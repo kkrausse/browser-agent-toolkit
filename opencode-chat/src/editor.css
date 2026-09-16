@@ -1,0 +1,27 @@
+.oc-editor { font: 14px/1.4 system-ui, sans-serif; color: #171717; }
+.oc-editor-preview { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: white; z-index: 10; }
+.oc-editor-panel { position: fixed; bottom: 1rem; right: 1rem; width: 480px; height: 80dvh; max-width: calc(100vw - 2rem); max-height: calc(100dvh - 2rem); background: white; border-radius: 12px; box-shadow: 0 8px 40px #0002; z-index: 20; }
+.oc-editor-panel *, .oc-editor-panel { box-sizing: border-box; }
+.oc-editor-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.oc-editor-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow: auto; }
+.oc-editor-panel .oc-chat { min-height: 0; }
+.oc-editor-resize { position: absolute; top: -5px; left: -5px; width: 20px; height: 20px; padding: 0; border: 0; border-top: 3px solid #98a2b3; border-left: 3px solid #98a2b3; border-radius: 6px 0 0; background: transparent; cursor: nwse-resize; touch-action: none; z-index: 1; }
+.oc-editor-resize:focus-visible { outline: 2px solid #3157c8; outline-offset: 3px; }
+.oc-editor-debug summary { cursor: pointer; }
+.oc-editor-debug pre { max-height: 140px; }
+.oc-editor-panel .oc-footer p { margin: 3px 0; }
+.oc-editor-panel [role=alert] { color: #a00; white-space: pre-wrap; }
+.oc-editor-panel [hidden] { display: none; }
+.oc-editor-sidebar { display: grid; grid-template-columns: minmax(0, 1fr) min(var(--oc-sidebar-width, 480px), 100%); width: 100%; height: 100%; min-height: 0; overflow: hidden; }
+.oc-editor-sidebar .oc-editor-preview { position: static; min-width: 0; min-height: 0; }
+.oc-editor-sidebar .oc-editor-panel { position: relative; inset: auto; width: 100%; height: 100%; max-width: none; max-height: none; min-width: 0; min-height: 0; border-radius: 0; box-shadow: none; border-left: 1px solid #dce1e7; }
+.oc-editor-sidebar .oc-chat { border: 0; border-radius: 0; }
+.oc-editor-sidebar .oc-editor-resize { top: 0; bottom: 0; left: -4px; width: 8px; height: 100%; border: 0; border-radius: 0; cursor: col-resize; }
+.oc-editor-sidebar .oc-editor-resize::after { content: ""; position: absolute; top: calc(50% - 20px); left: 3px; width: 2px; height: 40px; border-radius: 2px; background: #98a2b3; }
+.oc-editor-sidebar .oc-editor-resize:hover { background: #3157c822; }
+@media (max-width: 720px) {
+  .oc-editor-sidebar { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) min(var(--oc-sidebar-height, 60%), 100%); }
+  .oc-editor-sidebar .oc-editor-panel { border-left: 0; border-top: 1px solid #dce1e7; }
+  .oc-editor-sidebar .oc-editor-resize { top: -4px; left: 0; right: 0; bottom: auto; width: 100%; height: 8px; cursor: row-resize; }
+  .oc-editor-sidebar .oc-editor-resize::after { top: 3px; left: calc(50% - 20px); width: 40px; height: 2px; }
+}

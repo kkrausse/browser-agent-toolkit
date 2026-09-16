@@ -1,0 +1,26 @@
+{
+  "name": "@kev-browser-agent-kit/workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": ["dist/lib", "README.md", "LOCAL-PACKAGES.md"],
+  "types": "./dist/lib/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/lib/index.d.ts", "import": "./dist/lib/index.js" },
+    "./react": { "types": "./dist/lib/react.d.ts", "import": "./dist/lib/react.js" },
+    "./assets": { "types": "./dist/lib/assets.d.ts", "import": "./dist/lib/assets.js" },
+    "./server": { "types": "./dist/lib/server.d.ts", "import": "./dist/lib/server.js" }
+  },
+  "peerDependencies": { "react": ">=18 <20" },
+  "peerDependenciesMeta": { "react": { "optional": true } },
+  "devDependencies": { "@types/bun": "latest", "@types/react": "^19.2.18", "react": "19.1.1", "typescript": "^5.9.3" },
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "test:consumer": "bun scripts/consumer-smoke.ts",
+    "prepack": "bun run build",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests/*.test.ts",
+    "test:workers": "bun scripts/test-workers.ts",
+    "distribution": "bun scripts/distribution.ts"
+  }
+}

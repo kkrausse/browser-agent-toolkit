@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "paths": { "@kev-browser-agent-kit/workspace": ["./src/index.ts"] },
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["bun", "react"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "examples/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["tests/*.test.ts", "tests/headless-contract.ts"]
+}

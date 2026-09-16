@@ -1,0 +1,10 @@
+{
+  "checkout": "../../vivari",
+  "repository": "https://github.com/kkrausse/vivari.git",
+  "branch": "browser-runtime",
+  "revision": "33305d590c2d0a739d3fa4ccf08893f0519a96e2",
+  "upstream": "https://github.com/maitrungduc1410/vivari.git",
+  "upstreamBase": "2629c71097238400c45aefa213ef61df4794c2b7",
+  "rustToolchain": "1.93.0",
+  "wasmPack": "0.13.1"
+}

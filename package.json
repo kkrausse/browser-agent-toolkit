@@ -1,0 +1,14 @@
+{
+  "name": "browser-agent-toolkit",
+  "description": "Run agent harnesses in the browser.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "bun scripts/build.ts --install",
+    "build": "bun scripts/build.ts",
+    "build:example": "bun scripts/build.ts --example",
+    "dev": "bun scripts/build.ts --dev",
+    "test": "bun run --cwd workspace-api test && bun run --cwd opencode-chat test && bun run --cwd examples/todo-app test && bun run --cwd vivari test",
+    "typecheck": "bun run --cwd workspace-api typecheck && bun run --cwd opencode-chat typecheck && bun run --cwd examples/todo-app typecheck"
+  }
+}

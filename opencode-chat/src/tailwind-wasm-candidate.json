@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "id": "tailwindcss-pr-20487@11050dda2c4e26a3412b1745e84ea41d8fed6335",
+  "repository": "https://github.com/kkrausse/tailwindcss.git",
+  "revision": "11050dda2c4e26a3412b1745e84ea41d8fed6335",
+  "tree": "98aa087afde005c8ae3956ae98db37b4d23bb3fb",
+  "upstreamBase": "41d9cae8e53378d16087fcf359eb785c2fd42ce4",
+  "pullRequest": "https://github.com/tailwindlabs/tailwindcss/pull/20487",
+  "author": "kkrausse",
+  "changedFiles": [
+    "crates/oxide/src/scanner/mod.rs",
+    "integrations/oxide/wasm.test.ts"
+  ],
+  "packageName": "@tailwindcss/oxide-wasm32-wasi",
+  "packageVersion": "4.3.3",
+  "rust": "1.95.0",
+  "target": "wasm32-wasip1-threads",
+  "node": "v24.13.0",
+  "pnpm": {
+    "version": "11.9.0",
+    "tarball": "https://registry.npmjs.org/pnpm/-/pnpm-11.9.0.tgz",
+    "sha256": "2b567aa66026238078ac2e0a33bec3febd60e962987aac697456f3180819b287"
+  }
+}

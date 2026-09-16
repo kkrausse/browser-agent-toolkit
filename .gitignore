@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.runtime/
+.editor/
+.diagnostics/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.tgz

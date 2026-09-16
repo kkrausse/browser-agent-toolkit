@@ -1,0 +1,5 @@
+{
+  "name": "vivari-ripgrep-packaging",
+  "private": true,
+  "dependencies": { "ripgrep": "0.3.1", "which": "6.0.1" }
+}

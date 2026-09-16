@@ -1,0 +1,7 @@
+/* No preflight or global theme: only namespaced, precompiled component utilities. */
+@import "tailwindcss/theme.css" layer(theme) theme(inline) prefix(ocui);
+@import "tailwindcss/utilities.css" layer(utilities) prefix(ocui) source(none);
+@source "./components/ui";
+
+.oc-ui { box-sizing: border-box; font-family: system-ui, sans-serif; line-height: 1.4; }
+.oc-ui *, .oc-ui *::before, .oc-ui *::after { box-sizing: border-box; }

@@ -1,0 +1,14 @@
+{
+  "name": "browser-agent-runtime-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "bun install --frozen-lockfile",
+    "runtime:setup": "bun scripts/setup-runtime.ts",
+    "runtime:build": "bun scripts/build-runtime.ts",
+    "runtime:release": "bun scripts/build-runtime.ts --release",
+    "runtime:contracts": "bun scripts/runtime-contracts.ts",
+    "test": "bun test scripts/runtime-build.test.ts"
+  },
+  "devDependencies": { "typescript": "5.9.2" }
+}

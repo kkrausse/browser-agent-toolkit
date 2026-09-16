@@ -1,0 +1,87 @@
+{
+  "name": "@kev-browser-agent-kit/opencode-chat",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md",
+    "PROVENANCE.md",
+    "LICENSE",
+    "LICENSE.marked",
+    "LICENSE.shadcn",
+    "LICENSE.upstream"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js"
+    },
+    "./editor": {
+      "types": "./dist/editor.d.ts",
+      "import": "./dist/editor.js"
+    },
+    "./editor.css": "./dist/editor.css",
+    "./recipe": { "types": "./dist/recipe.d.ts", "import": "./dist/recipe.js" },
+    "./prepare": { "types": "./dist/prepare.d.ts", "import": "./dist/prepare.js" },
+    "./server": { "types": "./dist/server.d.ts", "import": "./dist/server.js" },
+    "./vite": { "types": "./dist/vite.d.ts", "import": "./dist/vite.js" },
+    "./config": { "types": "./dist/config.d.ts", "import": "./dist/config.js" },
+    "./styles.css": "./dist/styles.css"
+  },
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "peerDependencies": {
+    "vite": "^7.0.0",
+    "tailwindcss": "^4.0.0",
+    "@tailwindcss/vite": "^4.0.0",
+    "@kev-browser-agent-kit/workspace": "^0.1.0",
+    "react-dom": ">=18",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "vite": { "optional": true },
+    "tailwindcss": { "optional": true },
+    "@tailwindcss/vite": { "optional": true },
+    "react-dom": { "optional": true },
+    "@kev-browser-agent-kit/workspace": { "optional": true },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@opencode/client": "2.0.3",
+    "effect": "4.0.0-rc.112",
+    "vite": "^7.3.1",
+    "@tailwindcss/vite": "4.3.3",
+    "@base-ui/react": "1.8.0",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "tailwind-merge": "3.6.0",
+    "tailwindcss": "4.3.3",
+    "@tailwindcss/cli": "4.3.3",
+    "lucide-react": "1.43.0",
+    "happy-dom": "20.14.3",
+    "postcss": "8.5.28",
+    "@kev-browser-agent-kit/workspace": "file:../workspace-api",
+    "marked": "17.0.4",
+    "@types/bun": "1.3.9",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "build": "bun build.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "test:packed": "bun scripts/packed-smoke.ts",
+    "prepack": "bun run build"
+  }
+}
