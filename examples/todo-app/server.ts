@@ -13,7 +13,7 @@ const editor = createBrowserEditorHandler({
   preparedDirectory: '.editor/prepared',
   runtimeDirectory: process.env.RUNTIME_DIR ?? '../workspace-api/dist/runtime',
   clientDirectory: useBuild ? 'build/client' : undefined,
-  model: { baseURL: 'https://opencode.ai/zen/v1', headers: { authorization: 'Bearer public' } },
+  model: { baseURL: 'https://opencode.ai/zen/v1', headers: { authorization: `Bearer ${process.env.VIVARI_MODEL_API_KEY || 'public'}` } },
 })
 
 const withEditor = (next: (request: Request) => Promise<Response>) => async (request: Request) => {
