@@ -1,11 +1,13 @@
 import { assert, browserCase, capture, equalBytes, mount, type BrowserTest } from "./harness.js";
 import { httpTests } from "./http-cases.js";
 import { processTests } from "./process-cases.js";
+import { storageTests } from "./storage-cases.js";
 
 const encoder = new TextEncoder();
 export const tests: BrowserTest[] = [
   ...httpTests,
   ...processTests,
+  ...storageTests,
   {
     name: "failed case releases workspace and running process",
     steps: [async () => {
