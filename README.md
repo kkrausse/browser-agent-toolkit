@@ -3,7 +3,7 @@
 **Run agent harnesses in the browser.**
 
 Experimental workspace and OpenCode integration built on
-[Vivari](https://github.com/kkrausse/vivari/tree/browser-runtime). A browser-hosted
+[Vivari](https://github.com/kkrausse/vivari/tree/integration/upstream-runtime). A browser-hosted
 workspace supplies files, execution, service endpoints, and a live preview.
 OpenCode runs its server and agent loop inside that workspace; model inference
 still happens at a configured provider.
@@ -17,9 +17,10 @@ still happens at a configured provider.
 | `examples/todo-app/` | Local React Router + Bun/tRPC TODO application with an optional browser editor |
 | `vivari/` | Runtime source pins, build/packaging tools, and runtime qualification support |
 
-Existing package names are retained. Packages are consumed as local build output;
-there is no registry publication. The intended GitHub repository is
-`kkrausse/browser-agent-toolkit`; creation and pushing are separate review steps.
+Development package names are retained. Source lives at
+[`kkrausse/browser-agent-toolkit`](https://github.com/kkrausse/browser-agent-toolkit).
+GitHub Packages release tooling is being added for versioned external consumers;
+local builds remain supported.
 
 ## Local setup
 
@@ -30,7 +31,7 @@ version). Runtime builds additionally require the toolchain documented in
 ```text
 kkrausse/
   browser-agent-toolkit/
-  vivari/                  # runtime fork, optional until runtime development
+    vendor/vivari/         # gitignored checkout of the pinned runtime fork
   irs-tools/               # future consumer; integration not implemented here
 ```
 
@@ -38,8 +39,12 @@ kkrausse/
 
 The chat build verifies an exact OpenCode 2.0.3 artifact and receipt before copying
 them into the package. This artifact is generated, ignored, and not included in a
-source checkout. On the development machine the extracted repository has a copy
-of the previously qualified artifact.
+source checkout. Fetch the previously qualified artifact from its checksummed
+GitHub Release asset:
+
+```sh
+bun scripts/setup-opencode.ts
+```
 
 To seed another checkout from an existing qualified integration directory:
 
@@ -54,12 +59,20 @@ to the directory containing the qualified `build-receipt.json` and
 
 The rebuild recipe is in `vivari/experiments/opencode-release-server/`. Rebuilding
 on another host may change artifact identities; a new build is not automatically
-qualified and must not silently replace the pinned contract. Portable artifact
-distribution/requalification remains follow-up work before a public release.
+qualified and must not silently replace the pinned contract. The download command
+checks both the archive hash and the existing application receipt/output contract.
 
 ### Build and run
 
-Once the prepared prerequisite is available, from this repository root:
+First create and build the pinned runtime (requires the native toolchain below):
+
+```sh
+bun vivari/scripts/setup-runtime.ts
+bun vivari/scripts/build-runtime.ts --release
+bun workspace-api/scripts/distribution.ts
+```
+
+Once the runtime and prepared OpenCode prerequisite are available, from this repository root:
 
 ```sh
 bun run setup           # install, build both packages, install/build the example

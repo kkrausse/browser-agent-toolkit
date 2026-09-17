@@ -5,7 +5,7 @@
     "": {
       "name": "@kev-browser-agent-kit/workspace",
       "dependencies": {
-        "@vivari/core": "file:../../vivari-upstream-rebase/packages/core",
+        "@vivari/core": "file:../vendor/vivari/packages/core",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -62,7 +62,7 @@
 
     "@types/react": ["@types/react@19.2.18", "", { "dependencies": { "csstype": "^3.2.2" } }, "sha512-AnzbBERsrLKtk2XSfTbYRLjQPdy116Sty4q+T+Bp3IC4l6jNBvreVPAHmpq9qhXQM7CXZPjLVmGMw9sy+hxQ3w=="],
 
-    "@vivari/core": ["@vivari/core@file:../../vivari-upstream-rebase/packages/core", { "devDependencies": { "typescript": "~6.0.2", "vite": "^8.1.1" } }],
+    "@vivari/core": ["@vivari/core@file:../vendor/vivari/packages/core", { "devDependencies": { "typescript": "~6.0.2", "vite": "^8.1.1" } }],
 
     "bun-types": ["bun-types@1.4.2", "", { "dependencies": { "@types/node": "*" } }, "sha512-bxV1FgK7yBIzjRe5zBozIM4Bem11ZJcCXSrjWRG3YWLt8yFDePu4cLjpebO8OvPeIE9trbyPF4fuj3Cia4Fj3w=="],
 

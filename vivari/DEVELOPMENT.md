@@ -2,7 +2,7 @@
 
 ## Source of truth
 
-Runtime repository: <https://github.com/kkrausse/vivari/tree/browser-runtime>.
+Runtime repository: <https://github.com/kkrausse/vivari/tree/integration/upstream-runtime>.
 Edit normal source files there and commit normally. The fork retains upstream
 history, with `upstream` pointing at `maitrungduc1410/vivari`.
 
@@ -15,7 +15,7 @@ kkrausse/
     workspace-api/
     opencode-chat/
     examples/todo-app/
-  vivari/                    # editable runtime fork, branch browser-runtime
+    vendor/vivari/           # editable runtime fork, pinned by runtime-source.json
 ```
 
 `VIVARI_SOURCE=/absolute/path/to/vivari` selects another checkout for host builds,
@@ -25,16 +25,19 @@ historical. Source migration provenance lives in the fork's `FORK.md`.
 
 ## Setup
 
-Clone the fork as a sibling of `browser-agent-toolkit`:
+From the toolkit root, clone the pinned fork into `vendor/vivari`:
 
 ```sh
-git clone --branch browser-runtime https://github.com/kkrausse/vivari.git
-git -C vivari remote add upstream https://github.com/maitrungduc1410/vivari.git
+bun vivari/scripts/setup-runtime.ts
 ```
 
 Use Bun and the qualified native toolchain: Rust 1.93.0 with
 `wasm32-unknown-unknown` and `wasm32-wasip1`, wasm-pack 0.13.1. Use Node 24.18.0
 for the qualified headless checks. The build does not install the Rust toolchain.
+The workspace package's local host SDK dependency resolves through `vendor/vivari`.
+For a different editable checkout, use a `vendor/vivari` symlink to it (before
+installing dependencies) and set `VIVARI_SOURCE` to that same checkout so the host
+SDK and worker distribution are built from matching source.
 
 From `browser-agent-toolkit/vivari`:
 

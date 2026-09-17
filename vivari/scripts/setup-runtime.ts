@@ -1,10 +1,11 @@
 // Explicit checkout setup; normal builds never clone, checkout, reset or apply patches.
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { integrationRoot, resolveRuntimeSource, runtimeConfig } from './runtime-source.mjs';
 
 const args = process.argv.slice(2);
 if (args.includes('--help')) {
-  console.log('Usage: bun scripts/setup-runtime.ts\nClone runtime-source.json repository at its recorded revision into the sibling fork (or VIVARI_SOURCE). Existing paths are never changed. Then run bun scripts/build-runtime.ts.');
+  console.log('Usage: bun scripts/setup-runtime.ts\nClone runtime-source.json repository at its recorded revision into vendor/vivari (or VIVARI_SOURCE). Existing paths are never changed. Then run bun scripts/build-runtime.ts.');
   process.exit(0);
 }
 if (args.length) throw new Error('Unexpected arguments; see --help');
@@ -15,6 +16,7 @@ function run(args: string[], cwd: string) {
   const result = Bun.spawnSync(args, { cwd, stdout: 'inherit', stderr: 'inherit' });
   if (result.exitCode !== 0) throw new Error(`Failed (${result.exitCode}): ${args.join(' ')}`);
 }
+mkdirSync(dirname(source), { recursive: true });
 run(['git', 'clone', '--no-checkout', runtimeConfig.repository, source], integrationRoot);
 run(['git', 'checkout', '-B', runtimeConfig.branch, runtimeConfig.revision], source);
 run(['git', 'remote', 'add', 'upstream', runtimeConfig.upstream], source);

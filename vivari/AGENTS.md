@@ -1,7 +1,7 @@
 # Vivari integration workflow
 
-The editable runtime is the standalone `kkrausse/vivari` fork on `browser-runtime`.
-Default local source: a sibling `vivari` checkout next to `browser-agent-toolkit`.
+The editable runtime is the standalone `kkrausse/vivari` fork on `integration/upstream-runtime`.
+Default local source: the gitignored `vendor/vivari` checkout in `browser-agent-toolkit`.
 `VIVARI_SOURCE` overrides this. Read `DEVELOPMENT.md` before runtime work.
 
 - Do not edit `.runtime/patched` or regenerate `patches/0001-sqlite.patch`.

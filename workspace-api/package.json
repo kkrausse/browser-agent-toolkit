@@ -12,7 +12,7 @@
     "./server": { "types": "./dist/lib/server.d.ts", "import": "./dist/lib/server.js" }
   },
   "peerDependencies": { "react": ">=18 <20" },
-  "dependencies": { "@vivari/core": "file:../../vivari-upstream-rebase/packages/core" },
+  "dependencies": { "@vivari/core": "file:../vendor/vivari/packages/core" },
   "peerDependenciesMeta": { "react": { "optional": true } },
   "devDependencies": { "@types/bun": "latest", "@types/react": "^19.2.18", "react": "19.1.1", "typescript": "^5.9.3" },
   "scripts": {

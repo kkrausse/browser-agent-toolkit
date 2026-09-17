@@ -8,3 +8,6 @@ dist/
 !.env.example
 .DS_Store
 *.tgz
+/vendor/
+/.release/
+/.prepared-opencode/
