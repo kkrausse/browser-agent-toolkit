@@ -6,6 +6,10 @@ on:
         description: 'Exact new package version (first experimental release: 0.1.0-alpha.1)'
         required: true
         type: string
+      verify_only:
+        description: Install and check an already published version without rebuilding or publishing
+        type: boolean
+        default: false
 permissions:
   contents: read
   packages: write
@@ -14,6 +18,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
+    if: ${{ !inputs.verify_only }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -64,3 +69,21 @@ jobs:
               if (await child.exited) process.exit(1);
             }
           '
+  verify:
+    needs: publish
+    if: ${{ always() && (inputs.verify_only || needs.publish.result == 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - name: Verify installation from GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: bun scripts/verify-registry.ts "$RELEASE_VERSION"

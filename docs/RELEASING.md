@@ -3,7 +3,7 @@
 The public source is `kkrausse/browser-agent-toolkit`. Releases are manually
 dispatched from a selected committed Git ref using **Publish packages**. Supply
 an explicit, unused version. Pushes do not publish. Nothing publishes to npmjs.
-GitHub Packages may require authentication even when downloading public packages.
+GitHub's npm registry requires authentication even when downloading public packages.
 
 The first release is **`0.1.0-alpha.1`**, an experimental prerelease. Packaging
 checks do not establish full runtime qualification: the retained runtime contract
@@ -126,6 +126,16 @@ receipts, hashes and retained Actions artifacts provide build traceability.
 
 Publishing several packages is not atomic. A failed run may have published an
 earlier package. Inspect the registry before retrying; versions are immutable.
+
+The separate `verify` job installs the exact versions from the registry into an
+empty consumer with a fresh Bun cache, then checks public imports, SSR, runtime
+assets and the prepared application. It uses only `packages: read`. To verify an
+existing version without publishing, dispatch with `verify_only: true`. Locally:
+
+```sh
+# NODE_AUTH_TOKEN is supplied by your environment, with read:packages permission.
+bun scripts/verify-registry.ts 0.1.0-alpha.1
+```
 
 Private consumers such as irs-tools configure a scoped registry using an
 environment-provided token, never a committed credential:
