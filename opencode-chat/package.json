@@ -68,7 +68,7 @@
     "lucide-react": "1.43.0",
     "happy-dom": "20.14.3",
     "postcss": "8.5.28",
-    "@kev-browser-agent-kit/workspace": "file:../workspace-api",
+    "@kev-browser-agent-kit/workspace": "file:../workspace-api/dist/lib",
     "marked": "17.0.4",
     "@types/bun": "1.3.9",
     "@types/react": "19.2.14",

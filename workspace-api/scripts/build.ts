@@ -1,5 +1,6 @@
 import { rm } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
+import { runtimeSourcePath } from "../../vivari/scripts/runtime-source.mjs";
 
 const root = resolve(import.meta.dir, "..");
 await rm(resolve(root, "dist/lib"), { recursive: true, force: true });
@@ -10,6 +11,23 @@ for (const [entry, target] of [["index.ts", "browser"], ["react.tsx", "browser"]
 }
 const types = Bun.spawn(["bun", "x", "--no-install", "tsc", "-p", "tsconfig.build.json"], { cwd: root, stdout: "inherit", stderr: "inherit" });
 if (await types.exited) throw Error("Declaration build failed");
+// The host implementation is bundled above. Its public error type must also be
+// available without installing a developer's local Vivari checkout.
+const declarations = resolve(root, 'dist/lib');
+const hostTypes = runtimeSourcePath('packages/core/dist/host-sdk');
+for await (const name of new Bun.Glob('**/*.d.ts').scan(hostTypes)) {
+  const text = (await Bun.file(resolve(hostTypes, name)).text()).replace(/^\/\/# sourceMappingURL=.*$/gm, '');
+  await Bun.write(resolve(declarations, 'vivari-host', name), text);
+}
+for await (const name of new Bun.Glob('**/*.d.ts').scan(declarations)) {
+  const file = resolve(declarations, name);
+  const target = relative(dirname(file), resolve(declarations, 'vivari-host/index.js')).replaceAll('\\', '/');
+  const text = await Bun.file(file).text();
+  if (text.includes('@vivari/core/host')) {
+    await Bun.write(file, text.replaceAll('@vivari/core/host', target.startsWith('.') ? target : './' + target));
+  }
+}
+await Bun.write(resolve(declarations, 'LICENSE.vivari'), Bun.file(runtimeSourcePath('LICENSE')));
 const metadata = await Bun.file(resolve(root, 'package.json')).json();
 const relocate = (value: unknown): unknown => typeof value === 'string' ? value.replace('./dist/lib/', './')
   : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, relocate(item)])) : value;

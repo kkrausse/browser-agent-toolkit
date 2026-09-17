@@ -34,7 +34,8 @@ refuse existing storage rather than silently resetting it.
 
 ## Add a case
 
-Add an entry to `cases.ts`. Test bodies execute **in the browser**:
+Add an entry to `cases.ts` or its imported `http-cases.ts`, `process-cases.ts`,
+or `storage-cases.ts` arrays. Test bodies execute **in the browser**:
 
 ```ts
 {
@@ -77,16 +78,26 @@ Slow-reader/backpressure/overflow cases should consume raw execution or response
 streams themselves: automatic capture would change the condition being tested.
 Decoded console output is diagnostic; byte assertions use the original bytes.
 
-## Initial coverage and extension points
+## Coverage and extension points
 
 - Failed callback propagates while running-process/workspace cleanup permits reopen.
 - Binary stdin/stdout, stderr, EOF, natural exit metadata.
 - Binary endpoint response/status, EOF-triggered HTTP server shutdown, endpoint close.
 - Acknowledged file bytes restored after orderly close and browser reload.
+- HTTP abort and response cancellation close the guest socket; slow readers retain
+  bounded producer buffering and exact binary bytes; stale endpoints cannot reach
+  same-port replacement listeners. Fixtures isolate background readiness probes.
+- Unread stdout overflow, stdout/stderr cancellation, and execution/runtime stop
+  with descendant listener cleanup, port reuse, and runtime restart.
+- OPFS ownership lock/reopen, concurrent mutations/flushes and exact backing bytes,
+  backing-file failure/retry; SQLite ownership, transactions, orderly reopen,
+  failed-commit connection poisoning and pathname quarantine.
 
-This establishes the runner and initial contracts, not full runtime qualification.
-Next cases can cover cancellation/slow readers/listener replacement, SQLite,
-storage ownership, and persistence failures. Multi-tab orchestration and precise
-fault injection should be added as small helpers when those cases require them.
+All 18 cases passed against a release-mode build from committed runtime source
+`6badd6731a70a2354898d6155301fe724b61c485`. This is not full runtime qualification:
+abrupt crash recovery, cross-document workspace contention, quota exhaustion and
+interrupted manifest writes remain unqualified. Storage fixtures document their
+narrow internal backing-layout/lock coupling; failed SQLite commits do not imply
+rollback and recovered OPFS flushes do not imply a reset of failed status.
 Compatibility fixtures that already run under Vivari's headless harness should
 remain there unless browser-specific behavior needs additional coverage.
