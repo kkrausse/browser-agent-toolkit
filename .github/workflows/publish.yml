@@ -1,0 +1,79 @@
+name: Publish packages
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Exact new package version (for example 0.1.0)'
+        required: true
+        type: string
+      prepared_application_run:
+        description: 'Optional same-repository Actions run ID with prepared-opencode artifact; enables chat'
+        required: false
+        type: string
+permissions:
+  contents: read
+  packages: write
+  actions: read
+concurrency:
+  group: publish-packages
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      RUSTUP_TOOLCHAIN: 1.93.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          registry-url: https://npm.pkg.github.com
+          scope: '@kkrausse'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - name: Install Rust and wasm-pack
+        run: |
+          rustup toolchain install 1.93.0 --profile minimal --target wasm32-unknown-unknown --target wasm32-wasip1
+          cargo install wasm-pack --version 0.13.1 --locked
+      - name: Set up pinned runtime source
+        run: bun vivari/scripts/setup-runtime.ts
+      - name: Download prepared application
+        if: inputs.prepared_application_run != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: prepared-opencode
+          run-id: ${{ inputs.prepared_application_run }}
+          github-token: ${{ github.token }}
+          path: .prepared-opencode
+      - name: Build, stage, pack and smoke
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          PREPARED_RUN: ${{ inputs.prepared_application_run }}
+        run: |
+          if [ -n "$PREPARED_RUN" ]; then
+            OPENCODE_PACKAGE_DIR="$PWD/.prepared-opencode" bun scripts/release.ts "$RELEASE_VERSION" --chat
+          else
+            bun scripts/release.ts "$RELEASE_VERSION"
+          fi
+      - name: Retain tested tarballs and provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ inputs.version }}
+          path: |
+            .release/*/*.tgz
+            .release/*/release.json
+          if-no-files-found: error
+      - name: Publish tested tarballs to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          bun -e '
+            const {artifacts} = await Bun.file(`.release/${process.env.RELEASE_VERSION}/release.json`).json();
+            for (const artifact of artifacts) {
+              const child = Bun.spawn(["npm", "publish", `.release/${process.env.RELEASE_VERSION}/${artifact.filename}`, "--registry=https://npm.pkg.github.com", "--access=public", "--ignore-scripts"], {stdout:"inherit", stderr:"inherit"});
+              if (await child.exited) process.exit(1);
+            }
+          '
