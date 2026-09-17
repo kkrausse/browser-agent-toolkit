@@ -15,7 +15,7 @@ test('delivered backend policy must match the consumed runtime source receipt', 
     await writeFile(join(source, 'assets/worker.js'), 'worker');
     await writeFile(join(source, 'assets/sw.js'), 'sw');
     await writeFile(join(source, 'backend-policy.mjs'), policy);
-    await writeFile(join(source, 'distribution.json'), JSON.stringify({ abi: 'workspace-v1', name: 'vivari', version: 'a'.repeat(64), kernelWorker: 'assets/worker.js', serviceWorker: 'assets/sw.js', kernelSha256: hash('worker'), runtimeBuild: { source: { files: [{ name: 'packages/runtime/toolchain-shims.js', sha256: hash(policy) }] } } }));
+    await writeFile(join(source, 'distribution.json'), JSON.stringify({ abi: 'workspace-v2-sab6-sqlite39', features: ['install-tree-v1', 'http-stream-v1', 'workspace-flush-v1'], name: 'vivari', version: 'a'.repeat(64), kernelWorker: 'assets/worker.js', serviceWorker: 'assets/sw.js', kernelSha256: hash('worker'), runtimeBuild: { source: { files: [{ name: 'packages/runtime/toolchain-shims.js', sha256: hash(policy) }] } } }));
     const expected = { runtimeVersion: 'a'.repeat(64), sha256: hash(policy), aliases: { esbuild: 'esbuild-wasm' } };
     expect(await readRuntimeBackendPolicy(source)).toEqual(expected);
     await copyRuntimeAssets({ source, destination });

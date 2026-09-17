@@ -14,11 +14,20 @@ test("abort after worker ready ends a stalled persistence query, releases the le
     }
     terminate() { terminated++; }
   }
-  const replacements = [TestWorker, async () => Response.json({ abi: "workspace-v1", version: "qa", kernelWorker: "worker.js", serviceWorker: "sw.js" }), { href: "http://qa.test/" }, true];
+  const manifest = { abi: "workspace-v2-sab6-sqlite39", features: ["install-tree-v1", "http-stream-v1", "workspace-flush-v1"], version: "qa", kernelWorker: "worker.js", serviceWorker: "sw.js" };
+  const replacements = [TestWorker, async () => Response.json(manifest), { href: "http://qa.test/" }, true];
   keys.forEach((key, index) => Object.defineProperty(globalThis, key, { configurable: true, value: replacements[index] }));
   try {
     const signal = new AbortController(), events: DiagnosticEvent[] = [];
     const storage = opfsStore({ name: "qa", version: "qa", assetBaseUrl: "/runtime/" });
+    manifest.abi = "workspace-v1";
+    await expect(Workspace.open({ id: "default", storage })).rejects.toThrow("Distribution ABI/version/features mismatch");
+    expect(terminated).toBe(0);
+    manifest.abi = "workspace-v2-sab6-sqlite39";
+    manifest.features.pop();
+    await expect(Workspace.open({ id: "default", storage })).rejects.toThrow("Distribution ABI/version/features mismatch");
+    expect(terminated).toBe(0);
+    manifest.features.push("workspace-flush-v1");
     await expect(Workspace.open({ id: "default", storage, signal: signal.signal, onDiagnostic: event => {
       events.push(event);
       if (event.stage === "persistence.query") queueMicrotask(() => signal.abort(new Error("QA persistence deadline")));

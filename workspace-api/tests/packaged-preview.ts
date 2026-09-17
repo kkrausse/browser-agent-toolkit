@@ -31,7 +31,7 @@ let registrations = 0;
 Object.assign(sw, { register: async () => { registrations++; return {}; }, ready: Promise.resolve(), controller: { postMessage() {} } });
 for (const [key, value] of Object.entries({
   Worker: TestWorker, crossOriginIsolated: true, location: { href: "http://qa.test/" },
-  fetch: async () => Response.json({ abi: "workspace-v1", version: "qa", kernelWorker: "worker.js", serviceWorker: "sw.js" }),
+  fetch: async () => Response.json({ abi: "workspace-v2-sab6-sqlite39", features: ["install-tree-v1", "http-stream-v1", "workspace-flush-v1"], version: "qa", kernelWorker: "worker.js", serviceWorker: "sw.js" }),
   navigator: { serviceWorker: sw },
   window: { addEventListener: (_: string, fn: (event: MessageEvent) => void) => messages.add(fn), removeEventListener: (_: string, fn: (event: MessageEvent) => void) => messages.delete(fn) },
 })) Object.defineProperty(globalThis, key, { configurable: true, value });

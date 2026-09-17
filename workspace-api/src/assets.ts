@@ -4,7 +4,8 @@ import { resolve, relative } from "node:path";
 import { createHash } from "node:crypto";
 
 export interface RuntimeAssetManifest {
-  abi: "workspace-v1";
+  abi: "workspace-v2-sab6-sqlite39";
+  features: string[];
   name: "vivari";
   version: string;
   kernelWorker: string;
@@ -36,7 +37,8 @@ function assetPath(root: string, path: string): string {
 /** Verify the delivered ABI, pinned version, boot worker and SW before copying. */
 export async function readRuntimeAssets(source: string, expectedVersion?: string): Promise<RuntimeAssetManifest> {
   const manifest = JSON.parse(await readFile(resolve(source, "distribution.json"), "utf8")) as RuntimeAssetManifest;
-  if (manifest.abi !== "workspace-v1" || manifest.name !== "vivari" || !/^[a-f0-9]{64}$/.test(manifest.version)) throw Error("Invalid runtime distribution manifest");
+  if (manifest.abi !== "workspace-v2-sab6-sqlite39" || manifest.name !== "vivari" || !/^[a-f0-9]{64}$/.test(manifest.version)
+    || !["install-tree-v1", "http-stream-v1", "workspace-flush-v1"].every(feature => manifest.features?.includes(feature))) throw Error("Invalid runtime distribution ABI/features manifest");
   if (expectedVersion && manifest.version !== expectedVersion) throw Error(`Runtime version mismatch: expected ${expectedVersion}, received ${manifest.version}`);
   const worker = await readFile(assetPath(source, manifest.kernelWorker));
   await readFile(assetPath(source, manifest.serviceWorker));

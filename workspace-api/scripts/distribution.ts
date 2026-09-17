@@ -16,6 +16,12 @@ for (const asset of runtimeBuild.assets) {
   if (sha256(await readFile(resolve(source, asset.name))) !== asset.sha256) throw new Error(`Runtime differs from its build receipt: ${asset.name}; rebuild the fork first`);
 }
 const index = await readFile(resolve(source, "index.js"), "utf8");
+// Never relabel a four-slot distribution as the integrated six-slot ABI.
+const protocolPath = 'packages/protocol/syscall.js';
+const protocolBytes = await readFile(runtimeSourcePath(protocolPath));
+if (runtimeBuild.source?.files?.find((file: { name: string }) => file.name === protocolPath)?.sha256 !== sha256(protocolBytes)) throw Error('Protocol differs from runtime build receipt');
+const protocol = await import(runtimeSourcePath(protocolPath));
+if (protocol.CTRL_SLOTS !== 6 || protocol.OP_SQLITE !== 39) throw Error('Distribution requires six-slot SAB and SQLite opcode 39');
 const kernelWorker = index.match(/assets\/kernel-worker-[\w-]+\.js/)?.[0];
 if (!kernelWorker) throw new Error("Cannot locate active kernel worker in built SDK");
 const kernelBytes = await readFile(resolve(source, kernelWorker));
@@ -33,7 +39,7 @@ await writeFile(resolve(destination, 'backend-policy.mjs'), backendPolicy);
 await cp(resolve(source, "assets"), resolve(destination, "assets"), { recursive: true });
 await writeFile(resolve(destination, 'assets/sw.js'), serviceWorker);
 await writeFile(resolve(destination, "distribution.json"), JSON.stringify({
-  abi: "workspace-v1", features: ["install-tree-v1"], name: "vivari", version, kernelWorker, serviceWorker: "assets/sw.js",
+  abi: "workspace-v2-sab6-sqlite39", features: ["install-tree-v1", "http-stream-v1", "workspace-flush-v1"], name: "vivari", version, kernelWorker, serviceWorker: "assets/sw.js",
   runtimeBuild, runtimeBuildSha256: sha256(receiptBytes),
   kernelSha256: createHash("sha256").update(kernelBytes).digest("hex"),
 }, null, 2) + "\n");
