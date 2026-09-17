@@ -48,6 +48,8 @@ jobs:
             .release/*/*.tgz
             .release/*/release.json
           if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
       - name: Publish tested tarballs to GitHub Packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
