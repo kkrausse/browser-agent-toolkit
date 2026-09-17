@@ -54,17 +54,7 @@ export namespace Runtime {
         if (!Number.isInteger(port) || port < 1 || port > 65535) throw new RangeError("Invalid port");
         const signal = opts.signal ? AbortSignal.any([opts.signal, lifetime.signal]) : lifetime.signal;
         signal.throwIfAborted();
-        const listenerId = await new Promise<string>((resolve, reject) => {
-          const abort = () => { off(); reject(signal.reason); };
-          const finish = (id: string) => { off(); signal.removeEventListener("abort", abort); resolve(id); };
-          const off = host.on(m => {
-            if (m.type === "listen" && m.port === port) finish(String(m.listenerId));
-            if (m.type === "host-error") { off(); signal.removeEventListener("abort", abort); reject(new Error(String(m.error))); }
-          });
-          signal.addEventListener("abort", abort, { once: true });
-          const existing = host.listeners.get(port);
-          if (existing) finish(existing);
-        });
+        const listenerId = await host.waitForListener(port, signal);
         check();
         const endpoint = createEndpoint(host, port, listenerId, lifetime.signal);
         endpoints.add(endpoint);
@@ -85,20 +75,18 @@ export namespace Runtime {
       node,
       async installTree(tree) {
         check();
-        if (!host.features.has("install-tree-v1")) throw new Error("Runtime lacks bulk tree installation; rebuild its distribution and editor preparation");
-        const result = await host.request("workspace-install-tree", tree);
-        return { files: Number(result.files), verifyMs: Number(result.verifyMs), installMs: Number(result.installMs), readbackMs: Number(result.readbackMs) };
+        return host.installTree(tree);
       },
-      async readFile(path) { check(); return (await host.request("workspace-read", { path })).bytes as Uint8Array; },
+      async readFile(path) { check(); return host.readFile(path); },
       async installFile(path, bytes) {
         check();
-        const stat = await host.request("vv-stat", { path });
+        const stat = await host.stat(path);
         if (stat.exists) {
           const existing = await context.readFile(path);
           if (existing.length !== bytes.length || existing.some((b, i) => b !== bytes[i])) throw new Error(`Bundle conflict: ${path}`);
           return;
         }
-        await host.request("workspace-write", { path, bytes });
+        await host.writeFile(path, bytes);
       },
     };
     try {

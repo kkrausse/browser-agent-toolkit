@@ -33,41 +33,42 @@ export namespace Workspace {
       if (options.signal?.aborted) { aborted(); options.signal.throwIfAborted(); }
       const h = host;
       diagnostics.emit("persistence.query");
-      let persistence = (await h.request("workspace-persistence")).persistence as PersistenceState;
+      let persistence = await h.persistence();
       diagnostics.emit("persistence.result", { status: persistence.status });
       // A failed lease/init never silently opens someone else's store in RAM.
       if (persistence.status !== "durable") throw new WorkspaceError("STORAGE_BUSY", persistence.status === "failed" ? persistence.error : "Persistent storage unavailable");
       diagnostics.emit("workspace.directory");
-      await h.request("vv-mkdirp", { path: "/workspace" });
+      await h.mkdir("/workspace");
       const state = { host: h, distribution: options.storage.distribution, attached: false, closed: false };
       let closing: Promise<void> | undefined;
       const check = () => { if (state.closed) throw new WorkspaceError("CLOSED", "Workspace closed"); };
-      const rpc = (type: string, data: Record<string, unknown>) => { check(); return h.request(type, data); };
       const watches = new Set<(event: { paths: string[] }) => void>();
-      const off = h.on(m => {
-        if (m.type === "workspace-persistence") { persistence = m as unknown as PersistenceState; options.onPersistenceChange?.(persistence); }
-        if (m.type === "vv-fs-changed" && (m.path === "/workspace" || String(m.path).startsWith("/workspace/"))) {
-          for (const listener of watches) listener({ paths: [String(m.path).slice(10) || "/"] });
+      const offPersistence = h.onPersistence(value => { persistence = value; options.onPersistenceChange?.(value); });
+      const offMutation = h.onMutation(path => {
+        if (path === "/workspace" || path.startsWith("/workspace/")) {
+          for (const listener of watches) listener({ paths: [path.slice(10) || "/"] });
         }
       });
+      const off = () => { offPersistence(); offMutation(); };
       const workspace: Workspace = {
         id: options.id,
         get persistence() { return persistence; },
         fs: {
-          async readFile(path) { return (await rpc("workspace-read", { path: workspacePath(path) })).bytes as Uint8Array; },
-          async writeFile(path, bytes) { await rpc("workspace-write", { path: workspacePath(path), bytes }); },
+          async readFile(path) { check(); return h.readFile(workspacePath(path)); },
+          async writeFile(path, bytes) { check(); await h.writeFile(workspacePath(path), bytes); },
           async stat(path) {
-            const m = await rpc("vv-stat", { path: workspacePath(path) });
+            check();
+            const m = await h.stat(workspacePath(path));
             if (!m.exists) throw new Error(`ENOENT: ${path}`);
-            return { isDirectory: !!m.isDir, isFile: !m.isDir, size: Number(m.size) };
+            return { isDirectory: m.isDirectory, isFile: m.isFile, size: m.size };
           },
-          async readdir(path) { return ((await rpc("vv-readdir", { path: workspacePath(path) })).entries as { name: string }[]).map(e => e.name); },
-          async mkdir(path) { await rpc("vv-mkdirp", { path: workspacePath(path) }); },
-          async rename(from, to) { if (from === "/" || to === "/") throw new Error("Cannot rename workspace root"); await rpc("vv-rename", { from: workspacePath(from), to: workspacePath(to) }); },
-          async remove(path) { if (path === "/") throw new Error("Cannot remove workspace root"); await rpc("vv-rm", { path: workspacePath(path) }); },
+          async readdir(path) { check(); return h.readdir(workspacePath(path)); },
+          async mkdir(path) { check(); await h.mkdir(workspacePath(path)); },
+          async rename(from, to) { check(); if (from === "/" || to === "/") throw new Error("Cannot rename workspace root"); await h.rename(workspacePath(from), workspacePath(to)); },
+          async remove(path) { check(); if (path === "/") throw new Error("Cannot remove workspace root"); await h.remove(workspacePath(path)); },
           watch(listener) { check(); watches.add(listener); return () => { watches.delete(listener); }; },
         },
-        async flush() { check(); await h.request("workspace-flush"); },
+        async flush() { check(); await h.flush(); },
         close() {
           if (closing) return closing;
           if (state.attached) return Promise.reject(new WorkspaceError("ATTACHED", "Stop the attached runtime before closing Workspace"));
@@ -75,7 +76,7 @@ export namespace Workspace {
           // asynchronous flush, so a concurrent start cannot lose live workers.
           state.closed = true;
           return closing = (async () => {
-            try { await h.request("workspace-flush"); }
+            try { await h.flush(); }
             finally { off(); watches.clear(); h.destroy(); opening = false; }
           })();
         },

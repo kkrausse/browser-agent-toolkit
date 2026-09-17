@@ -60,7 +60,8 @@ function save(path: string, value: unknown) {
   writeFileSync(temporary, JSON.stringify(value, null, 2) + '\n');
   renameSync(temporary, path);
 }
-command(['bun', 'install', '--frozen-lockfile']);
+// The upstream-based candidate uses npm's authoritative lockfile.
+command(['npm', 'ci', '--no-audit', '--no-fund']);
 const nativeCrates = ['vfs', 'codec', 'crypto', 'wasi-demo'];
 const excluded = new Set(['target', 'pkg', 'pkg-node', '.git', 'node_modules']);
 const nativeFiles = nativeCrates.flatMap(crate => treeFiles(source, `packages/${crate}`, excluded));
@@ -88,8 +89,12 @@ const nativeRebuilt = args.includes('--native') || !cacheMatches(previous, nativ
 if (nativeRebuilt) {
   for (const crate of ['vfs', 'codec', 'crypto']) {
     for (const target of ['web', 'nodejs']) {
-      command(['bunx', '--package', `wasm-pack@${runtimeConfig.wasmPack}`, 'wasm-pack', 'build', `packages/${crate}`,
+      command(['wasm-pack', 'build', `packages/${crate}`,
         '--target', target, '--out-dir', target === 'web' ? 'pkg' : 'pkg-node', '--locked']);
+      if (target === 'nodejs') {
+        const path = join(source, `packages/${crate}/pkg-node/package.json`);
+        writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf8')), type: 'commonjs' }, null, 2) + '\n');
+      }
     }
   }
   command(['cargo', 'build', '--locked', '--release', '--manifest-path', 'packages/wasi-demo/Cargo.toml', '--target', 'wasm32-wasip1']);
@@ -108,7 +113,7 @@ if (!release) {
   mkdirSync(retained, { recursive: true });
   if (existsSync(join(dist, 'assets'))) cpSync(join(dist, 'assets'), retained, { recursive: true });
 }
-command(['bun', 'run', '--cwd', 'packages/core', 'build']);
+command(['npm', 'run', 'build:core']);
 const currentAssets = new Set(treeFiles(dist));
 if (!release) for (const name of treeFiles(retained)) {
   const destination = join(dist, 'assets', name);

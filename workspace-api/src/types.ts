@@ -91,6 +91,4 @@ export interface Endpoint {
 export type ErrorCode = "ENTRY_NOT_FOUND" | "LAUNCH_REJECTED" | "BACKEND_UNAVAILABLE"
   | "CLOSED" | "ATTACHED" | "STORAGE_BUSY" | "UNSUPPORTED_WORKSPACE"
   | "DISTRIBUTION_MISMATCH" | "OUTPUT_OVERFLOW" | "TOOL_FAILED";
-export class WorkspaceError extends Error {
-  constructor(readonly code: ErrorCode, message: string) { super(message); this.name = "WorkspaceError"; }
-}
+export { WorkspaceError } from "@vivari/core/host";
