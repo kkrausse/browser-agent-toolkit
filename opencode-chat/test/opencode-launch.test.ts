@@ -17,7 +17,7 @@ test('candidate uses ordinary unchanged server launch and qualified environment'
 });
 
 test('explicit model config supplies catalog-absent Muse Spark via supported HTTP provider', () => {
-  const baseURL = 'http://host.vivari.internal:5173/editor/model/';
+  const baseURL = 'http://host.vivari.internal:5173/editor/model/opencode/';
   const config = createOpenCodeCandidateConfig(baseURL);
   expect(config.model).toBe('opencode/muse-spark-1.3-contributor-free');
   expect(config.$schema).toBe('https://opencode.ai/config.json');

@@ -13,7 +13,12 @@ const editor = createBrowserEditorHandler({
   preparedDirectory: '.editor/prepared',
   runtimeDirectory: process.env.RUNTIME_DIR ?? '../workspace-api/dist/runtime',
   clientDirectory: useBuild ? 'build/client' : undefined,
-  model: { baseURL: 'https://opencode.ai/zen/v1', headers: { authorization: `Bearer ${process.env.VIVARI_MODEL_API_KEY || 'public'}` } },
+  providers: { opencode: { baseURL: 'https://opencode.ai/zen/v1', headers: {
+    authorization: `Bearer ${process.env.VIVARI_MODEL_API_KEY || 'public'}`,
+    // Chromium replaces the guest's User-Agent. Restore the real app identity
+    // from vivari/experiments/opencode-release-server/server.ts (pinned 2.0.3).
+    'user-agent': 'opencode/stable/2.0.3/vivari-opencode-server',
+  } } },
 })
 
 const withEditor = (next: (request: Request) => Promise<Response>) => async (request: Request) => {

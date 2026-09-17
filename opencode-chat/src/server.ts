@@ -19,7 +19,7 @@ export function createBrowserEditorHandler(options: {
   runtimeDirectory: string;
   clientDirectory?: string;
   base?: string;
-  model: { baseURL: string; headers?: HeadersInit };
+  providers: Record<string, { baseURL: string; headers?: HeadersInit }>;
 }) {
   const base = options.base ?? '/editor/';
   let privateAssets: Promise<string[]> | undefined;
@@ -37,18 +37,24 @@ export function createBrowserEditorHandler(options: {
     }
     if (path.startsWith(base + 'model/')) {
       if (!['GET', 'POST'].includes(request.method)) return new Response('Method not allowed', { status: 405 });
-      const upstreamBase = new URL(options.model.baseURL.replace(/\/$/, '') + '/');
+      const route = path.slice((base + 'model/').length);
+      const separator = route.indexOf('/');
+      const providerID = separator < 0 ? route : route.slice(0, separator);
+      const provider = Object.hasOwn(options.providers, providerID) ? options.providers[providerID] : undefined;
+      if (!provider) return new Response('Unknown model provider', { status: 404 });
+      const nativePath = separator < 0 ? '' : route.slice(separator + 1);
+      const upstreamBase = new URL(provider.baseURL.replace(/\/$/, '') + '/');
       let modelPath: string;
-      try { modelPath = decodeURIComponent(path.slice((base + 'model/').length)); } catch { return new Response('Invalid model path', { status: 400 }); }
+      try { modelPath = decodeURIComponent(nativePath); } catch { return new Response('Invalid model path', { status: 400 }); }
       if (modelPath.includes('\\') || modelPath.split('/').some(part => part === '..' || part === '.')) return new Response('Invalid model path', { status: 400 });
-      const upstream = new URL(upstreamBase.href + path.slice((base + 'model/').length) + url.search);
+      const upstream = new URL(upstreamBase.href + nativePath + url.search);
       if (upstream.origin !== upstreamBase.origin || !upstream.pathname.startsWith(upstreamBase.pathname)) return new Response('Invalid model path', { status: 400 });
       const headers = cleanHeaders(request.headers);
       for (const name of [...headers.keys()]) {
         if (['cookie', 'origin', 'referer', 'authorization', 'x-api-key', 'api-key', 'x-goog-api-key', 'forwarded'].includes(name) || name.startsWith('x-forwarded-') || name.startsWith('sec-')) headers.delete(name);
       }
       headers.set('accept-encoding', 'identity');
-      new Headers(options.model.headers).forEach((value, key) => headers.set(key, value));
+      new Headers(provider.headers).forEach((value, key) => headers.set(key, value));
       try {
         const response = await fetch(upstream, { method: request.method, headers, body: request.body, signal: request.signal, redirect: 'manual' });
         const outgoing = cleanHeaders(response.headers);

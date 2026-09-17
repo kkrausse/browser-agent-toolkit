@@ -83,7 +83,7 @@ export function createBrowserEditorRecipe(options: { base?: string; model?: stri
         }
         for (const directory of openCodeCandidateLaunch.workspaceDirectories) await workspace.fs.mkdir(directory);
         await workspace.fs.writeFile(openCodeCandidateLaunch.workspaceConfigPath, JSON.stringify(createOpenCodeCandidateConfig(
-          `http://host.vivari.internal:${location.port || (location.protocol === 'https:' ? '443' : '80')}${base}model/`, ['shell'])));
+          `http://host.vivari.internal:${location.port || (location.protocol === 'https:' ? '443' : '80')}${base}model/opencode/`, ['shell'])));
         await workspace.flush();
       }],
       ['Start runtime and deliver verified applications', async () => {
