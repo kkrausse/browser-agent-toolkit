@@ -6,13 +6,15 @@ const totalBytes = 8 * 1024 * 1024;
 const bufferingBudget = 1024 * 1024;
 const timeoutMs = 10_000;
 
-// State requests use separate connections. Only the target socket contributes
-// to `closed`, so completion of a state request cannot satisfy cancellation.
+// State requests and Vivari's GET / readiness probes use separate connections.
+// Only the target socket contributes to `closed`; neither control traffic nor
+// readiness traffic can satisfy cancellation.
 const serverSource = `
   const http = require('node:http');
   const state = { entered: false, closed: 0, produced: 0, blocked: false,
     backpressures: 0, drains: 0, finished: false };
   const server = http.createServer((req, res) => {
+    if (req.url === '/') { res.end('ready'); return; }
     if (req.url === '/state') {
       res.setHeader('content-type', 'application/json');
       res.end(JSON.stringify(state));
@@ -198,6 +200,8 @@ export const httpTests: BrowserTest[] = [
       const source = (version: string) => `
         let requests = 0;
         const server = require('node:http').createServer((req, res) => {
+          if (req.url === '/') { res.end('ready'); return; }
+          if (req.url !== '/identity') throw new Error('Unexpected path: ' + req.url);
           res.setHeader('content-type', 'application/json');
           res.end(JSON.stringify({ version: '${version}', requests: ++requests }));
         }).listen(${port});
@@ -208,7 +212,7 @@ export const httpTests: BrowserTest[] = [
       const oldExecution = await runtime.node({ entry: '/workspace/old.cjs' });
       const oldResult = diagnostics(oldExecution);
       const oldEndpoint = await runtime.expose(port, { signal: AbortSignal.timeout(timeoutMs) });
-      const first = await (await oldEndpoint.fetch('/', { signal: AbortSignal.timeout(timeoutMs) })).json();
+      const first = await (await oldEndpoint.fetch('/identity', { signal: AbortSignal.timeout(timeoutMs) })).json();
       assert(first.version === 'old' && first.requests === 1, 'Old listener did not serve the first request');
       await finish(oldExecution, oldResult, oldEndpoint);
 
@@ -216,12 +220,14 @@ export const httpTests: BrowserTest[] = [
       const newResult = diagnostics(newExecution);
       const newEndpoint = await runtime.expose(port, { signal: AbortSignal.timeout(timeoutMs) });
       assert(oldEndpoint.url !== newEndpoint.url, 'Replacement reused the stale listener identity');
-      for (const path of ['/', oldEndpoint.url]) {
+      const stalePreview = new URL(oldEndpoint.url);
+      stalePreview.pathname += 'identity';
+      for (const path of ['/identity', stalePreview.href]) {
         const error = await oldEndpoint.fetch(path, { signal: AbortSignal.timeout(timeoutMs) }).then(
           () => undefined, error => error);
         assert(error && error.code === 'CLOSED', `Stale endpoint did not reject CLOSED: ${String(error)}`);
       }
-      const replacement = await (await newEndpoint.fetch('/', { signal: AbortSignal.timeout(timeoutMs) })).json();
+      const replacement = await (await newEndpoint.fetch('/identity', { signal: AbortSignal.timeout(timeoutMs) })).json();
       assert(replacement.version === 'new' && replacement.requests === 1,
         `Stale endpoint reached replacement listener: ${JSON.stringify(replacement)}`);
       await finish(newExecution, newResult, newEndpoint);
