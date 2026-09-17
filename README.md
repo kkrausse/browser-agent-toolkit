@@ -19,8 +19,11 @@ still happens at a configured provider.
 
 Development package names are retained. Source lives at
 [`kkrausse/browser-agent-toolkit`](https://github.com/kkrausse/browser-agent-toolkit).
-GitHub Packages release tooling is being added for versioned external consumers;
-local builds remain supported.
+Versioned external consumers use GitHub Packages; local builds remain supported.
+See [releasing and consuming packages](docs/RELEASING.md) for the manual workflow,
+exact-version installs, runtime asset delivery and local overrides.
+The first published version is [`0.1.0-alpha.1`](docs/releases/0.1.0-alpha.1.md),
+an experimental release with clean CI packaging and browser runtime checks.
 
 ## Local setup
 
