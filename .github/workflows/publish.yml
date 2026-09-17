@@ -3,17 +3,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Exact new package version (for example 0.1.0)'
+        description: 'Exact new package version (first experimental release: 0.1.0-alpha.1)'
         required: true
-        type: string
-      prepared_application_run:
-        description: 'Optional same-repository Actions run ID with prepared-opencode artifact; enables chat'
-        required: false
         type: string
 permissions:
   contents: read
   packages: write
-  actions: read
 concurrency:
   group: publish-packages
   cancel-in-progress: false
@@ -39,24 +34,12 @@ jobs:
           cargo install wasm-pack --version 0.13.1 --locked
       - name: Set up pinned runtime source
         run: bun vivari/scripts/setup-runtime.ts
-      - name: Download prepared application
-        if: inputs.prepared_application_run != ''
-        uses: actions/download-artifact@v4
-        with:
-          name: prepared-opencode
-          run-id: ${{ inputs.prepared_application_run }}
-          github-token: ${{ github.token }}
-          path: .prepared-opencode
+      - name: Download and verify pinned prepared OpenCode
+        run: bun scripts/setup-opencode.ts
       - name: Build, stage, pack and smoke
         env:
           RELEASE_VERSION: ${{ inputs.version }}
-          PREPARED_RUN: ${{ inputs.prepared_application_run }}
-        run: |
-          if [ -n "$PREPARED_RUN" ]; then
-            OPENCODE_PACKAGE_DIR="$PWD/.prepared-opencode" bun scripts/release.ts "$RELEASE_VERSION" --chat
-          else
-            bun scripts/release.ts "$RELEASE_VERSION"
-          fi
+        run: bun scripts/release.ts "$RELEASE_VERSION"
       - name: Retain tested tarballs and provenance
         uses: actions/upload-artifact@v4
         with:
@@ -71,9 +54,11 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
           bun -e '
-            const {artifacts} = await Bun.file(`.release/${process.env.RELEASE_VERSION}/release.json`).json();
+            const {artifacts, publishable, sourceDirty} = await Bun.file(`.release/${process.env.RELEASE_VERSION}/release.json`).json();
+            if (!publishable || sourceDirty) throw Error("Refusing check-only or dirty-source artifacts");
+            const tag = process.env.RELEASE_VERSION.includes("-") ? "next" : "latest";
             for (const artifact of artifacts) {
-              const child = Bun.spawn(["npm", "publish", `.release/${process.env.RELEASE_VERSION}/${artifact.filename}`, "--registry=https://npm.pkg.github.com", "--access=public", "--ignore-scripts"], {stdout:"inherit", stderr:"inherit"});
+              const child = Bun.spawn(["npm", "publish", `.release/${process.env.RELEASE_VERSION}/${artifact.filename}`, "--registry=https://npm.pkg.github.com", "--access=public", "--tag", tag, "--ignore-scripts"], {stdout:"inherit", stderr:"inherit"});
               if (await child.exited) process.exit(1);
             }
           '
