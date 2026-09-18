@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { installSource } from "../src/delivery";
+import { installSource, managedDeliveryTool } from "../src/delivery";
 import type { Workspace } from "../src/workspace";
 
 function memoryWorkspace(initial: Record<string, string> = {}) {
@@ -20,4 +20,24 @@ test("source installation makes retention policy explicit", async () => {
   expect(memory.text("/src/new.ts")).toBe("new file");
   await installSource(memory.workspace, source, { existing: "replace" });
   expect(memory.text("/src/app.ts")).toBe("prepared source");
+});
+
+test("managed delivery accepts package bins through an isolated-linker symlink", () => {
+  expect(() => managedDeliveryTool({
+    format: "managed-tree-v1",
+    roots: ["/workspace/node_modules"],
+    entries: [
+      { kind: "directory", destination: "/workspace/node_modules", mode: 0o755 },
+      { kind: "directory", destination: "/workspace/node_modules/.bin", mode: 0o755 },
+      { kind: "directory", destination: "/workspace/node_modules/.bun", mode: 0o755 },
+      { kind: "directory", destination: "/workspace/node_modules/.bun/tool", mode: 0o755 },
+      { kind: "directory", destination: "/workspace/node_modules/.bun/tool/node_modules", mode: 0o755 },
+      { kind: "directory", destination: "/workspace/node_modules/.bun/tool/node_modules/tool", mode: 0o755 },
+      { kind: "file", destination: "/workspace/node_modules/.bun/tool/node_modules/tool/bin.js", mode: 0o755,
+        file: "a".repeat(64) + ".bin", bytes: 1, sha256: "a".repeat(64) },
+      { kind: "symlink", destination: "/workspace/node_modules/tool", target: ".bun/tool/node_modules/tool" },
+      { kind: "symlink", destination: "/workspace/node_modules/.bin/tool", target: "../tool/bin.js" },
+    ],
+    bundle: { file: "b".repeat(64) + ".bundle.gz", bytes: 1, sha256: "b".repeat(64) },
+  }, { baseUrl: "/", signal: new AbortController().signal })).not.toThrow();
 });

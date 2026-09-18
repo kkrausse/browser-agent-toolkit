@@ -10,7 +10,7 @@ const useBuild = isProduction || !!process.env.SERVE_BUILD
 const todos = new Map<string, Todo>()
 const editor = createBrowserEditorHandler({
   preparedDirectory: '.editor/prepared',
-  runtimeDirectory: process.env.RUNTIME_DIR ?? '../workspace-api/dist/runtime',
+  runtimeDirectory: process.env.RUNTIME_DIR ?? '../../workspace-api/dist/runtime',
   clientDirectory: useBuild ? 'build/client' : undefined,
   providers: { opencode: { baseURL: 'https://opencode.ai/zen/v1', headers: {
     authorization: `Bearer ${process.env.VIVARI_MODEL_API_KEY || 'public'}`,

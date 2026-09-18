@@ -6,9 +6,11 @@ const sha256 = async (bytes: Uint8Array) => [...new Uint8Array(await crypto.subt
 function validate(delivery: ManagedDelivery) {
   if (delivery.format !== "managed-tree-v1" || !delivery.roots.length) throw Error("Invalid managed delivery");
   const paths = new Map<string, ManagedEntry>();
-  for (const root of delivery.roots) if (!root.startsWith("/") || root === "/" || delivery.roots.some(other => other !== root && root.startsWith(other + "/"))) throw Error("Invalid managed root");
+  const rootFor = (path: string) => delivery.roots.find(root => path === root || path.startsWith(root + "/"));
+  const unsafePath = (path: string) => !path.startsWith("/") || path.split("/").slice(1).some(part => !part || part === "." || part === ".." || /[\\\0]/.test(part));
+  for (const root of delivery.roots) if (root === "/" || unsafePath(root) || delivery.roots.some(other => other !== root && root.startsWith(other + "/"))) throw Error("Invalid managed root");
   for (const entry of delivery.entries) {
-    if (!delivery.roots.some(root => entry.destination === root || entry.destination.startsWith(root + "/")) || paths.has(entry.destination)) throw Error("Managed entry escapes its roots");
+    if (unsafePath(entry.destination) || !rootFor(entry.destination) || paths.has(entry.destination)) throw Error("Managed entry escapes its roots");
     paths.set(entry.destination, entry);
     if (entry.kind === "file" && (entry.file !== entry.sha256 + ".bin" || !/^[a-f0-9]{64}$/.test(entry.sha256))) throw Error("Invalid managed file");
     if (entry.kind === "symlink" && (entry.target.startsWith("/") || /[\\\0]/.test(entry.target))) throw Error("Invalid managed symlink");
@@ -18,13 +20,34 @@ function validate(delivery: ManagedDelivery) {
       const parent = entry.destination.slice(0, entry.destination.lastIndexOf("/"));
       if (paths.get(parent)?.kind !== "directory") throw Error("Managed entry parent must be a directory");
     }
-    if (entry.kind === "symlink") {
-      const parts = entry.destination.slice(0, entry.destination.lastIndexOf("/")).split("/").filter(Boolean);
-      for (const part of entry.target.split("/")) part === ".." ? parts.pop() : part !== "." && part && parts.push(part);
-      const target = "/" + parts.join("/");
-      if (!paths.has(target) || !delivery.roots.some(root => target === root || target.startsWith(root + "/"))) throw Error("Managed symlink escapes or dangles");
-    }
   }
+  function follow(path: string, visited: Set<string>): string {
+    const parts = path.split("/").slice(1), resolved: string[] = [];
+    let enteredRoot = false;
+    while (parts.length) {
+      const part = parts.shift()!;
+      if (part === "." || !part) continue;
+      if (part === "..") {
+        resolved.pop();
+        if (enteredRoot && !rootFor("/" + resolved.join("/"))) throw Error("Managed symlink escapes its root");
+        continue;
+      }
+      resolved.push(part);
+      const current = "/" + resolved.join("/");
+      if (rootFor(current)) enteredRoot = true;
+      const entry = paths.get(current);
+      if (entry?.kind === "symlink") {
+        if (visited.has(current)) throw Error("Cyclic managed symlink");
+        const target = follow(current.slice(0, current.lastIndexOf("/")) + "/" + entry.target, new Set(visited).add(current));
+        resolved.splice(0, resolved.length, ...target.split("/").slice(1));
+      }
+      if (enteredRoot && parts.length && paths.get("/" + resolved.join("/"))?.kind !== "directory") throw Error("Invalid managed symlink parent");
+    }
+    const result = "/" + resolved.join("/");
+    if (!paths.has(result)) throw Error("Dangling managed symlink");
+    return result;
+  }
+  for (const entry of delivery.entries) if (entry.kind === "symlink" && rootFor(follow(entry.destination, new Set())) !== rootFor(entry.destination)) throw Error("Managed symlink escapes its root");
 }
 
 /** Replace only declared managed roots. Persistent workspace source is untouched. */
