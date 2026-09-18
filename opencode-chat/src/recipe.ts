@@ -2,6 +2,7 @@ import type { Endpoint, Distribution } from '@kev-browser-agent-kit/workspace';
 import { Effect } from 'effect';
 import type { WorkspaceController, Connection } from '@kev-browser-agent-kit/workspace/react';
 import { sourcePaths } from './editor-source';
+import { decodeProjectFile } from './project-file';
 import { preparePreviewCache } from './preview-cache';
 import { loadPrepared, preparedApps, type PreparedManifest } from './prepared';
 import { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, openCodeCandidateLaunch } from './opencode-launch';
@@ -79,7 +80,7 @@ export function createBrowserEditorRecipe(options: { base?: string; model?: stri
         for (const [path, text] of Object.entries(manifest.project)) {
           if (existing.has(path)) continue;
           await workspace.fs.mkdir(path.slice(0, path.lastIndexOf('/')) || '/');
-          await workspace.fs.writeFile(path, text);
+          await workspace.fs.writeFile(path, decodeProjectFile(text));
         }
         for (const directory of openCodeCandidateLaunch.workspaceDirectories) await workspace.fs.mkdir(directory);
         await workspace.fs.writeFile(openCodeCandidateLaunch.workspaceConfigPath, JSON.stringify(createOpenCodeCandidateConfig(

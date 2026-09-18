@@ -10,6 +10,7 @@ import { validateTree, treeRoots } from './package-tree';
 import { readQualifiedOpenCodeApplication } from './opencode-application';
 import { openCodeCandidateLaunch } from './opencode-launch';
 import { bundleFiles } from './prepared-bundle';
+import { encodeProjectFile } from './project-file';
 export { readTailwindWasmCandidate } from './tailwind-application';
 export type { BackendArchiveInput } from './prepare-dependencies';
 
@@ -90,11 +91,11 @@ export async function prepareBrowserEditor(options: PrepareBrowserEditorOptions)
   await Bun.write(join(prepared, 'opencode-build-receipt.json'), application.receiptBytes);
   const support = await prepareOpenCodeRipgrep(prepared, options.bunExecutable);
   assets.push(...support.assets);
-  const project: Record<string, string> = {};
+  const project: PreparedManifest['project'] = {};
   for (const name of options.source) {
     if (name.startsWith('/') || name.split('/').includes('..')) throw Error('Source must be app-relative');
     const path = join(root, name);
-    const visit = async (file: string, destination: string) => { project[destination] = await Bun.file(file).text(); };
+    const visit = async (file: string, destination: string) => { project[destination] = encodeProjectFile(new Uint8Array(await Bun.file(file).arrayBuffer())); };
     if ((await stat(path)).isDirectory()) await walk(path, '/' + name, visit);
     else await visit(path, '/' + name);
   }

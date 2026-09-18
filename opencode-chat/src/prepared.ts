@@ -3,6 +3,7 @@ import { treeInstaller, treeRoots, validateTree, type PreparedEntry } from './pa
 import type { DependencyProvenance } from './prepare-dependencies';
 import { openCodeCandidateLaunch } from './opencode-launch';
 import { readPreparedBundle, type PreparedBundle } from './prepared-bundle';
+import type { ProjectFile } from './project-file';
 
 export interface PreparedOpenCode {
   id: string; format: typeof openCodeCandidateLaunch.format; receiptSha256: string; sourceRevision: string; receipt: string;
@@ -45,7 +46,7 @@ export interface PreparedManifest {
   dependencies: DependencyProvenance;
   opencode: PreparedOpenCode;
   preview: NodeLaunchOptions;
-  project: Record<string, string>;
+  project: Record<string, ProjectFile>;
 }
 
 /** Derived locks reference these binary inputs relative to the project root. */
