@@ -1,4 +1,7 @@
 import { resolve, sep } from 'node:path';
+import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
+import { handleDiagnosticRequest, editorModelError, type DiagnosticContext, type EditorDiagnosticSink } from './diagnostics-server';
+export { createFileDiagnosticSink, runEditorLogs, readEditorDiagnostics, type EditorDiagnosticSink } from './diagnostics-server';
 
 export const browserEditorHeaders = {
   'Cross-Origin-Opener-Policy': 'same-origin',
@@ -19,8 +22,14 @@ export function createBrowserEditorHandler(options: {
   clientDirectory?: string;
   base?: string;
   providers: Record<string, { baseURL: string; headers?: HeadersInit }>;
+  diagnostics?: EditorDiagnosticSink;
+  /** Invoked for the manifest after app authorization. Receives the request's diagnostic scope. */
+  prepare?(diagnostics: DiagnosticScope): Promise<void>;
 }) {
   const base = options.base ?? '/editor/';
+  const scope = (context: DiagnosticContext = {}, runId?: string) => createDiagnosticScope(options.diagnostics?.enabled ? event => {
+    void Promise.resolve().then(() => options.diagnostics!.write({ clientId: 'server', events: [event] }, context)).catch(error => console.error('Editor diagnostic sink failed', error));
+  } : undefined, runId);
   let privateAssets: Promise<string[]> | undefined;
   const isPrivateAsset = async (path: string) => !!options.clientDirectory && path.startsWith('/assets/')
     && (await (privateAssets ??= Bun.file(resolve(options.clientDirectory, 'editor-assets.json')).json())).includes(path);
@@ -28,10 +37,18 @@ export function createBrowserEditorHandler(options: {
     const path = new URL(request.url).pathname;
     return path.startsWith(base) || await isPrivateAsset(path);
   };
-  const handle = async (request: Request): Promise<Response | undefined> => {
+  const handle = async (request: Request, context: DiagnosticContext = {}): Promise<Response | undefined> => {
     const url = new URL(request.url), path = url.pathname;
     const protectedAsset = await isPrivateAsset(path);
     if (!path.startsWith(base) && !protectedAsset) return;
+    if (path === base + 'diagnostics/config') return Response.json({ enabled: options.diagnostics?.enabled === true }, { headers: { 'Cache-Control': 'no-store' } });
+    if (path === base + 'diagnostics') return handleDiagnosticRequest(request, options.diagnostics, context);
+    const requestedRun = request.headers.get('x-editor-run-id');
+    const diagnostics = scope(context, requestedRun && /^[\w.-]{1,128}$/.test(requestedRun) ? requestedRun : undefined);
+    if (path === base + 'prepared/manifest.json' && ['GET', 'HEAD'].includes(request.method) && options.prepare) {
+      try { await diagnostics.stage('preparation', () => options.prepare!(diagnostics)); }
+      catch { return new Response('Editor preparation failed; see editor diagnostics and retry', { status: 503, headers: { 'Cache-Control': 'no-store' } }); }
+    }
     if (protectedAsset) {
       if (!['GET', 'HEAD'].includes(request.method)) return new Response('Method not allowed', { status: 405 });
       const file = Bun.file(resolve(options.clientDirectory!, '.' + path));
@@ -58,12 +75,19 @@ export function createBrowserEditorHandler(options: {
       }
       headers.set('accept-encoding', 'identity');
       new Headers(provider.headers).forEach((value, key) => headers.set(key, value));
+      headers.delete('x-editor-run-id');
+      const started = performance.now();
+      diagnostics.record('model.request', { path, provider: providerID, sessionId: request.headers.get('x-opencode-session') });
       try {
         const response = await fetch(upstream, { method: request.method, headers, body: request.body, signal: request.signal, redirect: 'manual' });
+        const detail = { path, provider: providerID, status: response.status, elapsedMs: Math.round(performance.now() - started), retryAfter: response.headers.get('retry-after'),
+          userAgent: headers.get('user-agent'), providerCredentialConfigured: ['authorization', 'x-api-key', 'api-key', 'x-goog-api-key'].some(name => headers.has(name)), sessionId: request.headers.get('x-opencode-session') };
+        diagnostics.record('model.response', detail);
+        if (options.diagnostics?.enabled && !response.ok) void editorModelError(response).then(error => diagnostics.record('model.error', { ...detail, error }));
         const outgoing = cleanHeaders(response.headers);
         outgoing.delete('set-cookie'); outgoing.delete('content-encoding'); outgoing.set('cache-control', 'no-store');
         return new Response(response.body, { status: response.status, headers: outgoing });
-      } catch { return new Response('Model upstream unavailable', { status: 502 }); }
+      } catch (error) { diagnostics.record('model.failed', { path, elapsedMs: Math.round(performance.now() - started), error }); return new Response('Model upstream unavailable', { status: 502 }); }
     }
     if (!['GET', 'HEAD'].includes(request.method)) return new Response('Method not allowed', { status: 405 });
     for (const [prefix, directory] of [['prepared/', options.preparedDirectory], ['runtime/', options.runtimeDirectory]]) {
@@ -78,5 +102,5 @@ export function createBrowserEditorHandler(options: {
     }
     return new Response('Not found', { status: 404 });
   };
-  return { matches, fetch: handle };
+  return { matches, fetch: handle, diagnostic: (event: string, data?: unknown, context?: DiagnosticContext) => scope(context).record(event, data) };
 }

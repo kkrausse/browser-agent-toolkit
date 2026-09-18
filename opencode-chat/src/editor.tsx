@@ -5,6 +5,7 @@ import { ChatView } from "./react";
 import { attachChat, editorLifecycle } from "./editor-adapter";
 import { Button } from "./components/ui/button";
 import { createBrowserEditorRecipe } from "./recipe";
+import { createBrowserEditorDiagnostics } from './diagnostics';
 export { attachChat, chatFor, type WorkspaceChatOptions } from "./editor-adapter";
 export { sourcePaths } from "./editor-source";
 
@@ -30,17 +31,38 @@ export type PreparedBrowserEditorProps = Omit<BrowserEditorProps, "controller" |
   base?: string;
   /** Default model for the prepared workspace. Captured on mount. */
   model?: string;
+  /** Auto-discover the server's diagnostics switch (default). False disables browser delivery. */
+  diagnostics?: boolean;
 };
 
 /** Mount only while editing is authorized and open. Composes the default prepared
  * recipe and workspace lifecycle; the host owns authorization and the launcher. */
-export function PreparedBrowserEditor({ onDiagnostic, captureProcessOutput, ...props }: PreparedBrowserEditorProps) {
-  return <WorkspaceProvider onDiagnostic={onDiagnostic} captureProcessOutput={captureProcessOutput}><PreparedEditor {...props} /></WorkspaceProvider>;
+export function PreparedBrowserEditor({ onDiagnostic, captureProcessOutput, diagnostics, ...props }: PreparedBrowserEditorProps) {
+  const [client] = useState(() => createBrowserEditorDiagnostics({ base: props.base, enabled: diagnostics, onDiagnostic }));
+  return <WorkspaceProvider onDiagnostic={client.onDiagnostic} captureProcessOutput={captureProcessOutput ?? (() => client.enabled)}><PreparedEditor {...props} diagnosticClient={client} /></WorkspaceProvider>;
 }
 
-function PreparedEditor({ base, model, ...props }: PreparedBrowserEditorProps) {
+function PreparedEditor({ base, model, diagnosticClient: client, ...props }: PreparedBrowserEditorProps & { diagnosticClient: ReturnType<typeof createBrowserEditorDiagnostics> }) {
   const { controller } = useWorkspace();
-  const [recipe] = useState(() => createBrowserEditorRecipe({ base, model }));
+  const mounts = useRef(0);
+  useEffect(() => {
+    mounts.current++;
+    let cancelled = false;
+    const detach = client.attach(window);
+    void client.connect().then(() => { if (!cancelled) client.record('editor.mounted', { path: location.pathname }); });
+    return () => {
+      detach(); cancelled = true; mounts.current--;
+      queueMicrotask(() => {
+        if (!mounts.current) void controller.dispose().catch(error => client.record('editor.cleanup.failed', error)).finally(async () => {
+          client.record('editor.unmounted'); await client.dispose();
+        });
+      });
+    };
+  }, [client, controller]);
+  const [recipe] = useState(() => {
+    const prepared = createBrowserEditorRecipe({ base, model });
+    return { async start(owner: WorkspaceController) { await client.connect(); await prepared.start(owner); } };
+  });
   return <BrowserEditor {...props} controller={controller} recipe={recipe} />;
 }
 

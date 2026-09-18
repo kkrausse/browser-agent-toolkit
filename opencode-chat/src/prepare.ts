@@ -11,6 +11,8 @@ import { readQualifiedOpenCodeApplication } from './opencode-application';
 import { openCodeCandidateLaunch } from './opencode-launch';
 import { bundleFiles } from './prepared-bundle';
 import { encodeProjectFile } from './project-file';
+import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
+import { runPreparationProcess } from './prepare-process';
 export { readTailwindWasmCandidate } from './tailwind-application';
 export type { BackendArchiveInput } from './prepare-dependencies';
 
@@ -18,7 +20,7 @@ export type { BackendArchiveInput } from './prepare-dependencies';
 export const packagedOpenCodeDirectory = fileURLToPath(new URL('./application/', import.meta.url));
 
 /** Ordinary registry installation, with the archive integrity retained by qualification. */
-export async function prepareOpenCodeRipgrep(prepared: string, bun = process.execPath) {
+export async function prepareOpenCodeRipgrep(prepared: string, bun = process.execPath, diagnostics = createDiagnosticScope()) {
   const directory = await mkdtemp(join(tmpdir(), 'browser-editor-ripgrep-'));
   const manifest = JSON.stringify({ name: 'browser-editor-opencode-support', private: true, dependencies: { ripgrep: '0.3.1' } });
   const integrity = 'sha512-6bDtNIBh1qPviVIU685/4uv0Ap5t8eS4wiJhy/tR2LdIeIey9CVasENlGS+ul3HnTmGANIp7AjnfsztsRmALfQ==';
@@ -27,8 +29,7 @@ export async function prepareOpenCodeRipgrep(prepared: string, bun = process.exe
   try {
     await Bun.write(join(directory, 'package.json'), manifest);
     await Bun.write(join(directory, 'bun.lock'), lock);
-    const child = Bun.spawn([bun, 'install', '--frozen-lockfile', '--linker', 'isolated', '--cache-dir', join(directory, 'cache')], { cwd: directory, stdout: 'inherit', stderr: 'inherit' });
-    if (await child.exited) throw Error('Qualified ripgrep installation failed');
+    await runPreparationProcess([bun, 'install', '--frozen-lockfile', '--linker', 'isolated', '--cache-dir', join(directory, 'cache')], { cwd: directory, label: 'opencode-ripgrep', diagnostics });
     if (await readFile(join(directory, 'bun.lock'), 'utf8') !== lock) throw Error('Frozen ripgrep lock changed');
     const pkg = JSON.parse(await readFile(join(directory, 'node_modules/ripgrep/package.json'), 'utf8'));
     if (pkg.name !== 'ripgrep' || pkg.version !== '0.3.1') throw Error('Qualified ripgrep package mismatch');
@@ -52,15 +53,17 @@ export interface PrepareBrowserEditorOptions {
   bunExecutable?: string;
   /** Explicit source-built backend archives, verified separately from registry packages. */
   backendArchives?: BackendArchiveInput[];
+  diagnostics?: DiagnosticScope;
 }
 
 /** Bun build-time preparation. Application source is unchanged; native bundlers use WASM. */
 export async function prepareBrowserEditor(options: PrepareBrowserEditorOptions) {
+  const diagnostics = options.diagnostics ?? createDiagnosticScope();
   const root = resolve(options.appRoot), out = resolve(options.output);
-  const runtime = await readRuntimeAssets(options.runtimeDirectory);
-  const application = await readQualifiedOpenCodeApplication(options.openCodeDirectory ?? packagedOpenCodeDirectory);
-  const policy = await readRuntimeBackendPolicy(options.runtimeDirectory);
-  const dependencies = await prepareDependencies({ ...options, policy });
+  const runtime = await diagnostics.stage('preparation.runtime-assets', () => readRuntimeAssets(options.runtimeDirectory));
+  const application = await diagnostics.stage('preparation.opencode-assets', () => readQualifiedOpenCodeApplication(options.openCodeDirectory ?? packagedOpenCodeDirectory));
+  const policy = await diagnostics.stage('preparation.backend-policy', () => readRuntimeBackendPolicy(options.runtimeDirectory));
+  const dependencies = await diagnostics.stage('preparation.dependencies', () => prepareDependencies({ ...options, policy, diagnostics }));
   try {
   const assets: PreparedManifest['assets'] = [];
   const prepared = join(out, 'prepared');
@@ -85,30 +88,37 @@ export async function prepareBrowserEditor(options: PrepareBrowserEditorOptions)
       else await visit(path, destination + '/' + entry.name);
     }
   }
-  assets.push(...await captureTree(join(dependencies.install, 'node_modules'), '/workspace/node_modules', async (file, bytes) => { await Bun.write(join(prepared, file), bytes); }));
+  assets.push(...await diagnostics.stage('preparation.capture-tree', () => captureTree(join(dependencies.install, 'node_modules'), '/workspace/node_modules', async (file, bytes) => { await Bun.write(join(prepared, file), bytes); })));
+  diagnostics.record('preparation.tree', { entries: assets.length });
   for (const input of dependencies.archiveInputs) await add('/workspace/' + input.path, input.bytes);
   for (const asset of application.assets) await add(asset.destination, asset.bytes);
   await Bun.write(join(prepared, 'opencode-build-receipt.json'), application.receiptBytes);
-  const support = await prepareOpenCodeRipgrep(prepared, options.bunExecutable);
+  const support = await diagnostics.stage('preparation.ripgrep', () => prepareOpenCodeRipgrep(prepared, options.bunExecutable, diagnostics));
   assets.push(...support.assets);
   const project: PreparedManifest['project'] = {};
-  for (const name of options.source) {
-    if (name.startsWith('/') || name.split('/').includes('..')) throw Error('Source must be app-relative');
-    const path = join(root, name);
-    const visit = async (file: string, destination: string) => { project[destination] = encodeProjectFile(new Uint8Array(await Bun.file(file).arrayBuffer())); };
-    if ((await stat(path)).isDirectory()) await walk(path, '/' + name, visit);
-    else await visit(path, '/' + name);
-  }
+  await diagnostics.stage('preparation.snapshot', async () => {
+    for (const name of options.source) {
+      if (name.startsWith('/') || name.split('/').includes('..')) throw Error('Source must be app-relative');
+      const path = join(root, name);
+      const visit = async (file: string, destination: string) => { project[destination] = encodeProjectFile(new Uint8Array(await Bun.file(file).arrayBuffer())); };
+      if ((await stat(path)).isDirectory()) await walk(path, '/' + name, visit);
+      else await visit(path, '/' + name);
+    }
+  });
   project['/package.json'] = dependencies.provenance.original.manifest;
   project['/bun.lock'] = dependencies.provenance.original.lock;
   project['/.browser-editor/runtime-package.json'] = dependencies.provenance.derived.manifest;
   project['/.browser-editor/runtime-bun.lock'] = dependencies.provenance.derived.lock;
   validateTree(assets);
-  const chunks: Uint8Array<ArrayBuffer>[] = [];
-  for (const entry of bundleFiles(assets)) chunks.push(new Uint8Array(await readFile(join(prepared, entry.file))));
-  const compressed = Bun.gzipSync(new Uint8Array(await new Blob(chunks).arrayBuffer()));
-  const bundleHash = hash(compressed), bundle = { file: bundleHash + '.bundle.gz', bytes: compressed.length, sha256: bundleHash };
-  await Bun.write(join(prepared, bundle.file), compressed);
+  const bundle = await diagnostics.stage('preparation.bundle', async () => {
+    const chunks: Uint8Array<ArrayBuffer>[] = [];
+    for (const entry of bundleFiles(assets)) chunks.push(new Uint8Array(await readFile(join(prepared, entry.file))));
+    const compressed = Bun.gzipSync(new Uint8Array(await new Blob(chunks).arrayBuffer()));
+    const bundleHash = hash(compressed), bundle = { file: bundleHash + '.bundle.gz', bytes: compressed.length, sha256: bundleHash };
+    await Bun.write(join(prepared, bundle.file), compressed);
+    diagnostics.record('preparation.bundle.size', { compressedBytes: compressed.length, entries: assets.length, files: chunks.length });
+    return bundle;
+  });
   const manifest: PreparedManifest = { format: 'browser-editor-v2', runtimeVersion: runtime.version, assets, project, dependencies: dependencies.provenance,
     bundle,
     opencode: { ...application.provenance, format: openCodeCandidateLaunch.format, receipt: application.receiptBytes.toString('utf8'), support: support.provenance },
@@ -116,5 +126,5 @@ export async function prepareBrowserEditor(options: PrepareBrowserEditorOptions)
   await Bun.write(join(prepared, 'manifest.json'), JSON.stringify(manifest));
   console.log(`Prepared shared application and ${assets.length} verified dependency/runtime tree entries`);
   return manifest;
-  } finally { await dependencies.cleanup(); }
+  } finally { await diagnostics.stage('preparation.cleanup', () => dependencies.cleanup()); }
 }

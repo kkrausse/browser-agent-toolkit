@@ -6,6 +6,7 @@ import { decodeProjectFile } from './project-file';
 import { preparePreviewCache } from './preview-cache';
 import { loadPrepared, preparedApps, type PreparedManifest } from './prepared';
 import { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, openCodeCandidateLaunch } from './opencode-launch';
+import { createDiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
 
 /** Readiness is a real configured provider barrier, not just an HTTP listener. */
 const verifyOpenCodeReadyEffect = Effect.fn('Workspace.verifyOpenCodeReady')(function*(endpoint: Pick<Endpoint, 'fetch'>, authorization: string) {
@@ -62,11 +63,12 @@ export function createBrowserEditorRecipe(options: { base?: string; model?: stri
   if (options.model && options.model !== 'opencode/' + openCodeCandidateLaunch.model.id) throw Error('Browser editor requires the qualified OpenCode Muse Spark model');
   const base = options.base ?? '/editor/';
   return { async start(controller: WorkspaceController) {
+    const diagnostics = createDiagnosticScope(event => controller.diagnostic(event.event, event.data), controller.diagnosticRunId);
     let manifest!: PreparedManifest, distribution!: Distribution;
     await controller.steps([
       ['Load editor preparation', async () => {
-        manifest = await loadPrepared(base + 'prepared/', controller.signal);
-        const response = await fetch(base + 'runtime/distribution.json', { signal: controller.signal });
+        manifest = await loadPrepared(base + 'prepared/', controller.signal, diagnostics);
+        const response = await diagnostics.stage('runtime.manifest.fetch', () => fetch(base + 'runtime/distribution.json', { signal: controller.signal, headers: { 'x-editor-run-id': diagnostics.runId } }));
         if (!response.ok) throw Error(`Runtime unavailable: HTTP ${response.status}`);
         const runtime = await response.json();
         if (runtime.version !== manifest.runtimeVersion) throw Error('Prepared runtime version mismatch');
@@ -89,7 +91,7 @@ export function createBrowserEditorRecipe(options: { base?: string; model?: stri
       }],
       ['Start runtime and deliver verified applications', async () => {
         if (!controller.runtime) {
-          const runtime = await controller.startRuntime({ apps: preparedApps(manifest, base + 'prepared/', controller.signal, controller.log) });
+          const runtime = await diagnostics.stage('runtime.start', () => controller.startRuntime({ apps: preparedApps(manifest, base + 'prepared/', controller.signal, controller.log, diagnostics) }));
           try { await runtime.tools.apps(); }
           catch (error) { await controller.stopRuntime(); throw error; }
         }

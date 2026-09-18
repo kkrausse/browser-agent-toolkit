@@ -15,6 +15,7 @@ for (const [entry, name] of [
   ["src/react.tsx", "react.js"],
   ["src/editor.tsx", "editor.js"],
   ["src/recipe.ts", "recipe.js"],
+  ["src/diagnostics.ts", "diagnostics.js"],
 ]) {
   const result = await Bun.build({
     entrypoints: [entry!],
@@ -22,11 +23,11 @@ for (const [entry, name] of [
     naming: name!,
     target: "browser",
     jsx: { runtime: "automatic", development: false },
-    external: ["react", "react/jsx-runtime", "react-dom", "react-dom/*", "@kev-browser-agent-kit/workspace", "@kev-browser-agent-kit/workspace/react"],
+    external: ["react", "react/jsx-runtime", "react-dom", "react-dom/*", "@kev-browser-agent-kit/workspace", "@kev-browser-agent-kit/workspace/react", "@kev-browser-agent-kit/workspace/diagnostics"],
   });
   if (!result.success) throw new AggregateError(result.logs);
 }
-for (const entry of ['prepare', 'server', 'vite', 'config']) {
+for (const entry of ['prepare', 'server', 'diagnostics-server', 'vite', 'config']) {
   const result = await Bun.build({ entrypoints: [`src/${entry}.ts`], outdir: 'dist', naming: `${entry}.js`, target: ['vite', 'config'].includes(entry) ? 'node' : 'bun', packages: 'external' });
   if (!result.success) throw new AggregateError(result.logs);
 }

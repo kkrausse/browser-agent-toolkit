@@ -42,6 +42,9 @@ export class WorkspaceController {
   get signal() { return this.lifetime.signal; }
   get workspace() { return this.snapshot.workspace; }
   get runtime() { return this.snapshot.runtime; }
+  /** Structured recipe/tool events share the active operation's run ID. */
+  diagnostic = (event: string, data?: unknown) => this.diagnostics.record(event, data);
+  get diagnosticRunId() { return this.diagnostics.runId; }
   private publish(patch: Partial<WorkspaceSnapshot>) { this.snapshot = { ...this.snapshot, ...patch }; for (const listener of this.listeners) listener(); }
   log = (line: string) => { this.diagnostics.record("activity", { message: line }); this.publish({ logs: [...this.snapshot.logs, `${new Date().toLocaleTimeString()} ${safeText(line)}`].slice(-160) }); };
   status = (status: string) => { this.publish({ status }); this.log(status); };
@@ -75,7 +78,9 @@ export class WorkspaceController {
       this.publish({ progress: this.snapshot.progress.map((step, i) => i === index ? { ...step, state: "running" } : step) });
       this.status(`${index + 1}/${steps.length} · ${label}…`);
       const started = performance.now(); diagnostics.record("stage.start", { label });
-      await task(); this.signal.throwIfAborted();
+      const heartbeat = setInterval(() => diagnostics.record('stage.waiting', { label, elapsedMs: Math.round(performance.now() - started) }), 5000);
+      try { await task(); this.signal.throwIfAborted(); }
+      finally { clearInterval(heartbeat); }
       diagnostics.record("stage.ready", { label, elapsedMs: Math.round(performance.now() - started) });
       this.publish({ progress: this.snapshot.progress.map((step, i) => i === index ? { ...step, state: "done" } : step) });
     }
@@ -103,9 +108,10 @@ export class WorkspaceController {
   }
   private async drain(stream: AsyncIterable<Uint8Array>, label: string) {
     const diagnostics = this.diagnostics;
-    const output = this.captureProcessOutput ? createProcessOutput(text => diagnostics.record('guest.output', { label, message: text })) : undefined;
+    const capture = () => typeof this.captureProcessOutput === 'function' ? this.captureProcessOutput() : this.captureProcessOutput;
+    const output = this.captureProcessOutput ? createProcessOutput(text => { if (capture()) diagnostics.record('guest.output', { label, message: text }); }) : undefined;
     let totalBytes = 0;
-    try { for await (const bytes of stream) { if (!totalBytes) diagnostics.record("guest.first-output", { label, bytes: bytes.length }); totalBytes += bytes.length; output?.push(bytes); } }
+    try { for await (const bytes of stream) { if (!totalBytes) diagnostics.record("guest.first-output", { label, bytes: bytes.length }); totalBytes += bytes.length; if (capture()) output?.push(bytes); } }
     catch (error) { this.log(`[${label}] ${message(error)}`); }
     finally { output?.flush(); this.log(`[${label}] drained ${totalBytes} bytes (${output ? 'bounded output captured in diagnostics' : 'raw output omitted from diagnostics'})`); }
   }

@@ -4,6 +4,7 @@ import type { DependencyProvenance } from './prepare-dependencies';
 import { openCodeCandidateLaunch } from './opencode-launch';
 import { readPreparedBundle, type PreparedBundle } from './prepared-bundle';
 import type { ProjectFile } from './project-file';
+import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
 
 export interface PreparedOpenCode {
   id: string; format: typeof openCodeCandidateLaunch.format; receiptSha256: string; sourceRevision: string; receipt: string;
@@ -58,20 +59,23 @@ export function validatePreparedBackendArchives(manifest: Pick<PreparedManifest,
   }
 }
 
-export async function loadPrepared(base: string, signal: AbortSignal): Promise<PreparedManifest> {
-  const response = await fetch(base + 'manifest.json', { signal });
+export async function loadPrepared(base: string, signal: AbortSignal, diagnostics = createDiagnosticScope()): Promise<PreparedManifest> {
+  const response = await diagnostics.stage('manifest.fetch', () => fetch(base + 'manifest.json', { signal, headers: { 'x-editor-run-id': diagnostics.runId } }));
   if (!response.ok) throw Error(`Editor preparation unavailable: HTTP ${response.status}`);
-  const manifest = await response.json() as PreparedManifest;
+  const manifest = await diagnostics.stage('manifest.decode', () => response.json()) as PreparedManifest;
+  await diagnostics.stage('manifest.validate', async () => {
   if (manifest.format !== 'browser-editor-v2') throw Error('Unsupported editor preparation; regenerate with the current preparer');
   validateTree(manifest.assets);
   validatePreparedBackendArchives(manifest);
   await validatePreparedOpenCode(manifest);
   if (manifest.dependencies.policy.runtimeVersion !== manifest.runtimeVersion) throw Error('Prepared backend policy runtime mismatch');
   for (const path of Object.keys(manifest.project)) if (!path.startsWith('/') || path.split('/').slice(1).some(part => !part || part === '.' || part === '..' || /[\\\0]/.test(part)) || path === '/node_modules' || path.startsWith('/node_modules/')) throw Error('Invalid prepared source path');
+  });
+  diagnostics.record('manifest.summary', { entries: manifest.assets.length, projectFiles: Object.keys(manifest.project).length, bundleBytes: manifest.bundle?.bytes, delivery: manifest.bundle ? 'bulk-tree' : 'individual-files' });
   return manifest;
 }
 
-export function preparedApps(manifest: PreparedManifest, base: string, signal: AbortSignal, report: (text: string) => void): ToolDescriptor<void, void> {
+export function preparedApps(manifest: PreparedManifest, base: string, signal: AbortSignal, report: (text: string) => void, diagnostics: DiagnosticScope = createDiagnosticScope()): ToolDescriptor<void, void> {
   return { name: 'browser-editor-apps', version: manifest.runtimeVersion, async bind(context) {
     return async () => {
       validateTree(manifest.assets);
@@ -92,19 +96,21 @@ export function preparedApps(manifest: PreparedManifest, base: string, signal: A
         if (result.exitCode !== 0 || result.signal || result.forced || !output.includes(`prepared-tree-${phase}-complete`)) throw Error(`Prepared tree ${phase} failed: ${output}`);
       }
       report(manifest.bundle ? 'Checking prepared workspace bundle cache…' : 'Downloading prepared workspace files…');
-      const bundled = manifest.bundle ? await readPreparedBundle(manifest.bundle, manifest.assets, base, signal, report) : undefined;
+      diagnostics.record('delivery.mode', { mode: manifest.bundle ? 'bulk-tree' : 'individual-files', entries: manifest.assets.length });
+      const bundled = manifest.bundle ? await readPreparedBundle(manifest.bundle, manifest.assets, base, signal, report, diagnostics) : undefined;
       signal.throwIfAborted();
       if (bundled) {
         report('Loading prepared workspace into filesystem…');
         for (const asset of manifest.assets) if (asset.kind === 'file' && bundled.get(asset.file)?.byteLength !== asset.bytes) throw Error(`Asset size failure: ${asset.destination}`);
-        const result = await context.installTree({
+        const result = await diagnostics.stage('delivery.install-tree', () => context.installTree({
           roots: treeRoots,
           entries: manifest.assets.map(asset => asset.kind === 'file'
             ? { kind: 'file', path: asset.destination, mode: asset.mode, bytes: bundled.get(asset.file)!, sha256: asset.sha256, verifyReadback: asset.destination.startsWith('/app/') }
             : asset.kind === 'directory'
               ? { kind: 'directory', path: asset.destination, mode: asset.mode }
               : { kind: 'symlink', path: asset.destination, target: asset.target }),
-        });
+        }));
+        diagnostics.record('delivery.install-tree.result', result);
         signal.throwIfAborted();
         await context.installFile('/runtime-probe/.browser-editor', new TextEncoder().encode(openCodeCandidateLaunch.candidate));
         report(`Loaded ${result.files} verified files in one filesystem operation (verify ${Math.round(result.verifyMs)}ms, install ${Math.round(result.installMs)}ms, readback ${Math.round(result.readbackMs)}ms)`);

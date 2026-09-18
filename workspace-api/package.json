@@ -8,7 +8,8 @@
   "exports": {
     ".": { "types": "./dist/lib/index.d.ts", "import": "./dist/lib/index.js" },
     "./react": { "types": "./dist/lib/react.d.ts", "import": "./dist/lib/react.js" },
-    "./assets": { "types": "./dist/lib/assets.d.ts", "import": "./dist/lib/assets.js" }
+    "./assets": { "types": "./dist/lib/assets.d.ts", "import": "./dist/lib/assets.js" },
+    "./diagnostics": { "types": "./dist/lib/diagnostics.d.ts", "import": "./dist/lib/diagnostics.js" }
   },
   "peerDependencies": { "react": ">=18 <20" },
   "peerDependenciesMeta": { "react": { "optional": true } },

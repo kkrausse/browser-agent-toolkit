@@ -1,4 +1,6 @@
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import type { Plugin } from 'vite';
 import { browserPreviewBase } from './config';
 
@@ -13,8 +15,18 @@ export function isBrowserEditorModule(url: string, privateEntry?: string): boole
 export function browserEditorBoundary(module: string, privateEntry?: string): Plugin {
   let boundary: string;
   return { name: 'browser-editor-boundary', enforce: 'pre',
-    config() { return process.env.BROWSER_AGENT_GUEST === '1' ? { base: browserPreviewBase(), cacheDir: '.browser-editor-cache/vite' }
-      : { optimizeDeps: { exclude: ['@kev-browser-agent-kit/opencode-chat', '@kev-browser-agent-kit/workspace'] } }; },
+    async config() {
+      if (process.env.BROWSER_AGENT_GUEST === '1') return { base: browserPreviewBase(), cacheDir: '.browser-editor-cache/vite' };
+      // Excluded file: packages still get Vite's immutable ?v= URLs. A same-version
+      // rebuild must change the optimizer config hash, even with an unchanged lock.
+      const hash = createHash('sha256');
+      for (const name of ['@kev-browser-agent-kit/opencode-chat/editor', '@kev-browser-agent-kit/opencode-chat/diagnostics',
+        '@kev-browser-agent-kit/opencode-chat/editor.css', '@kev-browser-agent-kit/workspace', '@kev-browser-agent-kit/workspace/react', '@kev-browser-agent-kit/workspace/diagnostics']) {
+        hash.update(await readFile(new URL(import.meta.resolve(name))));
+      }
+      return { optimizeDeps: { exclude: ['@kev-browser-agent-kit/opencode-chat', '@kev-browser-agent-kit/workspace'],
+        esbuildOptions: { define: { __BROWSER_EDITOR_BUILD__: JSON.stringify(hash.digest('hex')) } } } };
+    },
     configureServer(server) {
       if (process.env.BROWSER_AGENT_GUEST !== '1') return;
       const base = browserPreviewBase();

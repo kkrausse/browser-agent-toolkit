@@ -290,14 +290,11 @@ The optional toolkit entries own the reusable build/server/runtime orchestration
   workspace controller, seeds only missing source, installs hash-verified dependencies,
   launches real Vite and OpenCode, and waits for the mounted editor's clients. The editor
   owns chat attachment; the recipe does not create a second chat controller.
-- `PreparedBrowserEditor` also accepts `onDiagnostic(event)` and
-  `captureProcessOutput`. The optional sink receives lifecycle events and, when
-  output capture is enabled, `guest.output` events containing the service/stream
-  label and bounded, redacted stdout/stderr. UTF-8 and partial lines are assembled
-  across process chunks. The toolkit makes no diagnostic network calls; the host
-  application can persist these events through its own authenticated endpoint.
-  Output capture defaults to false. Launch events include entry, arguments, cwd
-  and port, but never environment values.
+- `PreparedBrowserEditor` discovers the authorized server's diagnostic setting and
+  owns browser error listeners, lifecycle/process capture, batching and retries.
+  No app-side reporter is needed. `diagnostics={false}` opts out of browser delivery;
+  `onDiagnostic(event)` and `captureProcessOutput` remain available for custom local sinks.
+  See **Diagnostics** below for the server switch and terminal reader.
 - `/server`: `createBrowserEditorHandler({preparedDirectory, runtimeDirectory,
   clientDirectory, providers: {opencode: {baseURL, headers}}, base?})` returns `{matches, fetch}`.
   `matches(request)` identifies preparation/runtime assets, the build's private editor
@@ -327,7 +324,9 @@ The optional toolkit entries own the reusable build/server/runtime orchestration
   replaces the host-only editing entry with a null component in the guest, before its
   imports load. In the host build it records private dynamic-entry artifacts in
   `editor-assets.json`; in development it excludes toolkit files from shared dependency
-  prebundling. The app's own Vite middleware uses
+  prebundling. It fingerprints installed client library bytes in the optimizer config,
+  so restarting after a same-version `file:` rebuild changes immutable module URLs.
+  The app's own Vite middleware uses
   `isBrowserEditorModule(request.url, 'src/editor-panel.tsx')` to identify editor modules
   and authorizes before calling `next()`. Keep the editor behind that dynamic entry.
   The app owns authorization, denial responses, the launcher, and editing state.
@@ -370,3 +369,76 @@ Runtime/OpenCode distributions must be prepared separately; this API does not si
 download a moving runtime or model harness. Dependencies are restored each open because
 the workspace's existing OPFS mirror excludes `node_modules`. Source and chat state are
 browser-local. **No remote Git patch persistence or publishing endpoint is implemented.**
+
+## Diagnostics
+
+The host owns authorization, enablement and storage policy. The toolkit owns capture,
+sanitizing, transport, receiving-boundary validation, timing and CLI formatting.
+
+```ts
+import { createBrowserEditorHandler, createFileDiagnosticSink } from '@kev-browser-agent-kit/opencode-chat/server';
+
+const diagnostics = createFileDiagnosticSink({
+  directory: 'tmp/editor/diagnostics',
+  enabled: process.env.EDITOR_DIAGNOSTICS !== '0',
+  maxFileBytes: 1024 * 1024, // current file plus one rotated file
+});
+const editor = createBrowserEditorHandler({
+  preparedDirectory, runtimeDirectory, providers,
+  diagnostics,
+  // Optional lazy preparation; called only when an authorized manifest is requested.
+  prepare: scope => ensurePrepared(scope),
+});
+// After application authorization:
+await editor.fetch(request, { actorId: authenticatedUserId });
+// Optional app-specific denial/cache/policy events:
+editor.diagnostic('editor.denied', { status: 403 }, { actorId: 'anonymous' });
+```
+
+For another destination, supply `{ enabled: true, write(batch, {actorId}), read?() }`
+instead of the file adapter. The authenticated actor comes from the host, never the
+browser. `/editor/diagnostics/config`, POST/GET `/editor/diagnostics` share the normal
+editor authorization boundary. Disabled capture sends no event batches; configuration
+is checked on each editor mount. An unavailable configuration endpoint costs at most
+two seconds and does not prevent editing.
+
+The browser receives the server switch automatically; `<PreparedBrowserEditor />`
+needs no diagnostic props. Delivery flushes every 200ms, uses batches of at most 50
+events / roughly 48KB, a 500-event queue, a five-second request timeout and three
+exponential-backoff retries. A new event resumes delivery after retries are exhausted.
+Overflow emits `diagnostics.dropped`; stable event IDs deduplicate retries in the file
+sink's bounded recent-ID window. Events are redacted and bounded on both sides.
+Guest stdout/stderr preserve UTF-8/partial lines with a 6KB pending-output bound.
+Successful model response content, request bodies, and environment objects are not
+collected. Failed provider bodies are bounded by bytes and time; proxy streaming is
+not delayed by diagnostic processing. Sink failures do not stop workspace operations.
+
+Pass the provided scope through `prepareBrowserEditor({ ...options, diagnostics: scope })`
+to capture runtime/application checks, local input copies, each dependency install and
+its stdout/stderr, tree capture, snapshot, bundle compression and cleanup. App-specific
+cache/publication work can use `scope.record(name, data)` or `scope.stage(name, task)`.
+Stages emit start, ready/failed and five-second waiting events. Manifest requests carry
+the browser operation's `x-editor-run-id`, linking browser waits to host preparation.
+Concurrent app preparation can record an owner run ID when sharing work.
+
+Browser events also identify manifest fetch/decode/validation, cache hit/miss,
+download/decompression sizes, `delivery.mode` (`bulk-tree` or `individual-files`),
+bulk installation verification/install/readback timings, worker opening, service
+readiness and process output. This distinguishes host preparation from browser startup.
+
+The application's log command is just:
+
+```ts
+import { runEditorLogs } from '@kev-browser-agent-kit/opencode-chat/server';
+await runEditorLogs({ directory: 'tmp/editor/diagnostics' });
+```
+
+It supports `--follow`, `--json`, `--run <ID-or-prefix>`, `--event <prefix>` and `--help`.
+For example: `bun editor:logs --follow --event preparation`.
+Shared reporter/scope primitives are exported from `/diagnostics` (also from workspace
+`/diagnostics`); storage/reader helpers are exported from `/diagnostics/server`.
+
+After local builds, reinstall consumers with
+`bun install --force --frozen-lockfile --no-save` and restart their dev server.
+The no-save flag avoids Bun 1.4 writing duplicate local-package keys during a forced
+same-version reinstall. Rebuild order is workspace, chat, then reinstall the app.

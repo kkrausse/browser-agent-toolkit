@@ -1,4 +1,7 @@
 import type { DiagnosticEvent } from "./types.js";
+export { sanitizeDiagnostic, boundDiagnostic, createDiagnosticScope, type DiagnosticScope, type ControllerDiagnosticEvent } from './react-diagnostics.js';
+export { createDiagnosticReporter, type DiagnosticBatch } from './diagnostic-transport.js';
+export { createProcessOutput } from './process-output.js';
 
 /** Observers are optional and must never affect storage/runtime correctness. */
 export function diagnosticReporter(observer?: (event: DiagnosticEvent) => void) {

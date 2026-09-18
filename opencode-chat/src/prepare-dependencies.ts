@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto';
 import { resolve, join, dirname, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { sha256 } from './prepare-tree';
+import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
+import { runPreparationProcess } from './prepare-process';
 
 type Lock = { lockfileVersion: number; packages: Record<string, any[]> };
 export interface BackendPolicy { runtimeVersion: string; sha256: string; aliases: Record<string, string> }
@@ -98,7 +100,8 @@ export function selectBackends(lock: Lock, policy: BackendPolicy) {
 }
 
 /** Bun owns resolution, local package copying, scripts and dependency closure. */
-export async function prepareDependencies(options: { appRoot: string; source: string[]; policy: BackendPolicy; bunExecutable?: string; backendArchives?: BackendArchiveInput[] }) {
+export async function prepareDependencies(options: { appRoot: string; source: string[]; policy: BackendPolicy; bunExecutable?: string; backendArchives?: BackendArchiveInput[]; diagnostics?: DiagnosticScope }) {
+  const diagnostics = options.diagnostics ?? createDiagnosticScope();
   const root = resolve(options.appRoot);
   const temporary = await mkdtemp(join(tmpdir(), 'browser-editor-install-'));
   const install = join(temporary, 'tree', root.slice(1));
@@ -120,10 +123,10 @@ export async function prepareDependencies(options: { appRoot: string; source: st
     }
     for (const [name, value] of Object.entries(overrides)) if (pkg.overrides?.[name] && pkg.overrides[name] !== value) throw Error(`Project override conflicts with runtime policy: ${name}`);
     await mkdir(install, { recursive: true });
-    for (const source of options.source) {
+    await diagnostics.stage('preparation.copy-project', async () => { for (const source of options.source) {
       if (!source || source.startsWith('/') || source.split('/').some(part => part === '..' || part === '.git' || part === 'node_modules') || source.includes('\\')) throw Error('Source must be app-relative');
       await cp(join(root, source), join(install, source), { recursive: true, verbatimSymlinks: true });
-    }
+    } });
     // Keep relative file: references identical. Copy declared local package inputs
     // into the same relative layout; Bun performs the actual installation.
     const copied = new Set<string>();
@@ -137,26 +140,26 @@ export async function prepareDependencies(options: { appRoot: string; source: st
         copied.add(source);
         const destination = join(temporary, 'tree', source.slice(1));
         await mkdir(dirname(destination), { recursive: true });
-        await cp(source, destination, { recursive: true, verbatimSymlinks: true, filter: path => !['node_modules', '.git'].includes(path.split('/').at(-1)!) });
+        await diagnostics.stage('preparation.copy-local-package', () => cp(source, destination, { recursive: true, verbatimSymlinks: true, filter: path => !['node_modules', '.git'].includes(path.split('/').at(-1)!) }), { directory: source });
         if (!source.endsWith('.tgz')) await localInputs(source, JSON.parse(await readFile(join(source, 'package.json'), 'utf8')));
       }
     }
-    await localInputs(root, pkg);
+    await diagnostics.stage('preparation.copy-local-packages', () => localInputs(root, pkg));
+    diagnostics.record('preparation.local-packages', { count: copied.size });
     await Bun.write(join(install, 'package.json'), manifest);
     await Bun.write(join(install, 'bun.lock'), lock);
     const bun = options.bunExecutable ?? process.execPath;
     const version = Bun.spawn([bun, '--version'], { stdout: 'pipe' });
     const installer = 'bun ' + (await new Response(version.stdout).text()).trim();
     if (await version.exited) throw Error('Cannot identify Bun installer');
-    async function run(args: string[]) {
-      const child = Bun.spawn([bun, 'install', '--linker', 'isolated', '--cache-dir', join(temporary, 'cache'), ...args], { cwd: install, stdout: 'inherit', stderr: 'inherit' });
-      if (await child.exited) throw Error(`Host dependency installation failed (${args.join(' ')})`);
+    async function run(label: string, args: string[]) {
+      await runPreparationProcess([bun, 'install', '--linker', 'isolated', '--cache-dir', join(temporary, 'cache'), ...args], { cwd: install, label, diagnostics });
     }
-    await run(['--frozen-lockfile']);
+    await run('original-dependencies', ['--frozen-lockfile']);
     for (const archive of archives.values()) await Bun.write(join(install, archive.input.path), archive.input.bytes);
     const derivedManifest = JSON.stringify({ ...pkg, overrides: { ...pkg.overrides, ...overrides } }, null, 2) + '\n';
     await Bun.write(join(install, 'package.json'), derivedManifest);
-    await run([]);
+    await run('runtime-dependencies', []);
     const derivedLockText = await readFile(join(install, 'bun.lock'), 'utf8');
     const derivedLock = parseLock(derivedLockText);
     for (const assertion of assertions.filter(item => item.name === '@tailwindcss/oxide-wasm32-wasi')) {
@@ -179,8 +182,8 @@ export async function prepareDependencies(options: { appRoot: string; source: st
     }
     // Verify reproducibility and platform-filtered delivery, independently of the
     // initial installer cache and node_modules. Scripts follow normal Bun policy.
-    await rm(join(install, 'node_modules'), { recursive: true, force: true });
-    await run(['--frozen-lockfile', '--cache-dir', join(temporary, 'verification-cache')]);
+    await diagnostics.stage('preparation.remove-initial-install', () => rm(join(install, 'node_modules'), { recursive: true, force: true }));
+    await run('verify-runtime-dependencies', ['--frozen-lockfile', '--cache-dir', join(temporary, 'verification-cache')]);
     if (await readFile(join(install, 'bun.lock'), 'utf8') !== derivedLockText) throw Error('Frozen runtime lock changed');
     for (const [key, archive] of archives) await verifyStagedInput(key, archive.input);
     for (const name of Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })) {
@@ -203,7 +206,8 @@ export async function prepareDependencies(options: { appRoot: string; source: st
         }
       }
     }
-    await packages(join(install, 'node_modules'));
+    await diagnostics.stage('preparation.inspect-packages', () => packages(join(install, 'node_modules')));
+    diagnostics.record('preparation.packages', { count: installed.length });
     const backendAssertions: DependencyProvenance['backendAssertions'] = [];
     for (const assertion of assertions) {
       const candidates = installed.filter(pkg => pkg.name === assertion.name && pkg.version === assertion.version
