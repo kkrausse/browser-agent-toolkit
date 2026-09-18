@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Workspace, Runtime, opfsStore, type Distribution, type Endpoint, type Execution, type NodeLaunchOptions, type ToolSet } from "@kev-browser-agent-kit/workspace";
-import { createControllerDiagnostics, safeText, type ControllerDiagnosticOptions } from "./react-diagnostics.js";
+import { createControllerDiagnostics, createDiagnosticScope, safeText, type ControllerDiagnosticOptions } from "./react-diagnostics.js";
 import { shutdownAtEOF } from "./service-shutdown.js";
 import { createProcessOutput } from "./process-output.js";
 
@@ -117,6 +117,7 @@ export class WorkspaceController {
   }
   async launch(name: string, options: NodeLaunchOptions, port: number, connect: (endpoint: Endpoint) => Promise<Connection>, lifecycle?: ServiceLifecycle) {
     const diagnostics = this.diagnostics;
+    const scope = createDiagnosticScope(event => diagnostics.record(event.event, event.data), diagnostics.runId);
     if (this.snapshot.services[name]) return this.snapshot.services[name]!;
     if (!this.runtime) throw Error("Start the runtime before launching services");
     diagnostics.record("service.launch", { name, port, entry: options.entry, args: options.args, cwd: options.cwd });
@@ -130,18 +131,18 @@ export class WorkspaceController {
       lifetime.throwIfAborted();
       lifetime.addEventListener('abort', abortStartup, { once: true });
     }
-    const execution = await this.runtime.node({ ...options, signal: lifecycle ? startup.signal : lifetime }).catch(error => {
+    const execution = await scope.stage('service.spawn', () => this.runtime!.node({ ...options, signal: lifecycle ? startup.signal : lifetime }), { name }).catch(error => {
       lifetime.removeEventListener('abort', abortStartup); throw error;
     });
     const drained = Promise.all([this.drain(execution.stdout, `${name}:stdout`), this.drain(execution.stderr, `${name}:stderr`)]).then(() => {});
     const controller = new AbortController();
     let endpoint: Endpoint | undefined;
     try {
-      endpoint = await Promise.race([
-        this.runtime.expose(port, { signal: AbortSignal.any([this.signal, controller.signal, AbortSignal.timeout(30000)]) }),
+      endpoint = await scope.stage('service.listen', () => Promise.race([
+        this.runtime!.expose(port, { signal: AbortSignal.any([this.signal, controller.signal, AbortSignal.timeout(30000)]) }),
         execution.exited.then(result => { throw Error(`${name} exited before listening (${JSON.stringify(result)}). Check Activity and launch configuration`); }),
-      ]);
-      const connection = await connect(endpoint);
+      ]), { name });
+      const connection = await scope.stage('service.connect', () => connect(endpoint!), { name });
       diagnostics.record("service.healthy", { name, port });
       this.signal.throwIfAborted();
       let resolve!: () => void, reject!: (error: Error) => void;

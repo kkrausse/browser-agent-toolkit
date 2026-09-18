@@ -156,6 +156,7 @@ function EditorPreview({ controller, service, name, hostPaths, isReady }: { cont
       if (target.getAttribute("src") === "about:blank") return;
       // attachPreview navigates through about:blank; ignore its queued load.
       try { if (target.contentWindow?.location.href === "about:blank") return; } catch { /* cross-origin preview */ }
+      controller.diagnostic('preview.iframe.loaded', { name });
       if (isReady) {
         try { observer?.disconnect(); observer = new MutationObserver(check); if (target.contentDocument) observer.observe(target.contentDocument, { childList: true, subtree: true }); }
         catch (error) { controller.clientFailed(name, error); }
@@ -164,6 +165,7 @@ function EditorPreview({ controller, service, name, hostPaths, isReady }: { cont
     };
     target.addEventListener("load", loaded);
     try {
+      controller.diagnostic('preview.iframe.attach', { name });
       const attachment = service.endpoint.attachPreview(target, { hostPaths });
       return controller.registerAttachment(name, () => { observer?.disconnect(); target.removeEventListener("load", loaded); attachment.dispose(); target.src = "about:blank"; });
     } catch (error) { target.removeEventListener("load", loaded); controller.clientFailed(name, error); }

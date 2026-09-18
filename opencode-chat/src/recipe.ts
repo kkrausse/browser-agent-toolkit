@@ -6,17 +6,17 @@ import { decodeProjectFile } from './project-file';
 import { preparePreviewCache } from './preview-cache';
 import { loadPrepared, preparedApps, type PreparedManifest } from './prepared';
 import { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, openCodeCandidateLaunch } from './opencode-launch';
-import { createDiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
+import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
 
 /** Readiness is a real configured provider barrier, not just an HTTP listener. */
-const verifyOpenCodeReadyEffect = Effect.fn('Workspace.verifyOpenCodeReady')(function*(endpoint: Pick<Endpoint, 'fetch'>, authorization: string) {
+const verifyOpenCodeReadyEffect = Effect.fn('Workspace.verifyOpenCodeReady')(function*(endpoint: Pick<Endpoint, 'fetch'>, authorization: string, diagnostics: DiagnosticScope) {
   const descriptor = openCodeCandidateLaunch;
   // Keep body consumption inside the interruptible request so cancellation also
   // aborts a response whose headers arrived but whose body is still streaming.
   const request = <A>(path: string, consume: (response: Response) => Promise<A>, method = 'GET', timeout = 20000) => Effect.tryPromise({
-    try: async signal => consume(await endpoint.fetch(path, {
+    try: async signal => diagnostics.stage('opencode.readiness.request', async () => consume(await endpoint.fetch(path, {
       method, headers: { authorization }, signal: AbortSignal.any([signal, AbortSignal.timeout(timeout)]),
-    })),
+    })), { path, method }),
     catch: (cause: unknown) => cause instanceof Error ? cause : new Error(String(cause)),
   });
   const drained = async (response: Response) => { await response.arrayBuffer(); return response; };
@@ -44,8 +44,8 @@ const verifyOpenCodeReadyEffect = Effect.fn('Workspace.verifyOpenCodeReady')(fun
     && model.enabled && model.capabilities?.tools)) return yield* Effect.fail(new Error('Qualified OpenCode model is not enabled with tools'));
 });
 
-export function verifyOpenCodeReady(endpoint: Pick<Endpoint, 'fetch'>, authorization: string, signal: AbortSignal) {
-  return Effect.runPromise(verifyOpenCodeReadyEffect(endpoint, authorization), { signal });
+export function verifyOpenCodeReady(endpoint: Pick<Endpoint, 'fetch'>, authorization: string, signal: AbortSignal, diagnostics = createDiagnosticScope()) {
+  return Effect.runPromise(verifyOpenCodeReadyEffect(endpoint, authorization, diagnostics), { signal });
 }
 
 function connection(endpoint: Endpoint, authorization?: string): Connection {
@@ -77,8 +77,8 @@ export function createBrowserEditorRecipe(options: { base?: string; model?: stri
       ['Open local workspace', async () => { await controller.open(distribution); }],
       ['Seed missing application source', async () => {
         const workspace = controller.workspace!;
-        controller.log(await preparePreviewCache(workspace, JSON.stringify([manifest.runtimeVersion, manifest.bundle?.sha256 ?? manifest.assets])));
-        const existing = new Set(await sourcePaths(workspace));
+        controller.log(await diagnostics.stage('preview.cache.prepare', () => preparePreviewCache(workspace, JSON.stringify([manifest.runtimeVersion, manifest.bundle?.sha256 ?? manifest.assets]))));
+        const existing = new Set(await diagnostics.stage('workspace.source.scan', () => sourcePaths(workspace)));
         for (const [path, text] of Object.entries(manifest.project)) {
           if (existing.has(path)) continue;
           await workspace.fs.mkdir(path.slice(0, path.lastIndexOf('/')) || '/');
@@ -87,12 +87,12 @@ export function createBrowserEditorRecipe(options: { base?: string; model?: stri
         for (const directory of openCodeCandidateLaunch.workspaceDirectories) await workspace.fs.mkdir(directory);
         await workspace.fs.writeFile(openCodeCandidateLaunch.workspaceConfigPath, JSON.stringify(createOpenCodeCandidateConfig(
           `http://host.vivari.internal:${location.port || (location.protocol === 'https:' ? '443' : '80')}${base}model/opencode/`, ['shell'])));
-        await workspace.flush();
+        await diagnostics.stage('workspace.seed.flush', () => workspace.flush());
       }],
       ['Start runtime and deliver verified applications', async () => {
         if (!controller.runtime) {
           const runtime = await diagnostics.stage('runtime.start', () => controller.startRuntime({ apps: preparedApps(manifest, base + 'prepared/', controller.signal, controller.log, diagnostics) }));
-          try { await runtime.tools.apps(); }
+          try { await diagnostics.stage('runtime.apps.deliver', () => runtime.tools.apps()); }
           catch (error) { await controller.stopRuntime(); throw error; }
         }
       }],
@@ -100,22 +100,24 @@ export function createBrowserEditorRecipe(options: { base?: string; model?: stri
         const started = performance.now();
         const preview = async () => {
           await controller.launch('vite', manifest.preview, 5173, async endpoint => {
-            const response = await endpoint.fetch('/', { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60000)]) });
+            const response = await diagnostics.stage('preview.http', () => endpoint.fetch('/', { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60000)]) }));
             if (!response.ok) throw Error(`Preview HTTP ${response.status}: ${(await response.text()).slice(0, 1000)}`);
             return connection(endpoint);
           });
-          await controller.waitForClient('vite');
-          await controller.workspace!.flush();
+          await diagnostics.stage('preview.client', () => controller.waitForClient('vite'));
+          diagnostics.record('preview.usable', { elapsedMs: Math.round(performance.now() - started) });
+          await diagnostics.stage('preview.flush', () => controller.workspace!.flush());
           controller.log(`Application preview ready (${Math.round(performance.now() - started)}ms)`);
         };
         const chat = async () => {
           const password = crypto.randomUUID() + crypto.randomUUID();
           const authorization = 'Basic ' + btoa('opencode:' + password);
           await controller.launch('chat', createOpenCodeCandidateLaunch({ password, ripgrepBinDirectory: manifest.opencode.support.binDirectory }), openCodeCandidateLaunch.port, async endpoint => {
-            await verifyOpenCodeReady(endpoint, authorization, controller.signal);
+            await verifyOpenCodeReady(endpoint, authorization, controller.signal, diagnostics);
             return connection(endpoint, authorization);
           }, { shutdown: 'stdin-eof', timeoutMs: 10000 });
-          await controller.waitForClient('chat');
+          await diagnostics.stage('chat.client', () => controller.waitForClient('chat'));
+          diagnostics.record('chat.usable', { elapsedMs: Math.round(performance.now() - started) });
           controller.log(`OpenCode ready (${Math.round(performance.now() - started)}ms)`);
         };
         // Both services depend on delivery, not on each other. Drain both starts
