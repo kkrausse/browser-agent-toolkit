@@ -9,7 +9,6 @@ const isProduction = process.env.NODE_ENV === 'production'
 const useBuild = isProduction || !!process.env.SERVE_BUILD
 const todos = new Map<string, Todo>()
 const editor = createBrowserEditorHandler({
-  authorize: authorizeEditing,
   preparedDirectory: '.editor/prepared',
   runtimeDirectory: process.env.RUNTIME_DIR ?? '../workspace-api/dist/runtime',
   clientDirectory: useBuild ? 'build/client' : undefined,
@@ -22,7 +21,11 @@ const editor = createBrowserEditorHandler({
 })
 
 const withEditor = (next: (request: Request) => Promise<Response>) => async (request: Request) => {
-  const response = await editor(request) ?? await next(request)
+  if (await editor.matches(request)) {
+    if (!authorizeEditing(request)) return new Response('Editing is not authorized', { status: 403, headers: { 'Cache-Control': 'no-store' } })
+    return await editor.fetch(request) ?? new Response('Not found', { status: 404 })
+  }
+  const response = await next(request)
   for (const [key, value] of Object.entries(browserEditorHeaders)) response.headers.set(key, value)
   return response
 }

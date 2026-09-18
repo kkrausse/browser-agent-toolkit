@@ -10,7 +10,6 @@ Nothing is published. Generated JS/declarations and runtime payloads are ignored
 | `@kev-browser-agent-kit/workspace` | Browser Workspace, Runtime, storage, endpoints, previews and tools |
 | `@kev-browser-agent-kit/workspace/react` | React 18/19 peer; WorkspaceEditing controlled boundary, WorkspaceProvider, useWorkspace, WorkspaceController and types |
 | `@kev-browser-agent-kit/workspace/assets` | Bun/Node build/server only; readRuntimeAssets, copyRuntimeAssets, RuntimeAssetManifest |
-| `@kev-browser-agent-kit/workspace/server` | Server-only authorizeEditorRequest(Request, appPolicy); denial Response or undefined |
 
 The React entry imports the public core entry, keeping runtime class identity shared.
 Core imports do not load React. No entry starts workers on import. Provider mount
@@ -165,11 +164,11 @@ failed cleanup can be retried. Recipes must observe `controller.signal` and awai
 all launched work. The controller's signal renews after successful close. StrictMode
 effect replay defers admission/disposal. DOM acceptance remains with fresh QA.
 
-Server policy is independent: call `authorizeEditorRequest(request, yourSessionRolePolicy)`
-before serving every editor asset or model/tool request. Undefined permits; otherwise
-return its 403 Response. Hook errors deny. `/server` is not imported by browser/core/
-React entries. The local demo's `LOCAL_EDITOR_ADMIN=1` loopback fixture is explicitly
-not a production identity system; replace it with existing application authorization.
+Authorization belongs directly in the app's server request handling: check the
+application's session/role before serving editor assets or model/tool requests.
+Workspace does not offer an authorization adapter or `/server` entrypoint.
+The local demo's `LOCAL_EDITOR_ADMIN=1` loopback fixture is explicitly not a
+production identity system; replace it with existing application authorization.
 
 `endpoint.attachPreview(iframe, { hostPaths: ["/api"] })` uses caller-selected
 root-absolute segment prefixes. With the matching rebuilt runtime SW, `/api` and

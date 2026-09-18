@@ -1,5 +1,4 @@
 import { resolve, sep } from 'node:path';
-import { authorizeEditorRequest, type EditorAuthorization } from '@kev-browser-agent-kit/workspace/server';
 
 export const browserEditorHeaders = {
   'Cross-Origin-Opener-Policy': 'same-origin',
@@ -13,8 +12,8 @@ function cleanHeaders(input: Headers) {
   return headers;
 }
 
+/** Routing and delivery only. The application must authorize before calling fetch. */
 export function createBrowserEditorHandler(options: {
-  authorize: EditorAuthorization;
   preparedDirectory: string;
   runtimeDirectory: string;
   clientDirectory?: string;
@@ -23,12 +22,16 @@ export function createBrowserEditorHandler(options: {
 }) {
   const base = options.base ?? '/editor/';
   let privateAssets: Promise<string[]> | undefined;
-  return async (request: Request): Promise<Response | undefined> => {
+  const isPrivateAsset = async (path: string) => !!options.clientDirectory && path.startsWith('/assets/')
+    && (await (privateAssets ??= Bun.file(resolve(options.clientDirectory, 'editor-assets.json')).json())).includes(path);
+  const matches = async (request: Request): Promise<boolean> => {
+    const path = new URL(request.url).pathname;
+    return path.startsWith(base) || await isPrivateAsset(path);
+  };
+  const handle = async (request: Request): Promise<Response | undefined> => {
     const url = new URL(request.url), path = url.pathname;
-    const protectedAsset = options.clientDirectory && path.startsWith('/assets/') && (await (privateAssets ??= Bun.file(resolve(options.clientDirectory, 'editor-assets.json')).json())).includes(path);
+    const protectedAsset = await isPrivateAsset(path);
     if (!path.startsWith(base) && !protectedAsset) return;
-    const denied = await authorizeEditorRequest(request, options.authorize);
-    if (denied) return denied;
     if (protectedAsset) {
       if (!['GET', 'HEAD'].includes(request.method)) return new Response('Method not allowed', { status: 405 });
       const file = Bun.file(resolve(options.clientDirectory!, '.' + path));
@@ -75,4 +78,5 @@ export function createBrowserEditorHandler(options: {
     }
     return new Response('Not found', { status: 404 });
   };
+  return { matches, fetch: handle };
 }

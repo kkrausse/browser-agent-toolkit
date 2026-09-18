@@ -185,7 +185,6 @@ try {
     import { Workspace, Runtime, WorkspaceError, attachPreview, type Distribution } from '@kev-browser-agent-kit/workspace';
     import { WorkspaceProvider, WorkspaceController } from '@kev-browser-agent-kit/workspace/react';
     export * from '@kev-browser-agent-kit/workspace/assets';
-    export * from '@kev-browser-agent-kit/workspace/server';
     const distribution: Distribution = {name: 'vivari', version: 'test', assetBaseUrl: '/runtime/'};
     const error: Error = new WorkspaceError('CLOSED', 'smoke');
     export { Workspace, Runtime, WorkspaceController, attachPreview, distribution, error };
