@@ -4,7 +4,6 @@ import type { ChatController } from "./types";
 import { ChatView } from "./react";
 import { attachChat, editorLifecycle } from "./editor-adapter";
 import { Button } from "./components/ui/button";
-import { createBrowserEditorRecipe } from "./recipe";
 import { createBrowserEditorDiagnostics } from './diagnostics';
 export { attachChat, chatFor, type WorkspaceChatOptions } from "./editor-adapter";
 export { sourcePaths } from "./editor-source";
@@ -29,8 +28,8 @@ export interface BrowserEditorProps {
 export type PreparedBrowserEditorProps = Omit<BrowserEditorProps, "controller" | "recipe"> & ControllerDiagnosticOptions & {
   /** Prepared assets, runtime and model proxy root. Default: /editor/. Captured on mount. */
   base?: string;
-  /** Default model for the prepared workspace. Captured on mount. */
-  model?: string;
+  /** Application-owned startup. Captured on mount; start preview and OpenCode explicitly. */
+  start(controller: WorkspaceController): Promise<void>;
   /** Auto-discover the server's diagnostics switch (default). False disables browser delivery. */
   diagnostics?: boolean;
 };
@@ -42,7 +41,7 @@ export function PreparedBrowserEditor({ onDiagnostic, captureProcessOutput, diag
   return <WorkspaceProvider onDiagnostic={client.onDiagnostic} captureProcessOutput={captureProcessOutput ?? (() => client.enabled)}><PreparedEditor {...props} diagnosticClient={client} /></WorkspaceProvider>;
 }
 
-function PreparedEditor({ base, model, diagnosticClient: client, ...props }: PreparedBrowserEditorProps & { diagnosticClient: ReturnType<typeof createBrowserEditorDiagnostics> }) {
+function PreparedEditor({ start, base: _base, diagnosticClient: client, ...props }: PreparedBrowserEditorProps & { diagnosticClient: ReturnType<typeof createBrowserEditorDiagnostics> }) {
   const { controller } = useWorkspace();
   const mounts = useRef(0);
   useEffect(() => {
@@ -60,8 +59,7 @@ function PreparedEditor({ base, model, diagnosticClient: client, ...props }: Pre
     };
   }, [client, controller]);
   const [recipe] = useState(() => {
-    const prepared = createBrowserEditorRecipe({ base, model });
-    return { async start(owner: WorkspaceController) { await client.connect(); await prepared.start(owner); } };
+    return { async start(owner: WorkspaceController) { await client.connect(); await start(owner); } };
   });
   return <BrowserEditor {...props} controller={controller} recipe={recipe} />;
 }

@@ -26,30 +26,22 @@
       "import": "./dist/editor.js"
     },
     "./editor.css": "./dist/editor.css",
-    "./recipe": { "types": "./dist/recipe.d.ts", "import": "./dist/recipe.js" },
+    "./browser": { "types": "./dist/browser.d.ts", "import": "./dist/browser.js" },
     "./prepare": { "types": "./dist/prepare.d.ts", "import": "./dist/prepare.js" },
     "./server": { "types": "./dist/server.d.ts", "import": "./dist/server.js" },
     "./diagnostics": { "types": "./dist/diagnostics.d.ts", "import": "./dist/diagnostics.js" },
     "./diagnostics/server": { "types": "./dist/diagnostics-server.d.ts", "import": "./dist/diagnostics-server.js" },
-    "./vite": { "types": "./dist/vite.d.ts", "import": "./dist/vite.js" },
-    "./config": { "types": "./dist/config.d.ts", "import": "./dist/config.js" },
     "./styles.css": "./dist/styles.css"
   },
   "sideEffects": [
     "**/*.css"
   ],
   "peerDependencies": {
-    "vite": "^7.0.0",
-    "tailwindcss": "^4.0.0",
-    "@tailwindcss/vite": "^4.0.0",
     "@kev-browser-agent-kit/workspace": "^0.1.0",
     "react-dom": ">=18",
     "react": ">=18"
   },
   "peerDependenciesMeta": {
-    "vite": { "optional": true },
-    "tailwindcss": { "optional": true },
-    "@tailwindcss/vite": { "optional": true },
     "react-dom": { "optional": true },
     "@kev-browser-agent-kit/workspace": { "optional": true },
     "react": {

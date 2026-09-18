@@ -21,8 +21,8 @@ compiled browser/headless entries.
 
 ### Prepared browser editor
 
-For the default prepared workspace, the optional `/editor` entrypoint composes
-the provider, controller and recipe:
+The optional `/editor` entrypoint composes the provider and controller. The
+application supplies its ordinary async startup function:
 
 ```tsx
 import { PreparedBrowserEditor } from '@kev-browser-agent-kit/opencode-chat/editor';
@@ -30,22 +30,23 @@ import '@kev-browser-agent-kit/opencode-chat/editor.css';
 
 // The host owns eligibility, useState(false), its Open editor button and lazy mount.
 {allowed && isEditing && <PreparedBrowserEditor
+  start={startBrowserEditor}
   hostPaths={['/api']}
   onExit={() => setIsEditing(false)}
 />}
 ```
 
-`base` defaults to `/editor/`; optional `base` and `model` are captured on mount.
-The existing `BrowserEditor` accepts a host-owned controller and optional recipe
+`base` defaults to `/editor/`; `base` and `start` are captured on mount.
+The existing `BrowserEditor` accepts a host-owned controller and optional startup
 for lower-level composition. Both surfaces use the same editor lifecycle.
-The wrapper uses the qualified OpenCode 2.0.3 preparation/recipe pin. The TODO
+The OpenCode browser helper enforces the qualified OpenCode 2.0.3 pin. The TODO
 flow previously passed model edits, shell execution, Tailwind HMR and local retention
 in the original repository. See the [current example setup](../examples/todo-app/README.md)
 for this checkout; historical acceptance is not fresh browser qualification.
 
 #### Model headers and application authentication
 
-The recipe installs `editor.model-headers` through OpenCode 2.0.3's public global
+`installOpenCodeConfig` installs `editor.model-headers` through OpenCode 2.0.3's public global
 single-file plugin discovery and verifies that it is active. Its provider-scoped
 `session.hook('http.request')` moves native provider headers into
 `X-Editor-Model-Headers` (base64 JSON header pairs, at most 8192 encoded bytes).
@@ -66,8 +67,8 @@ queries, bodies, and streamed responses retain the normal provider contract.
 
 The hook covers primary, title, compaction, and session-generation HTTP requests.
 WebSocket model transport is excluded and remains disabled by the qualified
-recipe. The current runtime's egress policy passes custom headers to the app host.
-This change requires matching recipe/server package versions and reopening the
+OpenCode configuration. The current runtime's egress policy passes custom headers to the app host.
+This change requires matching browser/server package versions and reopening the
 editor so the plugin is seeded; it does **not** require regenerating prepared
 application artifacts. Already-running older guests must be restarted.
 
@@ -316,9 +317,12 @@ fixed editing pane; applications can override its `oc-editor-*` classes.
 
 ## Prepared shared-application integration
 
-The optional toolkit entries own the reusable build/server/runtime orchestration:
+The optional toolkit entries provide concrete operations while the application
+owns preparation and browser startup:
 
-- `/prepare`: `prepareBrowserEditor({appRoot, output, runtimeDirectory, source, openCodeDirectory?})`.
+- `/prepare`: `prepareBrowserEditorDependencies(...)` performs dependency and
+  OpenCode artifact preparation when called. `writeBrowserEditorSource(...)`
+  refreshes the separate editable source delivery without reinstalling packages.
   The verified OpenCode application ships beside the compiled preparer and resolves
   relative to the installed package, independent of cwd. `openCodeDirectory` is an
   optional qualified-build override. Toolkit maintainers must build the retained
@@ -327,12 +331,13 @@ The optional toolkit entries own the reusable build/server/runtime orchestration
   outputs and their receipt are included; retained browser state is excluded.
   verifies the delivered workspace ABI and pinned OpenCode receipt, installs exact top-level
   application dependency versions with WASM esbuild/Rollup, and writes a content-addressed
-  preparation manifest. `source` is an explicit app-relative allowlist. No guest frontend
-  template is generated: the application's existing source and framework config are seeded.
-- `/recipe`: `createBrowserEditorRecipe({base?: '/editor/', model?})` opens the existing
-  workspace controller, seeds only missing source, installs hash-verified dependencies,
-  launches real Vite and OpenCode, and waits for the mounted editor's clients. The editor
-  owns chat attachment; the recipe does not create a second chat controller.
+  preparation manifest. Source is an explicit app-relative allowlist. No guest frontend
+  template is generated. The application owns the cache conditional; see
+  `examples/todo-app/prepare.ts` for a plain `{outputDir, runtimeDir}` `runBuild()`.
+- `/browser`: `installOpenCodeConfig(...)` and `startOpenCode(...)` own only the
+  pinned OpenCode configuration, process, readiness checks, authenticated connection,
+  and client barrier. They do not start Vite or choose application sequencing. See
+  `examples/todo-app/src/start-editor.ts` for app-owned preview startup and parallelism.
 - `PreparedBrowserEditor` discovers the authorized server's diagnostic setting and
   owns browser error listeners, lifecycle/process capture, batching and retries.
   No app-side reporter is needed. `diagnostics={false}` opts out of browser delivery;
@@ -363,7 +368,7 @@ The optional toolkit entries own the reusable build/server/runtime orchestration
   `x-opencode-client` are generated by OpenCode and forwarded unchanged; the host
   does not invent a session ID. A browser user agent with those headers still
   produced Zen's 403 `FreeTierError`; restoring the actual app user agent resolved it.
-- `/vite`: `browserEditorBoundary('src/editing.tsx', 'src/editor-panel.tsx')`
+- `@kev-browser-agent-kit/workspace/vite`: `browserEditorBoundary('src/editing.tsx', 'src/editor-panel.tsx')`
   replaces the host-only editing entry with a null component in the guest, before its
   imports load. In the host build it records private dynamic-entry artifacts in
   `editor-assets.json`; in development it excludes toolkit files from shared dependency
@@ -373,7 +378,7 @@ The optional toolkit entries own the reusable build/server/runtime orchestration
   `isBrowserEditorModule(request.url, 'src/editor-panel.tsx')` to identify editor modules
   and authorizes before calling `next()`. Keep the editor behind that dynamic entry.
   The app owns authorization, denial responses, the launcher, and editing state.
-- `/config`: `browserPreviewBase()` supplies a framework router's deployment basename
+- `@kev-browser-agent-kit/workspace/config`: `browserPreviewBase()` supplies a framework router's deployment basename
   (`/` on the host, `/preview/5173/` in the guest). The Vite boundary uses that same base,
   restoring it after the workspace bridge strips its transport prefix, including HMR.
 - Use upstream `@tailwindcss/vite` directly in the application's Vite config. The
@@ -456,7 +461,7 @@ Successful model response content, request bodies, and environment objects are n
 collected. Failed provider bodies are bounded by bytes and time; proxy streaming is
 not delayed by diagnostic processing. Sink failures do not stop workspace operations.
 
-Pass the provided scope through `prepareBrowserEditor({ ...options, diagnostics: scope })`
+Pass the provided scope through `prepareBrowserEditorDependencies({ ...options, diagnostics: scope })`
 to capture runtime/application checks, local input copies, each dependency install and
 its stdout/stderr, tree capture, snapshot, bundle compression and cleanup. App-specific
 cache/publication work can use `scope.record(name, data)` or `scope.stage(name, task)`.

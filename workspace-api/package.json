@@ -9,6 +9,10 @@
     ".": { "types": "./dist/lib/index.d.ts", "import": "./dist/lib/index.js" },
     "./react": { "types": "./dist/lib/react.d.ts", "import": "./dist/lib/react.js" },
     "./assets": { "types": "./dist/lib/assets.d.ts", "import": "./dist/lib/assets.js" },
+    "./prepare": { "types": "./dist/lib/prepare.d.ts", "import": "./dist/lib/prepare.js" },
+    "./delivery": { "types": "./dist/lib/delivery.d.ts", "import": "./dist/lib/delivery.js" },
+    "./vite": { "types": "./dist/lib/vite.d.ts", "import": "./dist/lib/vite.js" },
+    "./config": { "types": "./dist/lib/config.d.ts", "import": "./dist/lib/config.js" },
     "./diagnostics": { "types": "./dist/lib/diagnostics.d.ts", "import": "./dist/lib/diagnostics.js" }
   },
   "peerDependencies": { "react": ">=18 <20" },

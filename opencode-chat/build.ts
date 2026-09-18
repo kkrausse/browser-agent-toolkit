@@ -13,8 +13,8 @@ await $`bunx tsc --emitDeclarationOnly`;
 for (const [entry, name] of [
   ["src/controller.ts", "index.js"],
   ["src/react.tsx", "react.js"],
-  ["src/editor.tsx", "editor.js"],
-  ["src/recipe.ts", "recipe.js"],
+    ["src/editor.tsx", "editor.js"],
+    ["src/browser.ts", "browser.js"],
   ["src/diagnostics.ts", "diagnostics.js"],
 ]) {
   const result = await Bun.build({
@@ -27,8 +27,8 @@ for (const [entry, name] of [
   });
   if (!result.success) throw new AggregateError(result.logs);
 }
-for (const entry of ['prepare', 'server', 'diagnostics-server', 'vite', 'config']) {
-  const result = await Bun.build({ entrypoints: [`src/${entry}.ts`], outdir: 'dist', naming: `${entry}.js`, target: ['vite', 'config'].includes(entry) ? 'node' : 'bun', packages: 'external' });
+for (const entry of ['prepare', 'server', 'diagnostics-server']) {
+  const result = await Bun.build({ entrypoints: [`src/${entry}.ts`], outdir: 'dist', naming: `${entry}.js`, target: 'bun', packages: 'external' });
   if (!result.success) throw new AggregateError(result.logs);
 }
 await Bun.write('dist/application/build-receipt.json', application.receiptBytes);

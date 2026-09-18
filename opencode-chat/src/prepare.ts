@@ -9,10 +9,10 @@ import { captureTree, sha256 as hash } from './prepare-tree';
 import { validateTree, treeRoots } from './package-tree';
 import { readQualifiedOpenCodeApplication } from './opencode-application';
 import { openCodeCandidateLaunch } from './opencode-launch';
-import { bundleFiles } from './prepared-bundle';
 import { encodeProjectFile } from './project-file';
 import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
 import { runPreparationProcess } from './prepare-process';
+import { bundleEntries, captureSource, writeFile } from '@kev-browser-agent-kit/workspace/prepare';
 export { readTailwindWasmCandidate } from './tailwind-application';
 export type { BackendArchiveInput } from './prepare-dependencies';
 
@@ -41,7 +41,7 @@ export async function prepareOpenCodeRipgrep(prepared: string, bun = process.exe
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
 
-export interface PrepareBrowserEditorOptions {
+interface PrepareBrowserEditorOptions {
   appRoot: string;
   output: string;
   runtimeDirectory: string;
@@ -57,7 +57,7 @@ export interface PrepareBrowserEditorOptions {
 }
 
 /** Bun build-time preparation. Application source is unchanged; native bundlers use WASM. */
-export async function prepareBrowserEditor(options: PrepareBrowserEditorOptions) {
+async function buildManagedPreparation(options: PrepareBrowserEditorOptions) {
   const diagnostics = options.diagnostics ?? createDiagnosticScope();
   const root = resolve(options.appRoot), out = resolve(options.output);
   const runtime = await diagnostics.stage('preparation.runtime-assets', () => readRuntimeAssets(options.runtimeDirectory));
@@ -111,15 +111,11 @@ export async function prepareBrowserEditor(options: PrepareBrowserEditorOptions)
   project['/.browser-editor/runtime-bun.lock'] = dependencies.provenance.derived.lock;
   validateTree(assets);
   const bundle = await diagnostics.stage('preparation.bundle', async () => {
-    const chunks: Uint8Array<ArrayBuffer>[] = [];
-    for (const entry of bundleFiles(assets)) chunks.push(new Uint8Array(await readFile(join(prepared, entry.file))));
-    const compressed = Bun.gzipSync(new Uint8Array(await new Blob(chunks).arrayBuffer()));
-    const bundleHash = hash(compressed), bundle = { file: bundleHash + '.bundle.gz', bytes: compressed.length, sha256: bundleHash };
-    await Bun.write(join(prepared, bundle.file), compressed);
-    diagnostics.record('preparation.bundle.size', { compressedBytes: compressed.length, entries: assets.length, files: chunks.length });
+    const bundle = await bundleEntries({ entries: assets, assetDir: prepared });
+    diagnostics.record('preparation.bundle.size', { compressedBytes: bundle.bytes, entries: assets.length, files: assets.filter(entry => entry.kind === 'file').length });
     return bundle;
   });
-  const manifest: PreparedManifest = { format: 'browser-editor-v2', runtimeVersion: runtime.version, assets, project, dependencies: dependencies.provenance,
+  const manifest: PreparedManifest = { format: 'browser-editor-v2', runtimeVersion: runtime.version, assets, project, sourcePaths: options.source, dependencies: dependencies.provenance,
     bundle,
     opencode: { ...application.provenance, format: openCodeCandidateLaunch.format, receipt: application.receiptBytes.toString('utf8'), support: support.provenance },
     preview: { entry: '/workspace/node_modules/vite/bin/vite.js', args: ['--configLoader', 'native', '--host', '0.0.0.0', '--port', '5173', '--strictPort'], cwd: '/workspace', env: { BROWSER_AGENT_GUEST: '1', NODE_ENV: 'development' } } };
@@ -127,4 +123,25 @@ export async function prepareBrowserEditor(options: PrepareBrowserEditorOptions)
   console.log(`Prepared shared application and ${assets.length} verified dependency/runtime tree entries`);
   return manifest;
   } finally { await diagnostics.stage('preparation.cleanup', () => dependencies.cleanup()); }
+}
+
+export type PrepareBrowserEditorDependenciesOptions = Omit<PrepareBrowserEditorOptions, 'source'>;
+
+/** Perform the dependency/tool installation and managed bundle build now. */
+export function prepareBrowserEditorDependencies(options: PrepareBrowserEditorDependenciesOptions) {
+  return buildManagedPreparation({ ...options, source: [] });
+}
+
+/** Refresh editable source without installing packages or rebuilding managed assets. */
+export async function writeBrowserEditorSource(options: { appRoot: string; output: string; source: string[] }) {
+  const path = join(resolve(options.output), 'prepared/manifest.json');
+  const manifest = JSON.parse(await readFile(path, 'utf8')) as PreparedManifest;
+  if (manifest.format !== 'browser-editor-v2') throw Error('Unsupported editor preparation');
+  const generated = new Set(['/package.json', '/bun.lock', '/.browser-editor/runtime-package.json', '/.browser-editor/runtime-bun.lock']);
+  const project = Object.fromEntries(Object.entries(manifest.project).filter(([name]) => generated.has(name)));
+  Object.assign(project, await captureSource({ rootDir: options.appRoot, paths: options.source }));
+  manifest.project = project;
+  manifest.sourcePaths = [...options.source];
+  await writeFile(path, JSON.stringify(manifest));
+  return manifest;
 }

@@ -7,7 +7,7 @@ import { readQualifiedOpenCodeApplication } from '../src/opencode-application';
 import { openCodeCandidateLaunch, createOpenCodeCandidateConfig } from '../src/opencode-launch';
 import { validatePreparedOpenCode, type PreparedManifest } from '../src/prepared';
 import { validateTree } from '../src/package-tree';
-import { createBrowserEditorRecipe, verifyOpenCodeReady } from '../src/recipe';
+import { verifyOpenCodeReady } from '../src/browser';
 import { sourcePaths, type SourceWorkspace } from '../src/editor-source';
 
 test('ordinary ripgrep install captures pinned bytes, relative executable links and modes', async () => {
@@ -77,11 +77,6 @@ test('chat readiness awaits authenticated activation and validates global config
   for (const failure of ['activation', 'plugin', 'config', 'model'] as const) {
     await expect(verifyOpenCodeReady(endpointFixture(failure).endpoint, authorization, new AbortController().signal)).rejects.toThrow();
   }
-});
-
-test('unqualified model options fail before starting workspace work', () => {
-  expect(() => createBrowserEditorRecipe({ model: 'other/unqualified' })).toThrow('qualified');
-  expect(() => createBrowserEditorRecipe({ model: 'opencode/muse-spark-1.3-contributor-free' })).not.toThrow();
 });
 
 test('health readiness recovers from fetch failure, request timeout and non-OK response', async () => {

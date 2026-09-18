@@ -1,10 +1,11 @@
 import type { ToolDescriptor, NodeLaunchOptions } from '@kev-browser-agent-kit/workspace';
-import { treeInstaller, treeRoots, validateTree, type PreparedEntry } from './package-tree';
+import { treeRoots, validateTree, type PreparedEntry } from './package-tree';
 import type { DependencyProvenance } from './prepare-dependencies';
 import { openCodeCandidateLaunch } from './opencode-launch';
-import { readPreparedBundle, type PreparedBundle } from './prepared-bundle';
 import type { ProjectFile } from './project-file';
 import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
+import { managedDeliveryTool } from '@kev-browser-agent-kit/workspace/delivery';
+import type { ManagedBundle } from '@kev-browser-agent-kit/workspace/delivery';
 
 export interface PreparedOpenCode {
   id: string; format: typeof openCodeCandidateLaunch.format; receiptSha256: string; sourceRevision: string; receipt: string;
@@ -43,11 +44,13 @@ export interface PreparedManifest {
   format: 'browser-editor-v2';
   runtimeVersion: string;
   assets: PreparedEntry[];
-  bundle?: PreparedBundle;
+  bundle?: ManagedBundle;
   dependencies: DependencyProvenance;
   opencode: PreparedOpenCode;
   preview: NodeLaunchOptions;
   project: Record<string, ProjectFile>;
+  /** App-selected editable paths, separate from generated dependency inputs. */
+  sourcePaths?: string[];
 }
 
 /** Derived locks reference these binary inputs relative to the project root. */
@@ -76,76 +79,17 @@ export async function loadPrepared(base: string, signal: AbortSignal, diagnostic
 }
 
 export function preparedApps(manifest: PreparedManifest, base: string, signal: AbortSignal, report: (text: string) => void, diagnostics: DiagnosticScope = createDiagnosticScope()): ToolDescriptor<void, void> {
+  validateTree(manifest.assets);
+  validatePreparedBackendArchives(manifest);
+  if (!manifest.bundle) throw Error('Prepared managed bundle is required; regenerate this editor preparation');
+  const delivery = managedDeliveryTool({ format: 'managed-tree-v1', roots: treeRoots, entries: manifest.assets, bundle: manifest.bundle }, { baseUrl: base, signal, report });
   return { name: 'browser-editor-apps', version: manifest.runtimeVersion, async bind(context) {
+    const install = await delivery.bind(context);
     return async () => {
-      validateTree(manifest.assets);
-      validatePreparedBackendArchives(manifest);
-      async function metadata(phase: 'reset' | 'metadata') {
-        const script = new TextEncoder().encode(treeInstaller(manifest.assets, phase));
-        const identity = [...new Uint8Array(await crypto.subtle.digest('SHA-256', script))].map(byte => byte.toString(16).padStart(2, '0')).join('');
-        const entry = `/tmp/browser-editor-tree-${phase}-${identity}.cjs`;
-        await context.installFile(entry, script);
-        const child = await context.node({ entry, signal });
-        let output = '';
-        const consume = async (stream: AsyncIterable<Uint8Array>) => {
-          for await (const bytes of stream) output = (output + new TextDecoder().decode(bytes)).slice(-16000);
-        };
-        const readers = Promise.all([consume(child.stdout), consume(child.stderr)]);
-        const result = await child.exited;
-        await readers;
-        if (result.exitCode !== 0 || result.signal || result.forced || !output.includes(`prepared-tree-${phase}-complete`)) throw Error(`Prepared tree ${phase} failed: ${output}`);
-      }
-      report(manifest.bundle ? 'Checking prepared workspace bundle cache…' : 'Downloading prepared workspace files…');
-      diagnostics.record('delivery.mode', { mode: manifest.bundle ? 'bulk-tree' : 'individual-files', entries: manifest.assets.length });
-      const bundled = manifest.bundle ? await readPreparedBundle(manifest.bundle, manifest.assets, base, signal, report, diagnostics) : undefined;
-      signal.throwIfAborted();
-      if (bundled) {
-        report('Loading prepared workspace into filesystem…');
-        for (const asset of manifest.assets) if (asset.kind === 'file' && bundled.get(asset.file)?.byteLength !== asset.bytes) throw Error(`Asset size failure: ${asset.destination}`);
-        const result = await diagnostics.stage('delivery.install-tree', () => context.installTree({
-          roots: treeRoots,
-          entries: manifest.assets.map(asset => asset.kind === 'file'
-            ? { kind: 'file', path: asset.destination, mode: asset.mode, bytes: bundled.get(asset.file)!, sha256: asset.sha256, verifyReadback: asset.destination.startsWith('/app/') }
-            : asset.kind === 'directory'
-              ? { kind: 'directory', path: asset.destination, mode: asset.mode }
-              : { kind: 'symlink', path: asset.destination, target: asset.target }),
-        }));
-        diagnostics.record('delivery.install-tree.result', result);
-        signal.throwIfAborted();
-        await context.installFile('/runtime-probe/.browser-editor', new TextEncoder().encode(openCodeCandidateLaunch.candidate));
-        report(`Loaded ${result.files} verified files in one filesystem operation (verify ${Math.round(result.verifyMs)}ms, install ${Math.round(result.installMs)}ms, readback ${Math.round(result.readbackMs)}ms)`);
-        return;
-      }
-      await metadata('reset');
+      diagnostics.record('delivery.mode', { mode: 'managed-tree', entries: manifest.assets.length });
+      await diagnostics.stage('delivery.install-tree', install);
       // Provision only a marker, never reset the entrypoint's fixed database directory.
       await context.installFile('/runtime-probe/.browser-editor', new TextEncoder().encode(openCodeCandidateLaunch.candidate));
-      let done = 0;
-      const files = manifest.assets.filter(asset => asset.kind === 'file');
-      let next = 0;
-      async function install() {
-        try {
-          while (next < files.length) {
-            const asset = files[next++]!;
-            signal.throwIfAborted();
-            const response = await fetch(base + asset.file, { signal });
-            if (!response.ok) throw Error(`Prepared asset HTTP ${response.status}`);
-            const bytes = new Uint8Array(await response.arrayBuffer());
-            const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(b => b.toString(16).padStart(2, '0')).join('');
-            if (bytes.length !== asset.bytes || hash !== asset.sha256) throw Error(`Asset integrity failure: ${asset.destination}`);
-            await context.installFile(asset.destination, bytes);
-            if (asset.destination.startsWith('/app/')) {
-              const installed = await context.readFile(asset.destination);
-              if (installed.length !== asset.bytes || await sha256(installed) !== asset.sha256) throw Error(`Installed OpenCode integrity failure: ${asset.destination}`);
-            }
-            if (++done % 250 === 0) report(`Installed ${done}/${files.length} verified files`);
-          }
-        } catch (error) { next = files.length; throw error; }
-      }
-      // Bound worker messages and hashing memory; drain all work before surfacing errors.
-      const results = await Promise.allSettled(Array.from({ length: Math.min(8, files.length) }, install));
-      const failed = results.find(result => result.status === 'rejected');
-      if (failed?.status === 'rejected') throw failed.reason;
-      await metadata('metadata');
     };
   } };
 }

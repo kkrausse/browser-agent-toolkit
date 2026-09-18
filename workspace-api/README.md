@@ -14,6 +14,33 @@ see the [runtime development guide](../vivari/DEVELOPMENT.md).
 Real Vivari worker-backed files, explicit execution, typed tools and endpoints.
 Browser acceptance instructions are in [the TODO example](../examples/todo-app/README.md).
 
+## Explicit preparation and delivery
+
+`/prepare` contains immediate host-side operations, not a recipe/builder. Applications
+own an ordinary `runBuild()` and its cache branch:
+
+```ts
+import { bundleDirectory, cacheMatches, fingerprint, installPackages, markCache, writeFile } from '@kev-browser-agent-kit/workspace/prepare';
+
+const config = { outputDir: 'build/editor', runtimeDir: 'runtime' };
+async function runBuild() {
+  const identity = await fingerprint({ rootDir: '.', files: ['package.json', 'bun.lock'], values: { runtime: runtimeVersion, backendPolicy } });
+  if (!await cacheMatches({ receiptPath: `${config.outputDir}/cache.json`, fingerprint: identity, outputs: [`${config.outputDir}/managed.json`] })) {
+    await installPackages({ directory: stagingDirectory }); // always installs when called
+    const managed = await bundleDirectory({ directory: `${stagingDirectory}/node_modules`, outputDir: config.outputDir, destination: '/workspace/node_modules' });
+    await writeFile(`${config.outputDir}/managed.json`, JSON.stringify(managed));
+    await markCache({ receiptPath: `${config.outputDir}/cache.json`, fingerprint: identity, outputs: [`${config.outputDir}/managed.json`, `${config.outputDir}/${managed.bundle.file}`] });
+  }
+}
+```
+
+Cache identity and output selection are visible in application code. A receipt is
+valid only when its fingerprint matches and every declared output still exists;
+`markCache` also refuses to mark missing outputs. `/delivery` installs a
+`ManagedDelivery` by replacing only its declared managed roots. Editable source is
+a separate `SourceDelivery`; callers choose `{ existing: 'preserve' }` or
+`{ existing: 'replace' }` explicitly when calling `installSource`.
+
 ```ts
 import { Workspace, Runtime, opfsStore, defineRipgrepTool, attachPreview } from './src';
 

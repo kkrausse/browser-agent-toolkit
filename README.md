@@ -12,8 +12,8 @@ still happens at a configured provider.
 
 | Directory | Purpose |
 | --- | --- |
-| `workspace-api/` | `@kev-browser-agent-kit/workspace`: filesystem/persistence, execution, endpoints, previews, optional React lifecycle helpers |
-| `opencode-chat/` | `@kev-browser-agent-kit/opencode-chat`: server preparation/launch, headless client, optional chat/editor UI |
+| `workspace-api/` | `@kev-browser-agent-kit/workspace`: filesystem/persistence, execution, endpoints, previews, explicit preparation/delivery operations, optional React lifecycle helpers |
+| `opencode-chat/` | `@kev-browser-agent-kit/opencode-chat`: OpenCode artifacts/config/start/readiness/client plus optional chat/editor UI |
 | `examples/todo-app/` | Local React Router + Bun/tRPC TODO application with an optional browser editor |
 | `vivari/` | Runtime source pins, build/packaging tools, and runtime qualification support |
 

@@ -1,6 +1,6 @@
 import { reactRouter } from '@react-router/dev/vite'
 import tailwindcss from '@tailwindcss/vite'
-import { browserEditorBoundary, isBrowserEditorModule } from '@kev-browser-agent-kit/opencode-chat/vite'
+import { browserEditorBoundary, isBrowserEditorModule } from '@kev-browser-agent-kit/workspace/vite'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import { defineConfig } from 'vite'
 import { authorizeEditing } from './src/server/editing'
@@ -23,7 +23,14 @@ export default defineConfig({
         response.end('Editing is not authorized')
       })
     },
-  }, browserEditorBoundary('src/editing.tsx', 'src/editor-panel.tsx')],
+  }, browserEditorBoundary('src/editing.tsx', 'src/editor-panel.tsx', () => [
+    '@kev-browser-agent-kit/opencode-chat/editor',
+    '@kev-browser-agent-kit/opencode-chat/diagnostics',
+    '@kev-browser-agent-kit/opencode-chat/editor.css',
+    '@kev-browser-agent-kit/workspace',
+    '@kev-browser-agent-kit/workspace/react',
+    '@kev-browser-agent-kit/workspace/diagnostics',
+  ].map(name => Bun.resolveSync(name, import.meta.dir)))],
   server: {
     port: 5173,
     strictPort: true,

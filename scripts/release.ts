@@ -196,10 +196,13 @@ try {
     import { ChatView, type ChatViewProps } from '@kev-browser-agent-kit/opencode-chat/react';
     import { BrowserEditor, type BrowserEditorProps } from '@kev-browser-agent-kit/opencode-chat/editor';
     export * from '@kev-browser-agent-kit/opencode-chat';
-    export * from '@kev-browser-agent-kit/opencode-chat/recipe';
+    export * from '@kev-browser-agent-kit/opencode-chat/browser';
     export * from '@kev-browser-agent-kit/opencode-chat/prepare';
     export * from '@kev-browser-agent-kit/opencode-chat/server';
-    export * from '@kev-browser-agent-kit/opencode-chat/config';
+    export * from '@kev-browser-agent-kit/workspace/delivery';
+    export * from '@kev-browser-agent-kit/workspace/prepare';
+    export * from '@kev-browser-agent-kit/workspace/vite';
+    export * from '@kev-browser-agent-kit/workspace/config';
     export const chat = (props: ChatViewProps) => <ChatView {...props} />;
     export const editor = (props: BrowserEditorProps) => <BrowserEditor {...props} />;
   `);
