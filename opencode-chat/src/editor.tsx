@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { WorkspaceProvider, useWorkspace, type Service, type WorkspaceController } from "@kev-browser-agent-kit/workspace/react";
+import { WorkspaceProvider, useWorkspace, type ControllerDiagnosticOptions, type Service, type WorkspaceController } from "@kev-browser-agent-kit/workspace/react";
 import type { ChatController } from "./types";
 import { ChatView } from "./react";
 import { attachChat, editorLifecycle } from "./editor-adapter";
@@ -25,7 +25,7 @@ export interface BrowserEditorProps {
   /** Optional application-specific rendered-content check. Default: iframe load. */
   isPreviewReady?(frame: HTMLIFrameElement): boolean;
 }
-export type PreparedBrowserEditorProps = Omit<BrowserEditorProps, "controller" | "recipe"> & {
+export type PreparedBrowserEditorProps = Omit<BrowserEditorProps, "controller" | "recipe"> & ControllerDiagnosticOptions & {
   /** Prepared assets, runtime and model proxy root. Default: /editor/. Captured on mount. */
   base?: string;
   /** Default model for the prepared workspace. Captured on mount. */
@@ -34,8 +34,8 @@ export type PreparedBrowserEditorProps = Omit<BrowserEditorProps, "controller" |
 
 /** Mount only while editing is authorized and open. Composes the default prepared
  * recipe and workspace lifecycle; the host owns authorization and the launcher. */
-export function PreparedBrowserEditor(props: PreparedBrowserEditorProps) {
-  return <WorkspaceProvider><PreparedEditor {...props} /></WorkspaceProvider>;
+export function PreparedBrowserEditor({ onDiagnostic, captureProcessOutput, ...props }: PreparedBrowserEditorProps) {
+  return <WorkspaceProvider onDiagnostic={onDiagnostic} captureProcessOutput={captureProcessOutput}><PreparedEditor {...props} /></WorkspaceProvider>;
 }
 
 function PreparedEditor({ base, model, ...props }: PreparedBrowserEditorProps) {

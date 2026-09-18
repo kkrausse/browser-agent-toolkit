@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, useSyncExternal
 import { Workspace, Runtime, opfsStore, type Distribution, type Endpoint, type Execution, type NodeLaunchOptions, type ToolSet } from "@kev-browser-agent-kit/workspace";
 import { createControllerDiagnostics, safeText, type ControllerDiagnosticOptions } from "./react-diagnostics.js";
 import { shutdownAtEOF } from "./service-shutdown.js";
+import { createProcessOutput } from "./process-output.js";
 
 /** Reusable React boundary: public API ownership, serialization and subscriptions.
  * No sample source, package paths, provider configuration or application ports here. */
@@ -19,7 +20,11 @@ const message = (error: unknown) => safeText(error instanceof Error ? error.mess
 
 export class WorkspaceController {
   private readonly diagnostics;
-  constructor(options: ControllerDiagnosticOptions = {}) { this.diagnostics = createControllerDiagnostics(options); }
+  private readonly captureProcessOutput;
+  constructor(options: ControllerDiagnosticOptions = {}) {
+    this.diagnostics = createControllerDiagnostics(options);
+    this.captureProcessOutput = options.captureProcessOutput ?? false;
+  }
   private snapshot = initial();
   private listeners = new Set<() => void>();
   private attachments = new Map<string, () => void>();
@@ -98,16 +103,17 @@ export class WorkspaceController {
   }
   private async drain(stream: AsyncIterable<Uint8Array>, label: string) {
     const diagnostics = this.diagnostics;
+    const output = this.captureProcessOutput ? createProcessOutput(text => diagnostics.record('guest.output', { label, message: text })) : undefined;
     let totalBytes = 0;
-    try { for await (const bytes of stream) { if (!totalBytes) diagnostics.record("guest.first-output", { label, bytes: bytes.length }); totalBytes += bytes.length; } }
+    try { for await (const bytes of stream) { if (!totalBytes) diagnostics.record("guest.first-output", { label, bytes: bytes.length }); totalBytes += bytes.length; output?.push(bytes); } }
     catch (error) { this.log(`[${label}] ${message(error)}`); }
-    finally { this.log(`[${label}] drained ${totalBytes} bytes (raw output omitted from diagnostics)`); }
+    finally { output?.flush(); this.log(`[${label}] drained ${totalBytes} bytes (${output ? 'bounded output captured in diagnostics' : 'raw output omitted from diagnostics'})`); }
   }
   async launch(name: string, options: NodeLaunchOptions, port: number, connect: (endpoint: Endpoint) => Promise<Connection>, lifecycle?: ServiceLifecycle) {
     const diagnostics = this.diagnostics;
     if (this.snapshot.services[name]) return this.snapshot.services[name]!;
     if (!this.runtime) throw Error("Start the runtime before launching services");
-    diagnostics.record("service.launch", { name, port });
+    diagnostics.record("service.launch", { name, port, entry: options.entry, args: options.args, cwd: options.cwd });
     const timeoutMs = lifecycle?.timeoutMs ?? 10000;
     if (lifecycle && (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 120000)) throw Error('Service shutdown timeout must be 1–120000ms');
     // Cancel incomplete startup immediately. A published EOF-managed service is
@@ -218,8 +224,8 @@ export class WorkspaceController {
 const Context = createContext<{ controller: WorkspaceController; state: WorkspaceSnapshot } | null>(null);
 export type WorkspaceProviderProps = ControllerDiagnosticOptions & { children: ReactNode };
 /** Options are captured on mount. This provider starts no workers or services. */
-export function WorkspaceProvider({ children, onDiagnostic }: WorkspaceProviderProps) {
-  const [controller] = useState(() => new WorkspaceController({ onDiagnostic }));
+export function WorkspaceProvider({ children, onDiagnostic, captureProcessOutput }: WorkspaceProviderProps) {
+  const [controller] = useState(() => new WorkspaceController({ onDiagnostic, captureProcessOutput }));
   const mounts = useRef(0);
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   useEffect(() => {
@@ -254,8 +260,8 @@ export type WorkspaceEditingProps = WorkspaceProviderProps & {
 };
 /** Optional controlled boundary. Children retain identity in normal, boot and editing modes.
  * The recipe/editor decide preview readiness and presentation; no runtime or recipe is implicit. */
-export function WorkspaceEditing({ onDiagnostic, ...props }: WorkspaceEditingProps) {
-  return <WorkspaceProvider onDiagnostic={onDiagnostic}><EditingLifecycle {...props} /></WorkspaceProvider>;
+export function WorkspaceEditing({ onDiagnostic, captureProcessOutput, ...props }: WorkspaceEditingProps) {
+  return <WorkspaceProvider onDiagnostic={onDiagnostic} captureProcessOutput={captureProcessOutput}><EditingLifecycle {...props} /></WorkspaceProvider>;
 }
 function EditingLifecycle({ allowed, enabled, start, retryKey, children, renderEditor, isPreviewReady }: Omit<WorkspaceEditingProps, "onDiagnostic">) {
   const { controller, state } = useWorkspace();

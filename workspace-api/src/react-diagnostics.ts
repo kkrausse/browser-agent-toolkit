@@ -7,6 +7,8 @@ export interface ControllerDiagnosticEvent {
 export interface ControllerDiagnosticOptions {
   /** Optional local sink. No network calls are made by the integration. */
   onDiagnostic?: (event: ControllerDiagnosticEvent) => void;
+  /** Include bounded, redacted guest stdout/stderr as guest.output events. Default: false. */
+  captureProcessOutput?: boolean;
 }
 export function safeText(value: string): string {
   return value.slice(0, 6000)

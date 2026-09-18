@@ -290,6 +290,14 @@ The optional toolkit entries own the reusable build/server/runtime orchestration
   workspace controller, seeds only missing source, installs hash-verified dependencies,
   launches real Vite and OpenCode, and waits for the mounted editor's clients. The editor
   owns chat attachment; the recipe does not create a second chat controller.
+- `PreparedBrowserEditor` also accepts `onDiagnostic(event)` and
+  `captureProcessOutput`. The optional sink receives lifecycle events and, when
+  output capture is enabled, `guest.output` events containing the service/stream
+  label and bounded, redacted stdout/stderr. UTF-8 and partial lines are assembled
+  across process chunks. The toolkit makes no diagnostic network calls; the host
+  application can persist these events through its own authenticated endpoint.
+  Output capture defaults to false. Launch events include entry, arguments, cwd
+  and port, but never environment values.
 - `/server`: `createBrowserEditorHandler({preparedDirectory, runtimeDirectory,
   clientDirectory, providers: {opencode: {baseURL, headers}}, base?})` returns `{matches, fetch}`.
   `matches(request)` identifies preparation/runtime assets, the build's private editor
