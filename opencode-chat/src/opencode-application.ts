@@ -14,12 +14,12 @@ export interface ApplicationContract {
 /** Qualification identity, not a general OpenCode release pin or a rebuild recipe. */
 export const qualifiedOpenCodeCandidate = {
   id: 'opencode-server-process-2.0.3',
-  receiptSha256: 'df6a3d88f014f95c1dd5957a06c6e3baa3ca4d4dd45ca4be5ea88d6518627813',
+  receiptSha256: '40789e37d00c5bfbfc9dad88012d7fe3c88a6054df7a2cbd340e1bd2bd676112',
   sourceRevision: 'd44b52ca66b6bf69626c0384626d1a9cd9555977',
   publishedPackage: { name: '@opencode/server', version: '2.0.3', integrity: 'sha512-XlUL8p9fpW9FEssTY5aWS0qpcrDb1pV3dEbu6lU8KOgCIt6/gHwAKibEz4XPYf978vSRrvYGjreHIv0loA7fTg==' },
   outputs: {
     'ffi-rs.darwin-arm64-xwnmxr1d.node': { bytes: 721896, sha256: '50158069dfc4fcef50af699b84f41b746eeeda076b43950c51828e1eb62f9bc7' },
-    'server.js': { bytes: 27721709, sha256: '1df4bc41c0f6c7350da9d5953f3139586f760a7931fe411bdcabb3460098a929' },
+    'server.js': { bytes: 27721680, sha256: '648140f53c48820106d4727fd29f1914f8f86a4e2c3f3430551eb9dd41a806b5' },
     'tree-sitter-bash.wasm': { bytes: 1380769, sha256: '364f0a2cd385c792239423026ef442dbd073d34c396b7bc9e5932426b8e4aa5d' },
     'tree-sitter-powershell.wasm': { bytes: 983236, sha256: '1d30b5a21866354aa2eb94845556f1e19126ff00e3335048719a0e6435b1c154' },
     'tree-sitter.wasm': { bytes: 205488, sha256: 'f38dcc4b43b818f9a0785bc1c6d5611a75ac4cdd428ff3f02757c34ca4e46d7f' },

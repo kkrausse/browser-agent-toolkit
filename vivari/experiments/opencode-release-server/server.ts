@@ -1,5 +1,6 @@
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';
+import { HttpClient } from 'effect/unstable/http';
 import { ServerProcess } from '@opencode/server/process';
 
 await Effect.runPromise(Effect.scoped(Effect.gen(function* () {
@@ -8,7 +9,8 @@ await Effect.runPromise(Effect.scoped(Effect.gen(function* () {
     hostname: '127.0.0.1', port: 4096,
     password: process.env.OPENCODE_PASSWORD,
     database: { path: process.env.OPENCODE_DATABASE_PATH ?? '/runtime-probe/opencode.sqlite' },
-    models: { fetch: false },
+    // Refresh the official catalog; embedded free-model IDs can be retired.
+    models: { fetch: true },
     config: { project: false, content: '{"snapshot":false}' },
     fs: { filewatcher: false, fff: false },
   }, {
@@ -21,5 +23,9 @@ await Effect.runPromise(Effect.scoped(Effect.gen(function* () {
   });
   console.log('OPENCODE_SERVER_PROCESS_READY');
   yield* server.shutdown;
-})).pipe(Effect.provide(NodeServices.layer)));
+})).pipe(
+  // Public catalog CORS permits GET, but not Effect's b3/traceparent headers.
+  Effect.provideService(HttpClient.TracerPropagationEnabled, false),
+  Effect.provide(NodeServices.layer),
+));
 console.log('OPENCODE_SERVER_PROCESS_SHUTDOWN_COMPLETE');

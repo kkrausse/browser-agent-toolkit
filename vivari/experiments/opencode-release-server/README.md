@@ -36,6 +36,31 @@ root and `OPENCODE_PROBE_STORAGE` to a new isolated directory, and run
 upstream schema migration and the session's ID/title/project/location retention.
 It does not run against the user's existing workspace database.
 
+### Live catalog qualification (September 18, 2026)
+
+The same pinned 2.0.3 packages now run with native catalog fetching enabled.
+OpenCode refreshes `https://models.opencode.ai/api.json` on startup and every five
+minutes, retaining its native cache/snapshot fallback. Effect's supported
+`HttpClient.TracerPropagationEnabled` context is disabled for this embedded
+server: the catalog's CORS policy rejects the otherwise injected `b3` and
+`traceparent` headers. No catalog entries are maintained by this recipe.
+
+The Node 24.18.0 worker probe passed authenticated health, unauthenticated denial,
+EOF shutdown and natural exit 0. The irs-tools browser editor loaded the new
+catalog and selected `opencode/ling-3.0-flash-fin-free`; its harmless native prompt
+returned `provider.rate-limit` HTTP 429. Retries were stopped. This verifies the
+current model request path, not successful generation under provider quota.
+Existing workspace files and session history were retained.
+
+The replacement archive has its own immutable release asset name in
+`../../opencode-input.json`; the previous archive remains available. For existing
+checkouts, move the old `.runtime/opencode-release-2.0.3` directory aside before
+running `bun scripts/setup-opencode.ts` from the toolkit root. Rebuild the chat
+package, refresh file-dependency installs, rerun consumer editor preparation, and
+restart the dev server with dependency reoptimization. Close/reopen the editor
+to adopt the new server without resetting browser storage. Existing chats may
+retain a retired model selection; choose a current model in Session & model.
+
 Historical September 15 browser receipts remain in the original `random` repo.
 See the [toolkit setup guide](../../../README.md) for the exact-artifact prerequisite
 and how to import a previously qualified payload without copying workspace state.

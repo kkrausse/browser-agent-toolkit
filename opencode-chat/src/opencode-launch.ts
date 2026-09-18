@@ -4,7 +4,7 @@ import type { NodeLaunchOptions } from '@kev-browser-agent-kit/workspace';
 export const openCodeCandidateLaunch = {
   format: 'opencode-server-process-v1',
   candidate: 'opencode-server-process-2.0.3',
-  receiptSha256: 'df6a3d88f014f95c1dd5957a06c6e3baa3ca4d4dd45ca4be5ea88d6518627813',
+  receiptSha256: '40789e37d00c5bfbfc9dad88012d7fe3c88a6054df7a2cbd340e1bd2bd676112',
   sourceRevision: 'd44b52ca66b6bf69626c0384626d1a9cd9555977',
   port: 4096,
   databasePath: '/runtime-probe/opencode.sqlite',
