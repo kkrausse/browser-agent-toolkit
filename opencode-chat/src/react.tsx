@@ -131,6 +131,25 @@ const MessageRow = memo(function MessageRow({
   onOpenFile?: OpenFile;
   continuation?: boolean;
 }) {
+  if (message.type === "idle") {
+    const label = {
+      succeeded: "Run completed",
+      failed: "Run failed",
+      interrupted: "Run interrupted",
+    }[message.outcome];
+    return (
+      <div
+        className={`oc-message oc-run-status oc-run-status-${message.outcome}`}
+        role="status"
+        aria-label={label}
+      >
+        <span className="oc-run-status-label">
+          <span className="oc-run-status-dot" aria-hidden="true" />
+          {label}
+        </span>
+      </div>
+    );
+  }
   return (
     <article
       className={`oc-message oc-message-${message.type}${continuation ? " oc-message-continuation" : ""}`}

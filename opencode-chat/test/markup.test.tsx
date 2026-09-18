@@ -24,6 +24,25 @@ test("unsupported candidate forms explain the limitation in the chat UI", async 
     expect(hosted).not.toContain('class="oc-connection"');
   } finally { c.dispose(); }
 });
+test("idle messages render as compact run statuses instead of raw JSON", async () => {
+  const f = fixture();
+  f.histories.ses1!.push(
+    { id: "msg_idle_ok", type: "idle", outcome: "succeeded", time: { created: 1 } },
+    { id: "msg_idle_failed", type: "idle", outcome: "failed", time: { created: 2 } },
+    { id: "msg_idle_stopped", type: "idle", outcome: "interrupted", time: { created: 3 } },
+  );
+  const c = createChatController({ endpoint: f.endpoint, directory: "/workspace" });
+  try {
+    await c.ready;
+    const html = renderToStaticMarkup(<ChatView controller={c} />);
+    expect(html).toContain("Run completed");
+    expect(html).toContain("Run failed");
+    expect(html).toContain("Run interrupted");
+    expect(html).toContain("oc-run-status-succeeded");
+    expect(html).not.toContain("msg_idle_ok");
+    expect(html).not.toContain('&quot;type&quot;: &quot;idle&quot;');
+  } finally { c.dispose(); }
+});
 test("Markdown never executes HTML or unsafe links, and supports incomplete fences", () => {
   const html = renderToStaticMarkup(
     <Markdown

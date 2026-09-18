@@ -91,6 +91,41 @@
   border-radius: 10px;
   padding: 12px 16px;
 }
+.oc-run-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--oc-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.oc-run-status::before,
+.oc-run-status::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--oc-border);
+}
+.oc-run-status-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.oc-run-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #17a673;
+  box-shadow: 0 0 0 3px #e8f7f1;
+}
+.oc-run-status-failed .oc-run-status-dot {
+  background: #d92d20;
+  box-shadow: 0 0 0 3px #feeceb;
+}
+.oc-run-status-interrupted .oc-run-status-dot {
+  background: #dc8b18;
+  box-shadow: 0 0 0 3px #fff3df;
+}
 .oc-markdown p {
   margin: 8px 0;
 }
