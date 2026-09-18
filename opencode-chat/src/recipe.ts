@@ -2,6 +2,7 @@ import type { Endpoint, Distribution } from '@kev-browser-agent-kit/workspace';
 import { Effect } from 'effect';
 import type { WorkspaceController, Connection } from '@kev-browser-agent-kit/workspace/react';
 import { sourcePaths } from './editor-source';
+import { modelHeaderPluginSource } from './model-headers';
 import { decodeProjectFile } from './project-file';
 import { preparePreviewCache } from './preview-cache';
 import { loadPrepared, preparedApps, type PreparedManifest } from './prepared';
@@ -29,6 +30,13 @@ const verifyOpenCodeReadyEffect = Effect.fn('Workspace.verifyOpenCodeReady')(fun
   }
   const activated = yield* request(descriptor.activation.path, drained, descriptor.activation.method);
   if (!activated.ok) return yield* Effect.fail(new Error(`OpenCode plugin activation HTTP ${activated.status}`));
+  const plugins = yield* request('/api/plugin?directory=/workspace', async response => {
+    if (!response.ok) { await response.arrayBuffer(); throw Error(`OpenCode plugins HTTP ${response.status}`); }
+    return response.json();
+  });
+  if (!Array.isArray(plugins.data) || !plugins.data.some((plugin: { id: string; state?: { status: string } }) => plugin.id === 'editor.model-headers' && plugin.state?.status === 'active')) {
+    return yield* Effect.fail(new Error('OpenCode model header transport plugin is not active'));
+  }
   const entries = yield* request(descriptor.configAPIPath, async response => {
     if (!response.ok) { await response.arrayBuffer(); throw Error(`OpenCode configuration HTTP ${response.status}`); }
     return response.json();
@@ -85,8 +93,10 @@ export function createBrowserEditorRecipe(options: { base?: string; model?: stri
           await workspace.fs.writeFile(path, decodeProjectFile(text));
         }
         for (const directory of openCodeCandidateLaunch.workspaceDirectories) await workspace.fs.mkdir(directory);
-        await workspace.fs.writeFile(openCodeCandidateLaunch.workspaceConfigPath, JSON.stringify(createOpenCodeCandidateConfig(
-          `http://host.vivari.internal:${location.port || (location.protocol === 'https:' ? '443' : '80')}${base}model/opencode/`, ['shell'])));
+        const modelBaseURL = `http://host.vivari.internal:${location.port || (location.protocol === 'https:' ? '443' : '80')}${base}model/opencode/`;
+        await workspace.fs.mkdir('/.server/config/opencode/plugins');
+        await workspace.fs.writeFile('/.server/config/opencode/plugins/editor-model-headers.js', modelHeaderPluginSource(modelBaseURL));
+        await workspace.fs.writeFile(openCodeCandidateLaunch.workspaceConfigPath, JSON.stringify(createOpenCodeCandidateConfig(modelBaseURL, ['shell'])));
         await diagnostics.stage('workspace.seed.flush', () => workspace.flush());
       }],
       ['Start runtime and deliver verified applications', async () => {

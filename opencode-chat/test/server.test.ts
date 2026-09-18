@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createBrowserEditorHandler } from '../src/server';
+import { encodeModelHeaders, MODEL_HEADERS } from '../src/model-headers';
 
 test('request matching includes every editor resource and excludes public application routes', async () => {
   const root = await mkdtemp(join(tmpdir(), 'editor-server-'));
@@ -38,7 +39,8 @@ test('model proxy streams real HTTP, strips client credentials, and keeps its up
       anthropic: { baseURL: upstream.url + 'anthropic/v1', headers: { 'x-api-key': 'server-anthropic' } },
     } });
     const response = await handler.fetch(new Request('http://localhost/editor/model/opencode/chat/completions?native=value%2Fone', { method: 'POST', body: '{ "opaque": true }',
-      headers: { authorization: 'Bearer client', cookie: 'session=private', origin: 'http://localhost', 'x-api-key': 'private', 'x-opencode-session': 'ses_test', 'x-opencode-client': 'test-client', 'user-agent': 'Mozilla/5.0' } }));
+      headers: { authorization: 'Bearer app', cookie: 'session=private', origin: 'http://localhost', 'x-app-secret': 'private', 'x-clerk-auth': 'private',
+        [MODEL_HEADERS]: encodeModelHeaders(new Headers({ authorization: 'Bearer client', 'x-api-key': 'private', 'x-opencode-session': 'ses_test', 'x-opencode-client': 'test-client', 'user-agent': 'OpenCode-native' })) } }));
     expect(await response?.text()).toBe('data: real-stream\n\n');
     expect(received?.path).toBe('/v1/chat/completions');
     expect(received?.search).toBe('?native=value%2Fone');
@@ -47,10 +49,10 @@ test('model proxy streams real HTTP, strips client credentials, and keeps its up
     expect(received?.headers.get('x-opencode-client')).toBe('test-client');
     expect(received?.headers.get('authorization')).toBe('Bearer server-only');
     expect(received?.headers.get('user-agent')).toBe('opencode/stable/2.0.3/vivari-opencode-server');
-    for (const name of ['cookie', 'origin', 'x-api-key']) expect(received?.headers.get(name)).toBeNull();
+    for (const name of ['cookie', 'origin', 'x-api-key', 'x-app-secret', 'x-clerk-auth', MODEL_HEADERS]) expect(received?.headers.get(name)).toBeNull();
     expect(response?.headers.get('set-cookie')).toBeNull();
     const native = await handler.fetch(new Request('http://localhost/editor/model/anthropic/messages?beta=true', { method: 'POST', body: '{"messages":[]}',
-      headers: { authorization: 'Bearer client', 'x-api-key': 'client-key', 'anthropic-version': '2023-06-01' } }));
+      headers: { [MODEL_HEADERS]: encodeModelHeaders(new Headers({ authorization: 'Bearer client', 'x-api-key': 'client-key', 'anthropic-version': '2023-06-01' })) } }));
     await native?.text();
     expect(received?.path).toBe('/anthropic/v1/messages');
     expect(received?.headers.get('x-api-key')).toBe('server-anthropic');
@@ -62,4 +64,38 @@ test('model proxy streams real HTTP, strips client credentials, and keeps its up
     }
     expect(requests).toBe(2);
   } finally { upstream.stop(true); }
+});
+
+test('model proxy forwards request chunks before EOF and returns response chunks before EOF', async () => {
+  let firstRead!: (value: string) => void;
+  const first = new Promise<string>(resolve => { firstRead = resolve; });
+  let responseStream!: ReadableStreamDefaultController<Uint8Array>;
+  const upstream = Bun.serve({ port: 0, async fetch(request) {
+    const reader = request.body!.getReader();
+    firstRead(new TextDecoder().decode((await reader.read()).value));
+    while (!(await reader.read()).done) { /* Drain remaining native bytes. */ }
+    return new Response(new ReadableStream({ start(controller) {
+      responseStream = controller; controller.enqueue(new TextEncoder().encode('data: first\n\n'));
+    } }), { headers: { 'content-type': 'text/event-stream' } });
+  } });
+  const lifetime = new AbortController();
+  try {
+    const handler = createBrowserEditorHandler({ preparedDirectory: '.', runtimeDirectory: '.', providers: { opencode: { baseURL: upstream.url.href } } });
+    let requestStream!: ReadableStreamDefaultController<Uint8Array>;
+    const request = new Request('http://host/editor/model/opencode/responses', { method: 'POST', signal: lifetime.signal,
+      headers: { [MODEL_HEADERS]: encodeModelHeaders(new Headers({ 'content-type': 'application/json' })) },
+      body: new ReadableStream({ start(controller) { requestStream = controller; controller.enqueue(new TextEncoder().encode('first')); } }),
+    });
+    const pending = handler.fetch(request);
+    expect(await Promise.race([first, Bun.sleep(2000).then(() => 'timed out')])).toBe('first');
+    requestStream.enqueue(new TextEncoder().encode('second')); requestStream.close();
+    const response = await pending;
+    const reader = response!.body!.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe('data: first\n\n');
+    responseStream.enqueue(new TextEncoder().encode('data: second\n\n'));
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe('data: second\n\n');
+    const canceled = reader.read().then(() => false, () => true);
+    lifetime.abort();
+    expect(await Promise.race([canceled, Bun.sleep(2000).then(() => false)])).toBe(true);
+  } finally { lifetime.abort(); upstream.stop(true); }
 });

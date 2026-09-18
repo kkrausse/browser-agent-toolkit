@@ -1,4 +1,5 @@
 import { resolve, sep } from 'node:path';
+import { decodeModelHeaders, MODEL_HEADERS } from './model-headers';
 import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
 import { handleDiagnosticRequest, editorModelError, type DiagnosticContext, type EditorDiagnosticSink } from './diagnostics-server';
 export { createFileDiagnosticSink, runEditorLogs, readEditorDiagnostics, type EditorDiagnosticSink } from './diagnostics-server';
@@ -69,19 +70,21 @@ export function createBrowserEditorHandler(options: {
       if (modelPath.includes('\\') || modelPath.split('/').some(part => part === '..' || part === '.')) return new Response('Invalid model path', { status: 400 });
       const upstream = new URL(upstreamBase.href + nativePath + url.search);
       if (upstream.origin !== upstreamBase.origin || !upstream.pathname.startsWith(upstreamBase.pathname)) return new Response('Invalid model path', { status: 400 });
-      const headers = cleanHeaders(request.headers);
+      let headers: Headers;
+      try { headers = cleanHeaders(decodeModelHeaders(request.headers.get(MODEL_HEADERS))); }
+      catch { return new Response('Invalid model header envelope', { status: 400 }); }
       for (const name of [...headers.keys()]) {
-        if (['cookie', 'origin', 'referer', 'authorization', 'x-api-key', 'api-key', 'x-goog-api-key', 'forwarded'].includes(name) || name.startsWith('x-forwarded-') || name.startsWith('sec-')) headers.delete(name);
+        if (['cookie', 'origin', 'referer', 'authorization', 'x-api-key', 'api-key', 'x-goog-api-key', 'forwarded'].includes(name) || name.startsWith('x-forwarded-') || name.startsWith('sec-') || name.startsWith('x-editor-')) headers.delete(name);
       }
       headers.set('accept-encoding', 'identity');
       new Headers(provider.headers).forEach((value, key) => headers.set(key, value));
       headers.delete('x-editor-run-id');
       const started = performance.now();
-      diagnostics.record('model.request', { path, provider: providerID, sessionId: request.headers.get('x-opencode-session') });
+      diagnostics.record('model.request', { path, provider: providerID, sessionId: headers.get('x-opencode-session') });
       try {
         const response = await fetch(upstream, { method: request.method, headers, body: request.body, signal: request.signal, redirect: 'manual' });
         const detail = { path, provider: providerID, status: response.status, elapsedMs: Math.round(performance.now() - started), retryAfter: response.headers.get('retry-after'),
-          userAgent: headers.get('user-agent'), providerCredentialConfigured: ['authorization', 'x-api-key', 'api-key', 'x-goog-api-key'].some(name => headers.has(name)), sessionId: request.headers.get('x-opencode-session') };
+          userAgent: headers.get('user-agent'), providerCredentialConfigured: ['authorization', 'x-api-key', 'api-key', 'x-goog-api-key'].some(name => headers.has(name)), sessionId: headers.get('x-opencode-session') };
         diagnostics.record('model.response', detail);
         if (options.diagnostics?.enabled && !response.ok) void editorModelError(response).then(error => diagnostics.record('model.error', { ...detail, error }));
         const outgoing = cleanHeaders(response.headers);

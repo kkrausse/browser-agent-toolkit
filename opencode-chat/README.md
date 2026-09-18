@@ -43,6 +43,49 @@ flow previously passed model edits, shell execution, Tailwind HMR and local rete
 in the original repository. See the [current example setup](../examples/todo-app/README.md)
 for this checkout; historical acceptance is not fresh browser qualification.
 
+#### Model headers and application authentication
+
+The recipe installs `editor.model-headers` through OpenCode 2.0.3's public global
+single-file plugin discovery and verifies that it is active. Its provider-scoped
+`session.hook('http.request')` moves native provider headers into
+`X-Editor-Model-Headers` (base64 JSON header pairs, at most 8192 encoded bytes).
+It removes the native outer headers, including `Authorization`, without reading
+or replacing the native request body, URL, method, or abort signal. Browser
+cookies and application authentication belong to the resulting outer request.
+
+**Authenticate the original request normally** before calling
+`createBrowserEditorHandler().fetch(request)`. No model-specific authentication
+request clone or credential stripping is needed in the consuming application.
+The envelope is transport data, not an application credential. The host rejects
+missing/malformed envelopes with HTTP 400, accepts at most 64 unique lowercase
+header names, and builds upstream headers exclusively from the decoded map.
+Browser/app outer headers never become upstream headers. Hop-by-hop and browser
+headers and guest provider credentials are removed; host-configured provider
+headers override native values. Native protocol/session headers, request paths,
+queries, bodies, and streamed responses retain the normal provider contract.
+
+The hook covers primary, title, compaction, and session-generation HTTP requests.
+WebSocket model transport is excluded and remains disabled by the qualified
+recipe. The current runtime's egress policy passes custom headers to the app host.
+This change requires matching recipe/server package versions and reopening the
+editor so the plugin is seeded; it does **not** require regenerating prepared
+application artifacts. Already-running older guests must be restarted.
+
+Qualification uses the unchanged, hash-verified 2.0.3 server in the actual guest
+runtime with a mock HTTP provider (no model credentials):
+
+```sh
+OPENCODE_PACKAGE_DIR=/absolute/path/to/opencode-release-2.0.3 \
+NODE_BINARY=/absolute/path/to/node \
+bun test test/model-headers.test.ts test/server.test.ts test/opencode-integration.test.ts
+```
+
+Run from `opencode-chat`; Node 24 and a non-loopback host IPv4 address are needed
+by the opt-in headless probe. Ordinary tests also exercise both streaming
+directions and cancellation over real HTTP. The qualification uses documented
+global single-file discovery because explicit plugin-directory resolution in
+the current runtime returns a filesystem path where OpenCode expects a file URL.
+
 ### Standalone chat
 
 ```tsx
