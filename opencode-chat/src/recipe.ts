@@ -22,11 +22,18 @@ const verifyOpenCodeReadyEffect = Effect.fn('Workspace.verifyOpenCodeReady')(fun
   });
   const drained = async (response: Response) => { await response.arrayBuffer(); return response; };
   const deadline = Date.now() + 30000;
+  let lastFailure = new Error('OpenCode health not ready');
   while (true) {
-    const health = yield* request(descriptor.healthPath, drained, 'GET', 3000);
-    if (health.ok) break;
-    if (Date.now() >= deadline) return yield* Effect.fail(new Error(`OpenCode health HTTP ${health.status}`));
-    yield* Effect.sleep(100);
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return yield* Effect.fail(new Error('OpenCode health readiness timed out after 30000ms', { cause: lastFailure }));
+    // Catch request failures, not Effect interruption: closing the editor must
+    // still cancel the in-flight request/body and prevent any further attempts.
+    const health = yield* request(descriptor.healthPath, drained, 'GET', Math.min(3000, remaining)).pipe(
+      Effect.catch(error => { lastFailure = error; return Effect.succeed(undefined); }),
+    );
+    if (health?.ok) break;
+    if (health) lastFailure = new Error(`OpenCode health HTTP ${health.status}`);
+    yield* Effect.sleep(Math.max(0, Math.min(100, deadline - Date.now())));
   }
   const activated = yield* request(descriptor.activation.path, drained, descriptor.activation.method);
   if (!activated.ok) return yield* Effect.fail(new Error(`OpenCode plugin activation HTTP ${activated.status}`));

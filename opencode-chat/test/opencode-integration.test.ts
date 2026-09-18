@@ -84,6 +84,46 @@ test('unqualified model options fail before starting workspace work', () => {
   expect(() => createBrowserEditorRecipe({ model: 'opencode/muse-spark-1.3-contributor-free' })).not.toThrow();
 });
 
+test('health readiness recovers from fetch failure, request timeout and non-OK response', async () => {
+  const fixture = endpointFixture();
+  let attempts = 0;
+  let timedOut: AbortSignal | undefined;
+  const endpoint = { async fetch(path: string, init?: RequestInit) {
+    if (path === openCodeCandidateLaunch.healthPath) {
+      attempts++;
+      if (attempts === 1) throw new TypeError('Failed to fetch');
+      if (attempts === 2) {
+        timedOut = init!.signal!;
+        return await new Promise<Response>((_resolve, reject) => {
+          timedOut!.addEventListener('abort', () => reject(new TypeError('Failed to fetch')), { once: true });
+        });
+      }
+      if (attempts === 3) return new Response('', { status: 503 });
+    }
+    return fixture.endpoint.fetch(path, init);
+  } };
+  await verifyOpenCodeReady(endpoint, 'Basic test', new AbortController().signal);
+  expect(attempts).toBe(4);
+  expect(timedOut?.aborted).toBe(true);
+  expect(fixture.calls.at(-1)?.path).toBe(openCodeCandidateLaunch.modelPath);
+});
+
+test('health readiness stops retrying at its overall deadline', async () => {
+  let attempts = 0;
+  let aborted = 0;
+  const started = Date.now();
+  const endpoint = { fetch(_path: string, init?: RequestInit) {
+    attempts++;
+    return new Promise<Response>((_resolve, reject) => {
+      init!.signal!.addEventListener('abort', () => { aborted++; reject(new TypeError('Failed to fetch')); }, { once: true });
+    });
+  } };
+  await expect(verifyOpenCodeReady(endpoint, 'Basic test', new AbortController().signal)).rejects.toThrow('health readiness timed out');
+  expect(Date.now() - started).toBeLessThan(31500);
+  expect(attempts).toBeGreaterThan(1);
+  expect(aborted).toBe(attempts);
+}, 35000);
+
 test('readiness cancellation aborts an in-flight response body', async () => {
   const lifetime = new AbortController();
   let requestSignal: AbortSignal | undefined;
