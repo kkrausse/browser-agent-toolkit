@@ -1,5 +1,7 @@
 import type { NodeLaunchOptions } from '@kev-browser-agent-kit/workspace';
 
+const workspaceLocationQuery = new URLSearchParams({ 'location[directory]': '/workspace' }).toString();
+
 /** Browser-safe exact candidate contract. Host filesystem verification lives separately. */
 export const openCodeCandidateLaunch = {
   format: 'opencode-server-process-v1',
@@ -15,9 +17,10 @@ export const openCodeCandidateLaunch = {
   workspaceDirectories: ['/.server/home', '/.server/config/opencode', '/.server/state', '/.server/data', '/.server/cache', '/.server/tmp'],
   guestDirectories: ['/runtime-probe'],
   healthPath: '/api/health',
-  activation: { method: 'POST', path: '/api/plugin/await-activation?directory=/workspace' },
-  modelPath: '/api/model?directory=/workspace',
-  configAPIPath: '/api/config?directory=/workspace',
+  activation: { method: 'POST', path: `/api/plugin/await-activation?${workspaceLocationQuery}` },
+  pluginPath: `/api/plugin?${workspaceLocationQuery}`,
+  modelPath: `/api/model?${workspaceLocationQuery}`,
+  configAPIPath: `/api/config?${workspaceLocationQuery}`,
   readyMarker: 'OPENCODE_SERVER_PROCESS_READY',
   shutdownMarker: 'OPENCODE_SERVER_PROCESS_SHUTDOWN_COMPLETE',
   shutdown: 'stdin-eof',

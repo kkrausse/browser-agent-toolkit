@@ -37,7 +37,10 @@ test('descriptor exposes global config, fixed database, activation barrier and E
   expect(openCodeCandidateLaunch.projectConfig).toBe(false);
   expect(openCodeCandidateLaunch.databasePath).toBe('/runtime-probe/opencode.sqlite');
   expect(openCodeCandidateLaunch.guestDirectories).toContain('/runtime-probe');
-  expect(openCodeCandidateLaunch.activation).toEqual({ method: 'POST', path: '/api/plugin/await-activation?directory=/workspace' });
+  expect(openCodeCandidateLaunch.activation).toEqual({ method: 'POST', path: '/api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace' });
+  expect(openCodeCandidateLaunch.pluginPath).toBe('/api/plugin?location%5Bdirectory%5D=%2Fworkspace');
+  expect(openCodeCandidateLaunch.configAPIPath).toBe('/api/config?location%5Bdirectory%5D=%2Fworkspace');
+  expect(openCodeCandidateLaunch.modelPath).toBe('/api/model?location%5Bdirectory%5D=%2Fworkspace');
   expect(openCodeCandidateLaunch.shutdown).toBe('stdin-eof');
   expect(openCodeCandidateLaunch.port).toBe(4096);
 });

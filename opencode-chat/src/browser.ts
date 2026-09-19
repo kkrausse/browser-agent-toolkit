@@ -29,7 +29,7 @@ const verifyReadyEffect = Effect.fn('OpenCode.verifyReady')(function*(endpoint: 
   }
   const activated = yield* request(descriptor.activation.path, drained, descriptor.activation.method);
   if (!activated.ok) return yield* Effect.fail(new Error(`OpenCode plugin activation HTTP ${activated.status}`));
-  const plugins = yield* request('/api/plugin?directory=/workspace', async response => {
+  const plugins = yield* request(descriptor.pluginPath, async response => {
     if (!response.ok) { await response.arrayBuffer(); throw Error(`OpenCode plugins HTTP ${response.status}`); }
     return response.json();
   });

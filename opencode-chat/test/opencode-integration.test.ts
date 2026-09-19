@@ -59,7 +59,7 @@ function endpointFixture(change: 'none' | 'activation' | 'plugin' | 'config' | '
     const name = String(path);
     calls.push({ path: name, method: init?.method ?? 'GET', authorization: new Headers(init?.headers).get('authorization') });
     if (name === openCodeCandidateLaunch.activation.path) return new Response('', { status: change === 'activation' ? 503 : 200 });
-    if (name === '/api/plugin?directory=/workspace') return Response.json({ data: change === 'plugin' ? [] : [{ id: 'editor.model-headers', state: { status: 'active' } }] });
+    if (name === openCodeCandidateLaunch.pluginPath) return Response.json({ data: change === 'plugin' ? [] : [{ id: 'editor.model-headers', state: { status: 'active' } }] });
     if (name === openCodeCandidateLaunch.configAPIPath) return Response.json(change === 'config' ? [] : [{ type: 'document', path: openCodeCandidateLaunch.configPath, info: createOpenCodeCandidateConfig('http://host.vivari.internal:4390/editor/model/opencode/') }]);
     if (name === openCodeCandidateLaunch.modelPath) return Response.json({ data: [{ ...openCodeCandidateLaunch.model, enabled: true, capabilities: { tools: change !== 'model' } }] });
     return Response.json({ healthy: true });
@@ -71,7 +71,7 @@ test('chat readiness awaits authenticated activation and validates global config
   const { endpoint, calls } = endpointFixture();
   const authorization = 'Basic ' + btoa('opencode:' + crypto.randomUUID());
   await verifyOpenCodeReady(endpoint, authorization, new AbortController().signal);
-  expect(calls.map(call => call.path)).toEqual([openCodeCandidateLaunch.healthPath, openCodeCandidateLaunch.activation.path, '/api/plugin?directory=/workspace', openCodeCandidateLaunch.configAPIPath, openCodeCandidateLaunch.modelPath]);
+  expect(calls.map(call => call.path)).toEqual([openCodeCandidateLaunch.healthPath, openCodeCandidateLaunch.activation.path, openCodeCandidateLaunch.pluginPath, openCodeCandidateLaunch.configAPIPath, openCodeCandidateLaunch.modelPath]);
   expect(calls[1].method).toBe('POST');
   expect(calls.every(call => call.authorization === authorization)).toBe(true);
   for (const failure of ['activation', 'plugin', 'config', 'model'] as const) {

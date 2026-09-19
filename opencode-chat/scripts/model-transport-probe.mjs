@@ -33,8 +33,8 @@ const result = await runHeadlessProcessProbe({ directory: input.directory, name:
       headers: { authorization: 'Basic ' + Buffer.from('opencode:isolated-test').toString('base64'), 'content-type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-    assert.equal((await request('POST', '/api/plugin/await-activation?directory=/workspace')).status, 204);
-    const plugins = JSON.parse((await request('GET', '/api/plugin?directory=/workspace')).body);
+    assert.equal((await request('POST', '/api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace')).status, 204);
+    const plugins = JSON.parse((await request('GET', '/api/plugin?location%5Bdirectory%5D=%2Fworkspace')).body);
     assert(plugins.data.some(plugin => plugin.id === 'editor.model-headers' && plugin.state.status === 'active'));
     api.stage('plugin.active');
     const created = await request('POST', '/api/session', { location: { directory: '/workspace' }, model: input.model });
