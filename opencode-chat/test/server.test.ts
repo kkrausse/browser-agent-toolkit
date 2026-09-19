@@ -115,7 +115,9 @@ test('model proxy diagnostics correlate requests without retaining prompt or cre
       opencode: { baseURL: upstream.url + 'v1', headers: { authorization: 'Bearer server-secret', 'user-agent': 'opencode/stable/2.0.3/vivari-opencode-server' } },
     }, diagnostics: { enabled: true, async write(batch: DiagnosticBatch) { events.push(...batch.events); } } });
     const response = await handler.fetch(new Request('http://localhost/editor/model/opencode/responses?ignored=secret', {
-      method: 'POST', body: JSON.stringify({ model: 'muse-spark-1.3-contributor-free', input: 'PRIVATE_PROMPT' }),
+      method: 'POST', body: JSON.stringify({ model: 'muse-spark-1.3-contributor-free', input: [
+        { type: 'message', role: 'user', content: 'PRIVATE_PROMPT' },
+      ], stream: true, tools: [{ type: 'function', name: 'private_tool', description: 'PRIVATE_TOOL_DESCRIPTION' }] }),
       headers: { [MODEL_HEADERS]: encodeModelHeaders(new Headers({
         'content-type': 'application/json',
         authorization: 'Bearer browser-secret', 'x-opencode-client': 'vivari-opencode-server',
@@ -132,12 +134,14 @@ test('model proxy diagnostics correlate requests without retaining prompt or cre
     expect(error.requestId).toBe(request.requestId);
     expect(result).toMatchObject({ method: 'POST', path: '/editor/model/opencode/responses', upstreamPath: '/v1/responses',
       provider: 'opencode', model: 'muse-spark-1.3-contributor-free', client: 'vivari-opencode-server',
+      requestShape: { fields: ['input', 'model', 'stream', 'tools'], inputCount: 1, inputRoles: ['user'], inputTypes: ['message'],
+        stream: true, toolCount: 1, toolTypes: ['function'] },
       upstreamStatus: 403, downstreamStatus: 403, providerCredentialConfigured: true,
       nativeFields: ['authorization', 'content-type', 'x-opencode-client', 'x-opencode-project', 'x-opencode-session'],
       forwardedFields: ['accept-encoding', 'content-type', 'user-agent', 'x-opencode-client', 'x-opencode-project', 'x-opencode-session'],
       openCodeIdentity: { client: true, project: true, request: false, session: true } });
     expect(error.errorCategory).toBe('FreeTierError');
     const stored = JSON.stringify(events);
-    for (const secret of ['PRIVATE_PROMPT', 'server-secret', 'browser-secret', 'project-secret', 'session-secret', 'ignored=secret']) expect(stored).not.toContain(secret);
+    for (const secret of ['PRIVATE_PROMPT', 'PRIVATE_TOOL_DESCRIPTION', 'private_tool', 'server-secret', 'browser-secret', 'project-secret', 'session-secret', 'ignored=secret']) expect(stored).not.toContain(secret);
   } finally { upstream.stop(true); }
 });

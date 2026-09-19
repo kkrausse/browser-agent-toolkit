@@ -18,24 +18,51 @@ function cleanHeaders(input: Headers) {
 
 const safeIdentifier = (value: string | null, max = 128) => value && value.length <= max && /^[\w./:-]+$/.test(value) ? value : undefined;
 
-/** Read only the bounded model identifier from a cloned JSON body; never retain prompt/tool content. */
-async function readModelIdentifier(request: Request, contentType: string | null): Promise<string | undefined> {
-  if (!request.body || !contentType?.toLowerCase().includes('application/json')) return;
+type ModelMetadata = { model?: string; requestShape?: {
+  fields: string[]; inputCount?: number; inputRoles?: string[]; inputTypes?: string[];
+  stream?: boolean; toolCount?: number; toolTypes?: string[];
+} };
+
+const safeNames = (values: unknown[]): string[] => [...new Set(values.filter(value => typeof value === 'string' && safeIdentifier(value)) as string[])].sort();
+
+/** Read only bounded structural metadata from a cloned JSON body; never retain prompt/tool content. */
+async function readModelMetadata(request: Request, contentType: string | null): Promise<ModelMetadata> {
+  if (!request.body || !contentType?.toLowerCase().includes('application/json')) return {};
   const reader = request.clone().body!.getReader(), decoder = new TextDecoder();
-  let text = '', bytes = 0;
+  let text = '', bytes = 0, complete = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(Error('Model identifier timed out')), 500); });
   try {
     while (bytes < 65536) {
       const { done, value } = await Promise.race([reader.read(), timeout]);
-      if (done) break;
+      if (done) { text += decoder.decode(); complete = true; break; }
       text += decoder.decode(value.subarray(0, 65536 - bytes), { stream: true });
       bytes += value.length;
-      const match = /"model"\s*:\s*"([^"\\]{1,128})"/.exec(text);
-      if (match) return safeIdentifier(match[1] ?? null);
     }
+    if (complete) try {
+      const parsed: unknown = JSON.parse(text);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+      const body = parsed as Record<string, unknown>;
+      const input = Array.isArray(body.input) ? body.input : undefined;
+      const tools = Array.isArray(body.tools) ? body.tools : undefined;
+      return {
+        model: safeIdentifier(typeof body.model === 'string' ? body.model : null),
+        requestShape: {
+          fields: safeNames(Object.keys(body)),
+          inputCount: input?.length,
+          inputRoles: input && safeNames(input.map(item => item && typeof item === 'object' ? (item as Record<string, unknown>).role : undefined)),
+          inputTypes: input && safeNames(input.map(item => item && typeof item === 'object' ? (item as Record<string, unknown>).type : undefined)),
+          stream: typeof body.stream === 'boolean' ? body.stream : undefined,
+          toolCount: tools?.length,
+          toolTypes: tools && safeNames(tools.map(item => item && typeof item === 'object' ? (item as Record<string, unknown>).type : undefined)),
+        },
+      };
+    } catch { /* Fall back to the model identifier regex below. */ }
+    const match = /"model"\s*:\s*"([^"\\]{1,128})"/.exec(text);
+    return { model: safeIdentifier(match?.[1] ?? null) };
   } catch { /* Diagnostics must not affect model transport. */ }
   finally { clearTimeout(timer); void reader.cancel().catch(() => {}); reader.releaseLock(); }
+  return {};
 }
 
 function providerErrorCategory(error: unknown): string | undefined {
@@ -110,11 +137,11 @@ export function createBrowserEditorHandler(options: {
       headers.delete('x-editor-run-id');
       const started = performance.now();
       const requestId = crypto.randomUUID();
-      let model: string | undefined;
-      if (options.diagnostics?.enabled) void readModelIdentifier(request, headers.get('content-type')).then(value => { model = value; });
+      let metadata: ModelMetadata = {};
+      if (options.diagnostics?.enabled) void readModelMetadata(request, headers.get('content-type')).then(value => { metadata = value; });
       const requestDetail = {
         requestId, method: request.method, path, upstreamPath: upstream.pathname, provider: providerID,
-        client: safeIdentifier(headers.get('x-opencode-client')), model,
+        client: safeIdentifier(headers.get('x-opencode-client')), model: metadata.model,
         contentLength: Number(request.headers.get('content-length')) || undefined,
         nativeFields,
         forwardedFields: [...headers.keys()].filter(name => !['authorization', 'x-api-key', 'api-key', 'x-goog-api-key'].includes(name)).sort(),
@@ -125,7 +152,7 @@ export function createBrowserEditorHandler(options: {
       diagnostics.record('model.request', requestDetail);
       try {
         const response = await fetch(upstream, { method: request.method, headers, body: request.body, signal: request.signal, redirect: 'manual' });
-        const detail = { ...requestDetail, model, status: response.status, upstreamStatus: response.status, downstreamStatus: response.status,
+        const detail = { ...requestDetail, ...metadata, status: response.status, upstreamStatus: response.status, downstreamStatus: response.status,
           elapsedMs: Math.round(performance.now() - started), retryAfter: response.headers.get('retry-after'),
           userAgent: headers.get('user-agent'), providerCredentialConfigured: ['authorization', 'x-api-key', 'api-key', 'x-goog-api-key'].some(name => headers.has(name)) };
         diagnostics.record('model.response', detail);
@@ -133,7 +160,7 @@ export function createBrowserEditorHandler(options: {
         const outgoing = cleanHeaders(response.headers);
         outgoing.delete('set-cookie'); outgoing.delete('content-encoding'); outgoing.set('cache-control', 'no-store');
         return new Response(response.body, { status: response.status, headers: outgoing });
-      } catch (error) { diagnostics.record('model.failed', { ...requestDetail, model, upstreamStatus: null, downstreamStatus: 502,
+      } catch (error) { diagnostics.record('model.failed', { ...requestDetail, ...metadata, upstreamStatus: null, downstreamStatus: 502,
         elapsedMs: Math.round(performance.now() - started), errorCategory: 'transport', error }); return new Response('Model upstream unavailable', { status: 502 }); }
     }
     if (!['GET', 'HEAD'].includes(request.method)) return new Response('Method not allowed', { status: 405 });
