@@ -132,7 +132,6 @@ export function createBrowserEditorHandler(options: {
       for (const name of [...headers.keys()]) {
         if (['cookie', 'origin', 'referer', 'authorization', 'x-api-key', 'api-key', 'x-goog-api-key', 'forwarded'].includes(name) || name.startsWith('x-forwarded-') || name.startsWith('sec-') || name.startsWith('x-editor-')) headers.delete(name);
       }
-      headers.set('accept-encoding', 'identity');
       new Headers(provider.headers).forEach((value, key) => headers.set(key, value));
       headers.delete('x-editor-run-id');
       const started = performance.now();

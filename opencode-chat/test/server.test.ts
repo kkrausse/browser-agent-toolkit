@@ -139,7 +139,7 @@ test('model proxy diagnostics correlate requests without retaining prompt or cre
         stream: true, toolCount: 1, toolTypes: ['function'] },
       upstreamStatus: 403, downstreamStatus: 403, providerCredentialConfigured: true,
       nativeFields: ['authorization', 'content-type', 'x-opencode-client', 'x-opencode-project', 'x-opencode-session'],
-      forwardedFields: ['accept-encoding', 'content-type', 'user-agent', 'x-opencode-client', 'x-opencode-project', 'x-opencode-session'],
+      forwardedFields: ['content-type', 'user-agent', 'x-opencode-client', 'x-opencode-project', 'x-opencode-session'],
       openCodeIdentity: { client: true, project: true, request: false, session: true } });
     expect(error.errorCategory).toBe('FreeTierError');
     const stored = JSON.stringify(events);
