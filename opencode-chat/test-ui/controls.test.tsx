@@ -59,6 +59,21 @@ test("Base UI select supports keyboard opening, navigation and selection", async
   expect(selected).toBe("b");
 });
 
+test("Base UI select renders the selected label instead of its transport value", async () => {
+  const value = JSON.stringify({ providerID: "openai", id: "gpt-5.6-sol" });
+  const container = await mount(
+    <ChoiceSelect
+      label="Model"
+      value={value}
+      onValueChange={() => {}}
+      items={[{ value, label: "GPT-5.6 Sol · openai" }]}
+    />,
+  );
+  const trigger = container.querySelector('[role="combobox"]')!;
+  expect(trigger.textContent).toContain("GPT-5.6 Sol · openai");
+  expect(trigger.textContent).not.toContain("providerID");
+});
+
 test("question radio and checkbox primitives preserve pinned reply answer arrays", async () => {
   const replies: string[][][] = [];
   const controller = { replyQuestion: async (_id: string, answers: string[][]) => { replies.push(answers); }, rejectQuestion: async () => {} } as unknown as ChatController;

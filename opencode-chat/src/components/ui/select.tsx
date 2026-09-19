@@ -29,7 +29,11 @@ export function ChoiceSelect({ label, value, items, placeholder, disabled, onVal
   placeholder?: string; disabled?: boolean; onValueChange(value: string): void;
 }) {
   return <Select items={items} value={value || null} disabled={disabled} onValueChange={value => { if (value !== null) onValueChange(value); }}>
-    <SelectTrigger aria-label={label}><SelectValue className="ocui:truncate" placeholder={placeholder} /></SelectTrigger>
+    <SelectTrigger aria-label={label}>
+      <SelectValue className="ocui:truncate" placeholder={placeholder}>
+        {selected => selected === null ? placeholder : items.find(item => item.value === selected)?.label ?? selected}
+      </SelectValue>
+    </SelectTrigger>
     <SelectContent>{items.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
   </Select>;
 }
