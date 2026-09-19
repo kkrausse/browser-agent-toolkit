@@ -88,6 +88,7 @@ export function BrowserEditor({ controller, layout = "floating", recipe, onExit,
   };
   const [exiting, setExiting] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [copyStatus, setCopyStatus] = useState("");
   const managed = !!recipe;
   useEffect(() => {
     if (managed) return editorLifecycle(controller, owner => start.current!.start(owner));
@@ -101,6 +102,11 @@ export function BrowserEditor({ controller, layout = "floating", recipe, onExit,
       {state.error && <div role="alert"><p>{state.error}</p>{(managed || onRetry) && <Button disabled={state.busy} onClick={() => onRetry ? onRetry() : setRetry(value => value + 1)}>Retry editing</Button>}</div>}
       <details className="oc-editor-debug"><summary>Debug · Activity</summary>
         <p>Workspace: {state.workspace ? state.persistence : "closed"} · Runtime: {state.runtime ? "active" : "stopped"}</p>
+        <Button onClick={() => {
+          const log = [`Workspace: ${state.workspace ? state.persistence : "closed"} · Runtime: ${state.runtime ? "active" : "stopped"}`, state.status, state.error, ...state.logs].filter(Boolean).join("\n");
+          void Promise.resolve().then(() => navigator.clipboard.writeText(log)).then(() => setCopyStatus("Copied"), () => setCopyStatus("Copy failed — select the log below"));
+        }}>Copy log</Button> <span role="status">{copyStatus}</span>
+        <p>Recent activity (up to 2,000 entries).</p>
         <pre>{state.logs.join("\n")}</pre>
       </details>
     </>;

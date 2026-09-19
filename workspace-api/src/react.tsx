@@ -46,7 +46,8 @@ export class WorkspaceController {
   diagnostic = (event: string, data?: unknown) => this.diagnostics.record(event, data);
   get diagnosticRunId() { return this.diagnostics.runId; }
   private publish(patch: Partial<WorkspaceSnapshot>) { this.snapshot = { ...this.snapshot, ...patch }; for (const listener of this.listeners) listener(); }
-  log = (line: string) => { this.diagnostics.record("activity", { message: line }); this.publish({ logs: [...this.snapshot.logs, `${new Date().toLocaleTimeString()} ${safeText(line)}`].slice(-160) }); };
+  private appendLog(line: string) { this.publish({ logs: [...this.snapshot.logs, `${new Date().toLocaleTimeString()} ${safeText(line)}`].slice(-2000) }); }
+  log = (line: string) => { this.diagnostics.record("activity", { message: line }); this.appendLog(line); };
   status = (status: string) => { this.publish({ status }); this.log(status); };
   reportError = (error: unknown) => { this.publish({ error: message(error) }); this.log(message(error)); };
   notifyPersistence = () => this.publish({ persistence: this.workspace?.persistence.status ?? "closed" });
@@ -109,11 +110,14 @@ export class WorkspaceController {
   private async drain(stream: AsyncIterable<Uint8Array>, label: string) {
     const diagnostics = this.diagnostics;
     const capture = () => typeof this.captureProcessOutput === 'function' ? this.captureProcessOutput() : this.captureProcessOutput;
-    const output = this.captureProcessOutput ? createProcessOutput(text => { if (capture()) diagnostics.record('guest.output', { label, message: text }); }) : undefined;
+    const output = createProcessOutput(text => {
+      this.appendLog(`[${label}] ${text}`);
+      if (capture()) diagnostics.record('guest.output', { label, message: text });
+    });
     let totalBytes = 0;
-    try { for await (const bytes of stream) { if (!totalBytes) diagnostics.record("guest.first-output", { label, bytes: bytes.length }); totalBytes += bytes.length; if (capture()) output?.push(bytes); } }
+    try { for await (const bytes of stream) { if (!totalBytes) diagnostics.record("guest.first-output", { label, bytes: bytes.length }); totalBytes += bytes.length; output.push(bytes); } }
     catch (error) { this.log(`[${label}] ${message(error)}`); }
-    finally { output?.flush(); this.log(`[${label}] drained ${totalBytes} bytes (${output ? 'bounded output captured in diagnostics' : 'raw output omitted from diagnostics'})`); }
+    finally { output.flush(); this.log(`[${label}] drained ${totalBytes} bytes (output available in Activity)`); }
   }
   async launch(name: string, options: NodeLaunchOptions, port: number, connect: (endpoint: Endpoint) => Promise<Connection>, lifecycle?: ServiceLifecycle) {
     const diagnostics = this.diagnostics;
