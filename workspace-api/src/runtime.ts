@@ -77,6 +77,10 @@ export namespace Runtime {
         check();
         return host.installTree(tree);
       },
+      ...(host.features.has("install-tree-image-v1") ? { async installTreeImage(tree: Parameters<NonNullable<ToolContext["installTreeImage"]>>[0]) {
+        check();
+        return host.installTreeImage(tree);
+      } } : {}),
       async readFile(path) { check(); return host.readFile(path); },
       async installFile(path, bytes) {
         check();

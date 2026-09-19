@@ -26,7 +26,7 @@ const kernelWorker = index.match(/assets\/kernel-worker-[\w-]+\.js/)?.[0];
 if (!kernelWorker) throw new Error("Cannot locate active kernel worker in built SDK");
 const kernelBytes = await readFile(resolve(source, kernelWorker));
 if (!kernelBytes.includes(Buffer.from("workspace-flush"))) throw new Error("Runtime output lacks workspace-v1; rebuild fork source first");
-if (!kernelBytes.includes(Buffer.from("workspace-install-tree"))) throw new Error("Runtime output lacks bulk tree installation; rebuild fork source first");
+if (!kernelBytes.includes(Buffer.from("workspace-install-tree-image"))) throw new Error("Runtime output lacks prepared tree image installation; rebuild fork source first");
 if (/new URL\(\s*["']\/assets\//.test(kernelBytes.toString())) {
   throw new Error("Runtime nested workers are root-absolute; rebuild core with a relative Vite base before delivery");
 }
@@ -39,7 +39,7 @@ await writeFile(resolve(destination, 'backend-policy.mjs'), backendPolicy);
 await cp(resolve(source, "assets"), resolve(destination, "assets"), { recursive: true });
 await writeFile(resolve(destination, 'assets/sw.js'), serviceWorker);
 await writeFile(resolve(destination, "distribution.json"), JSON.stringify({
-  abi: "workspace-v2-sab6-sqlite39", features: ["install-tree-v1", "http-stream-v1", "workspace-flush-v1"], name: "vivari", version, kernelWorker, serviceWorker: "assets/sw.js",
+  abi: "workspace-v2-sab6-sqlite39", features: ["install-tree-v1", "install-tree-image-v1", "http-stream-v1", "workspace-flush-v1"], name: "vivari", version, kernelWorker, serviceWorker: "assets/sw.js",
   runtimeBuild, runtimeBuildSha256: sha256(receiptBytes),
   kernelSha256: createHash("sha256").update(kernelBytes).digest("hex"),
 }, null, 2) + "\n");

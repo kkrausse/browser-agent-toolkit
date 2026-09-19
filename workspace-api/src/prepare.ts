@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { cp, lstat, mkdir, readFile, readdir, readlink, realpath, rename, rm, stat, writeFile as nodeWriteFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
+import { deflateSync } from "node:zlib";
 import type { ManagedDelivery, ManagedEntry, SourceDelivery } from "./delivery-types.js";
 
 export type BuildConfig = { outputDir: string; runtimeDir: string };
@@ -134,6 +135,33 @@ export async function bundleEntries(options: { entries: ManagedEntry[]; assetDir
   const bundle = { file: digest + ".bundle.gz", bytes: compressed.length, sha256: digest };
   await writeFile(join(resolve(options.outputDir ?? options.assetDir), bundle.file), compressed);
   return bundle;
+}
+
+/** Build a fresh-load image using the VFS's retained raw/zlib body policy. */
+export async function bundleVfsImage(options: { entries: ManagedEntry[]; assetDir: string; outputDir?: string }) {
+  const seen = new Set<string>(), bodies: [0 | 1, number][] = [], chunks: Uint8Array[] = [];
+  for (const entry of options.entries) if (entry.kind === "file" && !seen.has(entry.file)) {
+    seen.add(entry.file);
+    const raw = new Uint8Array(await readFile(resolve(options.assetDir, entry.file)));
+    if (raw.length !== entry.bytes || sha256(raw) !== entry.sha256) throw Error(`Managed asset differs from its entry: ${entry.destination}`);
+    let encoding: 0 | 1 = 0, body = raw;
+    if (raw.length >= 4096) {
+      const compressed = new Uint8Array(deflateSync(raw, { level: 6 }));
+      if (compressed.length < raw.length * 0.95) { encoding = 1; body = compressed; }
+    }
+    bodies.push([encoding, body.length]);
+    chunks.push(body);
+  }
+  const header = new TextEncoder().encode(JSON.stringify({ v: 1, codec: "vfs-zlib-6-v1", bodies }));
+  const frame = new Uint8Array(4 + header.length + chunks.reduce((sum, chunk) => sum + chunk.length, 0));
+  new DataView(frame.buffer).setUint32(0, header.length, true);
+  frame.set(header, 4);
+  let offset = 4 + header.length;
+  for (const chunk of chunks) { frame.set(chunk, offset); offset += chunk.length; }
+  const compressed = Bun.gzipSync(frame), digest = sha256(compressed);
+  const image = { format: "managed-vfs-image-v1" as const, file: digest + ".image.gz", bytes: compressed.length, sha256: digest };
+  await writeFile(join(resolve(options.outputDir ?? options.assetDir), image.file), compressed);
+  return image;
 }
 
 export async function captureSource(options: { rootDir: string; paths: string[] }): Promise<SourceDelivery> {

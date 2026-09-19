@@ -1,4 +1,5 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { installSource, managedDeliveryTool } from "../src/delivery";
 import type { Workspace } from "../src/workspace";
 
@@ -20,6 +21,31 @@ test("source installation makes retention policy explicit", async () => {
   expect(memory.text("/src/new.ts")).toBe("new file");
   await installSource(memory.workspace, source, { existing: "replace" });
   expect(memory.text("/src/app.ts")).toBe("prepared source");
+});
+
+test("managed delivery selects and validates a VFS image when the runtime supports it", async () => {
+  const bytes = new TextEncoder().encode("image bytes");
+  const fileHash = createHash("sha256").update(bytes).digest("hex");
+  const header = new TextEncoder().encode(JSON.stringify({ v: 1, codec: "vfs-zlib-6-v1", bodies: [[0, bytes.length]] }));
+  const frame = new Uint8Array(4 + header.length + bytes.length);
+  new DataView(frame.buffer).setUint32(0, header.length, true); frame.set(header, 4); frame.set(bytes, 4 + header.length);
+  const compressed = Bun.gzipSync(frame), imageHash = createHash("sha256").update(compressed).digest("hex");
+  const delivery = { format: "managed-tree-v1" as const, roots: ["/managed"], entries: [
+    { kind: "directory" as const, destination: "/managed", mode: 0o755 },
+    { kind: "file" as const, destination: "/managed/file", mode: 0o640, file: fileHash + ".bin", bytes: bytes.length, sha256: fileHash },
+  ], bundle: { file: "f".repeat(64) + ".bundle.gz", bytes: 1, sha256: "f".repeat(64) },
+    image: { format: "managed-vfs-image-v1" as const, file: imageHash + ".image.gz", bytes: compressed.length, sha256: imageHash } };
+  let installed: Parameters<NonNullable<import("../src/types").ToolContext["installTreeImage"]>>[0] | undefined;
+  const context = { installTree: async () => { throw Error("legacy path selected"); }, installTreeImage: async tree => {
+    installed = tree; return { files: 1, verifyMs: 1, installMs: 1, readbackMs: 0 };
+  } } as import("../src/types").ToolContext;
+  const fetch = spyOn(globalThis, "fetch").mockImplementation(async () => new Response(compressed));
+  try {
+    const install = await managedDeliveryTool(delivery, { baseUrl: "/", signal: new AbortController().signal }).bind(context);
+    await install();
+    expect(fetch.mock.calls[0]?.[0]).toBe("/" + delivery.image.file);
+    expect(installed?.entries[1]).toMatchObject({ kind: "file", logicalBytes: bytes.length, encoding: 0, sha256: fileHash });
+  } finally { fetch.mockRestore(); }
 });
 
 test("managed delivery accepts package bins through an isolated-linker symlink", () => {

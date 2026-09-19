@@ -152,6 +152,14 @@ metadata directly in the VFS. The caller retains its input buffers; views sharin
 an archive buffer cross the page boundary in one structured clone. Results report
 file count and verification/install/readback timings.
 
+Preparers can additionally call `bundleVfsImage` and attach its
+`managed-vfs-image-v1` result to `ManagedDelivery.image`. A distribution
+advertising `install-tree-image-v1` validates that image's logical file hashes and
+lengths before replacement, then imports its retained raw/zlib bodies without
+browser-side recompression. Image buffers are transferred and consumed. Delivery
+automatically uses the legacy raw bundle when the runtime lacks that optional
+feature; a malformed image is an integrity failure, not a fallback condition.
+
 This is not a transactional live-tree replacement: call before readers launch,
 and retry a failed write by replacing the tree again. Watch invalidations are
 root-level. Keep source and database paths outside the disposable roots. Requires

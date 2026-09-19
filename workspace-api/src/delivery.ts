@@ -54,8 +54,9 @@ function validate(delivery: ManagedDelivery) {
 export function managedDeliveryTool(delivery: ManagedDelivery, options: { baseUrl: string; signal: AbortSignal; report?(message: string): void }): ToolDescriptor<void, void> {
   validate(delivery);
   return { name: "managed-tree", version: delivery.bundle.sha256, async bind(context) { return async () => {
-    const url = options.baseUrl + delivery.bundle.file;
-    const valid = async (bytes: Uint8Array) => bytes.length === delivery.bundle.bytes && await sha256(bytes) === delivery.bundle.sha256;
+    const selected = context.installTreeImage && delivery.image ? delivery.image : delivery.bundle;
+    const url = options.baseUrl + selected.file;
+    const valid = async (bytes: Uint8Array) => bytes.length === selected.bytes && await sha256(bytes) === selected.sha256;
     let cache: Cache | undefined, compressed: Uint8Array | undefined;
     try {
       if (typeof caches !== "undefined") {
@@ -68,9 +69,9 @@ export function managedDeliveryTool(delivery: ManagedDelivery, options: { baseUr
         }
       }
     } catch { /* CacheStorage is only an optimization. */ }
-    if (compressed) options.report?.("Using cached managed dependency/tool bundle");
+    if (compressed) options.report?.(`Using cached managed dependency/tool ${selected === delivery.image ? "image" : "bundle"}`);
     else {
-      options.report?.("Downloading managed dependency/tool bundle…");
+      options.report?.(`Downloading managed dependency/tool ${selected === delivery.image ? "image" : "bundle"}…`);
       const response = await fetch(url, { signal: options.signal });
       if (!response.ok) throw Error(`Managed bundle HTTP ${response.status}`);
       compressed = new Uint8Array(await response.arrayBuffer());
@@ -78,6 +79,35 @@ export function managedDeliveryTool(delivery: ManagedDelivery, options: { baseUr
       try { await cache?.put(url, new Response(Uint8Array.from(compressed))); } catch { /* verified bytes remain usable */ }
     }
     const packed = new Uint8Array(await new Response(new Blob([Uint8Array.from(compressed)]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
+    if (selected === delivery.image) {
+      if (packed.length < 4) throw Error("Managed image header is truncated");
+      const headerBytes = new DataView(packed.buffer, packed.byteOffset, packed.byteLength).getUint32(0, true);
+      if (!headerBytes || headerBytes > packed.length - 4) throw Error("Managed image header is invalid");
+      let header: { v?: unknown; codec?: unknown; bodies?: unknown };
+      try { header = JSON.parse(new TextDecoder().decode(packed.subarray(4, 4 + headerBytes))) as typeof header; }
+      catch { throw Error("Managed image header is invalid"); }
+      if (header.v !== 1 || header.codec !== "vfs-zlib-6-v1" || !Array.isArray(header.bodies)) throw Error("Unsupported managed image");
+      const uniqueFiles = [...new Map(delivery.entries.flatMap(entry => entry.kind === "file" ? [[entry.file, entry] as const] : [])).values()];
+      if (header.bodies.length !== uniqueFiles.length) throw Error("Managed image body count mismatch");
+      const blobs = new Map<string, { bytes: Uint8Array; encoding: 0 | 1 }>();
+      let offset = 4 + headerBytes;
+      for (let index = 0; index < uniqueFiles.length; index++) {
+        const entry = uniqueFiles[index]!, body = header.bodies[index];
+        if (!Array.isArray(body) || body.length !== 2 || (body[0] !== 0 && body[0] !== 1)
+          || !Number.isSafeInteger(body[1]) || body[1] < 0 || offset + body[1] > packed.length) throw Error("Managed image body metadata is invalid");
+        const encoding = body[0] as 0 | 1, bytes = body[1] as number;
+        if ((encoding === 0 && bytes !== entry.bytes) || (encoding === 1 && (entry.bytes < 4096 || bytes >= entry.bytes * 0.95))) throw Error("Managed image body violates VFS policy");
+        blobs.set(entry.file, { bytes: packed.subarray(offset, offset + bytes), encoding });
+        offset += bytes;
+      }
+      if (offset !== packed.length) throw Error("Managed image size mismatch");
+      options.signal.throwIfAborted();
+      await context.installTreeImage!({ roots: delivery.roots, entries: delivery.entries.map(entry => entry.kind === "file"
+        ? { kind: "file", path: entry.destination, mode: entry.mode, bytes: blobs.get(entry.file)!.bytes, logicalBytes: entry.bytes, encoding: blobs.get(entry.file)!.encoding, sha256: entry.sha256 }
+        : entry.kind === "directory" ? { kind: "directory", path: entry.destination, mode: entry.mode }
+          : { kind: "symlink", path: entry.destination, target: entry.target }) });
+      return;
+    }
     const blobs = new Map<string, Uint8Array>(); let offset = 0;
     for (const entry of delivery.entries) if (entry.kind === "file" && !blobs.has(entry.file)) { blobs.set(entry.file, packed.subarray(offset, offset + entry.bytes)); offset += entry.bytes; }
     if (offset !== packed.length) throw Error("Managed bundle size mismatch");
@@ -101,4 +131,4 @@ export async function installSource(workspace: Workspace, source: SourceDelivery
   }
 }
 
-export type { ManagedDelivery, ManagedEntry, ManagedBundle, SourceDelivery, SourceFile } from "./delivery-types.js";
+export type { ManagedDelivery, ManagedEntry, ManagedBundle, ManagedVfsImage, SourceDelivery, SourceFile } from "./delivery-types.js";

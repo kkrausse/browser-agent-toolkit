@@ -4,6 +4,7 @@ export type ManagedEntry =
   | { kind: "symlink"; destination: string; target: string };
 
 export type ManagedBundle = { file: string; bytes: number; sha256: string };
+export type ManagedVfsImage = ManagedBundle & { format: "managed-vfs-image-v1" };
 
 /** A managed delivery replaces exactly its declared roots when installed. */
 export type ManagedDelivery = {
@@ -11,6 +12,8 @@ export type ManagedDelivery = {
   roots: string[];
   entries: ManagedEntry[];
   bundle: ManagedBundle;
+  /** Optional fresh-load image carrying the VFS's retained raw/zlib file bodies. */
+  image?: ManagedVfsImage;
 };
 
 export type SourceFile = string | { encoding: "base64"; data: string };

@@ -12,7 +12,7 @@ import { openCodeCandidateLaunch } from './opencode-launch';
 import { encodeProjectFile } from './project-file';
 import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
 import { runPreparationProcess } from './prepare-process';
-import { bundleEntries, captureSource, writeFile } from '@kev-browser-agent-kit/workspace/prepare';
+import { bundleEntries, bundleVfsImage, captureSource, writeFile } from '@kev-browser-agent-kit/workspace/prepare';
 export { readTailwindWasmCandidate } from './tailwind-application';
 export type { BackendArchiveInput } from './prepare-dependencies';
 
@@ -115,8 +115,13 @@ async function buildManagedPreparation(options: PrepareBrowserEditorOptions) {
     diagnostics.record('preparation.bundle.size', { compressedBytes: bundle.bytes, entries: assets.length, files: assets.filter(entry => entry.kind === 'file').length });
     return bundle;
   });
+  const image = await diagnostics.stage('preparation.image', async () => {
+    const image = await bundleVfsImage({ entries: assets, assetDir: prepared });
+    diagnostics.record('preparation.image.size', { compressedBytes: image.bytes, entries: assets.length, files: assets.filter(entry => entry.kind === 'file').length });
+    return image;
+  });
   const manifest: PreparedManifest = { format: 'browser-editor-v2', runtimeVersion: runtime.version, assets, project, sourcePaths: options.source, dependencies: dependencies.provenance,
-    bundle,
+    bundle, image,
     opencode: { ...application.provenance, format: openCodeCandidateLaunch.format, receipt: application.receiptBytes.toString('utf8'), support: support.provenance },
     preview: { entry: '/workspace/node_modules/vite/bin/vite.js', args: ['--configLoader', 'native', '--host', '0.0.0.0', '--port', '5173', '--strictPort'], cwd: '/workspace', env: { BROWSER_AGENT_GUEST: '1', NODE_ENV: 'development' } } };
   await Bun.write(join(prepared, 'manifest.json'), JSON.stringify(manifest));

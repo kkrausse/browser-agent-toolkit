@@ -5,7 +5,7 @@ import { openCodeCandidateLaunch } from './opencode-launch';
 import type { ProjectFile } from './project-file';
 import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
 import { managedDeliveryTool } from '@kev-browser-agent-kit/workspace/delivery';
-import type { ManagedBundle } from '@kev-browser-agent-kit/workspace/delivery';
+import type { ManagedBundle, ManagedVfsImage } from '@kev-browser-agent-kit/workspace/delivery';
 
 export interface PreparedOpenCode {
   id: string; format: typeof openCodeCandidateLaunch.format; receiptSha256: string; sourceRevision: string; receipt: string;
@@ -45,6 +45,7 @@ export interface PreparedManifest {
   runtimeVersion: string;
   assets: PreparedEntry[];
   bundle?: ManagedBundle;
+  image?: ManagedVfsImage;
   dependencies: DependencyProvenance;
   opencode: PreparedOpenCode;
   preview: NodeLaunchOptions;
@@ -74,7 +75,8 @@ export async function loadPrepared(base: string, signal: AbortSignal, diagnostic
   if (manifest.dependencies.policy.runtimeVersion !== manifest.runtimeVersion) throw Error('Prepared backend policy runtime mismatch');
   for (const path of Object.keys(manifest.project)) if (!path.startsWith('/') || path.split('/').slice(1).some(part => !part || part === '.' || part === '..' || /[\\\0]/.test(part)) || path === '/node_modules' || path.startsWith('/node_modules/')) throw Error('Invalid prepared source path');
   });
-  diagnostics.record('manifest.summary', { entries: manifest.assets.length, projectFiles: Object.keys(manifest.project).length, bundleBytes: manifest.bundle?.bytes, delivery: manifest.bundle ? 'bulk-tree' : 'individual-files' });
+  if (manifest.image && manifest.image.format !== 'managed-vfs-image-v1') throw Error('Unsupported prepared managed image');
+  diagnostics.record('manifest.summary', { entries: manifest.assets.length, projectFiles: Object.keys(manifest.project).length, bundleBytes: manifest.bundle?.bytes, imageBytes: manifest.image?.bytes, delivery: manifest.image ? 'vfs-image' : manifest.bundle ? 'bulk-tree' : 'individual-files' });
   return manifest;
 }
 
@@ -82,7 +84,7 @@ export function preparedApps(manifest: PreparedManifest, base: string, signal: A
   validateTree(manifest.assets);
   validatePreparedBackendArchives(manifest);
   if (!manifest.bundle) throw Error('Prepared managed bundle is required; regenerate this editor preparation');
-  const delivery = managedDeliveryTool({ format: 'managed-tree-v1', roots: treeRoots, entries: manifest.assets, bundle: manifest.bundle }, { baseUrl: base, signal, report });
+  const delivery = managedDeliveryTool({ format: 'managed-tree-v1', roots: treeRoots, entries: manifest.assets, bundle: manifest.bundle, image: manifest.image }, { baseUrl: base, signal, report });
   return { name: 'browser-editor-apps', version: manifest.runtimeVersion, async bind(context) {
     const install = await delivery.bind(context);
     return async () => {

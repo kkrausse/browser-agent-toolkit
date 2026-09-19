@@ -40,6 +40,10 @@ export type InstallTreeEntry =
   | { kind: "directory"; path: string; mode: number }
   | { kind: "symlink"; path: string; target: string }
   | { kind: "file"; path: string; mode: number; bytes: Uint8Array; sha256: string; verifyReadback?: boolean };
+export type InstallTreeImageEntry =
+  | { kind: "directory"; path: string; mode: number }
+  | { kind: "symlink"; path: string; target: string }
+  | { kind: "file"; path: string; mode: number; bytes: Uint8Array; logicalBytes: number; encoding: 0 | 1; sha256: string };
 export interface TreeInstallResult { files: number; verifyMs: number; installMs: number; readbackMs: number }
 export interface ToolContext {
   node(options: NodeLaunchOptions): Promise<Execution>;
@@ -49,6 +53,8 @@ export interface ToolContext {
   /** Verify then replace disposable roots in one FS-worker operation, before
    * launching readers. Not transactional on write failure. Caller retains bytes. */
   installTree(tree: { roots: string[]; entries: InstallTreeEntry[] }): Promise<TreeInstallResult>;
+  /** Install checked preparation-built VFS bodies. The runtime consumes their backing buffers. */
+  installTreeImage?(tree: { roots: string[]; entries: InstallTreeImageEntry[] }): Promise<TreeInstallResult>;
 }
 export interface ToolDescriptor<TOptions, TResult> {
   readonly name: string;
