@@ -16,6 +16,34 @@ function cleanHeaders(input: Headers) {
   return headers;
 }
 
+const safeIdentifier = (value: string | null, max = 128) => value && value.length <= max && /^[\w./:-]+$/.test(value) ? value : undefined;
+
+/** Read only the bounded model identifier from a cloned JSON body; never retain prompt/tool content. */
+async function readModelIdentifier(request: Request): Promise<string | undefined> {
+  if (!request.body || !request.headers.get('content-type')?.toLowerCase().includes('application/json')) return;
+  const reader = request.clone().body!.getReader(), decoder = new TextDecoder();
+  let text = '', bytes = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(Error('Model identifier timed out')), 500); });
+  try {
+    while (bytes < 65536) {
+      const { done, value } = await Promise.race([reader.read(), timeout]);
+      if (done) break;
+      text += decoder.decode(value.subarray(0, 65536 - bytes), { stream: true });
+      bytes += value.length;
+      const match = /"model"\s*:\s*"([^"\\]{1,128})"/.exec(text);
+      if (match) return safeIdentifier(match[1] ?? null);
+    }
+  } catch { /* Diagnostics must not affect model transport. */ }
+  finally { clearTimeout(timer); void reader.cancel().catch(() => {}); reader.releaseLock(); }
+}
+
+function providerErrorCategory(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return;
+  const value = (error as Record<string, unknown>).type;
+  return safeIdentifier(typeof value === 'string' ? value : null);
+}
+
 /** Routing and delivery only. The application must authorize before calling fetch. */
 export function createBrowserEditorHandler(options: {
   preparedDirectory: string;
@@ -80,17 +108,30 @@ export function createBrowserEditorHandler(options: {
       new Headers(provider.headers).forEach((value, key) => headers.set(key, value));
       headers.delete('x-editor-run-id');
       const started = performance.now();
-      diagnostics.record('model.request', { path, provider: providerID, sessionId: headers.get('x-opencode-session') });
+      const requestId = crypto.randomUUID();
+      let model: string | undefined;
+      if (options.diagnostics?.enabled) void readModelIdentifier(request).then(value => { model = value; });
+      const requestDetail = {
+        requestId, method: request.method, path, upstreamPath: upstream.pathname, provider: providerID,
+        client: safeIdentifier(headers.get('x-opencode-client')), model,
+        contentLength: Number(request.headers.get('content-length')) || undefined,
+        openCodeIdentity: {
+          client: headers.has('x-opencode-client'), project: headers.has('x-opencode-project'), session: headers.has('x-opencode-session'),
+        },
+      };
+      diagnostics.record('model.request', requestDetail);
       try {
         const response = await fetch(upstream, { method: request.method, headers, body: request.body, signal: request.signal, redirect: 'manual' });
-        const detail = { path, provider: providerID, status: response.status, elapsedMs: Math.round(performance.now() - started), retryAfter: response.headers.get('retry-after'),
-          userAgent: headers.get('user-agent'), providerCredentialConfigured: ['authorization', 'x-api-key', 'api-key', 'x-goog-api-key'].some(name => headers.has(name)), sessionId: headers.get('x-opencode-session') };
+        const detail = { ...requestDetail, model, status: response.status, upstreamStatus: response.status, downstreamStatus: response.status,
+          elapsedMs: Math.round(performance.now() - started), retryAfter: response.headers.get('retry-after'),
+          userAgent: headers.get('user-agent'), providerCredentialConfigured: ['authorization', 'x-api-key', 'api-key', 'x-goog-api-key'].some(name => headers.has(name)) };
         diagnostics.record('model.response', detail);
-        if (options.diagnostics?.enabled && !response.ok) void editorModelError(response).then(error => diagnostics.record('model.error', { ...detail, error }));
+        if (options.diagnostics?.enabled && !response.ok) void editorModelError(response).then(error => diagnostics.record('model.error', { ...detail, errorCategory: providerErrorCategory(error), error }));
         const outgoing = cleanHeaders(response.headers);
         outgoing.delete('set-cookie'); outgoing.delete('content-encoding'); outgoing.set('cache-control', 'no-store');
         return new Response(response.body, { status: response.status, headers: outgoing });
-      } catch (error) { diagnostics.record('model.failed', { path, elapsedMs: Math.round(performance.now() - started), error }); return new Response('Model upstream unavailable', { status: 502 }); }
+      } catch (error) { diagnostics.record('model.failed', { ...requestDetail, model, upstreamStatus: null, downstreamStatus: 502,
+        elapsedMs: Math.round(performance.now() - started), errorCategory: 'transport', error }); return new Response('Model upstream unavailable', { status: 502 }); }
     }
     if (!['GET', 'HEAD'].includes(request.method)) return new Response('Method not allowed', { status: 405 });
     for (const [prefix, directory] of [['prepared/', options.preparedDirectory], ['runtime/', options.runtimeDirectory]]) {

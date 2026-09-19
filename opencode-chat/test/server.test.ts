@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createBrowserEditorHandler } from '../src/server';
+import type { ControllerDiagnosticEvent, DiagnosticBatch } from '@kev-browser-agent-kit/workspace/diagnostics';
 import { encodeModelHeaders, MODEL_HEADERS } from '../src/model-headers';
 
 test('request matching includes every editor resource and excludes public application routes', async () => {
@@ -98,4 +99,38 @@ test('model proxy forwards request chunks before EOF and returns response chunks
     lifetime.abort();
     expect(await Promise.race([canceled, Bun.sleep(2000).then(() => false)])).toBe(true);
   } finally { lifetime.abort(); upstream.stop(true); }
+});
+
+test('model proxy diagnostics correlate requests without retaining prompt or credential content', async () => {
+  const events: ControllerDiagnosticEvent[] = [];
+  const upstream = Bun.serve({ port: 0, fetch: () => Response.json({ error: {
+    type: 'FreeTierError', message: "OpenCode's free tier can only be used from within OpenCode",
+  } }, { status: 403 }) });
+  try {
+    const handler = createBrowserEditorHandler({ preparedDirectory: '.', runtimeDirectory: '.', providers: {
+      opencode: { baseURL: upstream.url + 'v1', headers: { authorization: 'Bearer server-secret', 'user-agent': 'opencode/stable/2.0.3/vivari-opencode-server' } },
+    }, diagnostics: { enabled: true, async write(batch: DiagnosticBatch) { events.push(...batch.events); } } });
+    const response = await handler.fetch(new Request('http://localhost/editor/model/opencode/responses?ignored=secret', {
+      method: 'POST', body: JSON.stringify({ model: 'muse-spark-1.3-contributor-free', input: 'PRIVATE_PROMPT' }),
+      headers: { 'content-type': 'application/json', [MODEL_HEADERS]: encodeModelHeaders(new Headers({
+        authorization: 'Bearer browser-secret', 'x-opencode-client': 'vivari-opencode-server',
+        'x-opencode-project': 'project-secret', 'x-opencode-session': 'session-secret',
+      })) },
+    }));
+    expect(response?.status).toBe(403);
+    for (let index = 0; index < 20 && !events.some(event => event.event === 'model.error'); index++) await Bun.sleep(10);
+    const request = events.find(event => event.event === 'model.request')?.data as Record<string, unknown>;
+    const result = events.find(event => event.event === 'model.response')?.data as Record<string, unknown>;
+    const error = events.find(event => event.event === 'model.error')?.data as Record<string, unknown>;
+    expect(request.requestId).toBeString();
+    expect(result.requestId).toBe(request.requestId);
+    expect(error.requestId).toBe(request.requestId);
+    expect(result).toMatchObject({ method: 'POST', path: '/editor/model/opencode/responses', upstreamPath: '/v1/responses',
+      provider: 'opencode', model: 'muse-spark-1.3-contributor-free', client: 'vivari-opencode-server',
+      upstreamStatus: 403, downstreamStatus: 403, providerCredentialConfigured: true,
+      openCodeIdentity: { client: true, project: true, session: true } });
+    expect(error.errorCategory).toBe('FreeTierError');
+    const stored = JSON.stringify(events);
+    for (const secret of ['PRIVATE_PROMPT', 'server-secret', 'browser-secret', 'project-secret', 'session-secret', 'ignored=secret']) expect(stored).not.toContain(secret);
+  } finally { upstream.stop(true); }
 });

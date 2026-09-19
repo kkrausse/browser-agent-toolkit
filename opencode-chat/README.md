@@ -391,6 +391,11 @@ owns preparation and browser startup:
   JS/CSS, and the model proxy. The app checks its own authorization before calling
   `fetch(request)`; an `undefined` fetch result delegates to the app. There is no
   authorization callback or policy adapter in the toolkit.
+  When server diagnostics are enabled, model proxy events include a generated request
+  correlation ID, method, fixed route paths, safe provider/model/client identifiers,
+  OpenCode identity-header presence, elapsed time, upstream/downstream status, and a
+  bounded provider error/category. They never retain authorization, cookies, query
+  values, prompts, messages, tool bodies, or other request-body content.
   Client credentials/cookies are stripped from upstream requests. Protected artifacts use
   `no-store`. Apply `browserEditorHeaders` to the host document for worker isolation.
   Model routes are `${base}model/<providerID>/<native path>` (by default
