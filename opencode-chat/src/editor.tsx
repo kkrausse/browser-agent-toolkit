@@ -33,15 +33,37 @@ export type PreparedBrowserEditorProps = Omit<BrowserEditorProps, "controller" |
   /** Auto-discover the server's diagnostics switch (default). False disables browser delivery. */
   diagnostics?: boolean;
 };
+export type PreparedBrowserWorkspaceProps = ControllerDiagnosticOptions & {
+  children: ReactNode;
+  /** Prepared assets, runtime and model proxy root. Default: /editor/. Captured on mount. */
+  base?: string;
+  /** Application-owned startup. Captured on mount. */
+  start(controller: WorkspaceController): Promise<void>;
+  /** Auto-discover the server's diagnostics switch (default). False disables browser delivery. */
+  diagnostics?: boolean;
+};
 
 /** Mount only while editing is authorized and open. Composes the default prepared
  * recipe and workspace lifecycle; the host owns authorization and the launcher. */
 export function PreparedBrowserEditor({ onDiagnostic, captureProcessOutput, diagnostics, ...props }: PreparedBrowserEditorProps) {
-  const [client] = useState(() => createBrowserEditorDiagnostics({ base: props.base, enabled: diagnostics, onDiagnostic }));
-  return <WorkspaceProvider onDiagnostic={client.onDiagnostic} captureProcessOutput={captureProcessOutput ?? (() => client.enabled)}><PreparedEditor {...props} diagnosticClient={client} /></WorkspaceProvider>;
+  return <PreparedBrowserWorkspace base={props.base} start={props.start} diagnostics={diagnostics} onDiagnostic={onDiagnostic} captureProcessOutput={captureProcessOutput}>
+    <PreparedEditor {...props} />
+  </PreparedBrowserWorkspace>;
 }
 
-function PreparedEditor({ start, base: _base, diagnosticClient: client, ...props }: PreparedBrowserEditorProps & { diagnosticClient: ReturnType<typeof createBrowserEditorDiagnostics> }) {
+function PreparedEditor({ start: _start, base: _base, ...props }: PreparedBrowserEditorProps) {
+  const { controller } = useWorkspace();
+  return <BrowserEditor {...props} controller={controller} />;
+}
+
+export function PreparedBrowserWorkspace({ children, start, base, diagnostics, onDiagnostic, captureProcessOutput }: PreparedBrowserWorkspaceProps) {
+  const [client] = useState(() => createBrowserEditorDiagnostics({ base, enabled: diagnostics, onDiagnostic }));
+  return <WorkspaceProvider onDiagnostic={client.onDiagnostic} captureProcessOutput={captureProcessOutput ?? (() => client.enabled)}>
+    <PreparedWorkspaceLifecycle start={start} diagnosticClient={client}>{children}</PreparedWorkspaceLifecycle>
+  </WorkspaceProvider>;
+}
+
+function PreparedWorkspaceLifecycle({ start, diagnosticClient: client, children }: { start(controller: WorkspaceController): Promise<void>; diagnosticClient: ReturnType<typeof createBrowserEditorDiagnostics>; children: ReactNode }) {
   const { controller } = useWorkspace();
   const mounts = useRef(0);
   useEffect(() => {
@@ -61,7 +83,8 @@ function PreparedEditor({ start, base: _base, diagnosticClient: client, ...props
   const [recipe] = useState(() => {
     return { async start(owner: WorkspaceController) { await client.connect(); await start(owner); } };
   });
-  return <BrowserEditor {...props} controller={controller} recipe={recipe} />;
+  useEffect(() => editorLifecycle(controller, recipe.start), [controller, recipe]);
+  return children;
 }
 
 const noHostPaths: string[] = [];
@@ -130,13 +153,19 @@ export function BrowserEditor({ controller, layout = "floating", recipe, onExit,
   </div>;
 }
 
-function EditorChat({ controller, service, name, directory, headerActions, footer }: { controller: WorkspaceController; service?: Service; name: string; directory: string; headerActions: ReactNode; footer: ReactNode }) {
+export function useWorkspaceChat(controller: WorkspaceController, service: Service | undefined, options: { serviceName?: string; directory?: string } = {}) {
+  const name = options.serviceName ?? "chat", directory = options.directory ?? "/workspace";
   const [chat, setChat] = useState<ChatController>(), [error, setError] = useState("");
   useEffect(() => {
     let active = true; setChat(undefined); setError("");
     if (service) void attachChat(controller, service, { serviceName: name, directory }).then(value => { if (active) setChat(value); }, error => { if (active) setError(String(error)); });
     return () => { active = false; };
   }, [controller, service, name, directory]);
+  return { chat, error };
+}
+
+function EditorChat({ controller, service, name, directory, headerActions, footer }: { controller: WorkspaceController; service?: Service; name: string; directory: string; headerActions: ReactNode; footer: ReactNode }) {
+  const { chat, error } = useWorkspaceChat(controller, service, { serviceName: name, directory });
   return chat ? <ChatView controller={chat} headerActions={headerActions} footer={footer} /> : <section className="oc-chat" aria-label="OpenCode chat">
     <header className="oc-toolbar"><strong>OpenCode</strong>{headerActions}</header>
     <div className="oc-transcript-wrap oc-empty">{error ? <p role="alert">{error}</p> : <p>Waiting for OpenCode connection…</p>}</div>
@@ -144,7 +173,7 @@ function EditorChat({ controller, service, name, directory, headerActions, foote
   </section>;
 }
 
-function EditorPreview({ controller, service, name, hostPaths, isReady }: { controller: WorkspaceController; service?: Service; name: string; hostPaths: string[]; isReady?: BrowserEditorProps["isPreviewReady"] }) {
+export function EditorPreview({ controller, service, name, hostPaths, isReady }: { controller: WorkspaceController; service?: Service; name: string; hostPaths: string[]; isReady?: BrowserEditorProps["isPreviewReady"] }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [ready, setReady] = useState(false);
   useEffect(() => {

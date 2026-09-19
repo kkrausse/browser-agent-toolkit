@@ -63,8 +63,8 @@ export function validatePreparedBackendArchives(manifest: Pick<PreparedManifest,
   }
 }
 
-export async function loadPrepared(base: string, signal: AbortSignal, diagnostics = createDiagnosticScope()): Promise<PreparedManifest> {
-  const response = await diagnostics.stage('manifest.fetch', () => fetch(base + 'manifest.json', { signal, headers: { 'x-editor-run-id': diagnostics.runId } }));
+export async function loadPrepared(base: string, signal: AbortSignal, diagnostics = createDiagnosticScope(), options: { cache?: RequestCache } = {}): Promise<PreparedManifest> {
+  const response = await diagnostics.stage('manifest.fetch', () => fetch(base + 'manifest.json', { signal, cache: options.cache, headers: { 'x-editor-run-id': diagnostics.runId } }));
   if (!response.ok) throw Error(`Editor preparation unavailable: HTTP ${response.status}`);
   const manifest = await diagnostics.stage('manifest.decode', () => response.json()) as PreparedManifest;
   await diagnostics.stage('manifest.validate', async () => {
