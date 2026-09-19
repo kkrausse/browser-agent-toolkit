@@ -46,14 +46,31 @@ export type PreparedBrowserWorkspaceProps = ControllerDiagnosticOptions & {
 /** Mount only while editing is authorized and open. Composes the default prepared
  * recipe and workspace lifecycle; the host owns authorization and the launcher. */
 export function PreparedBrowserEditor({ onDiagnostic, captureProcessOutput, diagnostics, ...props }: PreparedBrowserEditorProps) {
-  return <PreparedBrowserWorkspace base={props.base} start={props.start} diagnostics={diagnostics} onDiagnostic={onDiagnostic} captureProcessOutput={captureProcessOutput}>
-    <PreparedEditor {...props} />
-  </PreparedBrowserWorkspace>;
+  const [client] = useState(() => createBrowserEditorDiagnostics({ base: props.base, enabled: diagnostics, onDiagnostic }));
+  return <WorkspaceProvider onDiagnostic={client.onDiagnostic} captureProcessOutput={captureProcessOutput ?? (() => client.enabled)}><PreparedEditor {...props} diagnosticClient={client} /></WorkspaceProvider>;
 }
 
-function PreparedEditor({ start: _start, base: _base, ...props }: PreparedBrowserEditorProps) {
+function PreparedEditor({ start, base: _base, diagnosticClient: client, ...props }: PreparedBrowserEditorProps & { diagnosticClient: ReturnType<typeof createBrowserEditorDiagnostics> }) {
   const { controller } = useWorkspace();
-  return <BrowserEditor {...props} controller={controller} />;
+  const mounts = useRef(0);
+  useEffect(() => {
+    mounts.current++;
+    let cancelled = false;
+    const detach = client.attach(window);
+    void client.connect().then(() => { if (!cancelled) client.record('editor.mounted', { path: location.pathname }); });
+    return () => {
+      detach(); cancelled = true; mounts.current--;
+      queueMicrotask(() => {
+        if (!mounts.current) void controller.dispose().catch(error => client.record('editor.cleanup.failed', error)).finally(async () => {
+          client.record('editor.unmounted'); await client.dispose();
+        });
+      });
+    };
+  }, [client, controller]);
+  const [recipe] = useState(() => {
+    return { async start(owner: WorkspaceController) { await client.connect(); await start(owner); } };
+  });
+  return <BrowserEditor {...props} controller={controller} recipe={recipe} />;
 }
 
 export function PreparedBrowserWorkspace({ children, start, base, diagnostics, onDiagnostic, captureProcessOutput }: PreparedBrowserWorkspaceProps) {
