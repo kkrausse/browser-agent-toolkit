@@ -231,13 +231,7 @@
 .oc-empty h3 {
   color: #344054;
 }
-.oc-latest {
-  position: absolute;
-  bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  box-shadow: 0 2px 10px #0001;
-}
+.oc-history-status { margin: 0 auto 12px; text-align: center; color: var(--oc-muted); font-size: 12px; }
 .oc-error {
   display: flex;
   gap: 10px;

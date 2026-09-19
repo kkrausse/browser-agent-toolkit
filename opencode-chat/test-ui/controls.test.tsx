@@ -4,8 +4,8 @@ import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { ChoiceSelect } from "../src/components/ui/select";
 import { Button } from "../src/components/ui/button";
-import { ChatView, QuestionCard } from "../src/react";
-import type { ChatController, QuestionRequest } from "../src/types";
+import { ChatView, QuestionCard, Transcript } from "../src/react";
+import type { ChatController, ChatSnapshot, QuestionRequest } from "../src/types";
 import { BrowserEditor } from "../src/editor";
 import type { WorkspaceController, WorkspaceSnapshot } from "@kev-browser-agent-kit/workspace/react";
 
@@ -115,6 +115,44 @@ test("ChatView chrome defaults visible and can be hidden for host-owned embeddin
   expect(container.querySelector("header.oc-header")).toBeNull();
   expect(container.querySelector("footer.oc-footer")).toBeNull();
   expect(container.querySelector('[aria-label="Conversation"]')).not.toBeNull();
+});
+
+test("transcript preserves reading position for new messages and earlier-page prepends", async () => {
+  const listeners = new Set<() => void>();
+  let snapshot: ChatSnapshot = {
+    connection: "connected", sessionID: "ses1", sessions: [], models: [], messages: [], execution: "idle",
+    interruptRequested: false, sending: false, loading: false, loadingOlder: false,
+    hasOlder: false, permissions: [], questions: [], unsupportedForms: [],
+  };
+  const controller = {
+    getSnapshot: () => snapshot,
+    subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+  } as unknown as ChatController;
+  const container = await mount(<Transcript controller={controller} />);
+  const transcript = container.querySelector<HTMLElement>(".oc-transcript")!;
+  let scrollHeight = 1_000;
+  Object.defineProperty(transcript, "scrollHeight", { configurable: true, get: () => scrollHeight });
+  Object.defineProperty(transcript, "clientHeight", { configurable: true, get: () => 400 });
+  const update = async (messages: ChatSnapshot["messages"]): Promise<void> => {
+    snapshot = { ...snapshot, messages };
+    await act(async () => { listeners.forEach(listener => listener()); });
+  };
+  await update([{ id: "middle", type: "user", text: "middle", time: { created: 2 } }]);
+  expect(transcript.scrollTop).toBe(1_000);
+  transcript.scrollTop = 100;
+  transcript.dispatchEvent(new Event("scroll", { bubbles: true }));
+  scrollHeight = 1_100;
+  await update([
+    ...snapshot.messages,
+    { id: "new", type: "user", text: "new", time: { created: 3 } },
+  ]);
+  expect(transcript.scrollTop).toBe(100);
+  scrollHeight = 1_200;
+  await update([
+    { id: "old", type: "user", text: "old", time: { created: 1 } },
+    ...snapshot.messages,
+  ]);
+  expect(transcript.scrollTop).toBe(200);
 });
 
 test("chat and preview panel gates host reset during startup and exposes no manual source editor", async () => {

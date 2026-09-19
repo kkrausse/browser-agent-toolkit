@@ -197,24 +197,72 @@ test("disconnect preserves unknown execution, reconnect hydrates and replaces st
   expect(c.getSnapshot().messages[0]!.id).toBe("msg_after");
 });
 
-test("paged history includes assistant without parent and deduplicates boundaries", async () => {
+test("selected session automatically drains paged history and deduplicates boundaries", async () => {
   const f = fixture();
   f.override = (url) =>
     url.pathname.endsWith("/message")
       ? json(
-          url.searchParams.has("cursor")
+          url.searchParams.get("cursor") === "second"
+            ? {
+                data: [user("msg_oldest", undefined, 0)],
+                cursor: {},
+              }
+            : url.searchParams.has("cursor")
             ? {
                 data: [user("msg_new", undefined, 2), user("msg_old", undefined, 1)],
-                cursor: {},
+                cursor: { next: "second" },
               }
             : { data: [user("msg_new", undefined, 2)], cursor: { next: "cursor" } },
         )
       : undefined;
   const { c } = start(f);
   await c.ready;
-  expect(c.getSnapshot().hasOlder).toBe(true);
-  await c.loadOlder();
-  expect(c.getSnapshot().messages.map((m) => m.id)).toEqual(["msg_old", "msg_new"]);
+  expect(c.getSnapshot().hasOlder).toBe(false);
+  expect(c.getSnapshot().loadingOlder).toBe(false);
+  expect(c.getSnapshot().messages.map((m) => m.id)).toEqual(["msg_oldest", "msg_old", "msg_new"]);
+  expect(f.calls.filter(call => call.url.pathname.endsWith("/message"))).toHaveLength(3);
+});
+
+test("automatic history drain stops repeated cursors and retains loaded messages with an error", async () => {
+  const f = fixture();
+  f.override = url => url.pathname.endsWith("/message")
+    ? url.searchParams.get("cursor") === "first"
+      ? json({ data: [user("msg_old", undefined, 1)], cursor: { next: "second" } })
+      : url.searchParams.get("cursor") === "second"
+        ? json({ data: [user("msg_older", undefined, 0)], cursor: { next: "first" } })
+        : json({ data: [user("msg_new", undefined, 2)], cursor: { next: "first" } })
+    : undefined;
+  const { c } = start(f);
+  await expect(c.ready).rejects.toThrow("Repeated history cursor");
+  expect(c.getSnapshot().messages.map(message => message.id)).toEqual(["msg_old", "msg_new"]);
+  expect(c.getSnapshot().loadingOlder).toBe(false);
+  expect(c.getSnapshot().hasOlder).toBe(false);
+  expect(c.getSnapshot().error).toContain("Repeated history cursor");
+  expect(f.calls.filter(call => call.url.pathname.endsWith("/message"))).toHaveLength(3);
+});
+
+test("session switch cancels an automatic history drain without stale prepends", async () => {
+  const { f, c } = start();
+  await c.ready;
+  const pending = deferred<Response>();
+  f.override = url => {
+    if (!url.pathname.endsWith("/message")) return;
+    const id = url.pathname.split("/").at(-2)!;
+    if (id === "ses1")
+      return url.searchParams.has("cursor")
+        ? pending.promise
+        : json({ data: [user("msg_first")], cursor: { next: "older" } });
+    return json({ data: [user("msg_second")], cursor: {} });
+  };
+  const first = c.selectSession("ses1");
+  void first.catch(() => {});
+  await tick();
+  await c.selectSession("ses2");
+  pending.resolve(json({ data: [user("msg_stale")], cursor: {} }));
+  await expect(first).rejects.toThrow();
+  expect(c.getSnapshot().sessionID).toBe("ses2");
+  expect(c.getSnapshot().messages.map(message => message.id)).toEqual(["msg_second"]);
+  expect(c.getSnapshot().loadingOlder).toBe(false);
 });
 
 test("chat export includes paged primary and subagent sessions with oldest-first deduplicated histories", async () => {

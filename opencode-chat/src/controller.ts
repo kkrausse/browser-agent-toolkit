@@ -164,6 +164,12 @@ export function createChatController(options: ChatOptions): ChatController {
           : {}),
         loading: false,
       });
+      if (older) {
+        publish({ loadingOlder: true });
+        yield* drainOlder(g, s).pipe(Effect.ensuring(Effect.sync(() => {
+          if (valid(g, s)) publish({ loadingOlder: false });
+        })));
+      }
       for (const e of requestEvents) requestEvent(e);
       if (revision !== rev) recover();
     }).pipe(Effect.forkIn(selectionScope));
@@ -438,23 +444,32 @@ export function createChatController(options: ChatOptions): ChatController {
       if (mutation === token) mutation = undefined;
     })));
   });
-  const loadOlder = Effect.fn("Chat.loadOlder")(function*() {
-    if (!older || state.loadingOlder) return;
-    const cursor = older, g = generation, s = selection;
-    publish({ loadingOlder: true });
-    yield* Effect.gen(function*() {
+  const drainOlder = Effect.fn("Chat.drainOlder")(function*(g: number, s: number) {
+    const cursors = new Set<string>();
+    while (older && valid(g, s)) {
+      const cursor = older;
+      cursors.add(cursor);
       const api = yield* OpenCodeAPI;
       const page = yield* api.messages(yield* sessionID(), { cursor });
       if (!valid(g, s)) return;
-      if (page.cursor.next === cursor)
+      if (page.cursor.next && cursors.has(page.cursor.next)) {
+        older = undefined;
+        publish({ hasOlder: false });
         return yield* new ChatError({ message: "Repeated history cursor" });
+      }
       older = page.cursor.next;
       const ids = new Set(state.messages.map((m) => m.id));
       publish({
         messages: [...page.data].reverse().filter((m) => !ids.has(m.id)).concat([...state.messages]),
         hasOlder: !!older,
       });
-    }).pipe(Effect.ensuring(Effect.sync(() => {
+    }
+  });
+  const loadOlder = Effect.fn("Chat.loadOlder")(function*() {
+    if (!older || state.loadingOlder || hydration) return;
+    const g = generation, s = selection;
+    publish({ loadingOlder: true });
+    yield* drainOlder(g, s).pipe(Effect.ensuring(Effect.sync(() => {
       if (valid(g, s)) publish({ loadingOlder: false });
     })));
   });

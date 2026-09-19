@@ -29,6 +29,7 @@ export interface ChatViewProps {
   showSessions?: boolean;
   showModels?: boolean;
   showHeader?: boolean;
+  showTitle?: boolean;
   showFooter?: boolean;
   onOpenFile?: OpenFile;
   headerActions?: ReactNode;
@@ -234,33 +235,38 @@ export function Transcript({
   const state = useChatSnapshot(controller),
     viewport = useRef<HTMLDivElement>(null),
     following = useRef(true);
-  const anchor = useRef<{ height: number; top: number } | null>(null),
+  const previous = useRef<{ firstID?: string; height: number }>({ height: 0 }),
     session = useRef(state.sessionID);
-  const [away, setAway] = useState(false);
   useLayoutEffect(() => {
     const el = viewport.current;
     if (!el) return;
     if (session.current !== state.sessionID) {
       session.current = state.sessionID;
       following.current = true;
-      anchor.current = null;
-    }
-    if (anchor.current && !state.loadingOlder) {
-      el.scrollTop =
-        anchor.current.top + el.scrollHeight - anchor.current.height;
-      anchor.current = null;
+      el.scrollTop = el.scrollHeight;
     } else {
-      const selection = el.ownerDocument.getSelection();
-      if (
-        selection &&
-        !selection.isCollapsed &&
-        el.contains(selection.anchorNode)
-      )
-        following.current = false;
-      if (following.current) el.scrollTop = el.scrollHeight;
+      const oldFirst = previous.current.firstID;
+      const oldFirstIndex = oldFirst
+        ? state.messages.findIndex((message) => message.id === oldFirst)
+        : -1;
+      if (oldFirstIndex > 0)
+        el.scrollTop += el.scrollHeight - previous.current.height;
+      else {
+        const selection = el.ownerDocument.getSelection();
+        if (
+          selection &&
+          !selection.isCollapsed &&
+          el.contains(selection.anchorNode)
+        )
+          following.current = false;
+        if (following.current) el.scrollTop = el.scrollHeight;
+      }
     }
-    setAway(!following.current);
-  }, [state.messages, state.sessionID, state.loadingOlder]);
+    previous.current = {
+      firstID: state.messages[0]?.id,
+      height: el.scrollHeight,
+    };
+  }, [state.messages, state.sessionID]);
   return (
     <div className="oc-transcript-wrap">
       <div
@@ -273,25 +279,16 @@ export function Transcript({
           const el = viewport.current!;
           following.current =
             el.scrollHeight - el.scrollTop - el.clientHeight < 64;
-          setAway(!following.current);
         }}
       >
-        {state.hasOlder && (
-          <Button
-            disabled={state.loadingOlder}
-            onClick={() => {
-              const el = viewport.current!;
-              anchor.current = { height: el.scrollHeight, top: el.scrollTop };
-              following.current = false;
-              run(controller.loadOlder());
-            }}
-          >
-            {state.loadingOlder ? "Loading…" : "Load earlier messages"}
-          </Button>
-        )}
         {state.loading && (
           <p className="oc-empty" role="status">
             Loading conversation…
+          </p>
+        )}
+        {!state.loading && state.loadingOlder && (
+          <p className="oc-history-status" role="status">
+            Loading earlier messages…
           </p>
         )}
         {!state.loading && !state.messages.length && (
@@ -320,18 +317,6 @@ export function Transcript({
           />
         ))}
       </div>
-      {away && (
-        <Button
-          className="oc-latest"
-          onClick={() => {
-            following.current = true;
-            viewport.current!.scrollTop = viewport.current!.scrollHeight;
-            setAway(false);
-          }}
-        >
-          Jump to latest ↓
-        </Button>
-      )}
     </div>
   );
 }
@@ -509,6 +494,7 @@ export function ChatView({
   showSessions = true,
   showModels = true,
   showHeader = true,
+  showTitle = true,
   showFooter = true,
   onOpenFile,
   headerActions,
@@ -521,7 +507,7 @@ export function ChatView({
       {showHeader && <header className="oc-header">
         <div className="oc-toolbar">
           <div className="oc-toolbar-copy">
-            <strong>OpenCode</strong>
+            {showTitle && <strong>OpenCode</strong>}
             {(showSessions || showModels) && (
               <details className="oc-settings">
                 <summary>Session & model</summary>
