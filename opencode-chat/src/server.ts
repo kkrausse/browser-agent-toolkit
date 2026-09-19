@@ -140,9 +140,11 @@ export function createBrowserEditorHandler(options: {
       let metadata: ModelMetadata = {};
       if (options.diagnostics?.enabled) void readModelMetadata(request, headers.get('content-type')).then(value => { metadata = value; });
       const requestDetail = {
-        requestId, method: request.method, path, upstreamPath: upstream.pathname, provider: providerID,
+        requestId, method: request.method, path, upstreamOrigin: upstream.origin, upstreamPath: upstream.pathname,
+        upstreamQueryFields: [...upstream.searchParams.keys()].sort(), provider: providerID,
         client: safeIdentifier(headers.get('x-opencode-client')), model: metadata.model,
-        contentLength: Number(request.headers.get('content-length')) || undefined,
+        userAgent: headers.get('user-agent'),
+        providerCredentialConfigured: ['authorization', 'x-api-key', 'api-key', 'x-goog-api-key'].some(name => headers.has(name)),
         nativeFields,
         forwardedFields: [...headers.keys()].filter(name => !['authorization', 'x-api-key', 'api-key', 'x-goog-api-key'].includes(name)).sort(),
         openCodeIdentity: {
@@ -153,10 +155,12 @@ export function createBrowserEditorHandler(options: {
       try {
         const response = await fetch(upstream, { method: request.method, headers, body: request.body, signal: request.signal, redirect: 'manual' });
         const detail = { ...requestDetail, ...metadata, status: response.status, upstreamStatus: response.status, downstreamStatus: response.status,
-          elapsedMs: Math.round(performance.now() - started), retryAfter: response.headers.get('retry-after'),
-          userAgent: headers.get('user-agent'), providerCredentialConfigured: ['authorization', 'x-api-key', 'api-key', 'x-goog-api-key'].some(name => headers.has(name)) };
+          elapsedMs: Math.round(performance.now() - started), retryAfter: response.headers.get('retry-after') };
         diagnostics.record('model.response', detail);
-        if (options.diagnostics?.enabled && !response.ok) void editorModelError(response).then(error => diagnostics.record('model.error', { ...detail, errorCategory: providerErrorCategory(error), error }));
+        if (options.diagnostics?.enabled && !response.ok) void editorModelError(response).then(error => diagnostics.record('model.error', {
+          requestId, provider: providerID, model: metadata.model, upstreamOrigin: upstream.origin, upstreamPath: upstream.pathname,
+          upstreamStatus: response.status, downstreamStatus: response.status, errorCategory: providerErrorCategory(error), error,
+        }));
         const outgoing = cleanHeaders(response.headers);
         outgoing.delete('set-cookie'); outgoing.delete('content-encoding'); outgoing.set('cache-control', 'no-store');
         return new Response(response.body, { status: response.status, headers: outgoing });

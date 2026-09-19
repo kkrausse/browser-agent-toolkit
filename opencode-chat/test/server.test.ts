@@ -132,7 +132,8 @@ test('model proxy diagnostics correlate requests without retaining prompt or cre
     expect(request.requestId).toBeString();
     expect(result.requestId).toBe(request.requestId);
     expect(error.requestId).toBe(request.requestId);
-    expect(result).toMatchObject({ method: 'POST', path: '/editor/model/opencode/responses', upstreamPath: '/v1/responses',
+    expect(result).toMatchObject({ method: 'POST', path: '/editor/model/opencode/responses', upstreamOrigin: upstream.url.origin,
+      upstreamPath: '/v1/responses', upstreamQueryFields: ['ignored'],
       provider: 'opencode', model: 'muse-spark-1.3-contributor-free', client: 'vivari-opencode-server',
       requestShape: { fields: ['input', 'model', 'stream', 'tools'], inputCount: 1, inputRoles: ['user'], inputTypes: ['message'],
         stream: true, toolCount: 1, toolTypes: ['function'] },
