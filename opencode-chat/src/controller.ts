@@ -450,7 +450,10 @@ export function createChatController(options: ChatOptions): ChatController {
       const cursor = older;
       cursors.add(cursor);
       const api = yield* OpenCodeAPI;
-      const page = yield* api.messages(yield* sessionID(), { cursor });
+      const page = yield* api.messages(yield* sessionID(), {
+        cursor,
+        limit: options.pageSize ?? 50,
+      });
       if (!valid(g, s)) return;
       if (page.cursor.next && cursors.has(page.cursor.next)) {
         older = undefined;
@@ -481,11 +484,9 @@ export function createChatController(options: ChatOptions): ChatController {
       const cursors = new Set<string>();
       let cursor: string | undefined;
       do {
-        const page = yield* api.messages(session.id, {
-          ...(cursor ? { cursor } : {}),
-          order: "desc",
-          limit: options.pageSize ?? 50,
-        });
+        const page = yield* api.messages(session.id, cursor
+          ? { cursor, limit: options.pageSize ?? 50 }
+          : { order: "desc", limit: options.pageSize ?? 50 });
         // Descending pages can overlap. Retain the first (newest-page) copy.
         for (const message of page.data)
           if (!messages.has(message.id)) messages.set(message.id, message);

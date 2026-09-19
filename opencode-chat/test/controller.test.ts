@@ -199,9 +199,14 @@ test("disconnect preserves unknown execution, reconnect hydrates and replaces st
 
 test("selected session automatically drains paged history and deduplicates boundaries", async () => {
   const f = fixture();
-  f.override = (url) =>
-    url.pathname.endsWith("/message")
-      ? json(
+  let rejectedIllegalCursorQueries = 0;
+  f.override = (url) => {
+    if (!url.pathname.endsWith("/message")) return;
+    if (url.searchParams.has("cursor") && url.searchParams.has("order")) {
+      rejectedIllegalCursorQueries++;
+      return json({ _tag: "InvalidCursorError", message: "Cursor cannot be combined with order" }, 400);
+    }
+    return json(
           url.searchParams.get("cursor") === "second"
             ? {
                 data: [user("msg_oldest", undefined, 0)],
@@ -213,14 +218,19 @@ test("selected session automatically drains paged history and deduplicates bound
                 cursor: { next: "second" },
               }
             : { data: [user("msg_new", undefined, 2)], cursor: { next: "cursor" } },
-        )
-      : undefined;
+        );
+  };
   const { c } = start(f);
   await c.ready;
   expect(c.getSnapshot().hasOlder).toBe(false);
   expect(c.getSnapshot().loadingOlder).toBe(false);
   expect(c.getSnapshot().messages.map((m) => m.id)).toEqual(["msg_oldest", "msg_old", "msg_new"]);
-  expect(f.calls.filter(call => call.url.pathname.endsWith("/message"))).toHaveLength(3);
+  const calls = f.calls.filter(call => call.url.pathname.endsWith("/message"));
+  expect(calls).toHaveLength(3);
+  expect(rejectedIllegalCursorQueries).toBe(0);
+  expect(calls[0]!.url.searchParams.get("order")).toBe("desc");
+  expect(calls.slice(1).every(call => !call.url.searchParams.has("order"))).toBe(true);
+  expect(calls.every(call => call.url.searchParams.get("limit") === "2")).toBe(true);
 });
 
 test("automatic history drain stops repeated cursors and retains loaded messages with an error", async () => {
@@ -267,9 +277,14 @@ test("session switch cancels an automatic history drain without stale prepends",
 
 test("chat export includes paged primary and subagent sessions with oldest-first deduplicated histories", async () => {
   const f = fixture();
+  let rejectedIllegalCursorQueries = 0;
   const primary = { ...session("ses_primary", "Primary"), time: { created: 20, updated: 20 } };
   const subagent = { ...session("ses_sub", "Subagent"), parentID: "ses_primary", time: { created: 10, updated: 10 } };
   f.override = (url, init) => {
+    if (url.searchParams.has("cursor") && url.searchParams.has("order")) {
+      rejectedIllegalCursorQueries++;
+      return json({ _tag: "InvalidCursorError", message: "Cursor cannot be combined with order" }, 400);
+    }
     if (url.pathname.endsWith("/session") && (!init.method || init.method === "GET"))
       return url.searchParams.get("cursor") === "sessions-2"
         ? json({ data: [primary, subagent], cursor: {} })
@@ -287,6 +302,7 @@ test("chat export includes paged primary and subagent sessions with oldest-first
   await c.ready;
   const selected = c.getSnapshot().sessionID;
   const snapshot = c.getSnapshot();
+  const callsBeforeExport = f.calls.length;
   const archive = await c.exportChats();
   expect(archive).toEqual({
     format: "opencode-chat",
@@ -303,7 +319,16 @@ test("chat export includes paged primary and subagent sessions with oldest-first
   });
   expect(c.getSnapshot()).toBe(snapshot);
   expect(c.getSnapshot().sessionID).toBe(selected);
-  expect(f.calls.filter(call => call.url.pathname.endsWith("/session") && call.url.searchParams.has("cursor"))).not.toHaveLength(0);
+  expect(rejectedIllegalCursorQueries).toBe(0);
+  const exportCalls = f.calls.slice(callsBeforeExport);
+  const sessionPages = exportCalls.filter(call => call.url.pathname.endsWith("/session"));
+  const messagePages = exportCalls.filter(call => call.url.pathname.endsWith("/message"));
+  expect(sessionPages.filter(call => call.url.searchParams.has("cursor"))).not.toHaveLength(0);
+  expect(sessionPages.filter(call => call.url.searchParams.has("cursor"))
+    .every(call => !call.url.searchParams.has("order"))).toBe(true);
+  expect(messagePages.filter(call => call.url.searchParams.has("cursor"))
+    .every(call => !call.url.searchParams.has("order"))).toBe(true);
+  expect(messagePages.every(call => call.url.searchParams.get("limit") === "2")).toBe(true);
 });
 
 test("chat export rejects repeated message cursors without publishing UI state", async () => {

@@ -8,10 +8,14 @@ export type { ModelRef, SessionInfo, Message, NativeEvent };
 
 export interface Page<T> { data: T[]; cursor: { next?: string | null } }
 
+type MessagePageOptions =
+  | { readonly cursor?: undefined; readonly limit?: number; readonly order?: "asc" | "desc" }
+  | { readonly cursor: string; readonly limit?: number; readonly order?: never };
+
 export interface ChatAPI {
   list(): Effect.Effect<SessionInfo[], ChatAPIError>;
   models(): Effect.Effect<ModelInfo[], ChatAPIError>;
-  messages(id: string, options?: { cursor?: string; limit?: number; order?: "asc" | "desc" }): Effect.Effect<Page<Message>, ChatAPIError>;
+  messages(id: string, options?: MessagePageOptions): Effect.Effect<Page<Message>, ChatAPIError>;
   create(title?: string): Effect.Effect<SessionInfo, ChatAPIError>;
   model(id: string, model: ModelRef): Effect.Effect<void, ChatAPIError>;
   prompt(id: string, text: string): Effect.Effect<void, ChatAPIError>;
@@ -64,7 +68,7 @@ const makeAPI = Effect.fn("OpenCodeAPI.make")(function*(directory: string, baseU
     const result = yield* client.model.list({ location });
     return result.data.map(model => ({ id: model.id, providerID: model.providerID, name: model.name, enabled: model.enabled }));
   }, withAPIError);
-  const messages = Effect.fn("OpenCodeAPI.messages")(function*(id: string, options: { cursor?: string; limit?: number; order?: "asc" | "desc" } = {}) {
+  const messages = Effect.fn("OpenCodeAPI.messages")(function*(id: string, options: MessagePageOptions = {}) {
     const page = yield* client.message.list({ sessionID: Session.ID.make(id), ...options });
     return { data: page.data.map(messageWire), cursor: page.cursor };
   }, withAPIError);
