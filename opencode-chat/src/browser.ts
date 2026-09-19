@@ -3,8 +3,11 @@ import type { Connection, WorkspaceController } from '@kev-browser-agent-kit/wor
 import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
 import { Effect } from 'effect';
 import { modelHeaderPluginSource } from './model-headers';
+import { javascriptPluginSource } from './javascript-plugin-source' with { type: 'macro' };
 import { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, openCodeCandidateLaunch } from './opencode-launch';
 import { validatePreparedOpenCode, type PreparedManifest } from './prepared';
+
+const javascriptPlugin = javascriptPluginSource();
 
 const verifyReadyEffect = Effect.fn('OpenCode.verifyReady')(function*(endpoint: Pick<Endpoint, 'fetch'>, authorization: string, diagnostics: DiagnosticScope) {
   const descriptor = openCodeCandidateLaunch;
@@ -34,6 +37,7 @@ const verifyReadyEffect = Effect.fn('OpenCode.verifyReady')(function*(endpoint: 
     return response.json();
   });
   if (!Array.isArray(plugins.data) || !plugins.data.some((plugin: { id: string; state?: { status: string } }) => plugin.id === 'editor.model-headers' && plugin.state?.status === 'active')) return yield* Effect.fail(new Error('OpenCode model header transport plugin is not active'));
+  if (!plugins.data.some((plugin: { id: string; state?: { status: string } }) => plugin.id === 'editor.javascript' && plugin.state?.status === 'active')) return yield* Effect.fail(new Error('OpenCode guest JavaScript tool plugin is not active'));
   const entries = yield* request(descriptor.configAPIPath, async response => {
     if (!response.ok) { await response.arrayBuffer(); throw Error(`OpenCode configuration HTTP ${response.status}`); }
     return response.json();
@@ -67,6 +71,7 @@ export async function installOpenCodeConfig(workspace: Workspace, options: { mod
   for (const directory of openCodeCandidateLaunch.workspaceDirectories) await workspace.fs.mkdir(directory);
   await workspace.fs.mkdir('/.server/config/opencode/plugins');
   await workspace.fs.writeFile('/.server/config/opencode/plugins/editor-model-headers.js', modelHeaderPluginSource(options.modelBaseURL));
+  await workspace.fs.writeFile('/.server/config/opencode/plugins/editor-javascript.js', await javascriptPlugin);
   await workspace.fs.writeFile(openCodeCandidateLaunch.workspaceConfigPath, JSON.stringify(createOpenCodeCandidateConfig(options.modelBaseURL, options.additionalToolActions)));
 }
 

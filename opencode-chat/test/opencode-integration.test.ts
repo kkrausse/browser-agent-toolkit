@@ -53,13 +53,16 @@ test.skipIf(!process.env.OPENCODE_PACKAGE_DIR)('real retained candidate survives
   } finally { await rm(output, { recursive: true, force: true }); }
 });
 
-function endpointFixture(change: 'none' | 'activation' | 'plugin' | 'config' | 'model' = 'none') {
+function endpointFixture(change: 'none' | 'activation' | 'plugin' | 'javascript' | 'config' | 'model' = 'none') {
   const calls: { path: string; method: string; authorization: string | null }[] = [];
   const endpoint = { async fetch(path: string | URL | Request, init?: RequestInit) {
     const name = String(path);
     calls.push({ path: name, method: init?.method ?? 'GET', authorization: new Headers(init?.headers).get('authorization') });
     if (name === openCodeCandidateLaunch.activation.path) return new Response('', { status: change === 'activation' ? 503 : 200 });
-    if (name === openCodeCandidateLaunch.pluginPath) return Response.json({ data: change === 'plugin' ? [] : [{ id: 'editor.model-headers', state: { status: 'active' } }] });
+    if (name === openCodeCandidateLaunch.pluginPath) return Response.json({ data: change === 'plugin' ? [] : [
+      { id: 'editor.model-headers', state: { status: 'active' } },
+      { id: 'editor.javascript', state: { status: change === 'javascript' ? 'error' : 'active' } },
+    ] });
     if (name === openCodeCandidateLaunch.configAPIPath) return Response.json(change === 'config' ? [] : [{ type: 'document', path: openCodeCandidateLaunch.configPath, info: createOpenCodeCandidateConfig('http://host.vivari.internal:4390/editor/model/opencode/') }]);
     if (name === openCodeCandidateLaunch.modelPath) return Response.json({ data: [{ ...openCodeCandidateLaunch.model, enabled: true, capabilities: { tools: change !== 'model' } }] });
     return Response.json({ healthy: true });
@@ -74,7 +77,7 @@ test('chat readiness awaits authenticated activation and validates global config
   expect(calls.map(call => call.path)).toEqual([openCodeCandidateLaunch.healthPath, openCodeCandidateLaunch.activation.path, openCodeCandidateLaunch.pluginPath, openCodeCandidateLaunch.configAPIPath, openCodeCandidateLaunch.modelPath]);
   expect(calls[1].method).toBe('POST');
   expect(calls.every(call => call.authorization === authorization)).toBe(true);
-  for (const failure of ['activation', 'plugin', 'config', 'model'] as const) {
+  for (const failure of ['activation', 'plugin', 'javascript', 'config', 'model'] as const) {
     await expect(verifyOpenCodeReady(endpointFixture(failure).endpoint, authorization, new AbortController().signal)).rejects.toThrow();
   }
 });

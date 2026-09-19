@@ -5,6 +5,7 @@ import { tmpdir, networkInterfaces } from 'node:os';
 import { decodeModelHeaders, encodeModelHeaders, MAX_MODEL_HEADERS, MODEL_HEADERS, modelHeaderPluginSource } from '../src/model-headers';
 import { createOpenCodeCandidateConfig, openCodeCandidateLaunch } from '../src/opencode-launch';
 import { createBrowserEditorHandler } from '../src/server';
+import { javascriptPluginSource } from '../src/javascript-plugin-source';
 
 async function hook(base = 'http://host/editor/model/opencode/') {
   const plugin = await import('data:text/javascript;base64,' + btoa(modelHeaderPluginSource(base)));
@@ -62,8 +63,25 @@ test('runtime egress policy preserves the envelope on host and same-origin route
 test.skipIf(!process.env.OPENCODE_PACKAGE_DIR || !process.env.NODE_BINARY)('qualified 2.0.3 guest loads public plugin and dispatches native enveloped HTTP', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'editor-model-probe-'));
   const received: { headers: Headers; path: string; body: string }[] = [];
+  let toolSent = false;
   const server = Bun.serve({ port: 0, async fetch(request) {
-    received.push({ headers: request.headers, path: new URL(request.url).pathname, body: await request.text() });
+    const body = await request.text();
+    received.push({ headers: request.headers, path: new URL(request.url).pathname, body });
+    if (!toolSent && JSON.parse(body).tools?.some((tool: { name: string }) => tool.name === 'runJavascript')) {
+      toolSent = true;
+      const args = JSON.stringify({ code: `import { writeFileSync } from 'node:fs'; writeFileSync('/workspace/javascript-tool-result.txt', 'executed:' + process.env.BROWSER_AGENT_GUEST); console.log('TOOL_EXECUTED');` });
+      const item = { type: 'function_call', id: 'fc_guest', call_id: 'call_guest', name: 'runJavascript', arguments: args, status: 'completed' };
+      const response = { id: 'resp_guest', object: 'response', created_at: 1, model: 'guest-test', status: 'completed', output: [item], usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } };
+      const events = [
+        { type: 'response.created', response: { ...response, status: 'in_progress', output: [] } },
+        { type: 'response.output_item.added', output_index: 0, item: { ...item, arguments: '', status: 'in_progress' } },
+        { type: 'response.function_call_arguments.delta', item_id: item.id, output_index: 0, delta: args },
+        { type: 'response.function_call_arguments.done', item_id: item.id, output_index: 0, arguments: args },
+        { type: 'response.output_item.done', output_index: 0, item },
+        { type: 'response.completed', response },
+      ];
+      return new Response(events.map(event => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''), { headers: { 'content-type': 'text/event-stream' } });
+    }
     return Response.json({ error: { message: 'Qualification complete', type: 'invalid_request_error' } }, { status: 400 });
   } });
   try {
@@ -73,12 +91,17 @@ test.skipIf(!process.env.OPENCODE_PACKAGE_DIR || !process.env.NODE_BINARY)('qual
     const base = `http://${host}:${server.port}/editor/model/opencode/`;
     const config = createOpenCodeCandidateConfig(base);
     await Bun.write(join(directory, 'input.json'), JSON.stringify({ directory, application: process.env.OPENCODE_PACKAGE_DIR,
-      receiptSha256: openCodeCandidateLaunch.receiptSha256, config, model: openCodeCandidateLaunch.model, plugin: modelHeaderPluginSource(base) }));
+      receiptSha256: openCodeCandidateLaunch.receiptSha256, config, model: openCodeCandidateLaunch.model,
+      plugin: modelHeaderPluginSource(base), javascriptPlugin: javascriptPluginSource() }));
     const child = Bun.spawn([process.env.NODE_BINARY!, join(import.meta.dir, '../scripts/model-transport-probe.mjs'), join(directory, 'input.json')], { stdout: 'pipe', stderr: 'pipe' });
     const [stdout, stderr, exit] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
     expect({ exit, stdout, stderr }).toMatchObject({ exit: 0 });
     if (!received.length) console.log(stdout, stderr);
     expect(received.length).toBeGreaterThan(0);
+    const names = received.flatMap(request => (JSON.parse(request.body).tools ?? []).map((tool: { name?: string }) => tool.name));
+    expect(names).toContain('runJavascript');
+    expect(names).not.toContain('shell');
+    expect(received.some(request => request.body.includes('TOOL_EXECUTED'))).toBe(true);
     for (const request of received) {
       expect(request.path.startsWith('/editor/model/opencode/')).toBe(true);
       expect(request.headers.has('authorization')).toBe(false);

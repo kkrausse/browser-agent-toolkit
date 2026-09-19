@@ -19,6 +19,7 @@ const result = await runHeadlessProcessProbe({ directory: input.directory, name:
     await api.kernel.writeFilesBatch([
       { path: '/workspace/.server/config/opencode/opencode.json', bytes: Buffer.from(JSON.stringify(input.config)) },
       { path: '/workspace/.server/config/opencode/plugins/editor-model-headers.js', bytes: Buffer.from(input.plugin) },
+      ...(input.javascriptPlugin ? [{ path: '/workspace/.server/config/opencode/plugins/editor-javascript.js', bytes: Buffer.from(input.javascriptPlugin) }] : []),
     ]);
     api.launch('/bin/bun.js', ['/app/server.js'], { cwd: '/workspace', env: {
       PATH: '/bin', HOME: '/workspace/.server', OPENCODE_TEST_HOME: '/workspace/.server', OPENCODE_PASSWORD: 'isolated-test',
@@ -36,11 +37,16 @@ const result = await runHeadlessProcessProbe({ directory: input.directory, name:
     assert.equal((await request('POST', '/api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace')).status, 204);
     const plugins = JSON.parse((await request('GET', '/api/plugin?location%5Bdirectory%5D=%2Fworkspace')).body);
     assert(plugins.data.some(plugin => plugin.id === 'editor.model-headers' && plugin.state.status === 'active'));
+    if (input.javascriptPlugin) assert(plugins.data.some(plugin => plugin.id === 'editor.javascript' && plugin.state.status === 'active'), JSON.stringify(plugins));
     api.stage('plugin.active');
     const created = await request('POST', '/api/session', { location: { directory: '/workspace' }, model: input.model });
     assert.equal(created.status, 200, created.body);
     const session = JSON.parse(created.body).data;
-    const generated = await request('POST', `/api/session/${session.id}/generate`, { prompt: 'Transport qualification only' });
+    const generated = input.javascriptPlugin
+      ? await request('POST', `/api/session/${session.id}/prompt`, { text: 'Tool catalog qualification only', delivery: 'steer' })
+      : await request('POST', `/api/session/${session.id}/generate`, { prompt: 'Transport qualification only' });
+    if (input.javascriptPlugin) await request('POST', `/api/session/${session.id}/wait`);
+    if (input.javascriptPlugin) assert.equal(api.kernel.readFile('/workspace/javascript-tool-result.txt'), 'executed:1');
     console.log('Generated result', generated);
     // Mock provider deliberately rejects the call; the parent asserts the native request it received.
     assert.notEqual(generated.status, 404, generated.body);

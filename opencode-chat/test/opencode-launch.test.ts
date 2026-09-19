@@ -28,8 +28,8 @@ test('explicit model config supplies catalog-absent Muse Spark via supported HTT
     capabilities: { tools: true, input: ['text', 'image', 'video', 'pdf', 'audio'], output: ['text'] },
     limit: { context: 1048576, output: 131072 }, websocket: false,
   });
-  expect(config.permissions).toEqual(['read', 'edit', 'grep', 'glob'].map(action => ({ action, resource: '*', effect: 'allow' })));
-  expect(createOpenCodeCandidateConfig(baseURL, ['shell', 'read']).permissions.map(p => p.action)).toEqual(['read', 'edit', 'grep', 'glob', 'shell']);
+  expect(config.permissions).toEqual(['read', 'edit', 'grep', 'glob', 'runJavascript'].map(action => ({ action, resource: '*', effect: 'allow' })));
+  expect(createOpenCodeCandidateConfig(baseURL, ['shell', 'read']).permissions.map(p => p.action)).toEqual(['read', 'edit', 'grep', 'glob', 'runJavascript', 'shell']);
 });
 
 test('descriptor exposes global config, fixed database, activation barrier and EOF lifecycle', () => {

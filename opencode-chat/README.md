@@ -44,6 +44,37 @@ flow previously passed model edits, shell execution, Tailwind HMR and local rete
 in the original repository. See the [current example setup](../examples/todo-app/README.md)
 for this checkout; historical acceptance is not fresh browser qualification.
 
+#### Guest JavaScript execution
+
+`installOpenCodeConfig` also installs the `editor.javascript` plugin. Startup
+requires both editor plugins to be active. It removes the model-facing `shell`
+tool and registers `runJavascript({ code, cwd?, timeoutMs? })` through OpenCode's
+public tool transform. Read/edit/glob/grep remain available.
+
+Each invocation runs a fresh ES module in a separate Vivari process, with
+top-level await, imports resolved from `cwd` (default `/workspace`), and
+`BROWSER_AGENT_GUEST=1`. This is the runtime's Node-compatible frontend, not a
+native Node/Bun executable. It supports installed JS/WASM packages to the extent
+their APIs are implemented by Vivari. The plugin injects this capability contract
+and examples into the model context, including retained sessions after reopening.
+
+Use package APIs directly when available. For CLI-only JS packages, use
+`node:child_process.spawn('/bin/node.js', [entrypoint, ...args])` and forward its
+streams/exit status. Package scripts must still be inspected for framework
+generation steps and unsupported APIs; the tool does not silently translate Bun
+commands or treat transpilation as a full typecheck.
+
+Results report status, working directory, elapsed time, exit code/signal,
+stdout/stderr, and timestamped launch/exit/timeout/cleanup diagnostics. Progress
+updates are published while running. Inline output retains the first 32 KiB per
+channel; complete output is retained under `/workspace/.server/javascript/` with
+paths in the result. Timeout (60 seconds by default, up to 5 minutes) and Effect
+interruption kill the guest process. Failure to confirm termination is explicit.
+Temporary source files are removed after execution; output logs remain readable.
+
+`bun run test:javascript` checks real Vivari workers, including JS/WASM imports,
+TypeScript API/CLI execution, compiler errors, timeout, interruption and logs.
+
 #### Model headers and application authentication
 
 `installOpenCodeConfig` installs `editor.model-headers` through OpenCode 2.0.3's public global

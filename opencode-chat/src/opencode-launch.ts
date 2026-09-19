@@ -33,7 +33,7 @@ export function createOpenCodeCandidateConfig(modelBaseURL: string, additionalTo
   return {
     $schema: 'https://opencode.ai/config.json',
     model: 'opencode/' + openCodeCandidateLaunch.model.id, snapshots: false,
-    permissions: [...new Set(['read', 'edit', 'grep', 'glob', ...additionalToolActions])].map(action => ({ action, resource: '*', effect: 'allow' as const })),
+    permissions: [...new Set(['read', 'edit', 'grep', 'glob', 'runJavascript', ...additionalToolActions])].map(action => ({ action, resource: '*', effect: 'allow' as const })),
     providers: { opencode: { settings: { baseURL: modelBaseURL }, models: {
       [openCodeCandidateLaunch.model.id]: { name: 'Muse Spark 1.3 Free', package: '@opencode/ai/providers/openai',
         capabilities: { tools: true, input: ['text', 'image', 'video', 'pdf', 'audio'], output: ['text'] },
