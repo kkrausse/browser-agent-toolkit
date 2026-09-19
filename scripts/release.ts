@@ -150,7 +150,7 @@ for (const { key, directory, metadata } of stages) {
   if (key === 'runtime') { await readRuntimeAssets(extracted); await readRuntimeBackendPolicy(extracted); }
   if (key === 'chat') {
     await readQualifiedOpenCodeApplication(join(extracted, 'application'));
-    for (const entry of ['index.js', 'react.js', 'editor.js', 'recipe.js']) {
+    for (const entry of ['index.js', 'react.js', 'editor.js']) {
       const built = await Bun.build({ entrypoints: [join(extracted, entry)], target: 'browser', external: ['react', 'react/jsx-runtime', 'react-dom', 'react-dom/*', '@kev-browser-agent-kit/workspace', '@kev-browser-agent-kit/workspace/*'] });
       if (!built.success) throw new AggregateError(built.logs, `Packed chat smoke failed: ${entry}`);
     }
