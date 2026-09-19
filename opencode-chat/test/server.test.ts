@@ -112,7 +112,8 @@ test('model proxy diagnostics correlate requests without retaining prompt or cre
     }, diagnostics: { enabled: true, async write(batch: DiagnosticBatch) { events.push(...batch.events); } } });
     const response = await handler.fetch(new Request('http://localhost/editor/model/opencode/responses?ignored=secret', {
       method: 'POST', body: JSON.stringify({ model: 'muse-spark-1.3-contributor-free', input: 'PRIVATE_PROMPT' }),
-      headers: { 'content-type': 'application/json', [MODEL_HEADERS]: encodeModelHeaders(new Headers({
+      headers: { [MODEL_HEADERS]: encodeModelHeaders(new Headers({
+        'content-type': 'application/json',
         authorization: 'Bearer browser-secret', 'x-opencode-client': 'vivari-opencode-server',
         'x-opencode-project': 'project-secret', 'x-opencode-session': 'session-secret',
       })) },

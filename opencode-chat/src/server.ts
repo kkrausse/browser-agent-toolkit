@@ -19,8 +19,8 @@ function cleanHeaders(input: Headers) {
 const safeIdentifier = (value: string | null, max = 128) => value && value.length <= max && /^[\w./:-]+$/.test(value) ? value : undefined;
 
 /** Read only the bounded model identifier from a cloned JSON body; never retain prompt/tool content. */
-async function readModelIdentifier(request: Request): Promise<string | undefined> {
-  if (!request.body || !request.headers.get('content-type')?.toLowerCase().includes('application/json')) return;
+async function readModelIdentifier(request: Request, contentType: string | null): Promise<string | undefined> {
+  if (!request.body || !contentType?.toLowerCase().includes('application/json')) return;
   const reader = request.clone().body!.getReader(), decoder = new TextDecoder();
   let text = '', bytes = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -110,7 +110,7 @@ export function createBrowserEditorHandler(options: {
       const started = performance.now();
       const requestId = crypto.randomUUID();
       let model: string | undefined;
-      if (options.diagnostics?.enabled) void readModelIdentifier(request).then(value => { model = value; });
+      if (options.diagnostics?.enabled) void readModelIdentifier(request, headers.get('content-type')).then(value => { model = value; });
       const requestDetail = {
         requestId, method: request.method, path, upstreamPath: upstream.pathname, provider: providerID,
         client: safeIdentifier(headers.get('x-opencode-client')), model,
