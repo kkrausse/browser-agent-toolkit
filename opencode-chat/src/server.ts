@@ -101,6 +101,7 @@ export function createBrowserEditorHandler(options: {
       let headers: Headers;
       try { headers = cleanHeaders(decodeModelHeaders(request.headers.get(MODEL_HEADERS))); }
       catch { return new Response('Invalid model header envelope', { status: 400 }); }
+      const nativeFields = [...headers.keys()].sort();
       for (const name of [...headers.keys()]) {
         if (['cookie', 'origin', 'referer', 'authorization', 'x-api-key', 'api-key', 'x-goog-api-key', 'forwarded'].includes(name) || name.startsWith('x-forwarded-') || name.startsWith('sec-') || name.startsWith('x-editor-')) headers.delete(name);
       }
@@ -115,8 +116,10 @@ export function createBrowserEditorHandler(options: {
         requestId, method: request.method, path, upstreamPath: upstream.pathname, provider: providerID,
         client: safeIdentifier(headers.get('x-opencode-client')), model,
         contentLength: Number(request.headers.get('content-length')) || undefined,
+        nativeFields,
+        forwardedFields: [...headers.keys()].filter(name => !['authorization', 'x-api-key', 'api-key', 'x-goog-api-key'].includes(name)).sort(),
         openCodeIdentity: {
-          client: headers.has('x-opencode-client'), project: headers.has('x-opencode-project'), session: headers.has('x-opencode-session'),
+          client: headers.has('x-opencode-client'), project: headers.has('x-opencode-project'), request: headers.has('x-opencode-request'), session: headers.has('x-opencode-session'),
         },
       };
       diagnostics.record('model.request', requestDetail);

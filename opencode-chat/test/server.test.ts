@@ -39,15 +39,19 @@ test('model proxy streams real HTTP, strips client credentials, and keeps its up
       opencode: { baseURL: upstream.url + 'v1', headers: { authorization: 'Bearer server-only', 'user-agent': 'opencode/stable/2.0.3/vivari-opencode-server' } },
       anthropic: { baseURL: upstream.url + 'anthropic/v1', headers: { 'x-api-key': 'server-anthropic' } },
     } });
+    const nativeHeaders = new Headers({ authorization: 'Bearer client', 'x-api-key': 'private', 'x-opencode-session': 'ses_test',
+      'x-opencode-client': 'test-client', 'user-agent': 'OpenCode-native', 'x-provider-feature': 'one' });
+    nativeHeaders.append('x-provider-feature', 'two');
     const response = await handler.fetch(new Request('http://localhost/editor/model/opencode/chat/completions?native=value%2Fone', { method: 'POST', body: '{ "opaque": true }',
       headers: { authorization: 'Bearer app', cookie: 'session=private', origin: 'http://localhost', 'x-app-secret': 'private', 'x-clerk-auth': 'private',
-        [MODEL_HEADERS]: encodeModelHeaders(new Headers({ authorization: 'Bearer client', 'x-api-key': 'private', 'x-opencode-session': 'ses_test', 'x-opencode-client': 'test-client', 'user-agent': 'OpenCode-native' })) } }));
+        [MODEL_HEADERS]: encodeModelHeaders(nativeHeaders) } }));
     expect(await response?.text()).toBe('data: real-stream\n\n');
     expect(received?.path).toBe('/v1/chat/completions');
     expect(received?.search).toBe('?native=value%2Fone');
     expect(received?.body).toBe('{ "opaque": true }');
     expect(received?.headers.get('x-opencode-session')).toBe('ses_test');
     expect(received?.headers.get('x-opencode-client')).toBe('test-client');
+    expect(received?.headers.get('x-provider-feature')).toBe('one, two');
     expect(received?.headers.get('authorization')).toBe('Bearer server-only');
     expect(received?.headers.get('user-agent')).toBe('opencode/stable/2.0.3/vivari-opencode-server');
     for (const name of ['cookie', 'origin', 'x-api-key', 'x-app-secret', 'x-clerk-auth', MODEL_HEADERS]) expect(received?.headers.get(name)).toBeNull();
@@ -129,7 +133,9 @@ test('model proxy diagnostics correlate requests without retaining prompt or cre
     expect(result).toMatchObject({ method: 'POST', path: '/editor/model/opencode/responses', upstreamPath: '/v1/responses',
       provider: 'opencode', model: 'muse-spark-1.3-contributor-free', client: 'vivari-opencode-server',
       upstreamStatus: 403, downstreamStatus: 403, providerCredentialConfigured: true,
-      openCodeIdentity: { client: true, project: true, session: true } });
+      nativeFields: ['authorization', 'content-type', 'x-opencode-client', 'x-opencode-project', 'x-opencode-session'],
+      forwardedFields: ['accept-encoding', 'content-type', 'user-agent', 'x-opencode-client', 'x-opencode-project', 'x-opencode-session'],
+      openCodeIdentity: { client: true, project: true, request: false, session: true } });
     expect(error.errorCategory).toBe('FreeTierError');
     const stored = JSON.stringify(events);
     for (const secret of ['PRIVATE_PROMPT', 'server-secret', 'browser-secret', 'project-secret', 'session-secret', 'ignored=secret']) expect(stored).not.toContain(secret);
