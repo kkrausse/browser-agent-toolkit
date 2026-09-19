@@ -90,10 +90,11 @@ Decoded console output is diagnostic; byte assertions use the original bytes.
 - Unread stdout overflow, stdout/stderr cancellation, and execution/runtime stop
   with descendant listener cleanup, port reuse, and runtime restart.
 - OPFS ownership lock/reopen, concurrent mutations/flushes and exact backing bytes,
-  backing-file failure/retry; SQLite ownership, transactions, orderly reopen,
-  failed-commit connection poisoning and pathname quarantine.
+  backing-file failure/retry; bounded project/OpenCode-state clear with an
+  attached-runtime guard and reopen verification; SQLite ownership, transactions,
+  orderly reopen, failed-commit connection poisoning and pathname quarantine.
 
-All 18 cases passed against a release-mode build from committed runtime source
+All 19 cases passed against a release-mode build from committed runtime source
 `6badd6731a70a2354898d6155301fe724b61c485`. This is not full runtime qualification:
 abrupt crash recovery, cross-document workspace contention, quota exhaustion and
 interrupted manifest writes remain unqualified. Storage fixtures document their

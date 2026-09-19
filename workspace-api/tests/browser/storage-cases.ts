@@ -1,5 +1,5 @@
-import { type Runtime, type Workspace } from "../../src/index.js";
-import { assert, browserCase, capture, equalBytes, mount, type BrowserTest } from "./harness.js";
+import { clearWorkspace, type Runtime, type Workspace } from "../../src/index.js";
+import { assert, browserCase, capture, equalBytes, mount, vivari, type BrowserTest } from "./harness.js";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -36,12 +36,43 @@ async function rejects(run: () => Promise<unknown>, pattern: RegExp) {
     `Expected rejection matching ${pattern}, received ${String(failure)}`);
 }
 
+async function assertEmptyOrMissing(host: ReturnType<typeof vivari>, path: string, message: string) {
+  const stat = await host.stat(path);
+  assert(!stat.exists || (stat.isDirectory && (await host.readdir(path)).length === 0), message);
+}
+
 const sqlite = `
   const { DatabaseSync } = require('node:sqlite');
   const assert = require('node:assert/strict');
 `;
 
 export const storageTests: BrowserTest[] = [
+  {
+    name: "bounded workspace clear removes project and OpenCode state durably",
+    steps: [
+      () => browserCase(async ({ workspace, runtime }) => {
+        const host = vivari(workspace);
+        await workspace.fs.mkdir("/.hidden");
+        await workspace.fs.writeFile("/.hidden/source.ts", "project");
+        await host.mkdir("/.server/chats/nested");
+        await host.writeFile("/.server/chats/nested/.history.json", "chat");
+        await host.mkdir("/unrelated");
+        await host.writeFile("/unrelated/keep.txt", "keep");
+        await rejects(() => clearWorkspace(workspace), /Stop the attached runtime/);
+        await runtime.stop();
+        await clearWorkspace(workspace);
+        assert((await workspace.fs.readdir("/")).length === 0, "Workspace root was not empty after clear");
+        await assertEmptyOrMissing(host, "/.server", "OpenCode state root was not empty after clear");
+        equalBytes(await host.readFile("/unrelated/keep.txt"), encoder.encode("keep"));
+      }),
+      () => browserCase(async ({ workspace }) => {
+        const host = vivari(workspace);
+        assert((await workspace.fs.readdir("/")).length === 0, "Workspace contents returned after reopen");
+        await assertEmptyOrMissing(host, "/.server", "OpenCode state returned after reopen");
+        equalBytes(await host.readFile("/unrelated/keep.txt"), encoder.encode("keep"));
+      }),
+    ],
+  },
   {
     name: "OPFS owner excludes a competing Web Lock and releases it on close",
     steps: [async () => {

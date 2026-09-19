@@ -116,7 +116,7 @@ const host = {
 Object.defineProperty(globalThis, "location", { value: { href: "http://localhost:43917/" }, configurable: true });
 const distribution = { name: "vivari", version: "headless-contract", assetBaseUrl: "/unused" };
 const workspace = {} as Workspace;
-workspaceInternals.set(workspace, { host, distribution, attached: false, closed: false });
+workspaceInternals.set(workspace, { host, distribution, attached: false, clearing: false, closed: false });
 async function collect(stream: AsyncIterable<Uint8Array>) {
   const chunks: Uint8Array[] = []; for await (const bytes of stream) chunks.push(bytes);
   return Buffer.concat(chunks);

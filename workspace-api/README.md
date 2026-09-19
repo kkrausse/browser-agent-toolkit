@@ -42,7 +42,7 @@ a separate `SourceDelivery`; callers choose `{ existing: 'preserve' }` or
 `{ existing: 'replace' }` explicitly when calling `installSource`.
 
 ```ts
-import { Workspace, Runtime, opfsStore, defineRipgrepTool, attachPreview } from './src';
+import { Workspace, Runtime, clearWorkspace, opfsStore, defineRipgrepTool, attachPreview } from './src';
 
 const manifest = await fetch('/runtime/distribution.json').then(r => r.json());
 const distribution = { name: 'vivari', version: manifest.version, assetBaseUrl: '/runtime/' };
@@ -60,6 +60,23 @@ await workspace.flush();
 await workspace.close();
 ```
 
+To replace a persisted project, the application should first save any exports it
+needs, stop the runtime, clear the two library-owned guest roots, reseed source,
+flush, and then start a new runtime:
+
+```ts
+await runtime.stop();
+await clearWorkspace(workspace); // clears /workspace and /.server, then flushes and verifies
+await workspace.fs.writeFile('/src/index.ts', freshSource);
+await workspace.flush();
+const restarted = await Runtime.start({ workspace, distribution });
+```
+
+`clearWorkspace` rejects while a runtime is attached and does not inspect or
+delete browser-private OPFS paths. It leaves each root empty when present and
+recursively removes all descendants, including dotfiles; an empty `/.server`
+may be absent after reopen because empty runtime-root directories are not mirrored.
+
 ## Contracts
 
 - Only `id: 'default'` and one origin's existing OPFS lease. Opening requires
@@ -68,6 +85,8 @@ await workspace.close();
 - Runtime starts no project applications. Runtime stop kills its executions and
   descendants; storage remains alive. Workspace close rejects while attached,
   flushes, then releases workers even if flushing fails (and propagates failure).
+- Workspace clear is bounded to `/workspace` and `/.server`, requires the runtime
+  to be stopped, flushes accepted removals, and verifies both roots are empty.
 - Flush acknowledges preceding accepted persisted mutations, not a checkpoint.
   **`node_modules` remains excluded from the existing OPFS mirror** and requires
   explicit dependency preparation/cache restoration on reopen.

@@ -23,6 +23,7 @@ export namespace Runtime {
     options.signal?.throwIfAborted();
     const state = workspaceInternals.get(options.workspace);
     if (!state || state.closed) throw new WorkspaceError("CLOSED", "Workspace is not open");
+    if (state.clearing) throw new WorkspaceError("STORAGE_BUSY", "Workspace is being cleared");
     if (state.attached) throw new WorkspaceError("ATTACHED", "Workspace already has an active runtime");
     if (JSON.stringify(state.distribution) !== JSON.stringify(options.distribution)) throw new WorkspaceError("DISTRIBUTION_MISMATCH", "Runtime must use the workspace distribution");
     state.attached = true;

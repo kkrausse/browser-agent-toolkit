@@ -15,7 +15,57 @@ export interface Workspace {
   flush(): Promise<void>;
   close(): Promise<void>;
 }
-export const workspaceInternals = new WeakMap<Workspace, { host: Host; distribution: Distribution; attached: boolean; closed: boolean }>();
+type WorkspaceInternalState = { host: Host; distribution: Distribution; attached: boolean; clearing: boolean; closed: boolean };
+export const workspaceInternals = new WeakMap<Workspace, WorkspaceInternalState>();
+
+const CLEAR_ROOTS = ["/workspace", "/.server"] as const;
+
+function childPath(parent: string, name: string): string {
+  if (!name || name === "." || name === ".." || name.includes("/") || name.includes("\0")) {
+    throw new Error(`Invalid directory entry while clearing ${parent}`);
+  }
+  return parent === "/" ? `/${name}` : `${parent}/${name}`;
+}
+
+async function removeDescendants(host: Host, root: string): Promise<void> {
+  const stat = await host.stat(root);
+  if (!stat.exists) return;
+  if (!stat.isDirectory) {
+    await host.remove(root);
+    return;
+  }
+  for (const name of await host.readdir(root)) {
+    const path = childPath(root, name);
+    const child = await host.stat(path);
+    if (child.exists && child.isDirectory) await removeDescendants(host, path);
+    await host.remove(path);
+  }
+}
+
+/**
+ * Durably clears project files and OpenCode server state from an open workspace.
+ * The caller must stop the attached runtime before invoking this operation.
+ */
+export async function clearWorkspace(workspace: Workspace): Promise<void> {
+  const state = workspaceInternals.get(workspace);
+  if (!state || state.closed) throw new WorkspaceError("CLOSED", "Workspace is not open");
+  if (state.attached) throw new WorkspaceError("ATTACHED", "Stop the attached runtime before clearing Workspace");
+  if (state.clearing) throw new WorkspaceError("STORAGE_BUSY", "Workspace is already being cleared");
+  state.clearing = true;
+  try {
+    for (const root of CLEAR_ROOTS) await removeDescendants(state.host, root);
+    await state.host.flush();
+    for (const root of CLEAR_ROOTS) {
+      const stat = await state.host.stat(root);
+      if (stat.exists && (!stat.isDirectory || (await state.host.readdir(root)).length !== 0)) {
+        throw new Error(`Workspace clear verification failed for ${root}`);
+      }
+    }
+  } finally {
+    state.clearing = false;
+  }
+}
+
 export namespace Workspace {
   export async function open(options: WorkspaceOpenOptions): Promise<Workspace> {
     if (options.id !== "default") throw new WorkspaceError("UNSUPPORTED_WORKSPACE", "Only workspace id 'default' is supported (one origin store)");
@@ -39,9 +89,12 @@ export namespace Workspace {
       if (persistence.status !== "durable") throw new WorkspaceError("STORAGE_BUSY", persistence.status === "failed" ? persistence.error : "Persistent storage unavailable");
       diagnostics.emit("workspace.directory");
       await h.mkdir("/workspace");
-      const state = { host: h, distribution: options.storage.distribution, attached: false, closed: false };
+      const state = { host: h, distribution: options.storage.distribution, attached: false, clearing: false, closed: false };
       let closing: Promise<void> | undefined;
-      const check = () => { if (state.closed) throw new WorkspaceError("CLOSED", "Workspace closed"); };
+      const check = () => {
+        if (state.closed) throw new WorkspaceError("CLOSED", "Workspace closed");
+        if (state.clearing) throw new WorkspaceError("STORAGE_BUSY", "Workspace is being cleared");
+      };
       const watches = new Set<(event: { paths: string[] }) => void>();
       const offPersistence = h.onPersistence(value => { persistence = value; options.onPersistenceChange?.(value); });
       const offMutation = h.onMutation(path => {
@@ -72,6 +125,7 @@ export namespace Workspace {
         close() {
           if (closing) return closing;
           if (state.attached) return Promise.reject(new WorkspaceError("ATTACHED", "Stop the attached runtime before closing Workspace"));
+          if (state.clearing) return Promise.reject(new WorkspaceError("STORAGE_BUSY", "Wait for Workspace clear before closing"));
           // Close excludes new runtime attachments and file operations before its
           // asynchronous flush, so a concurrent start cannot lose live workers.
           state.closed = true;
