@@ -28,6 +28,8 @@ export interface ChatViewProps {
   controller: ChatController;
   showSessions?: boolean;
   showModels?: boolean;
+  showHeader?: boolean;
+  showFooter?: boolean;
   onOpenFile?: OpenFile;
   headerActions?: ReactNode;
   footer?: ReactNode;
@@ -506,6 +508,8 @@ export function ChatView({
   controller,
   showSessions = true,
   showModels = true,
+  showHeader = true,
+  showFooter = true,
   onOpenFile,
   headerActions,
   footer,
@@ -514,7 +518,7 @@ export function ChatView({
   const showConnection = !footer || state.connection !== "connected" || state.execution !== "idle";
   return (
     <section className="oc-chat" aria-label="OpenCode chat">
-      <header className="oc-header">
+      {showHeader && <header className="oc-header">
         <div className="oc-toolbar">
           <div className="oc-toolbar-copy">
             <strong>OpenCode</strong>
@@ -527,7 +531,7 @@ export function ChatView({
           </div>
           {headerActions}
         </div>
-      </header>
+      </header>}
       {state.error && (
         <div className="oc-error" role="alert">
           <span>{state.error}</span>
@@ -546,7 +550,7 @@ export function ChatView({
         {state.questions.map((entry) => <QuestionCard key={entry.request.id} controller={controller} entry={entry} />)}
       </div>
       <Composer key={state.sessionID ?? "none"} controller={controller} />
-      <footer className="oc-footer">
+      {showFooter && <footer className="oc-footer">
         {showConnection && (
           <div className="oc-connection"><span role="status">
             {state.connection === "connected"
@@ -566,7 +570,7 @@ export function ChatView({
           </Button>}</div>
         )}
         {footer}
-      </footer>
+      </footer>}
     </section>
   );
 }

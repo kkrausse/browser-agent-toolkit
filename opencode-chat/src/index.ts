@@ -5,6 +5,7 @@ export type {
   ChatController,
   ChatSnapshot,
   ChatOptions,
+  ChatExport,
   PromptDraft,
   ModelRef,
   ModelInfo,

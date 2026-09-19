@@ -4,7 +4,7 @@ import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { ChoiceSelect } from "../src/components/ui/select";
 import { Button } from "../src/components/ui/button";
-import { QuestionCard } from "../src/react";
+import { ChatView, QuestionCard } from "../src/react";
 import type { ChatController, QuestionRequest } from "../src/types";
 import { BrowserEditor } from "../src/editor";
 import type { WorkspaceController, WorkspaceSnapshot } from "@kev-browser-agent-kit/workspace/react";
@@ -95,6 +95,26 @@ test("question radio and checkbox primitives preserve pinned reply answer arrays
   expect(submit.disabled).toBe(false);
   await act(async () => { container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
   expect(replies).toEqual([[["B"], ["C", "D"]]]);
+});
+
+test("ChatView chrome defaults visible and can be hidden for host-owned embedding", async () => {
+  const snapshot = {
+    connection: "connected", sessions: [], models: [], messages: [], execution: "idle",
+    interruptRequested: false, sending: false, loading: false, loadingOlder: false,
+    hasOlder: false, permissions: [], questions: [], unsupportedForms: [],
+  } as const;
+  const controller = {
+    getSnapshot: () => snapshot,
+    subscribe: () => () => {},
+    clearError: () => {},
+  } as unknown as ChatController;
+  const container = await mount(<ChatView controller={controller} />);
+  expect(container.querySelector("header.oc-header")).not.toBeNull();
+  expect(container.querySelector("footer.oc-footer")).not.toBeNull();
+  await act(async () => { root!.render(<ChatView controller={controller} showHeader={false} showFooter={false} />); });
+  expect(container.querySelector("header.oc-header")).toBeNull();
+  expect(container.querySelector("footer.oc-footer")).toBeNull();
+  expect(container.querySelector('[aria-label="Conversation"]')).not.toBeNull();
 });
 
 test("chat and preview panel gates host reset during startup and exposes no manual source editor", async () => {

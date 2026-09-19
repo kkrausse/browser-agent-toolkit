@@ -217,6 +217,91 @@ test("paged history includes assistant without parent and deduplicates boundarie
   expect(c.getSnapshot().messages.map((m) => m.id)).toEqual(["msg_old", "msg_new"]);
 });
 
+test("chat export includes paged primary and subagent sessions with oldest-first deduplicated histories", async () => {
+  const f = fixture();
+  const primary = { ...session("ses_primary", "Primary"), time: { created: 20, updated: 20 } };
+  const subagent = { ...session("ses_sub", "Subagent"), parentID: "ses_primary", time: { created: 10, updated: 10 } };
+  f.override = (url, init) => {
+    if (url.pathname.endsWith("/session") && (!init.method || init.method === "GET"))
+      return url.searchParams.get("cursor") === "sessions-2"
+        ? json({ data: [primary, subagent], cursor: {} })
+        : json({ data: [primary], cursor: { next: "sessions-2" } });
+    if (!url.pathname.endsWith("/message")) return;
+    const id = url.pathname.split("/").at(-2)!;
+    const cursor = url.searchParams.get("cursor");
+    if (id === "ses_primary")
+      return cursor === "primary-2"
+        ? json({ data: [user("msg_middle", "boundary", 2), user("msg_old", "old", 1)], cursor: {} })
+        : json({ data: [user("msg_new", "new", 3), user("msg_middle", "newest copy", 2)], cursor: { next: "primary-2" } });
+    return json({ data: [user("msg_sub", "sub", 4)], cursor: {} });
+  };
+  const { c } = start(f);
+  await c.ready;
+  const selected = c.getSnapshot().sessionID;
+  const snapshot = c.getSnapshot();
+  const archive = await c.exportChats();
+  expect(archive).toEqual({
+    format: "opencode-chat",
+    version: 1,
+    portability: { resume: "unsupported", attachmentBytes: "not-included" },
+    sessions: [
+      { session: subagent, messages: [user("msg_sub", "sub", 4)] },
+      { session: primary, messages: [
+        user("msg_old", "old", 1),
+        user("msg_middle", "newest copy", 2),
+        user("msg_new", "new", 3),
+      ] },
+    ],
+  });
+  expect(c.getSnapshot()).toBe(snapshot);
+  expect(c.getSnapshot().sessionID).toBe(selected);
+  expect(f.calls.filter(call => call.url.pathname.endsWith("/session") && call.url.searchParams.has("cursor"))).not.toHaveLength(0);
+});
+
+test("chat export rejects repeated message cursors without publishing UI state", async () => {
+  const { f, c } = start();
+  await c.ready;
+  f.override = url => url.pathname.endsWith("/message")
+    ? json({ data: [], cursor: { next: "same" } }) : undefined;
+  const snapshot = c.getSnapshot();
+  await expect(c.exportChats()).rejects.toThrow("Repeated export history cursor for session");
+  expect(c.getSnapshot()).toBe(snapshot);
+});
+
+test("chat export propagates page failures without changing selection", async () => {
+  const { f, c } = start();
+  await c.ready;
+  const selected = c.getSnapshot().sessionID;
+  f.override = url => url.pathname.endsWith("/message")
+    ? url.searchParams.has("cursor")
+      ? json({ error: "page failed" }, 503)
+      : json({ data: [], cursor: { next: "next" } })
+    : undefined;
+  await expect(c.exportChats()).rejects.toThrow("503");
+  expect(c.getSnapshot().sessionID).toBe(selected);
+  expect(c.getSnapshot().error).toBeUndefined();
+});
+
+test("disposing cancels an in-flight chat export", async () => {
+  const { f, c } = start();
+  await c.ready;
+  const wait = deferred<Response>();
+  let signal: AbortSignal | undefined;
+  f.override = (url, init) => {
+    if (url.pathname.endsWith("/session")) {
+      signal = init.signal!;
+      return wait.promise;
+    }
+  };
+  const exporting = c.exportChats();
+  void exporting.catch(() => {});
+  await tick();
+  c.dispose();
+  expect(signal!.aborted).toBe(true);
+  wait.resolve(json({ data: [], cursor: {} }));
+  await expect(exporting).rejects.toThrow();
+});
+
 test("disposal during prompt aborts local request, never endpoint or execution", async () => {
   const { f, c } = start();
   await c.ready;

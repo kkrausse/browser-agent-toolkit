@@ -160,8 +160,10 @@ fetch types. There is no DOM access in root JavaScript.
   `.oc-chat`; no reset, fonts, app assets, Tailwind or host routing required.
   Standalone presentation pieces can be wrapped in `.oc-chat` for these styles.
 - `ChatViewProps`: `{controller, showSessions?:boolean, showModels?:boolean,
+  showHeader?:boolean, showFooter?:boolean,
   onOpenFile?:(path, selection?:{startLine,endLine})=>void}`. Both controls default
-  to visible. View unmount only unsubscribes, including Strict Mode remounts.
+  to visible. Header and footer also default to visible and can be omitted for
+  app-owned chrome. View unmount only unsubscribes, including Strict Mode remounts.
 
 ### Controller
 
@@ -193,6 +195,7 @@ Actions return promises and reject on failure, also recording visible errors:
 | `selectSession(id)` | Cancel prior selection's requests; hydrate chosen session |
 | `createSession(title?) → Promise<string>` | Explicit creation and selection |
 | `loadOlder()` | Fetch next descending cursor page and prepend in native order |
+| `exportChats()` | Export every directory session (including parent-linked subagents) and every message page as a versioned, deterministic transcript archive |
 | `send({text})` | Submit native text prompt; preserve UI draft on failure |
 | `selectModel({providerID,id,variant?})` | Persist explicit session model; `undefined` rejects because pinned API has no reset-to-default operation |
 | `interrupt()` | Explicit server stop request, retained until authoritative idle/interruption; failure can be retried |
@@ -213,6 +216,14 @@ server stop/discovery, provisioning, route navigation or directory picker.
 Persisted native files render as chips; tool file paths invoke the host callback.
 Attachment composer controls are intentionally absent pending a tested upload
 adapter and size accounting for the runtime's buffered request limit.
+
+`exportChats()` returns an `opencode-chat` version `1` JSON envelope. Sessions
+and each session's messages are oldest-first (ties use IDs), and overlapping
+session/message page boundaries are deduplicated by their IDs. The archive preserves
+native attachment references present in message records, but does not fetch or
+embed referenced bytes. Its `portability` field therefore declares
+`attachmentBytes: "not-included"` and `resume: "unsupported"`; it is a chat
+record, not a fully portable OpenCode session import.
 
 ### Streaming and reconciliation
 

@@ -4,6 +4,7 @@ import { createV2SessionReducer } from "./vendor/reducer";
 import { questionFromForm, formAnswer } from "./forms";
 import type {
   ChatController,
+  ChatExport,
   ChatOptions,
   ChatSnapshot,
   ModelRef,
@@ -12,6 +13,7 @@ import type {
 } from "./types";
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const compareID = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 function freeze<T>(value: T): T {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
     Object.freeze(value);
@@ -81,6 +83,16 @@ export function createChatController(options: ChatOptions): ChatController {
   const run = <A, E>(effect: Effect.Effect<A, E, OpenCodeAPI>, scope = selectionScope) =>
     runtime.runPromise(action(effect).pipe(Effect.forkIn(scope), Effect.flatMap(Fiber.join),
       Effect.catchCause(cause => Effect.fail(new ChatError({ message: Cause.pretty(cause) })))));
+  // Archive reads must not publish errors or depend on the selected session.
+  // The root lifetime still guarantees that disposal cancels their requests.
+  const runArchive = <A, E>(effect: Effect.Effect<A, E, OpenCodeAPI>) => {
+    check();
+    return runtime.runPromise(effect.pipe(
+      Effect.forkIn(lifetime),
+      Effect.flatMap(Fiber.join),
+      Effect.catchCause(cause => Effect.fail(new ChatError({ message: Cause.pretty(cause) }))),
+    ));
+  };
   function recover() {
     if (disposed || recovery || state.connection !== "connected") return;
     const g = generation,
@@ -446,6 +458,46 @@ export function createChatController(options: ChatOptions): ChatController {
       if (valid(g, s)) publish({ loadingOlder: false });
     })));
   });
+  const exportChats = Effect.fn("Chat.exportChats")(function*(): Effect.fn.Return<ChatExport, ChatAPIError | ChatError, OpenCodeAPI> {
+    const api = yield* OpenCodeAPI;
+    const sessions = [...new Map((yield* api.list()).map(session => [session.id, session])).values()];
+    const exported = yield* Effect.forEach(sessions, session => Effect.gen(function*() {
+      const messages = new Map<string, ChatExport["sessions"][number]["messages"][number]>();
+      const cursors = new Set<string>();
+      let cursor: string | undefined;
+      do {
+        const page = yield* api.messages(session.id, {
+          ...(cursor ? { cursor } : {}),
+          order: "desc",
+          limit: options.pageSize ?? 50,
+        });
+        // Descending pages can overlap. Retain the first (newest-page) copy.
+        for (const message of page.data)
+          if (!messages.has(message.id)) messages.set(message.id, message);
+        const next = page.cursor.next ?? undefined;
+        if (next && cursors.has(next))
+          return yield* new ChatError({ message: `Repeated export history cursor for session ${session.id}` });
+        if (next) cursors.add(next);
+        cursor = next;
+      } while (cursor);
+      return {
+        session,
+        messages: [...messages.values()].sort((a, b) =>
+          a.time.created - b.time.created || compareID(a.id, b.id)),
+      };
+    }), { concurrency: "unbounded" });
+    exported.sort((a, b) =>
+      a.session.time.created - b.session.time.created || compareID(a.session.id, b.session.id));
+    return {
+      format: "opencode-chat",
+      version: 1,
+      portability: {
+        resume: "unsupported",
+        attachmentBytes: "not-included",
+      },
+      sessions: exported,
+    };
+  });
   const send = Effect.fn("Chat.send")(function*(draft: { text: string }) {
     if (!draft.text.trim()) return yield* new ChatError({ message: "Enter a message" });
     if (state.connection !== "connected" || state.loading || state.sending || mutation || state.execution !== "idle")
@@ -511,6 +563,7 @@ export function createChatController(options: ChatOptions): ChatController {
     reconnect: () => run(reconnect(), lifetime),
     createSession: title => run(createSession(title), connection),
     loadOlder: () => run(loadOlder()),
+    exportChats: () => runArchive(exportChats()),
     send: draft => run(send(draft)),
     selectModel: model => run(selectModel(model)),
     interrupt: () => run(interrupt()),

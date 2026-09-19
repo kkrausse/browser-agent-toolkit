@@ -27,6 +27,19 @@ export interface ChatEndpoint {
 export type PermissionDecision = "once" | "always" | "reject";
 export type QuestionAnswers = string[][];
 export type PromptDraft = { text: string };
+/** Versioned transcript archive. This is not an OpenCode session import or resume bundle. */
+export type ChatExport = {
+  format: "opencode-chat";
+  version: 1;
+  portability: {
+    resume: "unsupported";
+    attachmentBytes: "not-included";
+  };
+  sessions: Array<{
+    session: SessionInfo;
+    messages: SessionMessageInfo[];
+  }>;
+};
 export interface ChatOptions {
   endpoint: ChatEndpoint;
   directory: string;
@@ -65,6 +78,7 @@ export interface ChatController {
   selectSession(id: string): Promise<void>;
   createSession(title?: string): Promise<string>;
   loadOlder(): Promise<void>;
+  exportChats(): Promise<ChatExport>;
   send(draft: PromptDraft): Promise<void>;
   selectModel(model: ModelRef | undefined): Promise<void>;
   interrupt(): Promise<void>;
