@@ -126,11 +126,23 @@ const MessageRow = memo(function MessageRow({
   message,
   onOpenFile,
   continuation = false,
+  modelName,
 }: {
   message: SessionMessageInfo;
   onOpenFile?: OpenFile;
   continuation?: boolean;
+  modelName?: string;
 }) {
+  if (message.type === "model-switched") {
+    return (
+      <div className="oc-message oc-run-status" aria-label="Model switched">
+        <span className="oc-run-status-label">
+          Switched to {modelName || message.model.id} · {message.model.providerID}
+          {message.model.variant && ` · ${message.model.variant}`}
+        </span>
+      </div>
+    );
+  }
   if (message.type === "idle") {
     const label = {
       succeeded: "Run completed",
@@ -298,6 +310,9 @@ export function Transcript({
           <MessageRow
             key={message.id}
             message={message}
+            modelName={message.type === "model-switched"
+              ? state.models.find((model) => model.id === message.model.id && model.providerID === message.model.providerID)?.name
+              : undefined}
             onOpenFile={onOpenFile}
             continuation={message.type === "assistant" && state.messages[index - 1]?.type === "assistant"}
           />
