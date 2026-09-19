@@ -36,7 +36,10 @@ export namespace Runtime {
     const node = async (launchOptions: NodeLaunchOptions, binding?: Record<string, unknown>): Promise<Execution> => {
       check();
       const signal = launchOptions.signal ? AbortSignal.any([launchOptions.signal, lifetime.signal]) : lifetime.signal;
-      const promise = launch(host, { ...launchOptions, signal }, binding);
+      // Every entrypoint runs in the browser guest, including agent servers whose
+      // shell/JS children inherit this environment rather than the preview's.
+      const env = { ...launchOptions.env, BROWSER_AGENT_GUEST: "1" };
+      const promise = launch(host, { ...launchOptions, env, signal }, binding);
       pendingLaunches.add(promise);
       try {
         const execution = await promise;

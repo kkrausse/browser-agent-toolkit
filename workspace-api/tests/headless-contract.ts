@@ -126,6 +126,32 @@ async function output(execution: Execution) {
   return { stdout, stderr, exit };
 }
 let runtime: Awaited<ReturnType<typeof Runtime.start>> | undefined;
+async function testGuestEnvironment() {
+  kernel.writeFile("/workspace/guest-env.cjs", `
+const {spawn}=require('node:child_process');
+console.log('parent:'+process.env.BROWSER_AGENT_GUEST+':'+process.env.PROBE);
+const child=spawn('sh',['-c', ${JSON.stringify('node -e \'console.log("child:"+process.env.BROWSER_AGENT_GUEST+":"+process.env.PROBE)\'')}],{stdio:['ignore','pipe','pipe']});
+child.stdout.on('data',b=>process.stdout.write(b));child.stderr.on('data',b=>process.stderr.write(b));
+child.on('close',code=>{process.exitCode=code;});
+`);
+  const guest = await Runtime.start({ workspace, distribution, tools: { probe: {
+    name: 'guest-env', version: '1', async bind(context) {
+      return async () => output(await context.node({ entry: '/workspace/guest-env.cjs', env: { PROBE: 'tool' } }));
+    },
+  } } });
+  try {
+    const direct = await output(await guest.node({ entry: "/workspace/guest-env.cjs", env: { PROBE: "kept", BROWSER_AGENT_GUEST: "0" } }));
+    assert.equal(direct.exit.exitCode, 0, direct.stderr.toString());
+    assert.equal(direct.stdout.toString(), "parent:1:kept\nchild:1:kept\n");
+    const tool = await guest.tools.probe();
+    assert.equal(tool.exit.exitCode, 0, tool.stderr.toString());
+    assert.equal(tool.stdout.toString(), "parent:1:tool\nchild:1:tool\n");
+    const defaults = await output(await guest.node({ entry: "/workspace/guest-env.cjs" }));
+    assert.equal(defaults.exit.exitCode, 0, defaults.stderr.toString());
+    assert.equal(defaults.stdout.toString(), "parent:1:undefined\nchild:1:undefined\n");
+    console.log("PASS automatic guest environment for direct/tool launches and shell-to-node child inheritance");
+  } finally { await guest.stop(); }
+}
 async function testOfflineContract() {
   const bulk = await Runtime.start({ workspace, distribution, tools: { tree: {
     name: 'bulk-contract', version: '1', async bind(context) {
@@ -262,7 +288,10 @@ res.statusCode=418;res.setHeader('x-probe','real');res.end(Buffer.from([0,255,12
   } finally { await tools.stop(); globalThis.fetch=originalFetch; }
 }
 try {
-  if (!process.env.APP_RESTORE) await testOfflineContract();
+  if (!process.env.APP_RESTORE) {
+    await testGuestEnvironment();
+    if (!process.argv.includes('--guest-env-only')) await testOfflineContract();
+  }
   if (process.env.PREPARED_APPS) throw new Error('The historical prepared-app harness remains in random; use examples/todo-app/tests for current editor acceptance');
   console.log("RESULT PASS (real headless workers; browser-only gates remain separate)");
 } finally { await runtime?.stop(); for (const worker of workers) await worker.terminate(); clearTimeout(timeout); }

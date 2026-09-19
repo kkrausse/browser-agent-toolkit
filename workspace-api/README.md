@@ -73,6 +73,11 @@ await workspace.close();
   explicit dependency preparation/cache restoration on reopen.
 - `runtime.node` uses the configured Node-compatible frontend by absolute path.
   This does not run native Node/Bun. No public Bun or shell-spawn method is claimed.
+- All process launches through `runtime.node` and tool-context `node` set
+  `BROWSER_AGENT_GUEST=1`, preserving other supplied environment variables. This
+  guest marker takes precedence over a caller-supplied value. Child processes
+  inherit it unless they explicitly replace their environment, so agent commands
+  and previews use the same guest configuration path.
 - stdout/stderr have one reader each; drain concurrently. Each channel allows
   1 MiB unread bytes including worker transit, split into at most 64 KiB frames.
   Overflow errors that channel and forcibly stops the process tree; it does not
