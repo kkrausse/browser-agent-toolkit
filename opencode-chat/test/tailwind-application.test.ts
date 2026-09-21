@@ -83,6 +83,25 @@ test('rejects swapped binary bytes and undeclared additional package files', () 
   expect(() => readTailwindWasmCandidate(other.path, other.digest)).toThrow('bytes or file inventory changed');
 });
 
+test('accepts a pruned extracted dependency tree when the selected archive is still immutable', () => {
+  const f = fixture();
+  const dependencyPath = 'node_modules/example/index.js';
+  const dependencyBytes = 'module.exports = true;\n';
+  mkdirSync(join(f.root, 'package/node_modules/example'), { recursive: true });
+  writeFileSync(join(f.root, 'package', dependencyPath), dependencyBytes);
+  f.receipt.package.files.splice(1, 0, {
+    path: dependencyPath,
+    bytes: Buffer.byteLength(dependencyBytes),
+    sha256: sha(dependencyBytes),
+  });
+  f.receipt.package.manifestSha256 = sha(JSON.stringify(f.receipt.package.files));
+  const digest = f.save();
+  rmSync(join(f.root, 'package/node_modules'), { recursive: true });
+
+  const candidate = readTailwindWasmCandidate(f.path, digest);
+  expect(candidate.files).toEqual(f.receipt.package.files);
+});
+
 test('rejects symlink substitution and metadata rewriting', () => {
   const f = fixture();
   rmSync(join(f.root, 'package/package.json'));

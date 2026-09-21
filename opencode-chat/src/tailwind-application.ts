@@ -49,6 +49,12 @@ export function readTailwindWasmCandidate(receiptPath: string, expectedReceiptSh
   assert.equal(pkg.registryArtifact, false, 'Source candidate must not masquerade as registry bytes');
   assert.equal(pkg.path, 'package');
   assert.equal(pkg.originalMetadataPath, 'evidence/original-package.json');
+  assert.equal(sha256(JSON.stringify(pkg.files)), pkg.manifestSha256, 'Candidate receipt package manifest changed');
+  assert.equal(pkg.tarball, 'package.tgz');
+  const archivePath = join(dirname(receiptFile), pkg.tarball);
+  assert(lstatSync(archivePath).isFile() && !lstatSync(archivePath).isSymbolicLink(), 'Candidate archive must be a regular file');
+  const archiveBytes = readFileSync(archivePath);
+  assert.equal(sha256(archiveBytes), pkg.tarballSha256, 'Candidate archive hash mismatch');
   const packageRoot = join(dirname(receiptFile), pkg.path);
   assert(lstatSync(packageRoot).isDirectory() && !lstatSync(packageRoot).isSymbolicLink());
   function files(prefix = ''): CandidateFile[] {
@@ -61,8 +67,16 @@ export function readTailwindWasmCandidate(receiptPath: string, expectedReceiptSh
     });
   }
   const actualFiles = files();
-  assert.deepEqual(actualFiles, pkg.files, 'Candidate package bytes or file inventory changed');
-  assert.equal(sha256(JSON.stringify(actualFiles)), pkg.manifestSha256, 'Candidate manifest hash mismatch');
+  const expectedFiles = new Map(pkg.files.map(file => [file.path, file]));
+  for (const file of actualFiles) {
+    assert.deepEqual(file, expectedFiles.get(file.path), 'Candidate package bytes or file inventory changed');
+  }
+  const actualPaths = new Set(actualFiles.map(file => file.path));
+  const missingFiles = pkg.files.filter(file => !actualPaths.has(file.path));
+  assert(
+    missingFiles.every(file => file.path.startsWith('node_modules/')),
+    'Candidate package bytes or file inventory changed',
+  );
   const metadataBytes = readFileSync(join(packageRoot, 'package.json'));
   assert.equal(sha256(metadataBytes), pkg.metadataSha256);
   const metadata = JSON.parse(metadataBytes.toString());
@@ -73,11 +87,6 @@ export function readTailwindWasmCandidate(receiptPath: string, expectedReceiptSh
   assert.equal(sha256(original), pkg.originalMetadataSha256);
   assert.deepEqual(metadata, JSON.parse(original.toString()), 'Candidate rewrote original upstream metadata');
   assert.equal(sha256(readFileSync(join(packageRoot, 'tailwindcss-oxide.wasm32-wasi.wasm'))), pkg.wasmSha256);
-  assert.equal(pkg.tarball, 'package.tgz');
-  const archivePath = join(dirname(receiptFile), pkg.tarball);
-  assert(lstatSync(archivePath).isFile() && !lstatSync(archivePath).isSymbolicLink(), 'Candidate archive must be a regular file');
-  const archiveBytes = readFileSync(archivePath);
-  assert.equal(sha256(archiveBytes), pkg.tarballSha256, 'Candidate archive hash mismatch');
   return {
     id: receipt.id,
     packageName: pkg.name,
@@ -88,7 +97,7 @@ export function readTailwindWasmCandidate(receiptPath: string, expectedReceiptSh
     source: receipt.source,
     packageManifestSha256: pkg.manifestSha256,
     wasmSha256: pkg.wasmSha256,
-    files: actualFiles,
+    files: pkg.files,
     metadata,
     archive: { path: archivePath, sha256: pkg.tarballSha256, sha512: 'sha512-' + createHash('sha512').update(archiveBytes).digest('base64') },
     // Browser acceptance belongs to the embedding's later HMR gate.
