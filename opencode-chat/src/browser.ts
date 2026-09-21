@@ -4,7 +4,7 @@ import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-
 import { Effect } from 'effect';
 import { modelHeaderPluginSource } from './model-headers';
 import { javascriptPluginSource } from './javascript-plugin-source' with { type: 'macro' };
-import { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, openCodeCandidateLaunch } from './opencode-launch';
+import { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, openCodeCandidateLaunch, type OpenCodeCandidateModel } from './opencode-launch';
 import { validatePreparedOpenCode, type PreparedManifest } from './prepared';
 
 const javascriptPlugin = javascriptPluginSource();
@@ -67,12 +67,12 @@ function connection(endpoint: Endpoint, authorization: string): Connection {
 }
 
 /** Write only OpenCode-owned directories, plugin, and global model configuration. */
-export async function installOpenCodeConfig(workspace: Workspace, options: { modelBaseURL: string; additionalToolActions?: string[] }) {
+export async function installOpenCodeConfig(workspace: Workspace, options: { modelBaseURL: string; additionalToolActions?: string[]; models?: Record<string, OpenCodeCandidateModel> }) {
   for (const directory of openCodeCandidateLaunch.workspaceDirectories) await workspace.fs.mkdir(directory);
   await workspace.fs.mkdir('/.server/config/opencode/plugins');
   await workspace.fs.writeFile('/.server/config/opencode/plugins/editor-model-headers.js', modelHeaderPluginSource(options.modelBaseURL));
   await workspace.fs.writeFile('/.server/config/opencode/plugins/editor-javascript.js', await javascriptPlugin);
-  await workspace.fs.writeFile(openCodeCandidateLaunch.workspaceConfigPath, JSON.stringify(createOpenCodeCandidateConfig(options.modelBaseURL, options.additionalToolActions)));
+  await workspace.fs.writeFile(openCodeCandidateLaunch.workspaceConfigPath, JSON.stringify(createOpenCodeCandidateConfig(options.modelBaseURL, options.additionalToolActions, options.models)));
 }
 
 /** Launch, qualify, and connect the pinned OpenCode server. It starts no preview server. */
@@ -94,5 +94,5 @@ export async function startOpenCode(controller: WorkspaceController, options: {
   return service;
 }
 
-export { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, openCodeCandidateLaunch } from './opencode-launch';
+export { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, openCodeCandidateLaunch, type OpenCodeCandidateModel } from './opencode-launch';
 export { loadPrepared, preparedApps, type PreparedManifest } from './prepared';

@@ -26,8 +26,22 @@ export const openCodeCandidateLaunch = {
   shutdown: 'stdin-eof',
 } as const;
 
+export type OpenCodeCandidateModel = {
+  name: string;
+  package: '@opencode/ai/providers/openai';
+  capabilities: { tools: boolean; input: string[]; output: string[] };
+  limit: { context: number; input?: number; output: number };
+  websocket: false;
+};
+
+const fallbackModel: OpenCodeCandidateModel = {
+  name: 'Muse Spark 1.3 Free', package: '@opencode/ai/providers/openai',
+  capabilities: { tools: true, input: ['text', 'image', 'video', 'pdf', 'audio'], output: ['text'] },
+  limit: { context: 1048576, output: 131072 }, websocket: false,
+};
+
 /** Match the qualified global configuration; caller supplies its transparent model proxy. */
-export function createOpenCodeCandidateConfig(modelBaseURL: string, additionalToolActions: string[] = []) {
+export function createOpenCodeCandidateConfig(modelBaseURL: string, additionalToolActions: string[] = [], models: Record<string, OpenCodeCandidateModel> = {}) {
   const url = new URL(modelBaseURL);
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw Error('Expected credential-free HTTP model proxy URL');
   return {
@@ -35,9 +49,8 @@ export function createOpenCodeCandidateConfig(modelBaseURL: string, additionalTo
     model: 'opencode/' + openCodeCandidateLaunch.model.id, snapshots: false,
     permissions: [...new Set(['read', 'edit', 'grep', 'glob', 'runJavascript', ...additionalToolActions])].map(action => ({ action, resource: '*', effect: 'allow' as const })),
     providers: { opencode: { settings: { baseURL: modelBaseURL }, models: {
-      [openCodeCandidateLaunch.model.id]: { name: 'Muse Spark 1.3 Free', package: '@opencode/ai/providers/openai',
-        capabilities: { tools: true, input: ['text', 'image', 'video', 'pdf', 'audio'], output: ['text'] },
-        limit: { context: 1048576, output: 131072 }, websocket: false },
+      [openCodeCandidateLaunch.model.id]: fallbackModel,
+      ...models,
     } } },
   };
 }

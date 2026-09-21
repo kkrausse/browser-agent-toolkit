@@ -32,6 +32,18 @@ test('explicit model config supplies catalog-absent Muse Spark via supported HTT
   expect(createOpenCodeCandidateConfig(baseURL, ['shell', 'read']).permissions.map(p => p.action)).toEqual(['read', 'edit', 'grep', 'glob', 'runJavascript', 'shell']);
 });
 
+test('candidate config merges a caller-provided provider catalog without losing the qualified fallback', () => {
+  const baseURL = 'http://host.vivari.internal:5173/editor/model/opencode/';
+  const model = {
+    name: 'GPT-5.6 Sol', package: '@opencode/ai/providers/openai' as const,
+    capabilities: { tools: true, input: ['text', 'image', 'pdf'], output: ['text'] },
+    limit: { context: 1050000, input: 922000, output: 128000 }, websocket: false as const,
+  };
+  const config = createOpenCodeCandidateConfig(baseURL, [], { 'gpt-5.6-sol': model });
+  expect(config.providers.opencode.models['gpt-5.6-sol']).toEqual(model);
+  expect(config.providers.opencode.models[openCodeCandidateLaunch.model.id]).toBeDefined();
+});
+
 test('descriptor exposes global config, fixed database, activation barrier and EOF lifecycle', () => {
   expect(openCodeCandidateLaunch.configPath).toBe('/workspace' + openCodeCandidateLaunch.workspaceConfigPath);
   expect(openCodeCandidateLaunch.projectConfig).toBe(false);
