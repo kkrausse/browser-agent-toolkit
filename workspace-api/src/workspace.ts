@@ -28,17 +28,28 @@ function childPath(parent: string, name: string): string {
 }
 
 async function removeDescendants(host: Host, root: string): Promise<void> {
-  const stat = await host.stat(root);
+  const describeFailure = (operation: string, path: string, error: unknown) => {
+    const cause = error instanceof Error ? error.message : String(error);
+    return new Error(`Workspace clear failed while ${operation} ${path}: ${cause}`, { cause });
+  };
+  let stat;
+  try { stat = await host.stat(root); }
+  catch (error) { throw describeFailure("inspecting", root, error); }
   if (!stat.exists) return;
   if (!stat.isDirectory) {
-    await host.remove(root);
+    try { await host.remove(root); }
+    catch (error) { throw describeFailure("removing", root, error); }
     return;
   }
-  for (const name of await host.readdir(root)) {
+  let names: string[];
+  try { names = await host.readdir(root); }
+  catch (error) { throw describeFailure("listing", root, error); }
+  for (const name of names) {
     const path = childPath(root, name);
-    const child = await host.stat(path);
-    if (child.exists && child.isDirectory) await removeDescendants(host, path);
-    await host.remove(path);
+    // The runtime owns recursive deletion and classifies entries with lstat.
+    // Walking here with stat would follow directory symlinks outside this root.
+    try { await host.remove(path); }
+    catch (error) { throw describeFailure("removing", path, error); }
   }
 }
 

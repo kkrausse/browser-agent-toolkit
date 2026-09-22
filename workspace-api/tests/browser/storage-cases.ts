@@ -58,6 +58,11 @@ export const storageTests: BrowserTest[] = [
         await host.writeFile("/.server/chats/nested/.history.json", "chat");
         await host.mkdir("/unrelated");
         await host.writeFile("/unrelated/keep.txt", "keep");
+        await guest(workspace, runtime, `
+          const fs = require('node:fs');
+          fs.symlinkSync('/unrelated', '/workspace/external-directory');
+          console.log('STORAGE_OK');
+        `);
         await rejects(() => clearWorkspace(workspace), /Stop the attached runtime/);
         await runtime.stop();
         await clearWorkspace(workspace);
