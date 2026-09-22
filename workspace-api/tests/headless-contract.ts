@@ -7,7 +7,7 @@ import { readFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
-import { Runtime, defineRipgrepTool } from "../src/index.ts";
+import { Runtime, defineRipgrepTool, diagnoseWorkspace } from "../src/index.ts";
 import { workspaceInternals, type Workspace } from "../src/workspace.ts";
 import type { Host, Message } from "../src/host.ts";
 import type { Execution } from "../src/types.ts";
@@ -80,6 +80,7 @@ const host = {
   features: new Set(['install-tree-v1']),
   on(callback: (m: Message) => void) { callbacks.add(callback); return () => callbacks.delete(callback); },
   async request(type: string, data: Record<string, unknown> = {}): Promise<Message> {
+    if (type === "vv-diag") return { type: "vv-reply", ok: true, diag: kernel.diagnostics() };
     if (type === "vv-stat") {
       if (!kernel.exists(data.path)) return { type: "vv-reply", exists: false };
       const stat = kernel.stat(data.path); return { type: "vv-reply", exists: true, isDir: stat.kind === "dir", size: stat.size };
@@ -140,6 +141,11 @@ child.on('close',code=>{process.exitCode=code;});
     },
   } } });
   try {
+    const diagnostics = await diagnoseWorkspace(workspace);
+    assert.equal(diagnostics.pendingHttp, 0);
+    assert.deepEqual(diagnostics.listeners, []);
+    assert.ok(Array.isArray(diagnostics.procs));
+    console.log("PASS public read-only workspace runtime diagnostics");
     const direct = await output(await guest.node({ entry: "/workspace/guest-env.cjs", env: { PROBE: "kept", BROWSER_AGENT_GUEST: "0" } }));
     assert.equal(direct.exit.exitCode, 0, direct.stderr.toString());
     assert.equal(direct.stdout.toString(), "parent:1:kept\nchild:1:kept\n");

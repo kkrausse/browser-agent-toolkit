@@ -94,6 +94,33 @@ export interface Endpoint {
   attachPreview(iframe: HTMLIFrameElement, options?: PreviewOptions): PreviewAttachment;
   dispose(): void;
 }
+export type WorkspaceProcessDiagnostic = {
+  pid: number;
+  ppid: number;
+  command: string;
+  cwd: string;
+  sinceOutputMs: number;
+  sinceSyscallMs: number;
+  syscalls: number;
+  workerErrors: number;
+  firstWorkerError?: string;
+  booted: boolean;
+  paused: boolean;
+};
+export type WorkspaceDiagnostics = {
+  now: number;
+  procs: WorkspaceProcessDiagnostic[];
+  fetch: {
+    inflight: number;
+    queued: number;
+    active: number;
+    cachedEntries: number;
+    cachedBytes: number;
+    pinnedBodies: number;
+  };
+  listeners: number[];
+  pendingHttp: number;
+};
 export type ErrorCode = "ENTRY_NOT_FOUND" | "LAUNCH_REJECTED" | "BACKEND_UNAVAILABLE"
   | "CLOSED" | "ATTACHED" | "STORAGE_BUSY" | "UNSUPPORTED_WORKSPACE"
   | "DISTRIBUTION_MISMATCH" | "OUTPUT_OVERFLOW" | "TOOL_FAILED";

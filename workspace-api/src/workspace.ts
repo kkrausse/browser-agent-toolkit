@@ -1,6 +1,6 @@
 import { Host } from "./host.js";
 import { diagnosticReporter } from "./diagnostics.js";
-import { WorkspaceError, type Distribution, type PersistenceState, type WorkspaceFs, type WorkspaceOpenOptions, type WorkspaceStorage } from "./types.js";
+import { WorkspaceError, type Distribution, type PersistenceState, type WorkspaceDiagnostics, type WorkspaceFs, type WorkspaceOpenOptions, type WorkspaceStorage } from "./types.js";
 
 export function opfsStore(distribution: Distribution): WorkspaceStorage { return { kind: "opfs", distribution }; }
 export function workspacePath(path: string): string {
@@ -17,6 +17,14 @@ export interface Workspace {
 }
 type WorkspaceInternalState = { host: Host; distribution: Distribution; attached: boolean; clearing: boolean; closed: boolean };
 export const workspaceInternals = new WeakMap<Workspace, WorkspaceInternalState>();
+
+/** Return a read-only snapshot of the live guest processes and kernel activity. */
+export async function diagnoseWorkspace(workspace: Workspace): Promise<WorkspaceDiagnostics> {
+  const state = workspaceInternals.get(workspace);
+  if (!state || state.closed) throw new WorkspaceError("CLOSED", "Workspace is not open");
+  const reply = await state.host.request("vv-diag");
+  return reply.diag as WorkspaceDiagnostics;
+}
 
 const CLEAR_ROOTS = ["/workspace", "/.server"] as const;
 
