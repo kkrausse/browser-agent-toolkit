@@ -13,6 +13,9 @@ and the Bun-backed `browser-control` CLI connected to the browser extension:
 bun tests/browser/run.ts
 ```
 
+To run one named contract (substring match), set `BROWSER_TEST_FILTER`, for
+example `BROWSER_TEST_FILTER='interrupted node_modules' bun tests/browser/run.ts`.
+
 To select an existing distribution:
 
 ```sh
@@ -29,6 +32,10 @@ It creates its own session, refuses an origin containing existing OPFS entries,
 and clears only that verified test-owned store between cases and at completion.
 Steps within a case retain storage across real document reloads. The session and
 HTTP server are closed in `finally`; failures/timeouts/cleanup errors exit nonzero.
+The interrupted-clear case verifies a live partial `node_modules` tree after an
+injected `ENOTEMPTY`, then a retry after reload against durable source and chat.
+The package tree itself is excluded from the OPFS mirror and does not survive
+reload; the test does not exercise an application's chat-attachment UI.
 An externally killed runner may leave its session/storage behind; subsequent runs
 refuse existing storage rather than silently resetting it.
 

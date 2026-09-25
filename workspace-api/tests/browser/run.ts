@@ -78,7 +78,9 @@ try {
     });
   `) as { name: string; steps: number }[];
   ownsStorage = true;
+  const filter = process.env.BROWSER_TEST_FILTER;
   for (const [index, test] of cases.entries()) {
+    if (filter && !test.name.includes(filter)) continue;
     if (index > 0) await clearOwnedStorage();
     console.log(`TEST ${test.name}`);
     for (let step = 0; step < test.steps; step++) {

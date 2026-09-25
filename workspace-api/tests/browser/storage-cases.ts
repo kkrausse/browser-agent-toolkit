@@ -119,6 +119,63 @@ export const storageTests: BrowserTest[] = [
     ],
   },
   {
+    name: "interrupted node_modules clear preserves durable source and chat until retry after reopen",
+    steps: [
+      () => browserCase(async ({ workspace, runtime }) => {
+        const host = vivari(workspace);
+        await mount(workspace, {
+          "/node_modules/first/index.js": "first package",
+          "/node_modules/second/index.js": "second package",
+          "/src/app.ts": "current source",
+        });
+        await host.mkdir("/.server/chats");
+        await host.writeFile("/.server/chats/history.json", "current chat");
+        await workspace.flush();
+        await runtime.stop();
+
+        // Inject only the failure: the partial deletion is performed by the real
+        // host/VFS, not by a fake filesystem. Restore the method before closing.
+        const remove = host.remove.bind(host);
+        let interrupted = false;
+        host.remove = async (path: string) => {
+          if (path === "/workspace/node_modules" && !interrupted) {
+            interrupted = true;
+            await remove("/workspace/node_modules/first");
+            throw new Error("ENOTEMPTY: directory not empty, rm /workspace/node_modules");
+          }
+          await remove(path);
+        };
+        try {
+          await rejects(() => clearWorkspace(workspace), /removing \/workspace\/node_modules: ENOTEMPTY/);
+        } finally {
+          host.remove = remove;
+        }
+        assert(interrupted, "The node_modules failure was not exercised");
+        await rejects(() => workspace.fs.readFile("/node_modules/first/index.js"), /ENOENT/);
+        equalBytes(await workspace.fs.readFile("/node_modules/second/index.js"), encoder.encode("second package"));
+        equalBytes(await host.readFile("/.server/chats/history.json"), encoder.encode("current chat"));
+        // node_modules is deliberately excluded from OPFS; source and chat are
+        // durable. Closing flushes too, but acknowledge before the next document.
+        await workspace.flush();
+      }),
+      () => browserCase(async ({ workspace, runtime }) => {
+        const host = vivari(workspace);
+        assert(!(await workspace.fs.readdir("/")).includes("node_modules"), "Excluded packages unexpectedly persisted");
+        equalBytes(await workspace.fs.readFile("/src/app.ts"), encoder.encode("current source"));
+        assert((await host.readdir("/.server/chats")).includes("history.json"), "Chat history was lost on reopen");
+        equalBytes(await host.readFile("/.server/chats/history.json"), encoder.encode("current chat"));
+        await runtime.stop();
+        await clearWorkspace(workspace);
+        assert((await workspace.fs.readdir("/")).length === 0, "Retry left partial source behind");
+        await assertEmptyOrMissing(host, "/.server", "Retry left chat state behind");
+      }),
+      () => browserCase(async ({ workspace }) => {
+        assert((await workspace.fs.readdir("/")).length === 0, "Cleared source returned after reopen");
+        await assertEmptyOrMissing(vivari(workspace), "/.server", "Cleared chat returned after reopen");
+      }),
+    ],
+  },
+  {
     name: "OPFS owner excludes a competing Web Lock and releases it on close",
     steps: [async () => {
       await browserCase(async ({ workspace }) => {
