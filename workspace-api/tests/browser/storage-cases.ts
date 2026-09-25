@@ -48,6 +48,46 @@ const sqlite = `
 
 export const storageTests: BrowserTest[] = [
   {
+    name: "bulk root replacement coalesces delete and recreate without restoring stale descendants",
+    steps: [
+      () => browserCase(async ({ workspace, runtime }) => {
+        const host = vivari(workspace);
+        const directory = (path: string) => ({ kind: "directory" as const, path, mode: 0o755 });
+        await host.mkdir("/.server/chats/nested");
+        await host.writeFile("/.server/chats/nested/history.json", encoder.encode("old chat"));
+        await workspace.fs.mkdir("/src");
+        await workspace.fs.writeFile("/src/old.ts", "old source");
+        await host.mkdir("/unrelated");
+        await host.writeFile("/unrelated/keep.txt", encoder.encode("preserve"));
+        await workspace.flush(); // Prove the old descendants are already in the mirror.
+        await runtime.stop();
+
+        await host.installTree({ roots: ["/workspace", "/.server"], entries: [directory("/workspace"), directory("/.server")] });
+        assert((await host.readdir("/workspace")).length === 0, "Workspace not empty after replacement");
+        assert((await host.readdir("/.server")).length === 0, "Server root not empty after replacement");
+        await workspace.flush();
+        equalBytes(await host.readFile("/unrelated/keep.txt"), encoder.encode("preserve"));
+      }),
+      () => browserCase(async ({ workspace, runtime }) => {
+        const host = vivari(workspace);
+        assert((await host.readdir("/workspace")).length === 0, "Workspace descendants restored after replacement");
+        assert((await host.readdir("/.server")).length === 0, "Server descendants restored after replacement");
+        equalBytes(await host.readFile("/unrelated/keep.txt"), encoder.encode("preserve"));
+        await runtime.stop();
+        await host.installTree({ roots: ["/workspace", "/.server"], entries: [] });
+        assert(!(await host.stat("/workspace")).exists && !(await host.stat("/.server")).exists,
+          "Empty entries did not remove both roots");
+        await workspace.flush();
+      }),
+      () => browserCase(async ({ workspace }) => {
+        const host = vivari(workspace);
+        assert((await host.readdir("/workspace")).length === 0, "Workspace returned after empty install");
+        assert(!(await host.stat("/.server")).exists, "Server root returned after empty install");
+        equalBytes(await host.readFile("/unrelated/keep.txt"), encoder.encode("preserve"));
+      }),
+    ],
+  },
+  {
     name: "bounded workspace clear removes project and OpenCode state durably",
     steps: [
       () => browserCase(async ({ workspace, runtime }) => {

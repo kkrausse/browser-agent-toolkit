@@ -91,7 +91,9 @@ Decoded console output is diagnostic; byte assertions use the original bytes.
   with descendant listener cleanup, port reuse, and runtime restart.
 - OPFS ownership lock/reopen, concurrent mutations/flushes and exact backing bytes,
   backing-file failure/retry; bounded project/OpenCode-state clear with an
-  attached-runtime guard and reopen verification; SQLite ownership, transactions,
+  attached-runtime guard and reopen verification; bulk replacement of both roots
+  with recreated empty directories (and with no entries), proving stale descendants
+  stay removed after reload while paths outside the roots survive; SQLite ownership, transactions,
   orderly reopen, failed-commit connection poisoning and pathname quarantine.
 
 All 19 cases passed against a release-mode build from committed runtime source
