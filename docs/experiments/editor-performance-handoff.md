@@ -2,6 +2,12 @@
 
 ## Goal and boundaries
 
+Current priority: reliable, fast switching between workspaces with the same
+dependencies. Cached-image reinstall is the fallback; download-size pruning is
+deprioritized. The [baseline audit](2026-09-29-workspace-switch-baseline-audit.md)
+confirms the IRS-consumed filesystem fixes are already present: IRS recovery UI
+does not mean the underlying `ENOTEMPTY` failure was eliminated.
+
 Improve browser-editor cold download, warm startup, and workspace switching. Prove
 reusable behavior in this toolkit's todo sample before a minimal IRS Tools
 integration. Put caching/lifecycle machinery in libraries, not consumer scripts.
