@@ -1,5 +1,52 @@
 # Combined editor browser acceptance
 
+## Isolated performance experiments
+
+After normal editor preparation (including the receipted Tailwind backend), run
+`bun tests/performance.ts` from `examples/todo-app`. This repacks candidates and
+serves an isolated loopback-only origin at `http://127.0.0.1:43187`.
+`--sizes-only` repacks without starting the server. Outputs live under ignored
+`.editor/performance/`; library changes require rebuilding the root packages.
+
+Select `?variant=baseline|kernel|dependencies|incremental|reload` and
+`&candidate=baseline|maps|maps-native`. Baseline closes/reopens the workspace;
+kernel keeps the kernel but reinstalls; dependencies verifies retained packages;
+incremental also skips unchanged source writes. Reload opens the persisted store
+without clearing it. Start another variant, close it through
+`window.editorPerformanceExperiment.stop()`, then navigate to reload to test
+persistence. Use only this isolated origin: variants clear its experimental store.
+
+The fixture is the prepared todo app with a statically imported `pdf-lib` workload,
+generation-specific source, and a binary file. It exercises actual Vite and
+OpenCode readiness without model calls, application workspace APIs, or secrets.
+The in-memory todo API is shared across fixture switches, deliberately separate
+from workspace persistence. Readiness requires hydration, fresh generation, and
+an enabled todo input, not merely a bound port or SSR heading.
+
+Run `performance-acceptance.js` through the Bun-backed Browser Control CLI using
+an explicit session and `--file`. It verifies target source bytes and generates
+a PDF before and after switching. `samples`, `resources()`, and `diagnostics()`
+are available on `window.editorPerformanceExperiment` for evidence capture.
+
+These are experiments, **not enabled production optimizations**. Installed reuse
+checks topology, modes, links, and every file digest; a receipt alone is never
+trusted. Vite's known disposable caches are removed before verification. All
+readers must be stopped/drained before invoking experimental source replacement
+or reuse. Replacement is nontransactional and preserves only managed roots and
+the experiment cache; it is not a general saved-workspace restore policy.
+
+Initial qualification found that full verification is slower than reinstalling
+the cached image, and runtime persistence excludes `node_modules` from the
+ordinary OPFS mirror. A future fast path needs immutable environments or trusted
+FS-worker mutation tracking and explicit environment snapshots, not a host-side
+marker. Payload pruning remains isolated here pending broader qualification.
+Chronological measurements are retained in the original `random` repository.
+Repeated full-reset switching also exposed `ENOTEMPTY` while clearing
+`/workspace/node_modules`; the acceptance script deliberately propagates this
+failure. One successful switch is not repeated-switch qualification.
+
+## Historical editor acceptance
+
 This harness was carried over from the original POC. Historical browser receipts
 remain in `random`; this document gives run instructions, not fresh qualification
 of the extracted repository. Inspect current UI before using a phase: source-editor

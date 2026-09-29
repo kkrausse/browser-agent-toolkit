@@ -80,11 +80,12 @@ export async function loadPrepared(base: string, signal: AbortSignal, diagnostic
   return manifest;
 }
 
-export function preparedApps(manifest: PreparedManifest, base: string, signal: AbortSignal, report: (text: string) => void, diagnostics: DiagnosticScope = createDiagnosticScope()): ToolDescriptor<void, void> {
+export function preparedApps(manifest: PreparedManifest, base: string, signal: AbortSignal, report: (text: string) => void, diagnostics: DiagnosticScope = createDiagnosticScope(), options: { experimentalReuseInstalled?: boolean } = {}): ToolDescriptor<void, void> {
   validateTree(manifest.assets);
   validatePreparedBackendArchives(manifest);
   if (!manifest.bundle) throw Error('Prepared managed bundle is required; regenerate this editor preparation');
-  const delivery = managedDeliveryTool({ format: 'managed-tree-v1', roots: treeRoots, entries: manifest.assets, bundle: manifest.bundle, image: manifest.image }, { baseUrl: base, signal, report });
+  const delivery = managedDeliveryTool({ format: 'managed-tree-v1', roots: treeRoots, entries: manifest.assets, bundle: manifest.bundle, image: manifest.image }, { baseUrl: base, signal, report,
+    experimentalReuseInstalled: options.experimentalReuseInstalled ? { runtimeVersion: manifest.runtimeVersion, disposablePaths: ['/workspace/node_modules/.vite-temp', '/workspace/node_modules/.vite'], onResult: result => diagnostics.record('delivery.installed-environment', result) } : undefined });
   return { name: 'browser-editor-apps', version: manifest.runtimeVersion, async bind(context) {
     const install = await delivery.bind(context);
     return async () => {

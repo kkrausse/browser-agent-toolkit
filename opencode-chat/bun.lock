@@ -183,8 +183,6 @@
 
     "@kev-browser-agent-kit/workspace": ["@kev-browser-agent-kit/workspace@file:../workspace-api/dist/lib", { "peerDependencies": { "react": ">=18 <20" }, "optionalPeers": ["react"] }],
 
-    "@kev-browser-agent-kit/workspace": ["@kev-browser-agent-kit/workspace@file:../workspace-api/dist/lib", { "peerDependencies": { "react": ">=18 <20" }, "optionalPeers": ["react"] }],
-
     "@msgpackr-extract/msgpackr-extract-darwin-arm64": ["@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4", "", { "os": "darwin", "cpu": "arm64" }, "sha512-LCkGo6JDfaBhgST7UpPWgNgLINpcpabaHfyz5OBx75nUYxBsaEPxjnyNjWpeb/xBup/682QnBfRBy2/LvPutZQ=="],
 
     "@msgpackr-extract/msgpackr-extract-darwin-x64": ["@msgpackr-extract/msgpackr-extract-darwin-x64@3.0.4", "", { "os": "darwin", "cpu": "x64" }, "sha512-zExlW9zUJKZH/tOtVMttwjKa4Xm/3KcNjnE3dPN92uCktwavMxpgCA3MoJK/DOnTWsQgo224OaST27/mPNAf+w=="],

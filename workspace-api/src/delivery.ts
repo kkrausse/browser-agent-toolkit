@@ -1,5 +1,6 @@
 import type { ToolDescriptor, Workspace } from "./index.js";
 import type { ManagedDelivery, ManagedEntry, SourceDelivery } from "./delivery-types.js";
+import { environmentExperimentKey, reusableEnvironmentExperiment, type EnvironmentExperimentResult } from "./environment-experiment.js";
 
 const sha256 = async (bytes: Uint8Array) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", Uint8Array.from(bytes)))].map(value => value.toString(16).padStart(2, "0")).join("");
 
@@ -51,9 +52,13 @@ function validate(delivery: ManagedDelivery) {
 }
 
 /** Replace only declared managed roots. Persistent workspace source is untouched. */
-export function managedDeliveryTool(delivery: ManagedDelivery, options: { baseUrl: string; signal: AbortSignal; report?(message: string): void }): ToolDescriptor<void, void> {
+export function managedDeliveryTool(delivery: ManagedDelivery, options: {
+  baseUrl: string; signal: AbortSignal; report?(message: string): void;
+  /** Experimental: verify the complete installed tree before skipping download/decode/install. */
+  experimentalReuseInstalled?: { runtimeVersion: string; disposablePaths?: string[]; onResult?(result: EnvironmentExperimentResult): void };
+}): ToolDescriptor<void, void> {
   validate(delivery);
-  return { name: "managed-tree", version: delivery.bundle.sha256, async bind(context) { return async () => {
+  const tool: ToolDescriptor<void, void> = { name: "managed-tree", version: delivery.bundle.sha256, async bind(context) { return async () => {
     const selected = context.installTreeImage && delivery.image ? delivery.image : delivery.bundle;
     const url = options.baseUrl + selected.file;
     const valid = async (bytes: Uint8Array) => bytes.length === selected.bytes && await sha256(bytes) === selected.sha256;
@@ -117,6 +122,15 @@ export function managedDeliveryTool(delivery: ManagedDelivery, options: { baseUr
       : entry.kind === "directory" ? { kind: "directory", path: entry.destination, mode: entry.mode }
         : { kind: "symlink", path: entry.destination, target: entry.target }) });
   }; } };
+  const reuse = options.experimentalReuseInstalled;
+  if (!reuse) return tool;
+  return { name: tool.name, version: tool.version, async bind(context) {
+    const key = await environmentExperimentKey({ runtimeVersion: reuse.runtimeVersion, bundleSha256: delivery.bundle.sha256, imageSha256: delivery.image?.sha256, entries: delivery.entries, roots: delivery.roots });
+    return reusableEnvironmentExperiment({ delivery: tool, key, entries: delivery.entries, roots: delivery.roots, disposablePaths: reuse.disposablePaths, report(result) {
+      reuse.onResult?.(result);
+      options.report?.(result.reused ? "Reusing verified installed dependency/tool environment" : `Installed environment miss: ${result.reason}`);
+    } }).bind(context);
+  } };
 }
 
 /** Source retention is an explicit application choice at install time. */
@@ -132,3 +146,4 @@ export async function installSource(workspace: Workspace, source: SourceDelivery
 }
 
 export type { ManagedDelivery, ManagedEntry, ManagedBundle, ManagedVfsImage, SourceDelivery, SourceFile } from "./delivery-types.js";
+export { experimentalSourceReplacementTool } from "./environment-experiment.js";
