@@ -53,8 +53,13 @@ test.skipIf(!process.env.OPENCODE_PACKAGE_DIR)('real retained candidate survives
   } finally { await rm(output, { recursive: true, force: true }); }
 });
 
-function endpointFixture(change: 'none' | 'activation' | 'plugin' | 'javascript' | 'config' | 'model' = 'none') {
+function endpointFixture(change: 'none' | 'activation' | 'plugin' | 'javascript' | 'config' | 'model' = 'none', selectedModel?: string) {
   const calls: { path: string; method: string; authorization: string | null }[] = [];
+  const config = createOpenCodeCandidateConfig('http://host.vivari.internal:4390/editor/model/opencode/');
+  if (selectedModel) {
+    config.model = `opencode/${selectedModel}`;
+    config.providers.opencode.models = { [selectedModel]: config.providers.opencode.models[openCodeCandidateLaunch.model.id]! };
+  }
   const endpoint = { async fetch(path: string | URL | Request, init?: RequestInit) {
     const name = String(path);
     calls.push({ path: name, method: init?.method ?? 'GET', authorization: new Headers(init?.headers).get('authorization') });
@@ -63,8 +68,8 @@ function endpointFixture(change: 'none' | 'activation' | 'plugin' | 'javascript'
       { id: 'editor.model-headers', state: { status: 'active' } },
       { id: 'editor.javascript', state: { status: change === 'javascript' ? 'error' : 'active' } },
     ] });
-    if (name === openCodeCandidateLaunch.configAPIPath) return Response.json(change === 'config' ? [] : [{ type: 'document', path: openCodeCandidateLaunch.configPath, info: createOpenCodeCandidateConfig('http://host.vivari.internal:4390/editor/model/opencode/') }]);
-    if (name === openCodeCandidateLaunch.modelPath) return Response.json({ data: [{ ...openCodeCandidateLaunch.model, enabled: true, capabilities: { tools: change !== 'model' } }] });
+    if (name === openCodeCandidateLaunch.configAPIPath) return Response.json(change === 'config' ? [] : [{ type: 'document', path: openCodeCandidateLaunch.configPath, info: config }]);
+    if (name === openCodeCandidateLaunch.modelPath) return Response.json({ data: [{ ...openCodeCandidateLaunch.model, id: selectedModel ?? openCodeCandidateLaunch.model.id, enabled: true, capabilities: { tools: change !== 'model' } }] });
     return Response.json({ healthy: true });
   } };
   return { endpoint, calls };
@@ -80,6 +85,11 @@ test('chat readiness awaits authenticated activation and validates global config
   for (const failure of ['activation', 'plugin', 'javascript', 'config', 'model'] as const) {
     await expect(verifyOpenCodeReady(endpointFixture(failure).endpoint, authorization, new AbortController().signal)).rejects.toThrow();
   }
+});
+
+test('readiness accepts a configured default without the toolkit fallback in the catalog', async () => {
+  await verifyOpenCodeReady(endpointFixture('none', 'deepseek-v4.1-flash').endpoint, 'Basic test', new AbortController().signal);
+  await expect(verifyOpenCodeReady(endpointFixture('model', 'deepseek-v4.1-flash').endpoint, 'Basic test', new AbortController().signal)).rejects.toThrow('not enabled with tools');
 });
 
 test('health readiness recovers from fetch failure, request timeout and non-OK response', async () => {

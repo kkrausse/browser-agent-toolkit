@@ -42,14 +42,17 @@ const verifyReadyEffect = Effect.fn('OpenCode.verifyReady')(function*(endpoint: 
     if (!response.ok) { await response.arrayBuffer(); throw Error(`OpenCode configuration HTTP ${response.status}`); }
     return response.json();
   });
-  if (!Array.isArray(entries) || !entries.some(entry => entry.type === 'document' && entry.path === descriptor.configPath
-    && entry.info?.providers?.opencode?.models?.[descriptor.model.id]?.package === '@opencode/ai/providers/openai'
-    && entry.info.providers.opencode.models[descriptor.model.id].websocket === false)) return yield* Effect.fail(new Error('OpenCode global model configuration not loaded'));
+  const selected = Array.isArray(entries) && entries.find(entry => entry.type === 'document' && entry.path === descriptor.configPath);
+  const modelID = typeof selected?.info?.model === 'string' && selected.info.model.startsWith('opencode/')
+    ? selected.info.model.slice('opencode/'.length) : undefined;
+  const configured = modelID && selected.info?.providers?.opencode?.models?.[modelID];
+  if (!configured || typeof configured.package !== 'string' || configured.websocket !== false)
+    return yield* Effect.fail(new Error('OpenCode global model configuration not loaded'));
   const { data } = yield* request(descriptor.modelPath, async response => {
     if (!response.ok) { await response.arrayBuffer(); throw Error(`OpenCode model catalog HTTP ${response.status}`); }
     return response.json();
   });
-  if (!Array.isArray(data) || !data.some(model => model.providerID === descriptor.model.providerID && model.id === descriptor.model.id
+  if (!Array.isArray(data) || !data.some(model => model.providerID === descriptor.model.providerID && model.id === modelID
     && model.enabled && model.capabilities?.tools)) return yield* Effect.fail(new Error('Qualified OpenCode model is not enabled with tools'));
 });
 
