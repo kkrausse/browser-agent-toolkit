@@ -43,8 +43,12 @@ const verifyReadyEffect = Effect.fn('OpenCode.verifyReady')(function*(endpoint: 
     return response.json();
   });
   const selected = Array.isArray(entries) && entries.find(entry => entry.type === 'document' && entry.path === descriptor.configPath);
-  const modelID = typeof selected?.info?.model === 'string' && selected.info.model.startsWith('opencode/')
-    ? selected.info.model.slice('opencode/'.length) : undefined;
+  // The V2 config API returns the decoded model selection, even when the JSON
+  // document uses the shorthand string (which older responses may preserve).
+  const selection = selected?.info?.model;
+  const modelID = typeof selection === 'string'
+    ? (selection.startsWith('opencode/') ? selection.slice('opencode/'.length) : undefined)
+    : selection?.providerID === 'opencode' ? selection.model : undefined;
   const configured = modelID && selected.info?.providers?.opencode?.models?.[modelID];
   if (!configured || typeof configured.package !== 'string' || configured.websocket !== false)
     return yield* Effect.fail(new Error('OpenCode global model configuration not loaded'));

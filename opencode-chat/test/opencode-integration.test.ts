@@ -53,7 +53,7 @@ test.skipIf(!process.env.OPENCODE_PACKAGE_DIR)('real retained candidate survives
   } finally { await rm(output, { recursive: true, force: true }); }
 });
 
-function endpointFixture(change: 'none' | 'activation' | 'plugin' | 'javascript' | 'config' | 'model' = 'none', selectedModel?: string) {
+function endpointFixture(change: 'none' | 'activation' | 'plugin' | 'javascript' | 'config' | 'model' = 'none', selectedModel?: string, selection: 'decoded' | 'shorthand' | 'wrong-provider' = 'decoded') {
   const calls: { path: string; method: string; authorization: string | null }[] = [];
   const config = createOpenCodeCandidateConfig('http://host.vivari.internal:4390/editor/model/opencode/');
   if (selectedModel) {
@@ -68,7 +68,10 @@ function endpointFixture(change: 'none' | 'activation' | 'plugin' | 'javascript'
       { id: 'editor.model-headers', state: { status: 'active' } },
       { id: 'editor.javascript', state: { status: change === 'javascript' ? 'error' : 'active' } },
     ] });
-    if (name === openCodeCandidateLaunch.configAPIPath) return Response.json(change === 'config' ? [] : [{ type: 'document', path: openCodeCandidateLaunch.configPath, info: config }]);
+    if (name === openCodeCandidateLaunch.configAPIPath) return Response.json(change === 'config' ? [] : [{ type: 'document', path: openCodeCandidateLaunch.configPath, info: {
+      ...config,
+      model: selection === 'shorthand' ? config.model : { providerID: selection === 'wrong-provider' ? 'other' : 'opencode', model: selectedModel ?? openCodeCandidateLaunch.model.id },
+    } }]);
     if (name === openCodeCandidateLaunch.modelPath) return Response.json({ data: [{ ...openCodeCandidateLaunch.model, id: selectedModel ?? openCodeCandidateLaunch.model.id, enabled: true, capabilities: { tools: change !== 'model' } }] });
     return Response.json({ healthy: true });
   } };
@@ -90,6 +93,11 @@ test('chat readiness awaits authenticated activation and validates global config
 test('readiness accepts a configured default without the toolkit fallback in the catalog', async () => {
   await verifyOpenCodeReady(endpointFixture('none', 'deepseek-v4.1-flash').endpoint, 'Basic test', new AbortController().signal);
   await expect(verifyOpenCodeReady(endpointFixture('model', 'deepseek-v4.1-flash').endpoint, 'Basic test', new AbortController().signal)).rejects.toThrow('not enabled with tools');
+});
+
+test('readiness accepts legacy shorthand but rejects a decoded model from another provider', async () => {
+  await verifyOpenCodeReady(endpointFixture('none', 'deepseek-v4.1-flash', 'shorthand').endpoint, 'Basic test', new AbortController().signal);
+  await expect(verifyOpenCodeReady(endpointFixture('none', 'deepseek-v4.1-flash', 'wrong-provider').endpoint, 'Basic test', new AbortController().signal)).rejects.toThrow('global model configuration not loaded');
 });
 
 test('health readiness recovers from fetch failure, request timeout and non-OK response', async () => {
