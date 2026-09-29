@@ -12,5 +12,18 @@ export function stripPreviewQuery(search: string): string {
 export function preservePreviewQuery(source: string): string {
   const before = 'guestUrl.searchParams.delete("__vv_listener");\n  guestUrl.searchParams.delete("__vv_host_paths");';
   if (!source.includes(before)) throw Error('Preview service-worker query boundary changed; review the workspace adapter');
-  return source.replace(before, `guestUrl.search = (${stripPreviewQuery.toString()})(guestUrl.search);`);
+  const entry = 'async function handlePreview(event, port, path, keepPrefix) {';
+  if (!source.includes(entry)) throw Error('Preview response boundary changed; review the workspace adapter');
+  return source.replace(before, `guestUrl.search = (${stripPreviewQuery.toString()})(guestUrl.search);`)
+    .replace(entry, `// The serving application replaces this exact marker in the trusted SW script.
+// A guest response or preview query cannot configure the policy.
+const PREVIEW_CONNECTION_ALLOWLIST = /* trusted-preview-policy */ null;
+async function handlePreview(event, port, path, keepPrefix) {
+  const response = await handlePreviewUntrusted(event, port, path, keepPrefix);
+  if (!PREVIEW_CONNECTION_ALLOWLIST) return response;
+  const headers = new Headers(response.headers);
+  headers.set('Connection-Allowlist', PREVIEW_CONNECTION_ALLOWLIST);
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+async function handlePreviewUntrusted(event, port, path, keepPrefix) {`);
 }
