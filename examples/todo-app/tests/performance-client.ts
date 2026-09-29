@@ -184,6 +184,35 @@ async function verifySource(): Promise<{files: number; generation: number}> {
   return {files, generation}
 }
 const api = { samples, events, resetEvidence, installOnly, ready: false, error: "", switchWorkspace, verifySource, remainingTree,
+  filesystemSymlinkControl: async () => {
+    if (!installOnly || switching || api.error || !controller.runtime) throw new Error('Symlink controls require a healthy install-only cohort')
+    switching = true
+    const root = '/reset-symlink-control'
+    const target = '/reset-symlink-target'
+    const script = '/reset-symlink-control.js'
+    try {
+      await controller.workspace!.fs.writeFile(script, `const fs = require('fs'); fs.mkdirSync('/workspace${root}'); fs.mkdirSync('/workspace${target}'); fs.writeFileSync('/workspace${target}/sentinel', 'outside target'); fs.symlinkSync('../reset-symlink-target', '/workspace${root}/directory-link'); fs.symlinkSync('../reset-symlink-absent', '/workspace${root}/dangling-link');`)
+      const execution = await controller.runtime.node({entry: '/workspace' + script, cwd: '/workspace', signal: AbortSignal.timeout(30000)})
+      const drain = async (stream: AsyncIterable<Uint8Array>): Promise<string> => { const decoder = new TextDecoder(); let output = ''; for await (const bytes of stream) output += decoder.decode(bytes, {stream: true}); return output + decoder.decode() }
+      const drained = Promise.all([drain(execution.stdout), drain(execution.stderr)])
+      execution.closeStdin()
+      const exit = await execution.exited
+      const output = await drained
+      if (exit.exitCode !== 0) throw new Error(`Symlink fixture exited ${exit.exitCode}: ${output[1]}`)
+      const before = await Promise.all(['directory-link', 'dangling-link'].map(name => diagnoseWorkspaceEntry(controller.workspace!, root + '/' + name)))
+      await controller.stopRuntime()
+      const processes = await diagnoseWorkspace(controller.workspace!)
+      await controller.workspace!.fs.remove(root)
+      const after = await diagnoseWorkspaceEntry(controller.workspace!, root).catch(error => ({error: String(error)}))
+      const sentinel = new TextDecoder().decode(await controller.workspace!.fs.readFile(target + '/sentinel'))
+      if (sentinel !== 'outside target' || !('error' in after) || !after.error.includes('ENOENT')) throw new Error('Symlink removal contract failed')
+      await controller.workspace!.fs.remove(target)
+      await controller.workspace!.fs.remove(script)
+      const result = {root, before, after, sentinel, exit, processes}
+      resetEvidence.push({phase: 'filesystem.symlink-control', ...result})
+      return result
+    } finally { switching = false }
+  },
   inspectEntry: async (path: string) => {
     const entry = await diagnoseWorkspaceEntry(controller.workspace!, path)
     if (entry.metadata.kind !== 'file') return entry
