@@ -79,6 +79,8 @@ export function createBrowserEditorHandler(options: {
   base?: string;
   providers: Record<string, { baseURL: string; headers?: HeadersInit }>;
   diagnostics?: EditorDiagnosticSink;
+  /** Receives a clone of the fully constructed provider request immediately before fetch. */
+  captureModelRequest?(request: Request): Promise<void>;
   /** Invoked for the manifest after app authorization. Receives the request's diagnostic scope. */
   prepare?(diagnostics: DiagnosticScope): Promise<void>;
 }) {
@@ -153,7 +155,9 @@ export function createBrowserEditorHandler(options: {
       };
       diagnostics.record('model.request', requestDetail);
       try {
-        const response = await fetch(upstream, { method: request.method, headers, body: request.body, signal: request.signal, redirect: 'manual' });
+        const providerRequest = new Request(upstream, { method: request.method, headers, body: request.body, signal: request.signal, redirect: 'manual' });
+        if (options.captureModelRequest) await options.captureModelRequest(providerRequest.clone());
+        const response = await fetch(providerRequest);
         const detail = { ...requestDetail, ...metadata, status: response.status, upstreamStatus: response.status, downstreamStatus: response.status,
           elapsedMs: Math.round(performance.now() - started), retryAfter: response.headers.get('retry-after') };
         diagnostics.record('model.response', detail);

@@ -26,6 +26,7 @@ test('request matching includes every editor resource and excludes public applic
 
 test('model proxy streams real HTTP, strips client credentials, and keeps its upstream prefix', async () => {
   let received: { path: string; search: string; headers: Headers; body: string } | undefined;
+  let captured: { url: string; headers: Headers; body: string } | undefined;
   let requests = 0;
   const upstream = Bun.serve({ port: 0, async fetch(request) {
     requests++;
@@ -38,7 +39,7 @@ test('model proxy streams real HTTP, strips client credentials, and keeps its up
     const handler = createBrowserEditorHandler({ preparedDirectory: '.', runtimeDirectory: '.', providers: {
       opencode: { baseURL: upstream.url + 'v1', headers: { authorization: 'Bearer server-only', 'user-agent': 'opencode/stable/2.0.3/vivari-opencode-server' } },
       anthropic: { baseURL: upstream.url + 'anthropic/v1', headers: { 'x-api-key': 'server-anthropic' } },
-    } });
+    }, captureModelRequest: async request => { captured = { url: request.url, headers: request.headers, body: await request.text() }; } });
     const nativeHeaders = new Headers({ authorization: 'Bearer client', 'x-api-key': 'private', 'x-opencode-session': 'ses_test',
       'x-opencode-client': 'test-client', 'user-agent': 'OpenCode-native', 'x-provider-feature': 'one' });
     nativeHeaders.append('x-provider-feature', 'two');
@@ -49,6 +50,9 @@ test('model proxy streams real HTTP, strips client credentials, and keeps its up
     expect(received?.path).toBe('/v1/chat/completions');
     expect(received?.search).toBe('?native=value%2Fone');
     expect(received?.body).toBe('{ "opaque": true }');
+    expect(captured?.url).toBe(upstream.url + 'v1/chat/completions?native=value%2Fone');
+    expect(captured?.body).toBe('{ "opaque": true }');
+    expect(captured?.headers.get('authorization')).toBe('Bearer server-only');
     expect(received?.headers.get('x-opencode-session')).toBe('ses_test');
     expect(received?.headers.get('x-opencode-client')).toBe('test-client');
     expect(received?.headers.get('x-provider-feature')).toBe('one, two');
