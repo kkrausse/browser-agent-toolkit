@@ -6,5 +6,7 @@
   `.runtime` output. Read `vivari/DEVELOPMENT.md` before runtime work.
 - Preserve upstream licenses, provenance, source pins, and artifact verification.
 - Browser automation uses the Bun-backed `browser-control` CLI.
-- Keep chronological status reports in the original `random` repository; maintain
-  concise setup and architecture documentation here.
+- Keep toolkit experiment results and chronological status reports in `docs/experiments/`
+  in this repository. Keep setup and architecture documentation concise.
+- The original `random` repository is historical reference only; do not write or commit
+  new toolkit reports there.

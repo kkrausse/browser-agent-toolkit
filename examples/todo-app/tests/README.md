@@ -40,7 +40,8 @@ the cached image, and runtime persistence excludes `node_modules` from the
 ordinary OPFS mirror. A future fast path needs immutable environments or trusted
 FS-worker mutation tracking and explicit environment snapshots, not a host-side
 marker. Payload pruning remains isolated here pending broader qualification.
-Chronological measurements are retained in the original `random` repository.
+Measurements and qualification limits are recorded in the
+[editor performance report](../../../docs/experiments/2026-09-29-editor-performance.md).
 Repeated full-reset switching also exposed `ENOTEMPTY` while clearing
 `/workspace/node_modules`; the acceptance script deliberately propagates this
 failure. One successful switch is not repeated-switch qualification.

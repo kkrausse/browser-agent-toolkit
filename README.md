@@ -120,6 +120,9 @@ This repository starts with a clean source snapshot from
 documents remain there. They describe the original environment, not fresh
 qualification of this checkout.
 
+New toolkit experiment results and status reports live in [`docs/experiments/`](docs/experiments/)
+in this repository, alongside the implementation and reproduction harnesses.
+
 Package licenses, upstream notices, and provenance are retained in their source
 directories. See `opencode-chat/PROVENANCE.md`, its `LICENSE*` files, and
 `vivari/LICENSE*`. No new umbrella licensing decision is made by this extraction.
