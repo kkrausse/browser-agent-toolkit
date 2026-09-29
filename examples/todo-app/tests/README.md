@@ -42,6 +42,8 @@ FS-worker mutation tracking and explicit environment snapshots, not a host-side
 marker. Payload pruning remains isolated here pending broader qualification.
 Measurements and qualification limits are recorded in the
 [editor performance report](../../../docs/experiments/2026-09-29-editor-performance.md).
+The [full handoff](../../../docs/experiments/editor-performance-handoff.md) records
+prerequisites, current code state, reproduction, blockers, and next work.
 Repeated full-reset switching also exposed `ENOTEMPTY` while clearing
 `/workspace/node_modules`; the acceptance script deliberately propagates this
 failure. One successful switch is not repeated-switch qualification.

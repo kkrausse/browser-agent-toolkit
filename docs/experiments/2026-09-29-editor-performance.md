@@ -1,5 +1,8 @@
 # Upstream todo editor performance experiments — 2026-09-29
 
+For current implementation state, reproduction and next steps, see the
+[full handoff](editor-performance-handoff.md).
+
 Proving ground: [`examples/todo-app`](../../examples/todo-app).
 IRS Tools remains unchanged by these experiments; its separately committed autosave remains intact.
 
