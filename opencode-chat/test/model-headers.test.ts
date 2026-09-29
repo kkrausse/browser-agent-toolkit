@@ -37,6 +37,65 @@ test('public plugin envelopes native headers without consuming or replacing requ
   expect(() => callback({ request: new Request('https://unexpected.test'), kind: 'primary' })).toThrow('destination');
 });
 
+test('generated hook accepts normalized default HTTPS port without relaxing destination', async () => {
+  const base = 'https://host.vivari.internal:443/editor/model/opencode/';
+  const config = createOpenCodeCandidateConfig(base);
+  expect(config.providers.opencode.settings.baseURL).toBe(base);
+  const callback = await hook(config.providers.opencode.settings.baseURL);
+  const request = new Request(new URL('responses', base), { method: 'POST', headers: { authorization: 'Bearer synthetic' }, body: '{}' });
+  expect(request.url).toBe('https://host.vivari.internal/editor/model/opencode/responses');
+  callback({ request, kind: 'primary' });
+  expect(decodeModelHeaders(request.headers.get(MODEL_HEADERS)).get('authorization')).toBe('Bearer synthetic');
+});
+
+test('generated hook validates canonical origin and path boundary across schemes and ports', async () => {
+  for (const base of ['https://host.vivari.internal:443/editor/model/opencode/', 'http://host.vivari.internal:80/editor/model/opencode/',
+    'https://host.vivari.internal:8443/editor/model/opencode/', 'http://host.vivari.internal:5173/editor/model/opencode/']) {
+    const callback = await hook(base);
+    for (const path of ['responses', 'chat/completions?synthetic=1']) {
+      const request = new Request(new URL(path, base), { headers: { 'x-test': 'synthetic' } });
+      callback({ request, kind: 'primary' });
+      expect(decodeModelHeaders(request.headers.get(MODEL_HEADERS)).get('x-test')).toBe('synthetic');
+    }
+    const target = new URL(base);
+    const otherScheme = new URL(target); otherScheme.protocol = target.protocol === 'https:' ? 'http:' : 'https:';
+    const otherPort = new URL(target); otherPort.port = '9001';
+    for (const wrong of [otherScheme, otherPort, new URL('https://untrusted.example/editor/model/opencode/responses'),
+      new URL('responses', base.replace('host.vivari.internal', 'host.vivari.internal.evil.example')),
+      new URL('/editor/model/opencode-fake/responses', base), new URL('/editor/model/other/responses', base),
+      new URL('/editor/model/opencode', base), new URL('/editor/model/opencode/../other/responses', base)]) {
+      expect(() => callback({ request: new Request(wrong), kind: 'primary' })).toThrow('destination');
+    }
+  }
+  for (const base of ['ftp://host/editor/model/opencode/', 'https://user:pass@host/editor/model/opencode/',
+    'https://host/editor/model/opencode/?query=1', 'https://host/editor/model/opencode#hash', 'https://host/editor/model/opencode']) {
+    expect(() => modelHeaderPluginSource(base)).toThrow();
+  }
+});
+
+test('synthetic config to generated plugin to Request to model proxy works on HTTP and HTTPS aliases', async () => {
+  const upstream = Bun.serve({ port: 0, fetch: async request => Response.json({ path: new URL(request.url).pathname,
+    body: await request.text(), authorization: request.headers.get('authorization'), synthetic: request.headers.get('x-synthetic') }) });
+  try {
+    const handler = createBrowserEditorHandler({ preparedDirectory: '.', runtimeDirectory: '.', providers: {
+      opencode: { baseURL: `http://127.0.0.1:${upstream.port}/synthetic/` },
+    } });
+    for (const base of ['http://host.vivari.internal:80/editor/model/opencode/', 'https://host.vivari.internal:443/editor/model/opencode/',
+      'https://host.vivari.internal:8443/editor/model/opencode/']) {
+      const config = createOpenCodeCandidateConfig(base);
+      const callback = await hook(config.providers.opencode.settings.baseURL);
+      const request = new Request(new URL('responses?synthetic=1', config.providers.opencode.settings.baseURL), {
+        method: 'POST', body: '{"synthetic":true}', headers: { 'content-type': 'application/json', 'x-synthetic': 'marker' },
+      });
+      callback({ request, kind: 'primary' });
+      expect(request.headers.has('x-synthetic')).toBe(false);
+      const response = await handler.fetch(request);
+      expect(response?.status).toBe(200);
+      expect(await response?.json()).toEqual({ path: '/synthetic/responses', body: '{"synthetic":true}', authorization: null, synthetic: 'marker' });
+    }
+  } finally { upstream.stop(true); }
+});
+
 test('envelope rejects missing, oversized, malformed and ambiguous header maps', () => {
   const invalid = [null, '', '!base64', 'a'.repeat(MAX_MODEL_HEADERS + 1), btoa('{}'), btoa('null'), btoa('no json'),
     ...[[['Bad-Name', 'x']], [['bad name', 'x']], [['x', 'line\r\nbreak']], [['x', 1]], [['x', 'a'], ['x', 'b']],

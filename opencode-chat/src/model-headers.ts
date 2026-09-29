@@ -24,9 +24,14 @@ export function decodeModelHeaders(value: string | null): Headers {
 
 /** Self-contained JS for OpenCode's public global single-file plugin discovery. */
 export function modelHeaderPluginSource(modelBaseURL: string): string {
+  const base = new URL(modelBaseURL);
+  if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password || base.search || base.hash || !base.pathname.endsWith('/'))
+    throw Error('Expected credential-free HTTP model proxy directory URL');
   return `export default { id: 'editor.model-headers', async setup(ctx) {
   await ctx.session.hook('http.request', event => {
-    if (!event.request.url.startsWith(${JSON.stringify(modelBaseURL)})) throw Error('Unexpected editor model destination');
+    const destination = new URL(event.request.url);
+    if (destination.origin !== ${JSON.stringify(base.origin)} || destination.username || destination.password
+      || !destination.pathname.startsWith(${JSON.stringify(base.pathname)})) throw Error('Unexpected editor model destination');
     const headers = event.request.headers;
     const envelope = btoa(JSON.stringify([...headers]));
     if (envelope.length > ${MAX_MODEL_HEADERS}) throw Error('Model headers exceed transport limit');
