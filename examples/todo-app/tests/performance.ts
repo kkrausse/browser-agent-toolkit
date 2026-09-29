@@ -6,6 +6,7 @@ import type { PreparedManifest } from "@kev-browser-agent-kit/opencode-chat/brow
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { appRouter } from '../src/server/trpcRouter'
 import type { Todo } from '../src/schema/todo'
+import { readRuntimeAssets } from '@kev-browser-agent-kit/workspace/assets'
 
 // Standalone benchmark origin: no app auth, secrets, saved workspace APIs or model calls.
 // Never bind publicly; never point it at a live application's origin/store.
@@ -13,6 +14,8 @@ const input = resolve(process.env.EDITOR_PERFORMANCE_INPUT ?? ".editor/prepared"
 const runtime = resolve(process.env.RUNTIME_DIR ?? "../../workspace-api/dist/runtime")
 const output = resolve(".editor/performance")
 const manifest = await Bun.file(join(input, "manifest.json")).json() as PreparedManifest
+await readRuntimeAssets(runtime, manifest.runtimeVersion)
+if (manifest.dependencies.policy.runtimeVersion !== manifest.runtimeVersion) throw new Error('Prepared runtime policy identity mismatch')
 await mkdir(output, {recursive: true})
 const candidates = ["baseline", "maps", "maps-native"] as const
 const summaries: unknown[] = []

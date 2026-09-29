@@ -1,4 +1,4 @@
-import { clearWorkspace, diagnoseWorkspace } from "@kev-browser-agent-kit/workspace"
+import { clearWorkspace, diagnoseWorkspace, diagnoseWorkspaceEntry } from "@kev-browser-agent-kit/workspace"
 import { experimentalSourceReplacementTool, installSource } from "@kev-browser-agent-kit/workspace/delivery"
 import type { SourceDelivery } from "@kev-browser-agent-kit/workspace/delivery"
 import { WorkspaceController } from "@kev-browser-agent-kit/workspace/react"
@@ -9,9 +9,12 @@ type Variant = "baseline" | "kernel" | "dependencies" | "incremental" | "reload"
 type Sample = { name: string; milliseconds: number; detail?: unknown }
 const samples: Sample[] = []
 const events: unknown[] = []
+const resetEvidence: unknown[] = []
 const parameters = new URLSearchParams(location.search)
 const candidate = parameters.get("candidate") ?? "baseline"
 const variant = (parameters.get("variant") ?? "baseline") as Variant
+const captureResetEvidence = parameters.get('fsEvidence') === '1'
+const installOnly = parameters.get('services') === 'none'
 if (!["baseline", "kernel", "dependencies", "incremental", "reload"].includes(variant)) throw new Error("Unknown experiment variant")
 const controller = new WorkspaceController({ onDiagnostic: event => events.push(event) })
 const output = document.querySelector("pre")!
@@ -30,7 +33,61 @@ const fixture = (generation: number): SourceDelivery => {
     '/src/pdf-workload.ts': `import {PDFDocument} from 'pdf-lib'; export async function runPdfWorkload() {const pdf = await PDFDocument.create(); pdf.addPage().drawText('Todo dependency workload'); return (await pdf.save()).length;}`,
     '/vite.config.ts': config.replace('defineConfig({', `defineConfig({ cacheDir: '/workspace/.browser-editor-cache/vite',`),
     '/binary.dat': {encoding: 'base64', data: 'AAEC/w=='},
+    [generation % 2 ? '/switch-a-only.ts' : '/switch-b-only.ts']: `export const workspace = '${generation % 2 ? 'A' : 'B'}';`,
   }
+}
+// Read-only, bounded evidence. Only recurse into manifest-declared directories:
+// public stat follows symlinks, so never use it to choose traversal targets.
+async function remainingTree(root = '/node_modules'): Promise<unknown> {
+  const started = performance.now()
+  const known = new Map(manifest.assets.filter(entry => entry.destination.startsWith('/workspace/')).map(entry => [entry.destination.slice('/workspace'.length), entry]))
+  const directories: unknown[] = []
+  const pending = [root]
+  let entries = 0
+  while (pending.length && directories.length < 500 && entries < 20000 && performance.now() - started < 10000) {
+    const path = pending.shift()!
+    try {
+      const names = await controller.workspace!.fs.readdir(path)
+      const children = names.map(name => {
+        const child = path + '/' + name
+        const entry = known.get(child)
+        if (entry?.kind === 'directory') pending.push(child)
+        return {name, kind: entry?.kind ?? 'unknown', ...(entry?.kind === 'symlink' ? {target: entry.target} : {})}
+      })
+      entries += names.length
+      directories.push({path, children})
+    } catch (error) { directories.push({path, error: String(error)}) }
+  }
+  return {root, milliseconds: performance.now() - started, entries, directories, truncated: pending.length > 0, pending}
+}
+async function observedClear(attemptedGeneration = generation + 1): Promise<void> {
+  try { await timed('workspace.clear', () => clearWorkspace(controller.workspace!)) }
+  catch (error) {
+    if (captureResetEvidence) {
+      try {
+        const evidence = {phase: 'clear.failed', generation, attemptedGeneration, error: String(error),
+          stack: error instanceof Error ? error.stack : undefined, processes: await diagnoseWorkspace(controller.workspace!),
+          rootEntries: await controller.workspace!.fs.readdir('/'), frontier: await deletionFrontier(), remaining: await remainingTree()}
+        resetEvidence.push(evidence)
+        await new Promise(resolve => setTimeout(resolve, 250))
+        resetEvidence.push({phase: 'clear.failed.delayed', processes: await diagnoseWorkspace(controller.workspace!), remaining: await remainingTree()})
+      } catch (evidenceError) { resetEvidence.push({phase: 'evidence.failed', error: String(evidenceError), originalError: String(error)}) }
+    }
+    throw error
+  }
+}
+async function deletionFrontier(): Promise<unknown[]> {
+  const observations: unknown[] = []
+  let path = '/node_modules'
+  for (let depth = 0; depth < 24; depth++) {
+    try {
+      const entry = await diagnoseWorkspaceEntry(controller.workspace!, path)
+      observations.push(entry)
+      if (entry.metadata.kind !== 'dir' || !entry.names?.length) break
+      path += '/' + entry.names[0]
+    } catch (error) { observations.push({path, error: String(error)}); break }
+  }
+  return observations
 }
 const distribution = { name: "vivari", version: manifest.runtimeVersion, assetBaseUrl: "/runtime/" }
 const canReuse = ["dependencies", "incremental", "reload"].includes(variant)
@@ -73,10 +130,10 @@ async function services(generation: number): Promise<void> {
 async function start(): Promise<void> {
   await timed("workspace.open", () => controller.open(distribution))
   // Reload intentionally preserves source and the installed receipt.
-  if (variant !== "reload") await timed("workspace.clear", () => clearWorkspace(controller.workspace!))
+  if (variant !== "reload") await observedClear(1)
   await timed("source.install", () => installSource(controller.workspace!, fixture(1), {existing: "replace"}))
   await runtime()
-  await services(1)
+  if (!installOnly) await services(1)
   await controller.workspace!.flush()
 }
 async function switchWorkspace(): Promise<void> {
@@ -85,9 +142,13 @@ async function switchWorkspace(): Promise<void> {
   const nextGeneration = generation + 1
   try {
   await timed("switch.total", async () => {
+    const ownedServices = Object.entries(controller.getSnapshot().services)
+    if (captureResetEvidence) resetEvidence.push({phase: 'before.stop', generation, processes: await diagnoseWorkspace(controller.workspace!)})
     await timed("runtime.stop", () => controller.stopRuntime())
+    if (captureResetEvidence) resetEvidence.push({phase: 'after.stop', generation, processes: await diagnoseWorkspace(controller.workspace!),
+      services: await Promise.all(ownedServices.map(async ([name, service]) => ({name, exit: await service.execution.exited, drained: await service.drained.then(() => true)})))})
     if (variant === "baseline" || variant === "kernel") {
-      await timed("workspace.clear", () => clearWorkspace(controller.workspace!))
+      await observedClear()
       if (variant === "baseline") {
         await timed("workspace.close", () => controller.close())
         await timed("workspace.open", () => controller.open(distribution))
@@ -99,7 +160,7 @@ async function switchWorkspace(): Promise<void> {
       await runtime(nextGeneration)
       await timed("source.replace", () => replacement(nextGeneration))
     }
-    await services(nextGeneration)
+    if (!installOnly) await services(nextGeneration)
     await timed("switch.flush", () => controller.workspace!.flush())
   })
   generation = nextGeneration
@@ -118,9 +179,38 @@ async function verifySource(): Promise<{files: number; generation: number}> {
     if (actual.length !== expected.length || actual.some((byte, index) => byte !== expected[index])) throw new Error(`Target source mismatch: ${path}`)
     files++
   }
+  const removed = generation % 2 ? '/switch-b-only.ts' : '/switch-a-only.ts'
+  if ((await controller.workspace!.fs.readdir('/')).includes(removed.slice(1))) throw new Error(`Outgoing workspace file retained: ${removed}`)
   return {files, generation}
 }
-const api = { samples, events, ready: false, error: "", switchWorkspace, verifySource, diagnostics: () => diagnoseWorkspace(controller.workspace!), stop: () => controller.close(), resources: () => performance.getEntriesByType("resource").map(entry => {
+const api = { samples, events, resetEvidence, installOnly, ready: false, error: "", switchWorkspace, verifySource, remainingTree,
+  inspectEntry: async (path: string) => {
+    const entry = await diagnoseWorkspaceEntry(controller.workspace!, path)
+    if (entry.metadata.kind !== 'file') return entry
+    const bytes = await controller.workspace!.fs.readFile(path)
+    const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(bytes))
+    return {...entry, bytes: bytes.length, sha256: [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('')}
+  },
+  filesystemControl: async (newline: boolean) => {
+    if (!installOnly || switching || api.error) throw new Error('Filesystem controls require a healthy install-only cohort')
+    switching = true
+    const root = newline ? '/reset-newline-control' : '/reset-plain-control'
+    const path = root + (newline ? '/line\nbreak.txt' : '/plain.txt')
+    try {
+      await controller.stopRuntime()
+      await controller.workspace!.fs.mkdir(root)
+      await controller.workspace!.fs.writeFile(path, 'control bytes')
+      const before = await diagnoseWorkspaceEntry(controller.workspace!, path)
+      let error: string | undefined
+      try { await controller.workspace!.fs.remove(root) } catch (failure) { error = String(failure) }
+      const result = {root, path, before, error, processes: await diagnoseWorkspace(controller.workspace!),
+        after: await diagnoseWorkspaceEntry(controller.workspace!, path).catch(failure => ({error: String(failure)}))}
+      resetEvidence.push({phase: 'filesystem.control', ...result})
+      if (error) { api.error = error; api.ready = false }
+      return result
+    } finally { switching = false }
+  },
+  diagnostics: () => diagnoseWorkspace(controller.workspace!), stop: () => controller.close(), resources: () => performance.getEntriesByType("resource").map(entry => {
   const resource = entry as PerformanceResourceTiming
   return { name: resource.name, transferSize: resource.transferSize, encodedBodySize: resource.encodedBodySize, duration: resource.duration }
 }) }

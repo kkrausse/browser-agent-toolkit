@@ -48,6 +48,36 @@ Repeated full-reset switching also exposed `ENOTEMPTY` while clearing
 `/workspace/node_modules`; the acceptance script deliberately propagates this
 failure. One successful switch is not repeated-switch qualification.
 
+### Reset filesystem evidence
+
+Use the exact consumed archive's extracted `package/` as `RUNTIME_DIR` during
+**both preparation and serving**. The server rejects manifest/runtime identity
+mismatches. For phase-1 receipts, select an isolated port `43219` (replicate:
+`43220`), `?variant=baseline&candidate=baseline&fsEvidence=1`, and run
+`reset-evidence.js` through Browser Control. Set an absolute private
+`state.resetEvidenceDirectory` first. `state.resetEvidenceAction = 'initial'`
+checks startup only; `'switch'` makes exactly one switch. Check the returned
+`status`, not the CLI exit code. Failed clears are never retried by this script.
+
+Evidence includes before/after-stop process snapshots, owned execution exits and
+joined output drains, errors, and bounded remaining-tree listings. Tree `kind`
+and link targets are **manifest classifications**, not live lstat results;
+unknown generated entries are not traversed. The independent `inspectEntry(path)`
+API uses read-only lstat/readlink and hashes live files. `deletionFrontier` follows
+the first remaining entry with live lstat (not a guaranteed causal failing path).
+All directory listings still use runtime framing; they are not raw VFS snapshots.
+Evidence instrumentation adds diagnostic round-trip costs to switch totals.
+
+`&services=none` is a distinct install→clear cohort: it never launches Vite or
+OpenCode, and its PASS is **installed-only**, not editor readiness. Its
+`filesystemControl(false|true)` creates/removes an owned plain/newline filename
+fixture after stopping the runtime. A failed control is retained and blocks
+further switching; never run controls on an actual application origin. Preserve
+the failed page until collecting evidence: closing loses unpersisted node_modules.
+
+Fresh findings and limitations:
+[phase-1 reset investigation](../../../docs/experiments/2026-09-29-reset-filesystem-phase1.md).
+
 ## Historical editor acceptance
 
 This harness was carried over from the original POC. Historical browser receipts

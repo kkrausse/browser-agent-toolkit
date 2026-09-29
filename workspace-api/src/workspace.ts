@@ -26,6 +26,22 @@ export async function diagnoseWorkspace(workspace: Workspace): Promise<Workspace
   return reply.diag as WorkspaceDiagnostics;
 }
 
+/** Read-only lstat/readlink evidence; unlike fs.stat this never follows a leaf symlink.
+ * Directory names still use the runtime's existing readdir framing, not raw VFS access. */
+export async function diagnoseWorkspaceEntry(workspace: Workspace, path: string): Promise<{path: string; metadata: Record<string, unknown>; names?: string[]; target?: string}> {
+  const state = workspaceInternals.get(workspace);
+  if (!state || state.closed) throw new WorkspaceError("CLOSED", "Workspace is not open");
+  if (state.clearing) throw new WorkspaceError("STORAGE_BUSY", "Workspace is being cleared");
+  const absolute = workspacePath(path);
+  const reply = await state.host.request("vv-git-fs", { op: "lstat", args: { path: absolute } });
+  const metadata = reply.result as Record<string, unknown>;
+  if (metadata.kind === "symlink") {
+    const link = await state.host.request("vv-git-fs", { op: "readlink", args: { path: absolute } });
+    return {path, metadata, target: link.result as string};
+  }
+  return { path, metadata, ...(metadata.kind === "dir" ? { names: await state.host.readdir(absolute) } : {}) };
+}
+
 const CLEAR_ROOTS = ["/workspace", "/.server"] as const;
 
 function childPath(parent: string, name: string): string {
