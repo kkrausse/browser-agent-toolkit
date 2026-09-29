@@ -46,6 +46,21 @@ test("headless bootstrap uses injected string fetch, marker, requests, immutable
   ).toBe(false);
 });
 
+test("fresh startup creates an empty session without hydrating old history or deleting sessions", async () => {
+  const f = fixture();
+  const c = createChatController({ endpoint: f.endpoint, directory: "/workspace", startNewSession: true });
+  controllers.push(c);
+  await c.ready;
+  const state = c.getSnapshot();
+  expect(state.sessionID).toBeDefined();
+  expect(state.sessionID).not.toBe("ses1");
+  expect(state.sessions.some(session => session.id === "ses1")).toBe(true);
+  expect(state.messages).toEqual([]);
+  expect(state.execution).toBe("idle");
+  expect(f.calls.some(call => call.url.pathname.endsWith("/ses1/message"))).toBe(false);
+  expect(f.calls.filter(call => call.init.method === "DELETE")).toHaveLength(0);
+});
+
 test("selection races cannot overwrite newer history", async () => {
   const { f, c } = start();
   await c.ready;

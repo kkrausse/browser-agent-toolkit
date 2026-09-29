@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import type { ChatController } from "./types";
 import type { Service, WorkspaceController } from "@kev-browser-agent-kit/workspace/react";
 
-export interface WorkspaceChatOptions { serviceName?: string; directory?: string }
+export interface WorkspaceChatOptions { serviceName?: string; directory?: string; startNewSession?: boolean }
 const chats = new WeakMap<Service, ChatController>();
 export function chatFor(service: Service) { return chats.get(service); }
 /** Attach once per service lifetime. The workspace stops clients before servers. */
@@ -15,7 +15,7 @@ const attachChatEffect = Effect.fn("Workspace.attachChat")(function*(owner: Work
   if (!chat) {
     chat = createChatController({
       endpoint: { url: service.connection.url, fetch: (input, init) => service.connection.fetch(input, init) },
-      directory: options.directory ?? "/workspace", autoCreateSession: false,
+      directory: options.directory ?? "/workspace", autoCreateSession: false, startNewSession: options.startNewSession,
     });
     chats.set(service, chat);
     const current = chat;

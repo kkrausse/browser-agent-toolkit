@@ -379,7 +379,8 @@ export function createChatController(options: ChatOptions): ChatController {
       publish({ sessions, models, connection: "connected" });
       if (selection !== selectionAtStart) return;
       const id = state.sessionID ?? sessions[0]?.id;
-      if (id) yield* selectSession(id);
+      if (options.startNewSession && !state.sessionID) yield* createSession();
+      else if (id) yield* selectSession(id);
       else if (options.autoCreateSession) yield* createSession();
       else publish({ loading: false, execution: "idle" });
     });
