@@ -1,0 +1,16 @@
+import {readFile,writeFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+import {join,resolve} from 'node:path';
+const output=resolve('.diagnostics/single-kernel-close-retention-control-2026-09-30');
+const evidence=resolve('.diagnostics/sk-close-retention-live-qa-930');
+const hash=(bytes:Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
+const bytes=await readFile(join(output,'receipt.json'));
+const receipt=JSON.parse(bytes.toString());
+if(hash(bytes)!=='8ab9694867547b4d7f4a16f9dd64cb50b67d51bc8303ed045b3da8aab46405f0')throw Error('Frozen receipt mismatch');
+for(const [file,expected] of Object.entries(receipt.hashes))if(hash(await readFile(join(output,file)))!==expected)throw Error('Frozen mismatch: '+file);
+const observer='/Users/kkrausse/Documents/repos/kkrausse/vivari-single-kernel/scripts/fixtures/single-kernel-close-observer.js';
+const observerHash=hash(await readFile(observer));
+if(observerHash!=='f1fe47126b2acd6e676c16be6d5fc002a5bad57131b4498e7ddf66338dfc6799')throw Error('Observer mismatch');
+const result={phase:'post-run-reverification',wallMs:Date.now(),output,receiptHash:hash(bytes),files:Object.keys(receipt.hashes).length,revision:receipt.revision,version:receipt.version,observerHash,receipt};
+await writeFile(join(evidence,'immutable-inputs.json'),JSON.stringify(result,null,2),{flag:'wx'});
+console.log(JSON.stringify({...result,receipt:undefined}));
