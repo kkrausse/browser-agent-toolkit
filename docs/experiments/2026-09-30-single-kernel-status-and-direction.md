@@ -26,10 +26,10 @@ fewer workers. Keep the baseline as the comparison/control and fallback.
 
 | Workstream | Latest state |
 | --- | --- |
-| Chat readiness/drafts | Repaired `691cd5aa`; primary visible/headless lab passed. Same-view A→B→A observed; model cohorts hit QA-oracle/collapsed-control capture errors. New simplified independent QA assigned; whole-app acceptance pending. |
+| Chat readiness/drafts | Repaired `691cd5aa`; primary lab passed. Complete visible controller/model fixture passed 9 checkpoints/91 guards; headless follow-up failed and used wrong Playwright version. Whole-app acceptance pending. |
 | Close target retention | Unchanged-runtime case-1 live control passed with termination/lock/census observations. Historical cause still unknown; full suite pending. |
-| Cached installed artifacts | Script/audit joins and endpoint shutdown receipts repaired offline. Cache-app integration resumed with new matching SDK; independent browser ownership fixture preparing. No on adapter/live switch-speed result yet. |
-| OpenCode process retention | Root schema/evidence repair staged; A0 live requalification queued. Stable-root prototype initially blocked on per-root config assumption; shared-config scope approved. No reuse/remote-release proof. |
+| Cached installed artifacts | Endpoint and PID-egress ownership repairs built offline; independent real-browser egress QA assigned. App admission reassessment resumed against matching candidate; no on adapter or measured gain yet. |
+| OpenCode process retention | Root requalification stopped at browser-session setup, no guest launch. Shared-config stable-root toy frozen but unexecuted. No reuse/remote-release proof. |
 | Workspace switching/stress | Integrated frozen candidate, matched off/on comparison, full applicable E2E and stress/recovery qualification still pending. |
 
 The sections below preserve the original evaluation and chronological follow-ups;
@@ -774,6 +774,70 @@ library; real guest path where possible), with manual/headless QA pending parent
 slot. Intended report `2026-09-30-endpoint-owner-browser-qa-preparation.md`.
 All preparation remains offline while model QA owns the browser. Narrow browser
 library fixtures must not be presented as whole-guest/switch qualification.
+
+### Follow-up: visible model pass, prepared fixtures and PID-egress repair
+
+Controller/model QA commits `eae659c`/`dfc3a7e` report a visible local-fixture pass:
+9 checkpoints/91 guards, stable outer ChatView, isolated drafts, pending controls,
+Enter suppression, release/rejection recovery and exactly one intended A/ses1 Send.
+A holds/releases/rejects/prompts were 2/1/1/1, unexpected writes zero; B stayed
+unchanged. Headless stopped after 3 checkpoints/21 guards at its first model-hold
+assertion and used Playwright 1.63.0 rather than requested 1.62.1. Combined acceptance
+is incomplete, and no production regression is inferred from that cohort.
+See [complete model QA](2026-09-30-controller-model-complete-live-qa.md).
+
+Root repair QA `29f3db6` failed browser setup: it attempted execution in a nonexistent
+named CLI session. No page, Start click, guest, native root or finite codec response
+was observed. All frozen inputs verified before/after; owned host-only shutdown
+joined outputs and verified PID/listener absence, not normal guest lifecycle proof.
+The stage's origin receipt now prevents reuse as a fresh runnable cohort. See
+[root setup failure](2026-09-30-opencode-root-repair-live-qa.md).
+
+Shared-config stable-root toy source `653bee9`/report `3fbe8b7` is runnable-prepared,
+not executed. Stage:
+`/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit-single-kernel/.diagnostics/sk-stable-opencode-91f64fd6-4875-4412-a9f9-17371316f930`.
+Five actual-648 codec fixtures and strict builds passed; proposed A0→B→A evidence
+uses unchanged physical roots, actual read-only server location keys and combined
+execution/PID/listener/host continuity. Global refresh remains owned and undrained.
+See [shared-config toy](2026-09-30-stable-root-shared-config-toy-preparation.md).
+
+Endpoint browser fixture commits `6ecf321`/`ff0107a`/`96a4d9f`/`68c5200` (report
+included in concurrent `48b96a7`) prepared six release/reject/reentrant runtime/
+controller cases using real workspace/HTTP guest and matching 724/771 assets.
+It has not run live and does not automatically qualify later repaired assets.
+Stage: `/private/var/folders/t_/x48jtnps7n5_0g_pt9xpvbg00000gn/T/opencode/sk-endpoint-owner-qa-bL9deI`.
+See [endpoint fixture preparation](2026-09-30-endpoint-owner-browser-qa-preparation.md).
+
+Post-endpoint cache integration `a66d365`/`ba16454` exposed separate guest-egress
+ownership: zero PIDs while one fetch remained active and another queued, later
+dispatching and writing/pinning scratch bodies. This was a controlled protocol
+counterexample, not observed project/Vite-cache corruption or live TODO overlap.
+See [post-endpoint blocker](2026-09-30-cached-switch-post-endpoint-integration.md).
+
+PID-egress repair runtime `33fa135`, toolkit `d0eec346`, report `5038980` closes
+dead-PID admission and joins tracked backend/body-write/rollback/publication work.
+Shared requests are cancelled only after their last live owner exits. Abort-ignoring
+work must actually settle; public exit carries cleanup failures, stop rejects and
+runtime attachment remains retained. Historical sections were identical in baseline
+`e998de6` and e35, so this is not established as a single-kernel-only defect.
+See [PID-egress repair](2026-09-30-pid-egress-cleanup-repair.md).
+
+Focused regressions, 26 toolkit tests/98 assertions, full-off consumer/declarations,
+single-kernel/verify-node and selected contracts passed. Full contracts still stop
+at the known `markAsUncloneable` gap. SDK/workers/libraries were built from isolated
+committed archives; native inputs and Wasm provenance verified and reused, not rebuilt.
+Candidate:
+`/private/var/folders/t_/x48jtnps7n5_0g_pt9xpvbg00000gn/T/opencode/kernel-egress-repair-3GsF7d/candidate/`,
+version `3debc8095c310192bac6062bb963e0ee09a431246cc8bafb7be2f5a1f2655a62`.
+Browser qualification remains false.
+
+Independent agent `ses_f0bb96551ffeDRP5f7QzZaMgm0` now owns the visible CLI slot for
+new matching real-worker/guest egress QA; intended report
+`2026-09-30-pid-egress-browser-qa.md`. It must create/verify its named CLI session
+before page operations and preserve any failed cohort. Cache integration agent
+`ses_f0c2c2416ffeRDntC3dfCqgMKR` resumes offline admission review against that candidate;
+intended report `2026-09-30-cached-switch-post-egress-integration.md`. Neither
+assignment qualifies all RPC/background ownership, cache-on switching or retention.
 
 ## Next validation and stress-test sequence
 
