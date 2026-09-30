@@ -74,7 +74,7 @@ async function activate(root:Root){
  const locations=(await finite(root,token,'/api/debug/location')).data;
  const allowed=new Set<string>(evidence.switches.length?Object.values(roots):[roots.A]);
  assert(Array.isArray(locations)&&locations.every(ref=>allowed.has(ref.directory)&&ref.workspaceID===undefined),'Unexpected loaded server location');
- for(const directory of allowed)assert(locations.filter(ref=>ref.directory===directory).length===1,'Actual server directory key missing/duplicated');
+ for(const directory of allowed)assert(locations.filter((ref:{directory:string})=>ref.directory===directory).length===1,'Actual server directory key missing/duplicated');
  const receipt=await continuity(root,token);
  healthy();assert(!requestBusy&&token===epoch,'Finite completion not joined');
  selected=root;candidate=undefined; // Publication occurs only after every normal finite response/codec completes.
