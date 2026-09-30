@@ -11,9 +11,12 @@ test('matched defaults preserve phase9 policy and both variants receive identica
 })
 
 test('overall matched services deadline includes unresolved readiness and propagates cancellation', async () => {
-  let signal!: AbortSignal
-  await expect(boundedReadiness(10,new AbortController().signal,async s => {signal=s;return new Promise<never>(() => {})})).rejects.toThrow('Matched readiness budget exhausted')
-  expect(signal.aborted).toBe(true)
+   let signal!: AbortSignal
+   let release!: () => void
+   const pending = new Promise<void>(resolve => {release=resolve})
+   await expect(boundedReadiness(10,new AbortController().signal,async s => {signal=s;return pending},10)).rejects.toThrow('cleanup unresolved')
+   expect(signal.aborted).toBe(true)
+   release()
 })
 
 test('preexisting cancellation never starts readiness', async () => {

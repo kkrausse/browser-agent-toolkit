@@ -5,7 +5,8 @@ import { WorkspaceController } from "@kev-browser-agent-kit/workspace/react"
 import { installOpenCodeConfig, loadPrepared, preparedApps, startOpenCode } from "@kev-browser-agent-kit/opencode-chat/browser"
 import { createDiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics'
 import { installedTreeAuditTool } from './installed-tree-audit'
-import { boundedReadiness, matchedReadinessBudgets } from './matched-readiness'
+import { boundedReadiness, joinedReadiness, joinPendingReadiness, matchedReadinessBudgets } from './matched-readiness'
+import { auditFence, previewHTTPThenAttach } from './matched-qualification'
 
 type Variant = "baseline" | "kernel" | "dependencies" | "incremental" | "reload"
 type Sample = { name: string; milliseconds: number; detail?: unknown }
@@ -118,22 +119,44 @@ async function services(generation: number): Promise<void> {
   }
   return startServices(generation, controller.signal)
 }
+const pendingServices = new Set<Promise<void>>()
+const activeServiceReadiness = new Set<AbortController>()
+function cancelServiceReadiness(): void { for (const controller of activeServiceReadiness) controller.abort(Error('Driver requested service cleanup')) }
 async function startServices(generation: number, signal: AbortSignal): Promise<void> {
+  const cancellation = new AbortController()
+  activeServiceReadiness.add(cancellation)
+  signal = AbortSignal.any([signal, cancellation.signal])
+  const unsubscribe = controller.subscribe(() => {
+    const error = controller.getSnapshot().error
+    if (error) cancellation.abort(Error(error))
+  })
+  const task = qualifyServices(generation, signal)
+  pendingServices.add(task)
+  try { await task; signal.throwIfAborted(); assertHealthy() }
+  finally { unsubscribe(); pendingServices.delete(task); activeServiceReadiness.delete(cancellation) }
+}
+function assertHealthy(): void {
+  const snapshot = controller.getSnapshot()
+  if (snapshot.error || !snapshot.services.vite || !snapshot.services.chat) throw Error(snapshot.error || 'Aggregate services missing')
+}
+async function qualifyServices(generation: number, signal: AbortSignal): Promise<void> {
   const readiness = matched ? {...readinessBudgets, signal} : undefined
   await timed("config", () => installOpenCodeConfig(controller.workspace!, {modelBaseURL: location.origin + "/unused-model/"}))
-  await Promise.all([
-    timed("preview.ready", async () => {
+  signal.throwIfAborted()
+  await joinedReadiness(signal, [
+    async signal => timed("preview.ready", async () => {
+      const readiness = matched ? {...readinessBudgets, signal} : {signal}
       const service = await timed('vite.launch', () => controller.launch("vite", manifest.preview, 5173, async endpoint => ({url: endpoint.url, fetch: (input, init) => endpoint.fetch(String(input), init)}), undefined, readiness))
       const earlyExit = service.execution.exited.then(exit => {throw Error('Vite exited before interactive readiness: ' + JSON.stringify(exit))})
-      const outputFailure = service.drained.then(() => new Promise<never>(() => {}))
-      void earlyExit.catch(() => {}); void outputFailure.catch(() => {})
+      const outputFailure = service.failed
+      const previewCancellation = new AbortController()
+      void earlyExit.catch(error => previewCancellation.abort(error)); void outputFailure.catch(error => previewCancellation.abort(error))
       const previewTask = async (previewSignal: AbortSignal) => {
-        const response = await service.endpoint.fetch("/", {signal: AbortSignal.any([previewSignal, AbortSignal.timeout(60000)])})
-        if (!response.ok) throw new Error(`Preview HTTP ${response.status}`)
-        await response.arrayBuffer()
         const iframe = document.querySelector("iframe")!
-        const attachment = service.endpoint.attachPreview(iframe, {hostPaths: ['/api', '/editing-policy']})
-        controller.registerAttachment('vite', () => attachment.dispose())
+        await previewHTTPThenAttach(previewSignal, () => service.endpoint.fetch("/", {signal: AbortSignal.any([previewSignal, AbortSignal.timeout(60000)])}), () => {
+          const attachment = service.endpoint.attachPreview(iframe, {hostPaths: ['/api', '/editing-policy']})
+          controller.registerAttachment('vite', () => attachment.dispose())
+        })
         const deadline = performance.now() + (matched ? readinessBudgets.hydrationMs : 90000)
         while (performance.now() < deadline) {
           previewSignal.throwIfAborted()
@@ -142,10 +165,10 @@ async function startServices(generation: number, signal: AbortSignal): Promise<v
         }
         throw new Error(`Fresh preview generation ${generation} never appeared`)
       }
-      await Promise.race([earlyExit, outputFailure, matched ? boundedReadiness(readinessBudgets.hydrationMs, signal, previewTask) : previewTask(signal)])
+      await boundedReadiness(matched ? readinessBudgets.hydrationMs : 90000, AbortSignal.any([signal, previewCancellation.signal]), previewTask)
     }),
-    timed("chat.healthy", async () => {
-      await startOpenCode(controller, {prepared: manifest, waitForClient: false, readiness})
+    async signal => timed("chat.healthy", async () => {
+      await startOpenCode(controller, {prepared: manifest, waitForClient: false, readiness: {...readiness, signal}})
     }),
   ])
 }
@@ -163,9 +186,11 @@ async function switchWorkspace(): Promise<void> {
   if (switching) throw new Error('An experiment switch is already running')
   if (matched && (api.error || generation >= 6)) throw Error('Phase9 stopped or fixed budget exhausted')
   switching = true
+  api.ready = false
   const nextGeneration = generation + 1
   try {
   await timed("switch.total", async () => {
+    await joinPendingReadiness()
     const ownedServices = Object.entries(controller.getSnapshot().services)
     if (captureResetEvidence) resetEvidence.push({phase: 'before.stop', generation, processes: await diagnoseWorkspace(controller.workspace!)})
      await timed("runtime.stop", async () => {
@@ -214,9 +239,13 @@ async function switchWorkspace(): Promise<void> {
     await timed("switch.flush", () => controller.workspace!.flush())
   })
   generation = nextGeneration
+  if (!installOnly) assertHealthy()
+  api.ready = true
   } catch (error) {
     api.error = String(error)
     api.ready = false
+    cancelServiceReadiness()
+    await joinPendingReadiness()
     write()
     throw error
   } finally { switching = false }
@@ -230,15 +259,9 @@ function assertStopped(value: unknown): void {
 let retainedCacheDigest: string | undefined
 async function audit(phase: string): Promise<boolean> {
   const runtime = controller.runtime as Awaited<ReturnType<typeof controller.startRuntime<{audit: ReturnType<typeof installedTreeAuditTool>}>>>
-  const result = await timed('validation.' + phase, () => runtime.tools.audit()).catch(error => {
-    if (phase !== 'before-retain') throw error
-    return {valid:false,checked:0,reason:String(error),cacheDigest:undefined}
-  })
-  resetEvidence.push({phase:'phase9.audit', point:phase,generation,result})
+  const result = await auditFence(phase, () => timed('validation.' + phase, () => runtime.tools.audit()), retainedCacheDigest,
+    () => fullResetFallback(generation + 1), result => resetEvidence.push({phase:'phase9.audit', point:phase,generation,result}))
   if (phase === 'before-retain') retainedCacheDigest = result.cacheDigest
-  if (phase === 'after-replacement' && result.cacheDigest !== retainedCacheDigest) throw Error('Cache bytes changed during source replacement')
-  if (!result.valid && phase === 'after-replacement') await fullResetFallback(generation + 1)
-  if (!result.valid && phase !== 'before-retain') throw Error('Installed tree audit failed: ' + result.reason)
   return result.valid
 }
 async function fullResetFallback(nextGeneration: number): Promise<never> {
@@ -252,7 +275,8 @@ async function fullResetFallback(nextGeneration: number): Promise<never> {
     const apps = preparedApps(manifest, `/prepared/${candidate}/`, controller.signal, text => console.info(text), diagnostics)
     const fresh = await controller.startRuntime({apps})
     await fresh.tools.apps()
-    await controller.workspace!.flush()
+     await controller.workspace!.flush()
+     await controller.stopRuntime()
   })
   resetEvidence.push({phase:'phase9.full-reset-fallback',generation:nextGeneration})
   // Mandatory recovery is not a matched reuse pass; never launch incoming services.
@@ -271,6 +295,27 @@ async function verifySource(): Promise<{files: number; generation: number}> {
   return {files, generation}
 }
 const api = { samples, events, resetEvidence, installOnly, ready: false, error: "", switchWorkspace, verifySource, remainingTree,
+  stopServices: async () => {
+    if (switching) throw Error('Cannot stop during switch')
+    api.ready = false
+    cancelServiceReadiness()
+    await Promise.allSettled([...pendingServices])
+    const owned = Object.values(controller.getSnapshot().services)
+    await controller.stopServices()
+    await Promise.all(owned.map(async service => {await service.execution.exited; await service.drained}))
+    assertStopped(await diagnoseWorkspace(controller.workspace!))
+    resetEvidence.push({phase:'services.only.stopped', generation})
+  },
+  rearm: async () => {
+    if (switching || api.error || Object.keys(controller.getSnapshot().services).length) throw Error('Rearm requires stopped healthy same-generation services')
+    switching = true
+    try {
+      await timed('rearm.services.wall', () => services(generation))
+      assertHealthy(); api.ready = true
+      resetEvidence.push({phase:'services.same-generation.rearmed',generation,measured:false})
+    } catch (error) {api.error = String(error); api.ready = false; throw error}
+    finally {switching = false}
+  },
   filesystemSymlinkControl: async () => {
     if (!installOnly || switching || api.error || !controller.runtime) throw new Error('Symlink controls require a healthy install-only cohort')
     switching = true
@@ -326,14 +371,18 @@ const api = { samples, events, resetEvidence, installOnly, ready: false, error: 
       return result
     } finally { switching = false }
   },
-  diagnostics: () => diagnoseWorkspace(controller.workspace!), stop: () => controller.close(), resources: () => performance.getEntriesByType("resource").map(entry => {
+  diagnostics: () => diagnoseWorkspace(controller.workspace!), stop: async () => {api.ready=false; cancelServiceReadiness(); await joinPendingReadiness(); await controller.close()}, resources: () => performance.getEntriesByType("resource").map(entry => {
   const resource = entry as PerformanceResourceTiming
   return { name: resource.name, transferSize: resource.transferSize, encodedBodySize: resource.encodedBodySize, duration: resource.duration }
 }) }
 Object.assign(window, { editorPerformanceExperiment: api })
+controller.subscribe(() => {
+  if (controller.getSnapshot().error) { api.error = controller.getSnapshot().error; api.ready = false }
+})
 try {
   await timed("startup.total", start)
-  api.ready = true
+   if (!installOnly) assertHealthy()
+   api.ready = true
   if (!matched) document.querySelector("button")!.addEventListener("click", () => { void switchWorkspace().catch(error => { api.error = String(error); write() }) })
 } catch (error) {
   api.error = String(error)

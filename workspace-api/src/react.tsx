@@ -9,7 +9,7 @@ export type { ServiceReadiness } from "./service-readiness.js";
 /** Reusable React boundary: public API ownership, serialization and subscriptions.
  * No sample source, package paths, provider configuration or application ports here. */
 export type Connection = { url: string; fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
-export type Service = { execution: Execution; endpoint: Endpoint; connection: Connection; drained: Promise<void> };
+export type Service = { execution: Execution; endpoint: Endpoint; connection: Connection; drained: Promise<void>; failed: Promise<never> };
 export type ServiceLifecycle = { shutdown: 'stdin-eof'; timeoutMs?: number };
 export type Progress = { label: string; state: "waiting" | "running" | "done" | "failed" };
 export type WorkspaceSnapshot = {
@@ -31,6 +31,9 @@ export class WorkspaceController {
   private listeners = new Set<() => void>();
   private attachments = new Map<string, () => void>();
   private shutdowns = new Map<string, () => Promise<void>>();
+  private pendingLaunches = new Set<Promise<unknown>>();
+  private serviceSettlements = new Set<Promise<unknown>>();
+  private cleanupFailures: unknown[] = [];
   private clients = new Map<string, { resolve(): void; reject(error: Error): void; promise: Promise<void> }>();
   private distribution?: Distribution;
   private lifetime = new AbortController();
@@ -121,7 +124,23 @@ export class WorkspaceController {
     catch (error) { this.log(`[${label}] ${message(error)}`); throw error; }
     finally { output.flush(); this.log(`[${label}] drained ${totalBytes} bytes (output available in Activity)`); }
   }
-  async launch(name: string, options: NodeLaunchOptions, port: number, connect: (endpoint: Endpoint, signal: AbortSignal) => Promise<Connection>, lifecycle?: ServiceLifecycle, readiness?: ServiceReadiness) {
+  private drainExecution(execution: Execution, name: string) {
+    const streams = [this.drain(execution.stdout, `${name}:stdout`), this.drain(execution.stderr, `${name}:stderr`)];
+    const failure = Promise.race(streams.map(stream => stream.then(() => new Promise<never>(() => {}))));
+    const drained = Promise.allSettled(streams).then(results => {
+      const errors = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+      if (errors.length) throw new AggregateError(errors.map(result => result.reason), `${name} output drain failed`);
+    });
+    void failure.catch(() => {}); void drained.catch(() => {});
+    return {failure, drained};
+  }
+  launch(name: string, options: NodeLaunchOptions, port: number, connect: (endpoint: Endpoint, signal: AbortSignal) => Promise<Connection>, lifecycle?: ServiceLifecycle, readiness?: ServiceReadiness) {
+    const task = this.launchOwned(name, options, port, connect, lifecycle, readiness);
+    this.pendingLaunches.add(task);
+    void task.finally(() => this.pendingLaunches.delete(task)).catch(() => {});
+    return task;
+  }
+  private async launchOwned(name: string, options: NodeLaunchOptions, port: number, connect: (endpoint: Endpoint, signal: AbortSignal) => Promise<Connection>, lifecycle?: ServiceLifecycle, readiness?: ServiceReadiness) {
     const diagnostics = this.diagnostics;
     const scope = createDiagnosticScope(event => diagnostics.record(event.event, event.data), diagnostics.runId);
     if (this.snapshot.services[name]) return this.snapshot.services[name]!;
@@ -137,40 +156,67 @@ export class WorkspaceController {
     const abortStartup = () => startup.abort(budget.signal.reason);
     if (budget.signal.aborted) { budget.dispose(); budget.signal.throwIfAborted(); }
     budget.signal.addEventListener('abort', abortStartup, { once: true });
-    const execution = await scope.stage('service.spawn', () => budget.wait(async () => {
+    const spawn = Promise.resolve().then(async () => {
       const execution = await this.runtime!.node({ ...options, signal: lifecycle ? startup.signal : AbortSignal.any([lifetime, startup.signal]) });
       // A spawn accepted after cancellation remains owned and must not be published.
       if (budget.signal.aborted) {
-        const drained = Promise.all([this.drain(execution.stdout, `${name}:stdout`), this.drain(execution.stderr, `${name}:stderr`)]);
-        await execution.stop(); await drained; budget.signal.throwIfAborted();
+        const {drained} = this.drainExecution(execution, name);
+        const results = await Promise.allSettled([execution.stop(), drained]);
+        for (const result of results) if (result.status === 'rejected') {
+          this.cleanupFailures.push(result.reason);
+          diagnostics.record('service.cleanup.failed', { name, error: result.reason });
+        }
+        budget.signal.throwIfAborted();
       }
       return execution;
-    }), { name }).catch(error => {
+    });
+    const execution = await scope.stage('service.spawn', () => budget.wait(() => spawn), { name }).catch(async error => {
+      startup.abort(error);
+      // Readiness observation may expire before node accepts the launch. Keep its
+      // ownership until late acceptance has been stopped and both streams joined.
+      diagnostics.record('service.cleanup.join.start', { name, phase: 'spawn', quiescence: 'unproven' });
+      await spawn.then(async execution => {
+        const {drained} = this.drainExecution(execution, name);
+        const cleanup = await Promise.allSettled([execution.stop(), drained]);
+        for (const result of cleanup) if (result.status === 'rejected') this.cleanupFailures.push(result.reason);
+      }, cleanupError => diagnostics.record('service.spawn.settled', { name, error: cleanupError }));
+      diagnostics.record('service.cleanup.join.settled', { name, phase: 'spawn', failed: !!this.cleanupFailures.length });
       budget.signal.removeEventListener('abort', abortStartup); budget.dispose(); throw error;
     });
-    const drained = Promise.all([this.drain(execution.stdout, `${name}:stdout`), this.drain(execution.stderr, `${name}:stderr`)]).then(() => {});
+    const {drained, failure: outputFailure} = this.drainExecution(execution, name);
     // A stream error is evidence of process/transport failure, never healthy silence.
-    const outputFailure = drained.then(() => new Promise<never>(() => {}));
     const earlyExit = execution.exited.then(result => { throw Error(`${name} exited during readiness (${JSON.stringify(result)}). Check Activity and launch configuration`); });
     void outputFailure.catch(() => {}); void earlyExit.catch(() => {});
     const controller = new AbortController();
+    const pending: Promise<unknown>[] = [];
+    const own = <T,>(task: Promise<T>): Promise<T> => { pending.push(task); void task.catch(() => {}); return task; };
     let endpoint: Endpoint | undefined;
     try {
       endpoint = await scope.stage('service.listen', () => budget.stage('listen', signal => Promise.race([
-        this.runtime!.expose(port, { signal: AbortSignal.any([signal, controller.signal]) }).then(endpoint => {
-          if (signal.aborted) { endpoint.dispose(); signal.throwIfAborted(); }
-          return endpoint;
-        }),
+        own(this.runtime!.expose(port, { signal: AbortSignal.any([signal, controller.signal]) }).then(exposed => {
+          if (signal.aborted) { exposed.dispose(); signal.throwIfAborted(); }
+          // Ownership starts on acceptance, not on winning the exit/output race.
+          endpoint = exposed;
+          return exposed;
+        })),
         earlyExit, outputFailure,
       ])), { name });
-      const connection = await scope.stage('service.connect', () => budget.stage('connect', signal => Promise.race([connect(endpoint!, signal), earlyExit, outputFailure])), { name });
+      const connection = await scope.stage('service.connect', () => budget.stage('connect', signal => Promise.race([own(connect(endpoint!, signal)), earlyExit, outputFailure])), { name });
       diagnostics.record("service.healthy", { name, port });
       this.signal.throwIfAborted();
       let resolve!: () => void, reject!: (error: Error) => void;
       const promise = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
       void promise.catch(() => {});
       this.clients.set(name, { promise, resolve, reject });
-      const service = { execution, endpoint, connection, drained };
+      const failed = Promise.race([earlyExit, outputFailure]);
+      void failed.catch(() => {});
+      const service = { execution, endpoint, connection, drained, failed };
+      const settlement = Promise.allSettled([execution.exited, drained]).then(results => {
+        const errors = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+        if (errors.length) throw new AggregateError(errors.map(result => result.reason), `${name} settlement failed`);
+      });
+      this.serviceSettlements.add(settlement);
+      void settlement.then(() => this.serviceSettlements.delete(settlement), () => {});
       if (lifecycle) this.shutdowns.set(name, () => shutdownAtEOF(execution, drained, timeoutMs));
       this.publish({ services: { ...this.snapshot.services, [name]: service }, clients: { ...this.snapshot.clients, [name]: "connecting" } });
       const exited = (result: unknown) => {
@@ -180,8 +226,24 @@ export class WorkspaceController {
         this.publish({ error: `${name} exited. Retry Start workspace to relaunch; see Activity.` });
       };
       void execution.exited.then(exited, error => exited(message(error)));
+      void outputFailure.catch(error => {
+        if (this.snapshot.services[name]?.execution !== execution) return;
+        this.reportError(`${name} output failed: ${message(error)}`);
+        this.clientFailed(name, error);
+      });
       return service;
-    } catch (error) { diagnostics.record("service.failed", { name, error }); endpoint?.dispose(); try { await execution.stop(); await drained; } catch (cleanupError) { diagnostics.record("service.cleanup.failed", { name, error: cleanupError }); } throw error; }
+    } catch (error) {
+      diagnostics.record("service.failed", { name, error });
+      startup.abort(error); controller.abort(error); budget.dispose(); endpoint?.dispose();
+      diagnostics.record('service.cleanup.join.start', { name, phase: 'readiness', quiescence: 'unproven' });
+      const cleanup = await Promise.allSettled([execution.stop(), drained, ...pending]);
+      for (const [index, result] of cleanup.entries()) if (result.status === 'rejected') {
+        if (index < 2) this.cleanupFailures.push(result.reason);
+        diagnostics.record('service.cleanup.settled', { name, error: result.reason });
+      }
+      diagnostics.record('service.cleanup.join.settled', { name, phase: 'readiness', failed: !!this.cleanupFailures.length });
+      throw error;
+    }
     finally { controller.abort(); budget.signal.removeEventListener('abort', abortStartup); budget.dispose(); }
   }
   registerAttachment(name: string, dispose: () => void) {
@@ -216,10 +278,17 @@ export class WorkspaceController {
     else { await service.execution.stop(); await service.drained; }
   }
   async stopRuntime() {
-    const results = await Promise.allSettled(Object.keys(this.snapshot.services).map(name => this.stopService(name)));
+    await this.stopServices();
     await this.runtime?.stop(); this.publish({ runtime: undefined, progress: [] });
-    for (const result of results) if (result.status === "rejected") this.log(`Service cleanup: ${message(result.reason)}`);
     this.status("Runtime stopped. Files remain open and editable.");
+  }
+  /** Join startup ownership and service shutdown without closing the workspace. */
+  async stopServices() {
+    await Promise.allSettled([...this.pendingLaunches]);
+    const results = await Promise.allSettled(Object.keys(this.snapshot.services).map(name => this.stopService(name)));
+    const settlements = await Promise.allSettled([...this.serviceSettlements]);
+    const failures = [...results, ...settlements].filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (failures.length || this.cleanupFailures.length) throw new AggregateError([...this.cleanupFailures, ...failures.map(result => result.reason)], 'Service cleanup failed; quiescence unproven');
   }
   async close() {
     await this.stopRuntime();
