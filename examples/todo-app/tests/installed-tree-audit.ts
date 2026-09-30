@@ -55,13 +55,24 @@ export function installedTreeAuditTool(entries: ManagedEntry[]): ToolDescriptor<
       const path = `/workspace/.browser-editor-cache/experiments/${digest}.cjs`
       await context.installFile(path, bytes)
       const execution = await context.node({entry:path,cwd:'/workspace',signal:AbortSignal.timeout(120000)})
-      execution.closeStdin()
       const drain = async (stream: AsyncIterable<Uint8Array>) => {let text=''; const decoder=new TextDecoder(); for await(const chunk of stream) text+=decoder.decode(chunk,{stream:true}); return text+decoder.decode()}
+      // Retain every owned task before observing the first failure. Rejection is
+      // not permission for auditFence to reset while a sibling is still reading.
+      const stdoutDrain = drain(execution.stdout), stderrDrain = drain(execution.stderr), exited = execution.exited
+      let stop: Promise<unknown> | undefined
+      const requestStop = () => stop ??= Promise.resolve().then(() => execution.stop())
       try {
-        const [stdout,stderr,exit] = await Promise.all([drain(execution.stdout),drain(execution.stderr),execution.exited])
+        execution.closeStdin()
+        const [stdout,stderr,exit] = await Promise.all([stdoutDrain,stderrDrain,exited])
         if(exit.exitCode !== 0) throw Error(`Audit process failed: ${stderr.slice(0,1000)}`)
         return JSON.parse(stdout.trim()) as TreeAudit
-      } finally {await execution.stop()}
+      } finally {
+        // Start stop promptly, but never release ownership until all tasks join.
+        // An unresolved sibling deliberately keeps the audit (and fallback) pending.
+        const settled = await Promise.allSettled([requestStop(), exited, stdoutDrain, stderrDrain])
+        const failed = settled.find(result => result.status === 'rejected')
+        if (failed?.status === 'rejected') throw failed.reason
+      }
     }
   }}
 }

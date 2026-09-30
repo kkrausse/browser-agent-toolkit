@@ -20,7 +20,8 @@ const approvedVerifier = await command(['git','show','b2b9c55:'+verifierPath])
 const verifier = await Bun.file(join(root,verifierPath)).text()
 if (approvedVerifier !== verifier.trim()) throw Error('Exclusive serial verifier changed from b2b9c55')
 await Bun.write(join(output,'reset-verifier.js'),verifier)
-await Bun.write(join(output,'driver-policy.json'),JSON.stringify({switchObservation:{timeoutMs:prospectivePolicy.observationMs},hydrationAndPdfRead:{timeoutMs:prospectivePolicy.verifierReadMs},outerWatchdogMs:prospectivePolicy.watchdogMs,serviceOnlyStop:'editorPerformanceExperiment.stopServices',sameGenerationRearm:'editorPerformanceExperiment.rearm',rearmsPerOrigin:1,rearmsMeasured:false},null,2))
+await Bun.write(join(output,'matched-pair-driver.ts'),Bun.file(join(root,'examples/todo-app/tests/matched-pair-driver.ts')))
+await Bun.write(join(output,'driver-policy.json'),JSON.stringify({switchObservation:{timeoutMs:prospectivePolicy.observationMs},hydrationAndPdfRead:{timeoutMs:prospectivePolicy.verifierReadMs},outerWatchdogMs:prospectivePolicy.watchdogMs,serviceOnlyStop:'editorPerformanceExperiment.stopServices',sameGenerationRearm:'editorPerformanceExperiment.rearm',rearmsPerOrigin:1,rearmsMeasured:false,globalLock:join(root,'.diagnostics/matched-pair-initiator.lock'),driver:'examples/todo-app/tests/matched-pair-driver.ts'},null,2))
 await command(['git','worktree','add','--detach',runtimeSource,pin], join(root,'vendor/vivari'))
 if (await command(['git','rev-parse','HEAD'],runtimeSource) !== pin || await command(['git','status','--porcelain'],runtimeSource)) throw Error('Pinned source not clean')
 const frozen = join(root,'.diagnostics/phase4-clean-completion')
@@ -76,7 +77,7 @@ await Bun.write(join(workspace,'package.json'),JSON.stringify({name:'@kev-browse
 await Bun.write(join(output,'chat/package.json'),JSON.stringify({name:'@kev-browser-agent-kit/opencode-chat',version:'0.1.0',type:'module',license:'MIT',exports:{'./browser':{types:'./browser.d.ts',import:'./browser.js'}}},null,2))
 const consumerPaths = {...libraryPaths,'@kev-browser-agent-kit/opencode-chat/browser':[join(output,'chat/browser.d.ts')]}
 const consumerConfig = join(output,'consumer.tsconfig.json')
-await Bun.write(consumerConfig,JSON.stringify({compilerOptions:{...common,noEmit:true,paths:consumerPaths},files:[join(root,'examples/todo-app/tests/performance-client.ts')]},null,2))
+await Bun.write(consumerConfig,JSON.stringify({compilerOptions:{...common,noEmit:true,paths:consumerPaths},files:['performance-client.ts','matched-pair-driver.ts','matched-pair-driver.test.ts','installed-tree-audit.test.ts'].map(file=>join(root,'examples/todo-app/tests',file))},null,2))
 await command(['bun',tsc,'-p',consumerConfig])
 const built = await Bun.build({entrypoints:[join(root,'examples/todo-app/tests/performance-client.ts')],outdir:join(output,'client'),target:'browser',plugins:[{name:'isolated-libraries',setup(build){
   build.onResolve({filter:/^@kev-browser-agent-kit\/workspace(?:\/(?:react|delivery|diagnostics))?$/},args=>({path:join(workspace,(args.path.split('/')[2]??'index')+'.js')}))
@@ -95,6 +96,8 @@ const packagedHashes: Record<string,unknown> = {}
 for (const directory of ['workspace','chat','host']) for await (const file of new Bun.Glob('**/*.{js,d.ts}').scan(join(output,directory))) packagedHashes[directory+'/'+file] = await hash(join(output,directory,file))
 const sourceHashes: Record<string,unknown> = {}
 for (const path of ['workspace-api/src/react.tsx','workspace-api/src/service-readiness.ts','opencode-chat/src/browser.ts','examples/todo-app/tests/performance-client.ts','examples/todo-app/tests/matched-readiness.ts','examples/todo-app/tests/matched-qualification.ts','examples/todo-app/tests/matched-switch-live.ts','examples/todo-app/tests/prepare-reviewed-client.ts']) sourceHashes[path] = await hash(join(root,path))
-const receipt = {output,pin,runtimeSource,version:identity.version,verified,managedFileChecks,sourceHashes,packagedHashes,verifier:await hash(join(output,'reset-verifier.js')),client:await hash(client),prospectivePolicy,policyQuery,deliveredPolicy,liveRuns:0,models:0}
+sourceHashes['examples/todo-app/tests/installed-tree-audit.ts']=await hash(join(root,'examples/todo-app/tests/installed-tree-audit.ts'))
+sourceHashes['examples/todo-app/tests/matched-pair-driver.ts']=await hash(join(root,'examples/todo-app/tests/matched-pair-driver.ts'))
+const receipt = {output,pin,runtimeSource,version:identity.version,verified,managedFileChecks,sourceHashes,packagedHashes,driver:await hash(join(output,'matched-pair-driver.ts')),verifier:await hash(join(output,'reset-verifier.js')),client:await hash(client),prospectivePolicy,policyQuery,deliveredPolicy,liveRuns:0,models:0}
 await Bun.write(join(output,'receipt.json'),JSON.stringify(receipt,null,2))
 console.log(JSON.stringify(receipt,null,2))

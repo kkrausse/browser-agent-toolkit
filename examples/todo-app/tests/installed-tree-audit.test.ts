@@ -4,7 +4,8 @@ import {createHash} from 'node:crypto'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {runInNewContext} from 'node:vm'
-import {installedTreeAuditScript} from './installed-tree-audit'
+import {installedTreeAuditScript, installedTreeAuditTool} from './installed-tree-audit'
+import {auditFence} from './matched-qualification'
 import type {ManagedEntry} from '@kev-browser-agent-kit/workspace/delivery'
 
 function fixture() {
@@ -35,4 +36,25 @@ test('package mutation and unexpected package path fail closed',()=>{
 test('cache symlinks and cache/manifest overlap rejected',()=>{
   const f=fixture(); symlinkSync('pkg',f.root+'/workspace/node_modules/.vite-temp'); expect(f.run().reason).toContain('cache symlink')
   expect(()=>installedTreeAuditScript([...f.entries,{kind:'directory',destination:'/workspace/node_modules/.vite-temp',mode:0o755}])).toThrow('overlaps')
+})
+
+test('audit failure stops promptly and blocks fallback until sibling drain and exit join', async () => {
+  let release!: () => void, exit!: () => void
+  const sibling = new Promise<void>(resolve => {release = resolve})
+  const exited = new Promise<{exitCode:number}>(resolve => {exit = () => resolve({exitCode:0})})
+  let stopped = false, fallback = false, settled = false
+  const tool = await installedTreeAuditTool([]).bind({
+    installFile: async () => {}, node: async () => ({closeStdin() {},
+      stdout: (async function* () {throw Error('stdout failed')})(),
+      stderr: (async function* () {await sibling; yield new Uint8Array()})(),
+      exited, stop: async () => {stopped = true},
+    }),
+  } as any)
+  const task = auditFence('after-replacement', () => tool(undefined), 'retained', async () => {fallback = true; throw Error('fallback')}, () => {}).catch(() => {settled = true})
+  await Bun.sleep(10)
+  expect(stopped).toBe(true); expect(settled).toBe(false); expect(fallback).toBe(false)
+  release(); await Bun.sleep(10)
+  expect(settled).toBe(false); expect(fallback).toBe(false)
+  exit(); await task
+  expect(fallback).toBe(true); expect(settled).toBe(true)
 })
