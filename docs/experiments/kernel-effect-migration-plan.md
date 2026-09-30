@@ -226,3 +226,19 @@ not evidence that pilot success means the whole kernel is migrated.
   attachment receipts remain pending. No production migration qualification yet.
 - Previous editor trace preparation `61c0be5` is retained as optional diagnostic
   evidence tooling; no live activation is requested during first-wave migration.
+- Phases0–1 implementation delivered runtime `5c4b1c5`, toolkit cleanup bridge
+  `73dbae7`, final handoff `fc91222`:
+  [loader implementation](2026-09-30-effect-loader-pilot-implementation.md).
+  Effect pin rc.118; actual loader/shared interests/pre-PID launch joins migrated.
+  Four unchanged independent gates pass; supplemental launch/rollback/attachment
+  and preserved regressions pass under implementation-owner checks. Expanded
+  independent acceptance, qualified Node and real-browser execution remain pending.
+  Worker adds 621,609 raw / 135,365 gzip bytes; runtime overhead unmeasured.
+- Independent regression owner `ses_f0b6415eaffe2pbRMSqCj4VSlX` now qualifies the
+  actual native adapter, pre-PID launch, rollback and public attachment contracts;
+  intended report `2026-09-30-effect-loader-expanded-independent-qa.md`.
+- Delivery owner `ses_f0b3fd6c9ffe6RLKXhGwI2HQE4` prepares matching full app/browser
+  artifacts, first recovering/verifying the missing qualified OpenCode receipt
+  rather than bypassing its verifier. Intended report
+  `2026-09-30-effect-loader-full-app-delivery-preparation.md`. Both tasks are offline;
+  no phase2 expansion or release promotion follows until review.
