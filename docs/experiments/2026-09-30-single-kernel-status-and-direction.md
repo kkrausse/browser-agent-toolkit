@@ -318,6 +318,35 @@ chat/runtime work. App integration and live off/on testing remain gated on that
 repair and review. This is continuation of the authorized perf work, not acceptance
 of retention-on or permission to skip manual/live QA.
 
+### Follow-up: chat candidate ready; close retention remains a bounded unknown
+
+- Chat commit `55ae98c72437d27ff683c65dbb79f3b3f9e31572` independently reproduced
+  both original behaviors against the baseline: Send enabled during creation despite
+  controller rejection, and server ID assignment remounting Composer/erasing early
+  text. The candidate publishes mutation readiness and keeps a stable logical draft
+  identity, with explicit retry/session isolation and no queued sends. 62 targeted
+  tests passed; one repeated run encountered an inherited handshake-disposal timing
+  failure and a subsequent rerun passed. Full package qualification remains blocked
+  by missing workspace peers. See [candidate report](2026-09-30-chat-readiness-draft-stability.md).
+- New independent QA agent `ses_f0c5f766cffeLB1OeryKn5xwEp` has exclusive visible
+  Browser Control CLI ownership for the fresh, nonpersistent, no-provider-call chat
+  stub lab. It must verify ordinary controls/drafts/counters and attempt separate
+  headless real-browser coverage. Whole-app integration is still pending; an agent
+  assignment is not a live pass. Intended report: `2026-09-30-chat-readiness-live-qa.md`.
+- Runtime close investigation commit `516ef37` added offline characterizations and
+  an observation fixture, not production runtime changes; toolkit report commit
+  `3b42a10` records **bounded unknown**, not a leak fix or stale-CDP conclusion.
+  The existing evidence proves failed target disappearance but lacks terminate-call
+  and post-close ownership/liveness observations. Three offline close paths and
+  termination negative control passed; full runtime contracts still stop on
+  `markAsUncloneable is not a function`. See [close investigation](2026-09-30-single-kernel-close-retention-stability.md).
+- An unchanged-runtime frozen control is prepared at
+  `/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit-single-kernel/.diagnostics/single-kernel-close-retention-control-2026-09-30`.
+  Its fresh browser run is queued **after chat lab QA releases browser ownership**:
+  observe native termination, actual Web Locks and target census together for case 1,
+  without changing the 15-second bound. No server/browser run has occurred for this
+  control. Cases 2–9/full combined acceptance remain unqualified.
+
 ## Next validation and stress-test sequence
 
 After the first candidates are ready, commission separate test agents rather than
