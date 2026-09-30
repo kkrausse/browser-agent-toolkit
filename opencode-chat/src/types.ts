@@ -59,6 +59,10 @@ export interface ChatSnapshot {
   connection: "connecting" | "connected" | "disconnected";
   sessionID?: string;
   sessions: readonly SessionInfo[];
+  /** Controller-local logical conversation identity, including an uncreated new chat. */
+  draftKey?: string;
+  /** Session creation or model mutation has not completed. */
+  sessionOperationPending?: boolean;
   models: readonly ModelInfo[];
   model?: ModelRef;
   /** Resolved location default; does not mutate the session's model selection. */

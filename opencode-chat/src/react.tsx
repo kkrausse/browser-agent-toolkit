@@ -428,19 +428,25 @@ export function QuestionCard({
   );
 }
 export function Composer({ controller }: { controller: ChatController }) {
+  return <SessionComposer key={controllerIdentity(controller)} controller={controller} />;
+}
+function SessionComposer({ controller }: { controller: ChatController }) {
   const state = useChatSnapshot(controller),
-    [text, setText] = useState("");
+    [drafts, setDrafts] = useState<Record<string, string>>({});
+  const key = state.draftKey ?? state.sessionID ?? "none";
+  const text = drafts[key] ?? "";
   const disabled =
     !state.sessionID ||
     state.connection !== "connected" ||
     state.loading ||
     state.sending ||
+    state.sessionOperationPending ||
     state.execution !== "idle";
   const send = () => {
     if (disabled || !text.trim()) return;
     const draft = text;
     void controller.send({ text: draft }).then(
-      () => setText((current) => (current === draft ? "" : current)),
+      () => setDrafts(current => current[key] === draft ? { ...current, [key]: "" } : current),
       () => {},
     );
   };
@@ -456,7 +462,7 @@ export function Composer({ controller }: { controller: ChatController }) {
         aria-label="Message OpenCode"
         placeholder="Message OpenCode…"
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => setDrafts(current => ({ ...current, [key]: e.target.value }))}
         onKeyDown={(e) => {
           if (
             e.key === "Enter" &&
@@ -471,7 +477,7 @@ export function Composer({ controller }: { controller: ChatController }) {
       />
       <div className="oc-actions">
         <small>Enter to send · Shift+Enter for a new line</small>
-        {state.execution !== "idle" && state.sessionID ? (
+        {(state.execution === "running" || state.execution === "retrying") && state.sessionID ? (
           <Button
             type="button"
             disabled={state.connection !== "connected"}
@@ -501,7 +507,7 @@ export function ChatView({
   footer,
 }: ChatViewProps) {
   const state = useChatSnapshot(controller);
-  const showConnection = !footer || state.connection !== "connected" || state.execution !== "idle";
+  const showConnection = !footer || state.connection !== "connected" || state.execution !== "idle" || state.loading || state.sessionOperationPending;
   return (
     <section className="oc-chat" aria-label="OpenCode chat">
       {showHeader && <header className="oc-header">
@@ -535,12 +541,14 @@ export function ChatView({
         ))}
         {state.questions.map((entry) => <QuestionCard key={entry.request.id} controller={controller} entry={entry} />)}
       </div>
-      <Composer key={state.sessionID ?? "none"} controller={controller} />
+      <Composer controller={controller} />
       {showFooter && <footer className="oc-footer">
         {showConnection && (
           <div className="oc-connection"><span role="status">
             {state.connection === "connected"
-              ? state.execution === "idle"
+              ? state.loading || state.sessionOperationPending
+                ? "Preparing chat…"
+                : state.execution === "idle"
                 ? "Ready"
                 : state.execution === "unknown"
                   ? "Checking execution…"
@@ -585,7 +593,7 @@ function ChatSettings({ controller, showSessions, showModels }: ChatViewProps) {
                 />
               </label>
               <Button
-                disabled={state.connection !== "connected" || state.loading}
+                disabled={state.connection !== "connected" || state.loading || state.sessionOperationPending}
                 onClick={() => run(controller.createSession())}
               >
                 New chat
@@ -600,6 +608,7 @@ function ChatSettings({ controller, showSessions, showModels }: ChatViewProps) {
                 disabled={
                   !state.sessionID ||
                   state.connection !== "connected" ||
+                  state.loading || state.sending || state.sessionOperationPending ||
                   state.execution !== "idle"
                 }
                 value={
@@ -628,4 +637,12 @@ function ChatSettings({ controller, showSessions, showModels }: ChatViewProps) {
           )}
         </nav>
   );
+}
+// Controller changes (e.g. workspace switches) must never inherit draft text.
+const controllerIdentities = new WeakMap<ChatController, number>();
+let nextControllerIdentity = 0;
+function controllerIdentity(controller: ChatController) {
+  let identity = controllerIdentities.get(controller);
+  if (identity === undefined) controllerIdentities.set(controller, identity = ++nextControllerIdentity);
+  return identity;
 }

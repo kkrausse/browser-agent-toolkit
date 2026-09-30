@@ -34,6 +34,7 @@ export function createChatController(options: ChatOptions): ChatController {
   let state: ChatSnapshot = freeze({
     connection: "connecting",
     sessionID: options.sessionID,
+    draftKey: options.sessionID ? `session:${options.sessionID}` : undefined,
     sessions: [],
     models: [],
     messages: [],
@@ -59,6 +60,8 @@ export function createChatController(options: ChatOptions): ChatController {
   const answered = new Set<string>();
   let recovery: Fiber.Fiber<void, never> | undefined;
   let mutation: symbol | undefined;
+  let draftSequence = 0;
+  const draftKeys = new Map<string, string>();
   let disposal: Promise<void> | undefined;
   const publish = (patch: Partial<ChatSnapshot>) => {
     if (disposed) return;
@@ -303,28 +306,30 @@ export function createChatController(options: ChatOptions): ChatController {
     )
       recover();
   }
-  const selectSession = Effect.fn("Chat.selectSession")(function*(id: string) {
+  const selectSession = Effect.fn("Chat.selectSession")(function*(id: string | undefined, draftKey?: string, preserveMutation = false) {
     check();
     const previous = selectionScope;
     selectionScope = Scope.forkUnsafe(connection);
     selection++;
     hydration = undefined;
-    mutation = undefined;
+    if (!preserveMutation) mutation = undefined;
     recovery = undefined;
     if (state.sessionID) reducer.clear(state.sessionID);
     answered.clear();
     older = undefined;
     publish({
       sessionID: id,
+      draftKey: draftKey ?? (id ? draftKeys.get(id) ?? `session:${id}` : undefined),
+      sessionOperationPending: !!mutation,
       model: state.sessions.find((s) => s.id === id)?.model,
       messages: [],
       permissions: [],
       questions: [],
       unsupportedForms: [],
-      loading: true,
+      loading: !!id || !!mutation,
       loadingOlder: false,
       hasOlder: false,
-      execution: "unknown",
+      execution: id || mutation ? "unknown" : "idle",
       sending: false,
       interruptRequested: false,
     });
@@ -350,6 +355,7 @@ export function createChatController(options: ChatOptions): ChatController {
     if (state.sessionID) reducer.clear(state.sessionID);
     publish({
       connection: "connecting",
+      sessionOperationPending: false,
       loading: true,
       error: undefined,
       execution: "unknown",
@@ -438,18 +444,27 @@ export function createChatController(options: ChatOptions): ChatController {
   const createSession = Effect.fn("Chat.createSession")(function*(title?: string) {
     if (mutation) return yield* new ChatError({ message: "A session operation is pending" });
     const token = (mutation = Symbol());
-    const g = generation, s = selection;
     return yield* Effect.gen(function*() {
+      // Select the new logical conversation before waiting for its server ID.
+      // Retrying a failed creation retains this unsent draft, never the old session.
+      const key = !state.sessionID && state.draftKey
+        ? state.draftKey : `new:${++draftSequence}`;
+      yield* selectSession(undefined, key, true);
+      const g = generation, s = selection;
       const api = yield* OpenCodeAPI;
       // A custom title suppresses OpenCode's automatic first-prompt naming.
-      const session = yield* api.create(title);
+      const session = yield* action(api.create(title));
       if (valid(g, s)) {
+        draftKeys.set(session.id, key);
         publish({ sessions: [session, ...state.sessions] });
-        yield* selectSession(session.id);
+        yield* selectSession(session.id, key, true);
       }
       return session.id;
     }).pipe(Effect.ensuring(Effect.sync(() => {
-      if (mutation === token) mutation = undefined;
+      if (mutation === token) {
+        mutation = undefined;
+        publish({ sessionOperationPending: false, loading: false });
+      }
     })));
   });
   const drainOlder = Effect.fn("Chat.drainOlder")(function*(g: number, s: number) {
@@ -552,6 +567,7 @@ export function createChatController(options: ChatOptions): ChatController {
       return yield* new ChatError({ message: "Wait for the current operation" });
     const id = yield* sessionID();
     const g = generation, s = selection, token = (mutation = Symbol());
+    publish({ sessionOperationPending: true });
     yield* Effect.gen(function*() {
       const api = yield* OpenCodeAPI;
       yield* api.model(id, model);
@@ -560,7 +576,10 @@ export function createChatController(options: ChatOptions): ChatController {
         sessions: state.sessions.map(session => session.id === id ? { ...session, model } : session),
       });
     }).pipe(Effect.ensuring(Effect.sync(() => {
-      if (mutation === token) mutation = undefined;
+      if (mutation === token) {
+        mutation = undefined;
+        publish({ sessionOperationPending: false });
+      }
     })));
   });
   const interrupt = Effect.fn("Chat.interrupt")(function*() {
