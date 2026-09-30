@@ -78,9 +78,8 @@ export function createChatController(options: ChatOptions): ChatController {
   });
   const valid = (g: number, s: number) =>
     !disposed && g === generation && s === selection;
-  const action = <A, E>(effect: Effect.Effect<A, E, OpenCodeAPI>) => Effect.suspend(() => {
+  const action = <A, E>(effect: Effect.Effect<A, E, OpenCodeAPI>, g = generation, s = selection) => Effect.suspend(() => {
     check();
-    const g = generation, s = selection;
     return effect.pipe(Effect.tapCause(cause => Effect.sync(() => {
       if (valid(g, s) && !Cause.hasInterrupts(cause)) publish({ error: Cause.pretty(cause) });
     })));
@@ -306,7 +305,9 @@ export function createChatController(options: ChatOptions): ChatController {
     )
       recover();
   }
-  const selectSession = Effect.fn("Chat.selectSession")(function*(id: string | undefined, draftKey?: string, preserveMutation = false) {
+  // Selection is user intent, not asynchronous request work. Publish before the
+  // public call returns, so the next input event cannot address the old draft.
+  const selectSession = (id: string | undefined, draftKey?: string, preserveMutation = false) => {
     check();
     const previous = selectionScope;
     selectionScope = Scope.forkUnsafe(connection);
@@ -335,11 +336,14 @@ export function createChatController(options: ChatOptions): ChatController {
     });
     const g = generation,
       s = selection;
-    yield* Scope.close(previous, Exit.void);
-    yield* action(hydrate()).pipe(Effect.ensuring(Effect.sync(() => {
-      if (valid(g, s)) publish({ loading: false });
-    })));
-  });
+    return Effect.gen(function*() {
+      yield* Scope.close(previous, Exit.void);
+      if (!valid(g, s)) return;
+      yield* action(hydrate()).pipe(Effect.ensuring(Effect.sync(() => {
+        if (valid(g, s)) publish({ loading: false });
+      })));
+    });
+  };
   const reconnect = Effect.fn("Chat.reconnect")(function*() {
     check();
     generation++;
@@ -441,16 +445,20 @@ export function createChatController(options: ChatOptions): ChatController {
     if (valid(g, s)) answered.add(`${kind}:${id}`);
     update(undefined, false, true);
   });
-  const createSession = Effect.fn("Chat.createSession")(function*(title?: string) {
-    if (mutation) return yield* new ChatError({ message: "A session operation is pending" });
+  const createSession = (title?: string) => {
+    check();
+    if (mutation) return Effect.fail(new ChatError({ message: "A session operation is pending" }));
     const token = (mutation = Symbol());
-    return yield* Effect.gen(function*() {
-      // Select the new logical conversation before waiting for its server ID.
-      // Retrying a failed creation retains this unsent draft, never the old session.
-      const key = !state.sessionID && state.draftKey
-        ? state.draftKey : `new:${++draftSequence}`;
-      yield* selectSession(undefined, key, true);
-      const g = generation, s = selection;
+    // Admission must not be deferred into runPromise/forkIn. Retry retains the
+    // uncreated draft; a new intent from a real session allocates a fresh key.
+    const key = !state.sessionID && state.draftKey
+      ? state.draftKey : `new:${++draftSequence}`;
+    const transition = selectSession(undefined, key, true);
+    const g = generation, s = selection;
+    return Effect.gen(function*() {
+      yield* transition;
+      if (!valid(g, s) || mutation !== token)
+        return yield* new ChatError({ message: "Session creation was abandoned" });
       const api = yield* OpenCodeAPI;
       // A custom title suppresses OpenCode's automatic first-prompt naming.
       const session = yield* action(api.create(title));
@@ -466,7 +474,7 @@ export function createChatController(options: ChatOptions): ChatController {
         publish({ sessionOperationPending: false, loading: false });
       }
     })));
-  });
+  };
   const drainOlder = Effect.fn("Chat.drainOlder")(function*(g: number, s: number) {
     const cursors = new Set<string>();
     while (older && valid(g, s)) {
@@ -594,6 +602,10 @@ export function createChatController(options: ChatOptions): ChatController {
     const request = state.questions.find(q => q.request.id === id)!.request;
     yield* reply("question", id, (api, sessionID) => api.replyForm(sessionID, id, formAnswer(request, answers)));
   });
+  const admit = <A, E>(intent: () => Effect.Effect<A, E, OpenCodeAPI>) => {
+    try { return run(intent(), connection); }
+    catch (error) { return Promise.reject(error); }
+  };
   const controller: ChatController = {
     ready: undefined as unknown as Promise<void>,
     getSnapshot: () => state,
@@ -602,12 +614,22 @@ export function createChatController(options: ChatOptions): ChatController {
       listeners.add(notify);
       return () => { listeners.delete(notify); };
     },
-    selectSession: id => run(selectSession(id), connection),
+    selectSession: id => admit(() => selectSession(id)),
     reconnect: () => run(reconnect(), lifetime),
-    createSession: title => run(createSession(title), connection),
+    createSession: title => admit(() => createSession(title)),
     loadOlder: () => run(loadOlder()),
     exportChats: () => runArchive(exportChats()),
-    send: draft => run(send(draft)),
+    send: draft => {
+      // A rejected pending intent must never become a queued send merely because
+      // readiness/selection changes before the request fiber gets scheduled.
+      if (disposed) return Promise.reject(new Error("Chat controller is disposed"));
+      if (!state.sessionID || state.connection !== "connected" || state.loading || state.sending || mutation || state.execution !== "idle")
+        return Promise.reject(new ChatError({ message: "Chat is not ready to send" }));
+      const g = generation, s = selection;
+      return run(Effect.suspend(() => valid(g, s)
+        ? send(draft)
+        : Effect.fail(new ChatError({ message: "Send selection changed" }))));
+    },
     selectModel: model => run(selectModel(model)),
     interrupt: () => run(interrupt()),
     replyPermission: (id, decision) =>

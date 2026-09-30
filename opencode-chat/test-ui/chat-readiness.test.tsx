@@ -3,7 +3,7 @@ import { afterEach, expect, test } from "bun:test";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createChatController } from "../src/controller";
-import { ChatView, Composer } from "../src/react";
+import { ChatView } from "../src/react";
 import type { ChatController } from "../src/types";
 import { deferred, fixture, json, session } from "../test/fixture";
 
@@ -53,6 +53,38 @@ afterEach(async () => {
   document.body.innerHTML = "";
 });
 
+test("New chat click admits a new logical draft synchronously before immediate input, without a pending wait", async () => {
+  const { f, c } = await start();
+  const container = await mount(c);
+  await type(container, "old draft");
+  const creation = responseGate();
+  f.override = (url, init) => {
+    if (url.pathname.endsWith("/session") && init.method === "POST") return creation.promise;
+  };
+  const button = [...container.querySelectorAll("button")].find(b => b.textContent === "New chat")!;
+  // Neither async act nor request/pending-state synchronization may precede input.
+  act(() => { button.click(); });
+  const admitted = c.getSnapshot();
+  const beforeInput = text(container);
+  act(() => {
+    const textarea = container.querySelector("textarea")!;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea, textarea.value + "immediate new draft");
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    textarea.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  expect({ sessionID: admitted.sessionID, pending: admitted.sessionOperationPending ?? false, beforeInput, text: text(container) })
+    .toEqual({ sessionID: undefined, pending: true, beforeInput: "", text: "immediate new draft" });
+  expect(text(container)).toBe("immediate new draft");
+  expect(sendButton(container).disabled).toBe(true);
+  expect(f.calls.filter(call => call.url.pathname.endsWith("/prompt"))).toHaveLength(0);
+  await act(async () => { creation.resolve(json({ data: session("ses_immediate") })); });
+  expect(c.getSnapshot().sessionID).toBe("ses_immediate");
+  expect(c.getSnapshot().draftKey).toBe(admitted.draftKey);
+  expect(text(container)).toBe("immediate new draft");
+  await act(async () => { await c.selectSession("ses1"); });
+  expect(text(container)).toBe("old draft");
+});
+
 test("send control is disabled while creation is pending rather than advertising a send the controller rejects", async () => {
   const { f, c } = await start();
   const container = await mount(c);
@@ -68,6 +100,39 @@ test("send control is disabled while creation is pending rather than advertising
   await act(async () => { await expect(c.send({ text: "immediate prompt" })).rejects.toThrow("not ready"); });
   expect(sendButton(container).disabled).toBe(true);
   await act(async () => { creation.resolve(json({ data: session("ses_new") })); await creating; });
+});
+
+test("same-turn duplicate creation and pending send are rejected; selection cancels unscheduled creation without late errors", async () => {
+  const { f, c } = await start();
+  const creating = c.createSession();
+  void creating.catch(() => {});
+  const key = c.getSnapshot().draftKey;
+  const duplicate = c.createSession();
+  void duplicate.catch(() => {});
+  expect(c.getSnapshot().draftKey).toBe(key);
+  const sending = c.send({ text: "must never queue" });
+  void sending.catch(() => {});
+  const selecting = c.selectSession("ses2");
+  expect(c.getSnapshot().sessionID).toBe("ses2");
+  expect(c.getSnapshot().sessionOperationPending).toBe(false);
+  await selecting;
+  await expect(creating).rejects.toThrow("abandoned");
+  await expect(duplicate).rejects.toThrow("pending");
+  await expect(sending).rejects.toThrow("not ready");
+  expect(c.getSnapshot().error).toBeUndefined();
+  expect(f.calls.filter(call => call.url.pathname.endsWith("/session") && call.init.method === "POST")).toHaveLength(0);
+  expect(f.calls.filter(call => call.url.pathname.endsWith("/prompt"))).toHaveLength(0);
+});
+
+test("a send admitted in an old selection cannot target a newly selected session before its fiber starts", async () => {
+  const { f, c } = await start();
+  const sending = c.send({ text: "old selection only" });
+  void sending.catch(() => {});
+  await c.selectSession("ses2");
+  await expect(sending).rejects.toThrow();
+  expect(c.getSnapshot().sessionID).toBe("ses2");
+  expect(c.getSnapshot().error).toBeUndefined();
+  expect(f.calls.filter(call => call.url.pathname.endsWith("/prompt"))).toHaveLength(0);
 });
 
 test("New chat blocks immediate sends, preserves early draft through ID assignment and hydration, and never queues", async () => {
@@ -206,12 +271,12 @@ test("model mutation publishes send readiness and leaves drafts intact without q
   expect(f.calls.filter(call => call.url.pathname.endsWith("/prompt"))).toHaveLength(0);
 });
 
-test("Composer isolates controllers, preserves a rejected send and ignores a late completion in another session", async () => {
+test("same-view controller prop switch isolates drafts, preserves a rejected send and ignores a late completion in another session", async () => {
   const { c } = await start();
   const { c: other } = await start();
   const container = await mount(c);
   await type(container, "same ID, different controller");
-  await act(async () => { root!.render(<Composer controller={other} />); });
+  await act(async () => { root!.render(<ChatView controller={other} />); });
   expect(text(container)).toBe("");
   const rejected = deferred<void>();
   other.send = () => rejected.promise;
