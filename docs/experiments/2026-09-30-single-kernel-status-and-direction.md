@@ -30,7 +30,7 @@ fewer workers. Keep the baseline as the comparison/control and fallback.
 | Close target retention | Unchanged-runtime case-1 live control passed with termination/lock/census observations. Historical cause still unknown; full suite pending. |
 | Cached installed artifacts | Endpoint/PID-egress repairs pass offline; minimal native-fetch browser stop gate passed. Lazy-loader case still blocks cache admission; optimization paused. No on adapter or measured gain. |
 | OpenCode process retention | Root requalification stopped at browser-session setup, no guest launch. Shared-config stable-root toy frozen but unexecuted. No reuse/remote-release proof. |
-| Workspace switching/stress | App completed 19 stages/five generations; repaired focused harness enters live QA. Editor first save rejected chat-busy; switches/recovery unrun and kernel target retained after Exit. Investigation assigned. |
+| Workspace switching/stress | App phase passed 19 stages/five generations; repaired focused suite separately passed 10 cases/14 steps. Editor switches/recovery remain blocked by save/close observations; instrumented reproduction preparing. |
 
 The sections below preserve the original evaluation and chronological follow-ups;
 earlier “pending”/failure statements are snapshot facts, not erased by later bounded
@@ -1081,6 +1081,41 @@ occurred in the investigation. A bounded future editor cohort needs chat-state/
 capture-stage and close/termination traces before choosing a causal fix; sampled
 locks/targets alone do not resolve ownership. Focused live QA keeps its exclusive
 slot, and Effect remains a scoped proposal rather than an implemented remedy.
+
+### Follow-up: focused suite passes; editor tracing and abstraction direction
+
+Focused-only visible cohort report/observer commit `ccfa99f` passed all ten original
+cases and fourteen steps, one cohort, zero retries/inference. Actual built identity,
+9,681 frozen files, 111 candidate outputs and 37 reused native outputs verified;
+source adaptations reversed exactly. HTTP abort/reader cancellation, exact 8MiB
+backpressure, stale endpoints, stop/reuse, persistence/locks/SQLite bodies completed.
+See [focused repaired live QA](2026-09-30-focused-observer-repaired-live-qa.md).
+
+Fifteen normal workspace lifecycles/native terminate returns completed. Original
+direct CDP census had 27 reads: 23 zero-worker results and four transient two-worker
+samples in case4 before zero. All post-step closes passed the unchanged 15-second
+deadline; sampled native-return→zero intervals were 343–2319ms. Target event
+callbacks yielded no events and an initial about:blank lock sample was unavailable;
+these observer limits do not replace original census results. Owned driver/host/
+supervisor/PIDs/listener/session/targets/evidence lock absence verified; slot released.
+Headless zero. Separate app/focused passes do not rewrite the original failed cohort
+as one green full-suite run, resolve editor failures or admit retention-on.
+
+User authorized the proposed instrumented editor save/close reproduction. Offline
+preparation agent `ses_f0b716c18ffeVJMNsae8Np5GMB` owns read-only state/capture-stage/
+disposal/native-terminate tracing in a separate diagnostic build; intended report
+`2026-09-30-editor-save-close-trace-preparation.md`. No guard changes, newly awaited
+disposal or other production fix before observing the cause. Its live cohort can be
+assigned after a runnable handoff; the browser slot is now free.
+
+User then raised whether API abstractions, rather than repeated patches, are the
+underlying problem. Parent agrees this is a design direction to evaluate: service
+stop should close admission and join its owned work, kernel-shared work needs
+explicit ownership, failed close must retain attachment, and workspace capture/
+switch needs exclusive admission rather than racing idle snapshots. Effect is a
+possible implementation mechanism, not a replacement for those contracts. This
+records discussion only; no API redesign or Effect implementation is authorized
+yet, and no all-writer guarantee is claimed for current APIs.
 
 ## Next validation and stress-test sequence
 
