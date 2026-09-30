@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, openCodeCandidateLaunch } from '../src/opencode-launch';
+import { ConfigProvider } from '@opencode/schema/config/provider';
+import { Schema } from 'effect';
 
 test('candidate uses ordinary unchanged server launch and qualified environment', () => {
   const password = crypto.randomUUID();
@@ -41,7 +43,7 @@ test('candidate config merges a caller-provided provider catalog without losing 
     limit: { context: 1050000, input: 922000, output: 128000 }, websocket: false as const,
   };
   const config = createOpenCodeCandidateConfig(baseURL, [], { 'gpt-5.6-sol': model });
-  expect(config.providers.opencode.models['gpt-5.6-sol']).toEqual(model);
+  expect(config.providers.opencode.models['gpt-5.6-sol']).toEqual({ disabled: false, ...model });
   expect(config.providers.opencode.models[openCodeCandidateLaunch.model.id]).toBeDefined();
 });
 
@@ -53,11 +55,26 @@ test('an explicit approved default uses only the supplied catalog, without the c
   } };
   const config = createOpenCodeCandidateConfig('http://host/editor/model/opencode/', ['shell'], models, 'muse-spark-1.3');
   expect(config.model).toBe('opencode/muse-spark-1.3');
-  expect(config.providers.opencode.models).toEqual(models);
+  expect(config.providers.opencode.models).toEqual({ 'muse-spark-1.3': { disabled: false, ...models['muse-spark-1.3'] } });
   expect(config.providers.opencode.activation).toBe('enabled');
   expect(config.providers.opencode.settings.apiKey).toBe('editor-host-proxy');
   expect(() => createOpenCodeCandidateConfig('http://host/', [], models, 'missing')).toThrow('absent');
   expect(() => createOpenCodeCandidateConfig('http://host/', [], models, 'toString')).toThrow('absent');
+});
+
+test('proxy catalog explicitly restores inherited availability without mutating or enabling caller-disabled models', () => {
+  const model = { name: 'Paid', package: '@opencode/ai/providers/openai' as const,
+    capabilities: { tools: true, input: ['text'], output: ['text'] },
+    limit: { context: 1000, output: 100 }, websocket: false as const };
+  const models = { paid: model, disabled: { ...model, disabled: true } };
+  const config = createOpenCodeCandidateConfig('http://host/editor/model/opencode/', [], models, 'paid');
+  expect(config.providers.opencode.models.paid.disabled).toBe(false);
+  expect(config.providers.opencode.models.disabled.disabled).toBe(true);
+  expect(Object.hasOwn(model, 'disabled')).toBe(false);
+  const decoded = Schema.decodeUnknownSync(ConfigProvider.Info)(config.providers.opencode);
+  expect(decoded.models?.paid.disabled).toBe(false);
+  expect(decoded.models?.disabled.disabled).toBe(true);
+  expect(decoded.settings?.apiKey).toBe('editor-host-proxy');
 });
 
 test('descriptor exposes global config, fixed database, activation barrier and EOF lifecycle', () => {

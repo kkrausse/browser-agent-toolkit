@@ -8,6 +8,7 @@ import { openCodeCandidateLaunch, createOpenCodeCandidateConfig } from '../src/o
 import { validatePreparedOpenCode, type PreparedManifest } from '../src/prepared';
 import { validateTree } from '../src/package-tree';
 import { verifyOpenCodeReady } from '../src/browser';
+import { createDiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
 import { sourcePaths, type SourceWorkspace } from '../src/editor-source';
 
 test('ordinary ripgrep install captures pinned bytes, relative executable links and modes', async () => {
@@ -73,6 +74,8 @@ function endpointFixture(change: 'none' | 'activation' | 'plugin' | 'javascript'
       model: selection === 'shorthand' ? config.model : { providerID: selection === 'wrong-provider' ? 'other' : 'opencode', model: selectedModel ?? openCodeCandidateLaunch.model.id },
     } }]);
     if (name === openCodeCandidateLaunch.modelPath) return Response.json({ data: change === 'missing-model' ? [] : [{ ...openCodeCandidateLaunch.model, id: selectedModel ?? openCodeCandidateLaunch.model.id, enabled: change !== 'disabled', capabilities: { tools: change !== 'model' } }] });
+    if (name.startsWith('/api/provider/opencode?')) return Response.json({ data: { activation: 'enabled', settings: { apiKey: 'never-publish-fixture-credential', headers: { authorization: 'never-publish-header' } } } });
+    if (name.startsWith('/api/model/default?')) return Response.json({ data: { providerID: 'opencode', id: 'public-fallback' } });
     return Response.json({ healthy: true });
   } };
   return { endpoint, calls };
@@ -99,6 +102,26 @@ test('readiness accepts a configured default without the toolkit fallback in the
 test('readiness accepts legacy shorthand but rejects a decoded model from another provider', async () => {
   await verifyOpenCodeReady(endpointFixture('none', 'deepseek-v4.1-flash', 'shorthand').endpoint, 'Basic test', new AbortController().signal);
   await expect(verifyOpenCodeReady(endpointFixture('none', 'deepseek-v4.1-flash', 'wrong-provider').endpoint, 'Basic test', new AbortController().signal)).rejects.toThrow('global model configuration not loaded');
+});
+
+test('rejected readiness reports bounded public catalog facts without credentials or raw settings', async () => {
+  const fixture = endpointFixture('missing-model', 'muse-spark-1.3');
+  const events: unknown[] = [];
+  const diagnostics = createDiagnosticScope(event => events.push(event));
+  let failure = '';
+  try { await verifyOpenCodeReady(fixture.endpoint, 'Basic test', new AbortController().signal, diagnostics); }
+  catch (error) { failure = (error as Error).message; }
+  expect(failure).toContain('"modelID":"muse-spark-1.3"');
+  expect(failure).toContain('"present":false');
+  expect(failure).toContain('"hostProxyMarkerLoaded":true');
+  expect(failure).toContain('"catalogProxyMarkerLoaded":false');
+  expect(failure).toContain('"catalogProviderActivation":"enabled"');
+  expect(failure).toContain('"modelID":"public-fallback"');
+  expect(JSON.stringify(events) + failure).not.toContain('never-publish');
+  expect(fixture.calls.slice(-2).map(call => call.path)).toEqual([
+    openCodeCandidateLaunch.modelPath.replace('/api/model?', '/api/provider/opencode?'),
+    openCodeCandidateLaunch.modelPath.replace('/api/model?', '/api/model/default?'),
+  ]);
 });
 
 test('health readiness recovers from fetch failure, request timeout and non-OK response', async () => {

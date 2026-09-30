@@ -27,6 +27,7 @@ export const openCodeCandidateLaunch = {
 } as const;
 
 export type OpenCodeCandidateModel = {
+  disabled?: boolean;
   name: string;
   package: '@opencode/ai/providers/openai' | '@opencode/ai/providers/anthropic' | '@opencode/ai/providers/openai-compatible';
   capabilities: { tools: boolean; input: string[]; output: string[] };
@@ -54,7 +55,10 @@ export function createOpenCodeCandidateConfig(modelBaseURL: string, additionalTo
     // Zen otherwise disables paid models solely because the guest has no key.
     providers: { opencode: { activation: 'enabled' as const, settings: { baseURL: modelBaseURL, apiKey: 'editor-host-proxy' }, models: {
       ...(defaultModel === undefined ? { [openCodeCandidateLaunch.model.id]: fallbackModel } : {}),
-      ...models,
+      // Zen's pre-plugin can disable its paid catalog before the post-plugin
+      // applies this host-proxy config. Omission retains that disabled state.
+      // Explicit availability is owned by the supplied catalog, not guest auth.
+      ...Object.fromEntries(Object.entries(models).map(([id, model]) => [id, { disabled: false, ...model }])),
     } } },
   };
 }

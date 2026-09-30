@@ -56,8 +56,32 @@ const verifyReadyEffect = Effect.fn('OpenCode.verifyReady')(function*(endpoint: 
     if (!response.ok) { await response.arrayBuffer(); throw Error(`OpenCode model catalog HTTP ${response.status}`); }
     return response.json();
   });
-  if (!Array.isArray(data) || !data.some(model => model.providerID === descriptor.model.providerID && model.id === modelID
-    && model.enabled && model.capabilities?.tools)) return yield* Effect.fail(new Error('Qualified OpenCode model is not enabled with tools'));
+  const catalogModel = Array.isArray(data) && data.find(model => model.providerID === descriptor.model.providerID && model.id === modelID);
+  if (!catalogModel?.enabled || !catalogModel.capabilities?.tools) {
+    const inspect = (path: string) => request(path, async response => {
+      if (!response.ok) { await response.arrayBuffer(); return { httpStatus: response.status }; }
+      return response.json();
+    }, 'GET', 3000).pipe(Effect.catch(() => Effect.succeed(undefined)));
+    const providerResult = yield* inspect(descriptor.modelPath.replace('/api/model?', '/api/provider/opencode?'));
+    const defaultResult = yield* inspect(descriptor.modelPath.replace('/api/model?', '/api/model/default?'));
+    // Emit only public selection and boolean policy facts, never raw config,
+    // headers, provider settings, credentials, or the complete API response.
+    const provider = selected.info.providers.opencode;
+    const facts = {
+      providerID: descriptor.model.providerID, modelID,
+      catalogArray: Array.isArray(data), catalogCount: Array.isArray(data) ? data.length : null,
+      present: !!catalogModel, enabled: catalogModel ? catalogModel.enabled === true : null,
+      tools: catalogModel ? catalogModel.capabilities?.tools === true : null,
+      configuredTools: configured.capabilities?.tools === true,
+      hostProxyMarkerLoaded: provider.settings?.apiKey === 'editor-host-proxy',
+      catalogProxyMarkerLoaded: providerResult?.data?.settings?.apiKey === 'editor-host-proxy',
+      catalogProviderActivation: ['enabled', 'auto', 'disabled'].includes(providerResult?.data?.activation) ? providerResult.data.activation : null,
+      catalogSelectedModelIDs: Array.isArray(data) ? data.filter(model => model.providerID === descriptor.model.providerID).slice(0, 40).map(model => String(model.id).slice(0, 100)) : [],
+      serverDefault: defaultResult?.data ? { providerID: String(defaultResult.data.providerID).slice(0, 100), modelID: String(defaultResult.data.id).slice(0, 100) } : null,
+    };
+    diagnostics.record('opencode.readiness.model-rejected', facts);
+    return yield* Effect.fail(new Error('Qualified OpenCode model is not enabled with tools: ' + JSON.stringify(facts)));
+  }
 });
 
 export function verifyOpenCodeReady(endpoint: Pick<Endpoint, 'fetch'>, authorization: string, signal: AbortSignal, diagnostics = createDiagnosticScope()) {
