@@ -1,7 +1,7 @@
 import type { Distribution, Endpoint } from '@kev-browser-agent-kit/workspace'
 import { installSource } from '@kev-browser-agent-kit/workspace/delivery'
 import { createDiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics'
-import type { Connection, WorkspaceController } from '@kev-browser-agent-kit/workspace/react'
+import type { Connection, Service, WorkspaceController } from '@kev-browser-agent-kit/workspace/react'
 import { installOpenCodeConfig, loadPrepared, preparedApps, startOpenCode } from '@kev-browser-agent-kit/opencode-chat/browser'
 
 const base = '/editor/'
@@ -17,7 +17,11 @@ function connection(endpoint: Endpoint): Connection {
 }
 
 /** The application owns startup order, preview choice, readiness, and logging. */
-export async function startBrowserEditor(controller: WorkspaceController): Promise<void> {
+export async function startBrowserEditor(controller: WorkspaceController, options: {
+  beforeSource?(controller: WorkspaceController): Promise<void>
+  beforeChatConnect?(service: Service): Promise<void>
+  chatConnectReady?(): void
+} = {}): Promise<void> {
   const diagnostics = createDiagnosticScope(
     (event) => controller.diagnostic(event.event, event.data),
     controller.diagnosticRunId,
@@ -42,8 +46,13 @@ export async function startBrowserEditor(controller: WorkspaceController): Promi
       'Install application source and OpenCode config',
       async () => {
         const workspace = controller.workspace!
+        await options.beforeSource?.(controller)
         // Preserve is explicit: browser edits win over newly prepared source.
-        await installSource(workspace, manifest.project, { existing: 'preserve' })
+        // Known logical workspaces already own their complete source tree; do
+        // not resurrect files that the agent removed on a previous visit.
+        let initialized = false
+        try { await workspace.fs.stat('/.todo-workspace.json'); initialized = true } catch { /* legacy first open */ }
+        if (!initialized) await installSource(workspace, manifest.project, { existing: 'preserve' })
         const modelBaseURL = `http://host.vivari.internal:${location.port || (location.protocol === 'https:' ? '443' : '80')}${base}model/opencode/`
         await installOpenCodeConfig(workspace, { modelBaseURL, additionalToolActions: ['shell'] })
         await workspace.flush()
@@ -79,7 +88,12 @@ export async function startBrowserEditor(controller: WorkspaceController): Promi
         }
         const results = await Promise.allSettled([
           preview(),
-          startOpenCode(controller, { prepared: manifest, diagnostics }),
+          (async () => {
+            const service = await startOpenCode(controller, { prepared: manifest, diagnostics, waitForClient: false })
+            await options.beforeChatConnect?.(service)
+            options.chatConnectReady?.()
+            await controller.waitForClient('chat')
+          })(),
         ])
         const failed = results.find((result) => result.status === 'rejected')
         if (failed?.status === 'rejected') throw failed.reason

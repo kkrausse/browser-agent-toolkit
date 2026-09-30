@@ -23,7 +23,9 @@ const built = await Bun.build({
   jsx: { runtime: 'automatic', development: false },
   plugins: [{ name: 'frozen-qualified-libraries', setup(builder) {
     builder.onResolve({ filter: /^@kev-browser-agent-kit\/workspace(?:\/(?:react|delivery|diagnostics))?$/ }, args => ({ path: join(input, 'workspace', (args.path.split('/')[2] ?? 'index') + '.js') }));
-    builder.onResolve({ filter: /^@kev-browser-agent-kit\/opencode-chat\/browser$/ }, () => ({ path: join(input, 'chat/browser.js') }));
+     builder.onResolve({ filter: /^@kev-browser-agent-kit\/opencode-chat\/browser$/ }, () => ({ path: join(input, 'chat/browser.js') }));
+     builder.onResolve({ filter: /^@kev-browser-agent-kit\/opencode-chat\/(editor|react)$/ }, args => ({ path: join(root, 'opencode-chat/src', args.path.endsWith('/editor') ? 'editor.tsx' : 'react.tsx') }));
+     builder.onResolve({ filter: /^@kev-browser-agent-kit\/opencode-chat\/editor.css$/ }, () => ({ path: join(root, 'opencode-chat/dist/editor.css') }));
     builder.onResolve({ filter: /^(?:react(?:\/.*)?|react-dom(?:\/.*)?)$/ }, args => ({ path: require.resolve(args.path, { paths: [join(root, 'opencode-chat')] }) }));
   } }],
 });
@@ -49,7 +51,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 240, asy
   if (path.startsWith('/editor/')) return await editor.fetch(request) ?? new Response('Not found', { status: 404, headers });
   if (path.startsWith('/api/')) return fetchRequestHandler({ endpoint: '/api', req: request, router: appRouter, createContext: ({ req }) => ({ req, todos }) });
   if (path === '/editing-policy') return Response.json({ allowed: true, fixture: 'isolated loopback exploration' }, { headers });
-  if (path === '/') return new Response(`<!doctype html><html><head><meta charset="utf-8"><title>Single-kernel live TODO editor</title><link rel="stylesheet" href="/single-kernel-live-client.css"><style>body{margin:0;font:14px system-ui;color:#182230}.live-toolbar{padding:12px;display:flex;gap:16px;align-items:center;border-bottom:1px solid #ddd}.live-toolbar span{font-size:12px;color:#667085}.live-editor{height:75vh}.live-source{padding:12px}.live-source textarea{display:block;width:98%;height:35vh;margin-top:8px;font:13px monospace}.live-source input{width:260px;margin:0 8px}button{cursor:pointer}body>p{padding:16px}</style></head><body><div id="root"></div><script type="module" src="/single-kernel-live-client.js"></script></body></html>`, { headers: { ...headers, 'Content-Type': 'text/html' } });
+   if (path === '/') return new Response(`<!doctype html><html><head><meta charset="utf-8"><title>Single-kernel live TODO editor</title><link rel="stylesheet" href="/single-kernel-live-client.css"><style>body{margin:0;font:14px system-ui;color:#182230}.live-toolbar{padding:12px;display:flex;gap:16px;align-items:center;border-bottom:1px solid #ddd}button{cursor:pointer}body>p{padding:16px}</style></head><body><div id="root"></div><script type="module" src="/single-kernel-live-client.js"></script></body></html>`, { headers: { ...headers, 'Content-Type': 'text/html' } });
   if (!['/single-kernel-live-client.js', '/single-kernel-live-client.css'].includes(path)) return new Response('Not found', { status: 404, headers });
   const file = Bun.file(join(output, path.slice(1)));
   return new Response(file, { headers: { ...headers, 'Content-Type': file.type } });

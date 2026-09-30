@@ -1,0 +1,83 @@
+import * as v from 'valibot'
+import type { Service } from '@kev-browser-agent-kit/workspace/react'
+
+// Native OpenCode bundles, not ChatController.exportChats() transcript archives.
+export const sessionBundleSchema = v.strictObject({
+  info: v.looseObject({ id: v.pipe(v.string(), v.minLength(1)), parentID: v.optional(v.string()) }),
+  messages: v.array(v.record(v.string(), v.unknown())),
+})
+export type SessionBundle = v.InferOutput<typeof sessionBundleSchema>
+
+export function orderSessions(sessions: SessionBundle[]): SessionBundle[] {
+  const byId = new Map(sessions.map(session => [session.info.id, session]))
+  if (byId.size !== sessions.length) throw Error('Duplicate saved session ID')
+  const ordered: SessionBundle[] = [], visiting = new Set<string>(), visited = new Set<string>()
+  function visit(id: string): void {
+    if (visited.has(id)) return
+    if (visiting.has(id)) throw Error('Cyclic saved session hierarchy')
+    const session = byId.get(id)
+    if (!session) throw Error('Missing saved parent session: ' + id)
+    visiting.add(id)
+    if (session.info.parentID) visit(session.info.parentID)
+    visiting.delete(id); visited.add(id); ordered.push(session)
+  }
+  for (const session of sessions) visit(session.info.id)
+  return ordered
+}
+
+function url(service: Service, path: string): URL {
+  const base = new URL(service.connection.url), target = new URL(path.replace(/^\//, ''), base)
+  for (const [key, value] of base.searchParams) if (!target.searchParams.has(key)) target.searchParams.append(key, value)
+  return target
+}
+async function request(service: Service, path: string, init?: RequestInit): Promise<unknown> {
+  const response = await service.connection.fetch(url(service, path), { ...init, signal: AbortSignal.timeout(30_000) })
+  if (!response.ok) throw Error(`Native session transfer ${path}: HTTP ${response.status}`)
+  return response.json()
+}
+const pageSchema = v.object({ data: v.array(v.object({ id: v.string() })), cursor: v.optional(v.object({ next: v.optional(v.string()) })) })
+
+export async function captureSessions(service: Service): Promise<SessionBundle[]> {
+  const sessions: SessionBundle[] = [], ids = new Set<string>()
+  let cursor: string | undefined
+  do {
+    const page = v.parse(pageSchema, await request(service, '/api/session?directory=%2Fworkspace&limit=100' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '')))
+    for (const { id } of page.data) {
+      if (ids.has(id)) throw Error('Repeated session in native export pagination')
+      ids.add(id)
+      const transfer = v.parse(v.object({ data: sessionBundleSchema }), await request(service, `/api/session/${encodeURIComponent(id)}/export`))
+      sessions.push(transfer.data)
+    }
+    cursor = page.cursor?.next
+    if (ids.size > 10_000) throw Error('Too many sessions to save')
+  } while (cursor)
+  return orderSessions(sessions)
+}
+
+/** Run before attaching a chat client to the replacement server. Its SQLite
+ * mount can outlive clearWorkspace, so explicitly remove old native rows. */
+export async function restoreSessions(service: Service, sessions: SessionBundle[]): Promise<Map<string, string>> {
+  const ordered = orderSessions(sessions)
+  for (let attempt = 0; ; attempt++) {
+    const page = v.parse(pageSchema, await request(service, '/api/session?directory=%2Fworkspace&limit=100'))
+    if (!page.data.length) break
+    if (attempt >= 100) throw Error('Could not empty replacement session store')
+    for (const { id } of page.data) {
+      const response = await service.connection.fetch(url(service, `/api/session/${encodeURIComponent(id)}`), { method: 'DELETE', signal: AbortSignal.timeout(30_000) })
+      if (!response.ok && response.status !== 404) throw Error('Could not delete outgoing native session')
+    }
+  }
+  const ids = new Map<string, string>()
+  for (const session of ordered) {
+    const id = 'ses_' + crypto.randomUUID().replaceAll('-', '')
+    const parentID = session.info.parentID ? ids.get(session.info.parentID) : undefined
+    const result = v.parse(v.object({ data: v.object({ id: v.string() }) }), await request(service, '/api/session/import', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...session, info: { ...session.info, id, ...(parentID ? { parentID } : {}) }, location: { directory: '/workspace' } }),
+    }))
+    if (result.data.id !== id) throw Error('Native session import returned unexpected ID')
+    await request(service, `/api/session/${encodeURIComponent(id)}/message?order=desc&limit=50`)
+    ids.set(session.info.id, id)
+  }
+  return ids
+}
