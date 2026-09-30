@@ -11,6 +11,7 @@ export const counterbalancedLifecyclePlan=Object.freeze([
 export async function runCounterbalancedLifecyclePair(run:(step:typeof counterbalancedLifecyclePlan[number])=>Promise<void>){
  for(const step of counterbalancedLifecyclePlan)await run(step);
 }
+export function retainLifecycleHost<T extends {unref:()=>void}>(host:T){host.unref();return host;}
 
 if(import.meta.main){
  if(process.env.MATCHED_AUTHORIZE_COUNTERBALANCE!=='yes')throw Error('Explicit single-pair authorization required');
@@ -54,7 +55,7 @@ if(import.meta.main){
   // Host ownership is intentionally retained like the first pair. Guest services
   // are joined/stopped by the unchanged client before accepting a condition.
   await runCounterbalancedLifecyclePair(async({condition,port})=>{
-   const host=Bun.spawn(['bun',resolve('examples/todo-app/tests/serve-reuse-pilot.ts'),output,String(port)],{stdout:Bun.file(join(output,'host-'+condition+'.out')),stderr:Bun.file(join(output,'host-'+condition+'.err'))});hosts.push({condition,port,pid:host.pid});
+   const host=retainLifecycleHost(Bun.spawn(['bun',resolve('examples/todo-app/tests/serve-reuse-pilot.ts'),output,String(port)],{stdout:Bun.file(join(output,'host-'+condition+'.out')),stderr:Bun.file(join(output,'host-'+condition+'.err'))}));hosts.push({condition,port,pid:host.pid});
    await writeFile(join(output,'hosts-'+condition+'.json'),JSON.stringify(hosts),{flag:'wx'});
    const hostDeadline=Date.now()+10000;
    while(!await Bun.file(join(output,'host-'+condition+'.out')).size){if(Date.now()>hostDeadline)throw Error('Host listen deadline');await Bun.sleep(100);}

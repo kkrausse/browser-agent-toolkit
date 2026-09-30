@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {counterbalancedLifecyclePlan,runCounterbalancedLifecyclePair} from './counterbalanced-lifecycle-driver';
+import {counterbalancedLifecyclePlan,runCounterbalancedLifecyclePair,retainLifecycleHost} from './counterbalanced-lifecycle-driver';
 test('mounted lifecycle reverses blocked first-pair order without reversing fixtures or adding rearms',async()=>{
  expect(counterbalancedLifecyclePlan.map(s=>s.condition)).toEqual(['reuse','restart']);
  expect(counterbalancedLifecyclePlan.map(s=>s.port)).toEqual([43232,43233]);
@@ -12,4 +12,11 @@ test('failed first counterbalanced condition prevents second condition and repla
  const seen:string[]=[];
  await expect(runCounterbalancedLifecyclePair(async step=>{seen.push(step.condition);throw Error('stop whole pair');})).rejects.toThrow('stop whole pair');
  expect(seen).toEqual(['reuse']);
+});
+test('retained host is unreferenced without stopping or replacing its owned process',()=>{
+ let unrefs=0,stops=0;
+ const host={pid:123,unref:()=>{unrefs++;},kill:()=>{stops++;}};
+ expect(retainLifecycleHost(host)).toBe(host);
+ expect(unrefs).toBe(1);
+ expect(stops).toBe(0);
 });
