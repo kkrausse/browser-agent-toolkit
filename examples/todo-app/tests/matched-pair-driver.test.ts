@@ -2,7 +2,7 @@ import {test,expect} from 'bun:test'
 import {mkdtemp, rmdir} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
-import {acquirePairLock,pairPlan,runPair,requestCode} from './matched-pair-driver'
+import {acquirePairLock,pairPlan,runPair,requestCode,createDriverCommands} from './matched-pair-driver'
 import {runInNewContext} from 'node:vm'
 
 test('global filesystem lock excludes another initiator and never steals retained ownership',async()=>{
@@ -48,4 +48,32 @@ test('page request excludes different tokens while owned action pending',async()
   await expect(run('different-token')).rejects.toThrow('Owned request pending')
   expect(calls).toBe(1);release();await Bun.sleep(1)
   await expect(run('first')).rejects.toThrow('Request token reused')
+})
+for(const rejected of ['stdout','exit'] as const)test(`cold command ${rejected} rejection joins delayed siblings and retains ambiguous lock`,async()=>{
+  const root=await mkdtemp(join(tmpdir(),'matched-command-')), lock=join(root,'lock')
+  const release=await acquirePairLock(lock)
+  let out!:ReadableStreamDefaultController, err!:ReadableStreamDefaultController, finish!:(value:number)=>void, fail!:(error:Error)=>void
+  const stdout=new ReadableStream({start(c){out=c}}), stderr=new ReadableStream({start(c){err=c}})
+  const exited=new Promise<number>((resolve,reject)=>{finish=resolve;fail=reject})
+  let calls=0, settled=false, cleanup=0, steps=0
+  const commands=createDriverCommands(root,{baseline:'owned-baseline'},()=>false,()=>{++calls;return {stdout,stderr,exited}})
+  // Same cold-command/actionPending=false ownership boundary as the live driver.
+  const task=runPair(async()=>{++steps;await commands.command('baseline','await page.goto("http://cold/");return {ready:true}')})
+    .catch(async error=>{if(!commands.pending){++cleanup;await commands.command('baseline',requestCode('stopServices','cleanup'))}throw error})
+    .finally(()=>{settled=true})
+  const observed=task.catch(error=>error)
+  while(!calls)await Bun.sleep(1)
+  if(rejected==='stdout')out.error(Error('observation failed'));else fail(Error('observation failed'))
+  await Bun.sleep(5)
+  expect(settled).toBe(false);expect(commands.pending).toBe(true)
+  for(const code of [requestCode('stopServices','stop'),requestCode('rearm','rearm'),'return await page.reload()'])await expect(commands.command('baseline',code)).rejects.toThrow('Unsettled ownership')
+  await expect(acquirePairLock(lock)).rejects.toThrow()
+  err.close();await Bun.sleep(5);expect(settled).toBe(false)
+  if(rejected==='stdout')finish(1);else out.close()
+  expect(String(await observed)).toContain('observation failed')
+  expect(commands.pending).toBe(true);expect(cleanup).toBe(0);expect(calls).toBe(1);expect(steps).toBe(1)
+  await expect(commands.command('baseline',requestCode('rearm','late'))).rejects.toThrow('Unsettled ownership')
+  await expect(acquirePairLock(lock)).rejects.toThrow()
+  // Only the test fixture owner releases its retained lock, never the driver.
+  await release()
 })

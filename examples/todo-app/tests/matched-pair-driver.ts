@@ -36,6 +36,34 @@ export function requestCode(action: string, token: string) {
   },${JSON.stringify({action,token})})`
 }
 
+export function createDriverCommands(evidence:string, sessions:Record<string,string>, expired:()=>boolean,
+  spawn:(args:string[])=>{stdout:ReadableStream;stderr:ReadableStream;exited:Promise<number>}=(args)=>Bun.spawn(args,{stdout:'pipe',stderr:'pipe'})) {
+  let sequence=0, pending=false
+  return {
+    get pending(){return pending},
+    async command(condition:string,code:string) {
+      if(expired() || pending)throw Error('Unsettled ownership; no further browser commands')
+      pending=true
+      let ambiguous=false
+      try {
+        const id=String(++sequence).padStart(4,'0'), file=join(evidence,id+'.js')
+        await writeFile(file,code,{flag:'wx'})
+        const child=spawn(['bunx','browser-control','execute','--json','--session',sessions[condition]!,'--file',file])
+        // Join every drain and exit before relinquishing ownership. A rejected
+        // observation cannot prove browser settlement, even after its siblings join.
+        const joined=await Promise.allSettled([new Response(child.stdout).text(),new Response(child.stderr).text(),child.exited])
+        const failure=joined.find(result=>result.status==='rejected')
+        if(failure?.status==='rejected'){ambiguous=true;throw failure.reason}
+        const [stdout,stderr,exit]=joined.map(result=>(result as PromiseFulfilledResult<any>).value)
+        await writeFile(join(evidence,id+'.json'),JSON.stringify({stdout,stderr,exit}),{flag:'wx'})
+        const result=JSON.parse(stdout)
+        if(exit || !result.ok)throw Error(result.error || stderr || 'Browser command failed')
+        return result.value
+      } finally {if(!ambiguous)pending=false}
+    },
+  }
+}
+
 if (import.meta.main) {
   if (process.env.MATCHED_AUTHORIZE_PAIR !== 'yes') throw Error('Offline preparation only unless MATCHED_AUTHORIZE_PAIR=yes explicitly authorizes the fresh pair')
   const preparation=resolve(process.env.MATCHED_CLIENT_PREPARATION || ''), evidence=resolve(process.env.MATCHED_DRIVER_EVIDENCE || '')
@@ -57,22 +85,8 @@ if (import.meta.main) {
     const helper=`const ResetVerifier=(()=>{const module={exports:{}};const exports=module.exports;${await build.outputs[0]!.text()};return module.exports})()\n`
     await writeFile(join(evidence,'plan.json'),JSON.stringify({pairPlan,prospectivePolicy,receipt,lock:resolve('.diagnostics/matched-pair-initiator.lock')},null,2),{flag:'wx'})
     const sessions:Record<string,string>={baseline:process.env.MATCHED_BASELINE_SESSION,dependencies:process.env.MATCHED_REUSE_SESSION}
-    let sequence=0, expired=false, commandPending=false, actionPending=false
-    async function command(condition:string, code:string) {
-      if(expired || commandPending)throw Error('Unsettled ownership; no further browser commands')
-      commandPending=true
-      try {
-      const id=String(++sequence).padStart(4,'0'), file=join(evidence,id+'.js')
-      await writeFile(file,code,{flag:'wx'})
-      const child=Bun.spawn(['bunx','browser-control','execute','--json','--session',sessions[condition]!,'--file',file],{stdout:'pipe',stderr:'pipe'})
-      // Do NOT kill or retry an ambiguous command: the lock remains owned.
-      const [stdout,stderr,exit]=await Promise.all([new Response(child.stdout).text(),new Response(child.stderr).text(),child.exited])
-      await writeFile(join(evidence,id+'.json'),JSON.stringify({stdout,stderr,exit}),{flag:'wx'})
-      const result=JSON.parse(stdout)
-      if(exit || !result.ok)throw Error(result.error || stderr || 'Browser command failed')
-      return result.value
-      } finally {commandPending=false}
-    }
+    let expired=false, actionPending=false
+    const commands=createDriverCommands(evidence,sessions,()=>expired), command=commands.command
     async function bounded<T>(task:Promise<T>,ms:number) {
       let timer:ReturnType<typeof setTimeout> | undefined
       try{return await Promise.race([task,new Promise<never>((_,reject)=>{timer=setTimeout(()=>{expired=true;reject(Error('Deadline expired; owned work retained, quiescence unproven'))},ms)})])}
@@ -153,7 +167,7 @@ if (import.meta.main) {
       // Stop requests only: no reset, close, rearm, replacement or new workload.
       // Do not overlap unresolved initiations with cleanup: pending page requests
       // reject a new request. A failed/expired cleanup retains lock and pages.
-      if(!expired && !commandPending && !actionPending)for(const condition of ['baseline','dependencies']) {try{await bounded(stop(condition),prospectivePolicy.cleanupMs)}catch{break}}
+      if(!expired && !commands.pending && !actionPending)for(const condition of ['baseline','dependencies']) {try{await bounded(stop(condition),prospectivePolicy.cleanupMs)}catch{break}}
       throw error
     }
   } finally {if(quiescent)await release()}
