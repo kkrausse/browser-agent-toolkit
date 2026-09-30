@@ -22,7 +22,8 @@ test('explicit model config supplies catalog-absent Muse Spark via supported HTT
   expect(config.model).toBe('opencode/muse-spark-1.3-contributor-free');
   expect(config.$schema).toBe('https://opencode.ai/config.json');
   expect(config.snapshots).toBe(false);
-  expect(config.providers.opencode.settings).toEqual({ baseURL });
+  expect(config.providers.opencode.activation).toBe('enabled');
+  expect(config.providers.opencode.settings).toEqual({ baseURL, apiKey: 'editor-host-proxy' });
   expect(config.providers.opencode.models[openCodeCandidateLaunch.model.id]).toEqual({
     name: 'Muse Spark 1.3 Free', package: '@opencode/ai/providers/openai',
     capabilities: { tools: true, input: ['text', 'image', 'video', 'pdf', 'audio'], output: ['text'] },
@@ -53,6 +54,8 @@ test('an explicit approved default uses only the supplied catalog, without the c
   const config = createOpenCodeCandidateConfig('http://host/editor/model/opencode/', ['shell'], models, 'muse-spark-1.3');
   expect(config.model).toBe('opencode/muse-spark-1.3');
   expect(config.providers.opencode.models).toEqual(models);
+  expect(config.providers.opencode.activation).toBe('enabled');
+  expect(config.providers.opencode.settings.apiKey).toBe('editor-host-proxy');
   expect(() => createOpenCodeCandidateConfig('http://host/', [], models, 'missing')).toThrow('absent');
   expect(() => createOpenCodeCandidateConfig('http://host/', [], models, 'toString')).toThrow('absent');
 });

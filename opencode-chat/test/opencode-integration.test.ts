@@ -53,7 +53,7 @@ test.skipIf(!process.env.OPENCODE_PACKAGE_DIR)('real retained candidate survives
   } finally { await rm(output, { recursive: true, force: true }); }
 });
 
-function endpointFixture(change: 'none' | 'activation' | 'plugin' | 'javascript' | 'config' | 'model' = 'none', selectedModel?: string, selection: 'decoded' | 'shorthand' | 'wrong-provider' = 'decoded') {
+function endpointFixture(change: 'none' | 'activation' | 'plugin' | 'javascript' | 'config' | 'model' | 'disabled' | 'missing-model' = 'none', selectedModel?: string, selection: 'decoded' | 'shorthand' | 'wrong-provider' = 'decoded') {
   const calls: { path: string; method: string; authorization: string | null }[] = [];
   const config = createOpenCodeCandidateConfig('http://host.vivari.internal:4390/editor/model/opencode/');
   if (selectedModel) {
@@ -72,7 +72,7 @@ function endpointFixture(change: 'none' | 'activation' | 'plugin' | 'javascript'
       ...config,
       model: selection === 'shorthand' ? config.model : { providerID: selection === 'wrong-provider' ? 'other' : 'opencode', model: selectedModel ?? openCodeCandidateLaunch.model.id },
     } }]);
-    if (name === openCodeCandidateLaunch.modelPath) return Response.json({ data: [{ ...openCodeCandidateLaunch.model, id: selectedModel ?? openCodeCandidateLaunch.model.id, enabled: true, capabilities: { tools: change !== 'model' } }] });
+    if (name === openCodeCandidateLaunch.modelPath) return Response.json({ data: change === 'missing-model' ? [] : [{ ...openCodeCandidateLaunch.model, id: selectedModel ?? openCodeCandidateLaunch.model.id, enabled: change !== 'disabled', capabilities: { tools: change !== 'model' } }] });
     return Response.json({ healthy: true });
   } };
   return { endpoint, calls };
@@ -92,7 +92,8 @@ test('chat readiness awaits authenticated activation and validates global config
 
 test('readiness accepts a configured default without the toolkit fallback in the catalog', async () => {
   await verifyOpenCodeReady(endpointFixture('none', 'deepseek-v4.1-flash').endpoint, 'Basic test', new AbortController().signal);
-  await expect(verifyOpenCodeReady(endpointFixture('model', 'deepseek-v4.1-flash').endpoint, 'Basic test', new AbortController().signal)).rejects.toThrow('not enabled with tools');
+  for (const failure of ['model', 'disabled', 'missing-model'] as const)
+    await expect(verifyOpenCodeReady(endpointFixture(failure, 'deepseek-v4.1-flash').endpoint, 'Basic test', new AbortController().signal)).rejects.toThrow('not enabled with tools');
 });
 
 test('readiness accepts legacy shorthand but rejects a decoded model from another provider', async () => {

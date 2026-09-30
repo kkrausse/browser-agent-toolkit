@@ -49,7 +49,10 @@ export function createOpenCodeCandidateConfig(modelBaseURL: string, additionalTo
     $schema: 'https://opencode.ai/config.json',
     model: 'opencode/' + (defaultModel ?? openCodeCandidateLaunch.model.id), snapshots: false,
     permissions: [...new Set(['read', 'edit', 'grep', 'glob', 'runJavascript', ...additionalToolActions])].map(action => ({ action, resource: '*', effect: 'allow' as const })),
-    providers: { opencode: { settings: { baseURL: modelBaseURL }, models: {
+    // This is a host-authenticated proxy, not a direct Zen connection. The host
+    // replaces authorization; this public routing marker is never a credential.
+    // Zen otherwise disables paid models solely because the guest has no key.
+    providers: { opencode: { activation: 'enabled' as const, settings: { baseURL: modelBaseURL, apiKey: 'editor-host-proxy' }, models: {
       ...(defaultModel === undefined ? { [openCodeCandidateLaunch.model.id]: fallbackModel } : {}),
       ...models,
     } } },
