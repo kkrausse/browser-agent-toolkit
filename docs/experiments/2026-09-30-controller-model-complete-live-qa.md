@@ -193,6 +193,9 @@ sessions/tabs untouched. **Exclusive visible Browser Control slot RELEASED.**
 ## Commit provenance
 
 Only these two QA paths were staged by this agent. Concurrent commit **fa5bbaf**
-captured them together with another agent's preparation report before this
-agent's `git commit --only` ran (it reported nothing to commit). That commit was
-not rewritten; this provenance note is a separate own-path-only commit. No push.
+briefly captured them with another agent's preparation report before this agent's
+`git commit --only` ran (it reported nothing to commit). The other agent then
+replaced its commit with **3fbe8b7**, excluding the QA paths. This agent did not
+rewrite either commit. Report is now independently committed as **eae659c**;
+the runner and this corrected provenance use a subsequent own-path-only commit.
+No push.
