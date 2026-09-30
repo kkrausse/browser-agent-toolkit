@@ -22,14 +22,14 @@ performance comparison or demonstrated reduction in failure rate yet.
 The next milestone is **reliably faster real workspace switching**, not merely
 fewer workers. Keep the baseline as the comparison/control and fallback.
 
-### Latest rollup (after library prerequisite result `d1f60e4`)
+### Latest rollup (updated with integration and live QA follow-ups)
 
 | Workstream | Latest state |
 | --- | --- |
-| Chat readiness/drafts | Repaired `691cd5aa`; isolated visible and headless lab passed. Same-view/held-model QA harness being corrected; whole-app acceptance pending. |
+| Chat readiness/drafts | Repaired `691cd5aa`; isolated visible and headless lab passed. Corrected same-view/held-model harness now in independent live QA; whole-app acceptance pending. |
 | Close target retention | Unchanged-runtime case-1 live control passed with termination/lock/census observations. Historical cause still unknown; full suite pending. |
-| Cached installed artifacts | Joined script ownership and supported cache audits committed `d1f60e4`; app opt-in integration assigned, retention default off. No new switch-speed result. |
-| OpenCode process retention | Actual-delivered-server foundation staged; A0-only live qualification running, exact artifact lifetime audit running. No retention transition or remote-release proof. |
+| Cached installed artifacts | Library script ownership/audits repaired. App integration found asynchronous endpoint-upload cancellation is not joined by shutdown; owner repair assigned. No on adapter or new switch-speed result. |
+| OpenCode process retention | Exact artifact audit found background refresh invalidates baseline no-background-work premise. A0 foundation live cohort failed local null-settings guard; repair assigned. No reuse or remote-release proof. |
 | Workspace switching/stress | Integrated frozen candidate, matched off/on comparison, full applicable E2E and stress/recovery qualification still pending. |
 
 The sections below preserve the original evaluation and chronological follow-ups;
@@ -247,6 +247,36 @@ Provisional choice: the third column. User subsequently authorized concrete
 stability work and separate cached-artifact and OpenCode-retention subagents, then
 isolated workspace-switch testing after the candidates are ready. This is not
 authorization to push, deploy, promote default reuse, or overwrite existing evidence.
+
+### User direction: retain OpenCode long term; evaluate a stable layout
+
+The user explicitly wants to preserve long-term OpenCode process retention as a
+performance goal, not abandon it because the current same-root eviction experiment
+is blocked. They suggested keeping the server in a stable isolated subdirectory
+that project replacement never touches. The final refactor decision should follow
+hardening and practical comparisons, not precede them.
+
+The server binary is already delivered separately at `/app/server.js`; server-path
+stability alone does not fix location ownership tied to replaced `/workspace`.
+The parent proposes a **hypothesis to test**, not a chosen production layout:
+stable server/state plus distinct stable physical project directories per logical
+workspace (for example `/workspace/projects/<id>`), with explicitly routed clients
+and native sessions. Switch the active location/preview instead of destructively
+replacing the same source path and evicting/reacquiring the same key each time.
+A different logical ID over the same physical source path is not that isolation.
+
+This could avoid one dangerous boundary while keeping the process warm. It does
+not prove safe background refresh/plugin routing, global session/event isolation,
+configuration changes, memory growth or eventual workspace deletion/eviction.
+Retained old locations still need explicit ownership and bounded resource policy;
+do not portray persistent directories as a substitute for finalizer joins.
+
+Source feasibility agent `ses_f0c1d07d2ffeieeJXkjkkKVFc0` checks actual public
+selective service lifecycle APIs, path/cwd/dependency/config/database constraints
+and native routing, without changing active integration or runtime work. Intended
+technical report: `2026-09-30-stable-opencode-workspace-source-feasibility.md`.
+High-level design/decision remains parent/user-owned; no wholesale rewrite or
+stable-layout benchmark has been performed.
 
 ## Active work authorized in the chat
 
@@ -542,6 +572,79 @@ audits, equal cache digests and owned conservative recovery. Intended report:
 consumers/frozen off-on candidates but cannot start browser/server work until parent
 assigns the slot. Manual/headless live switching, timings and stress remain mandatory;
 no flag that silently performs no safe retention may be presented as an on treatment.
+
+### Follow-up: delivered lifetime constraints strengthen; first foundation QA fails
+
+Source audit `4b3738d` verifies exact actual-648 and baseline-1df bytes/provenance.
+Critical RcMap/location/request/plugin snippets are identical: zero-ref joined
+eviction survives conditionally; positive-ref invalidation/same-key overlap remains.
+**Actual 648 enables `models.fetch:true`; baseline disables it.** Global repeating
+refresh/cache writes/events and location-plugin reload callbacks invalidate the old
+blanket `backgroundWork:false` admission. Serial finite-route reasoning is not
+concurrent mounted hydration/SSE proof. Creation routes through payload location,
+and session reads require exact owned-root IDs. See
+[delivered lifetime audit](2026-09-30-delivered-opencode-retention-lifetime-audit.md).
+An A→B retention attempt remains blocked on actual mounted qualification, refresh
+owner resolution and exact-delivered core/service acquisition/finalizer evidence;
+the remote generation/ref/finalizer receipt is still absent. Cached-artifact reuse
+is the nearer-term performance target, not a blind baseline process-reuse port.
+
+Foundation live report `b5daa94`, clarification `53948b5`, records **one failed
+cohort, no retry**, on stage/source `874e759`, fresh origin 60643:
+
+- All 9,588 frozen files/63 staged entries verified before/after. Eleven raw finite
+  responses passed actual SK pinned-codec parity, independently re-executed offline.
+- Fresh-root attempt failed the local guard `Unexpected root create settings`;
+  no root selected/manual idle admission/hydration acceptance. Pinned SDK absent
+  optional root settings serialize as null; the location-only guard rejected them.
+  Exact rejected request bytes were not retained, a stated evidence gap.
+- Failed state/errors/raw responses/screenshot/journal/partial network retained.
+  Owned page destruction/forced host SIGTERM, host exit 143/initiator exit 1 and
+  PID/port/session absence are **failure cleanup, not clean guest/host acceptance**.
+  Browser slot released. Global refresh/catalog observations/network limits are
+  cited accurately; no absent-background-work or remote-release pass is claimed.
+
+See [foundation live failure](2026-09-30-single-kernel-opencode-foundation-live-qa.md).
+New repair agent `ses_f0c21308affegMgHc8w0gKkQdN` owns pinned-schema root admission,
+request-byte capture before semantic validation and guarded failure cleanup, with
+new frozen source/stage and independent live cohort required. Intended report:
+`2026-09-30-single-kernel-opencode-root-qualification-repair.md`. Known null absence
+may be accepted only per the actual schema; non-null inheritance/unknown inputs
+remain rejected. This is a concrete harness/fixture repair, not a runtime or
+retention result. No new browser/server run is authorized for that repair agent.
+
+### Follow-up: cached integration finds endpoint ownership gap; swap QA ready
+
+App integration commits `3a34772`/`93b8a6b` did **not** ship retention-on or a no-op
+flag. Public committed-e35 endpoint characterization shows `Endpoint.closed` and
+fetch rejection resolving before asynchronous upload cancellation joins; stream
+cleanup swallows cancellation failure and runtime stop exposes no equivalent join.
+This is a supported streaming-input counterexample, **not a live ordinary-TODO-JSON
+overlap claim**. Library audit joins/kernel inventory alone cannot prove that owner
+finished. See [integration report](2026-09-30-single-kernel-cached-switch-integration.md).
+
+Full isolated off-only consumer build/declarations/strict check passed; existing
+focused suites passed 59 tests/297 assertions. Stage:
+`/private/var/folders/t_/x48jtnps7n5_0g_pt9xpvbg00000gn/T/opencode/cached-switch-consumer-MGBmBw`.
+No safe on candidate/matched pair/live run/timing exists. The lstat-safe helper
+bootstrap fence also still needs proof after joined shutdown.
+
+New owner-repair agent `ses_f0c1a168effeok6uYJrpnkV9Mi` owns causal host-SDK endpoint/
+stream joins and supported toolkit runtime shutdown propagation, retaining failures
+and withholding fallback when cleanup is uncertain. Intended report:
+`2026-09-30-endpoint-upload-shutdown-ownership-repair.md`. It is offline-only until
+parent assigns a fresh matching candidate's live QA; old e35 receipts cannot be
+relabelled repaired. Defaults/journal/source/native session ordering remain unchanged.
+
+QA-only repaired controller-switch harness commit `e1048ed` passed offline build/
+strict check and one concrete regression/21 assertions. It checks stable outer
+ChatView (child composer may remount), correct empty A return, controller-isolated
+text, and exact session-model POST holds without blocking plugin activation.
+See [harness repair](2026-09-30-controller-swap-qa-harness-repair.md). Frozen handoff:
+`/private/var/folders/t_/x48jtnps7n5_0g_pt9xpvbg00000gn/T/opencode/controller-swap-repaired-46MQpb/frozen-final`.
+New independent QA agent `ses_f0c19439effe3pvL2PjB06ciX0` now owns the visible CLI
+slot, then serialized headless coverage where practical. Intended report:
+`2026-09-30-controller-swap-model-live-qa.md`. That assignment is not acceptance.
 
 ## Next validation and stress-test sequence
 
