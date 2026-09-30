@@ -189,7 +189,7 @@ Within the absolute stage directory above:
 - `qa-failure-cleanup.json`, `host-process-join.json`,
   `qa-initiator-completion.txt`, `qa-failure-absence.json`.
 
-No model inference/provider invocation, prompt, tool/execution RPC, source
+No model inference/provider inference invocation, prompt, tool/execution RPC, source
 replacement, API DELETE, reset, reuse, paid operation or dependency/pin mutation.
 Catalog/default-model reads are not model inference. Root inheritance, message/
 permission/form hydration, rendered idle admission, after-mount identity stability,
@@ -202,3 +202,44 @@ after repair/review, but none was run here.
 Only this new report is committed; QA evidence is retained locally in the ignored
 diagnostics directory. No staged/client/source, app/chat/cache/runtime/audit/parent
 document changes and no push.
+
+## Follow-up: actual delivered lifetime audit incorporated, no rerun
+
+Source audit commit **`4b3738d`**, read after this failed cohort and completed
+failure cleanup, is explicitly incorporated:
+`/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit-single-kernel/docs/experiments/2026-09-30-delivered-opencode-retention-lifetime-audit.md`.
+
+Actual **648** enables `models:{fetch:true}`; baseline **1df** disables it.
+The shipped global ModelsDev owner can repeat HTTP refresh/cache writes and
+publish refreshed events, with location-plugin subscribers reloading catalog
+state. Activation is a latch, not a global refresh/callback drain. **No
+`backgroundWork:false` assertion is made.** Normal finite body consumption,
+activation, catalog parity or local disposal cannot establish remote release.
+Critical RcMap/request lifetime snippets match the baseline; the positive-ref
+invalidate/same-key reacquisition hazard and missing server-owned callback/
+ref/finalizer receipts persist. `remoteZeroRef:false`, `retentionAccepted:false`.
+
+Live stdout recorded `catalog.updated` at guest timestamps **12:37:47.432** and
+**12:37:50.600**, after location/plugin startup. These prove catalog activity,
+not which refresh/subscriber caused it or that its work drained. The partial HAR
+contains seven successful host `/codec` POSTs and one `/evidence` entry with status
+zero; independently retained terminal evidence proves the latter was ultimately
+exported, so capture failure alone must not be labelled guest-request failure.
+No external refresh request appears in that partial capture. Because capture
+began after launch and does not establish complete guest background-network
+coverage, **absence there is not proof of no external network/cache work**.
+No paid prompts were sent or authorized.
+
+The audit also confirms **POST session creation routes by payload.location**;
+query routing alone is insufficient. This cohort rejected the POST before guest
+transport and therefore supplies no actual payload/result root verification.
+The offline schema reproduction has explicit `/workspace`, but is not recovered
+live-body proof. Any repaired cohort must retain actual payload bytes and verify
+explicit owned `/workspace` routing, absence of workspace/settings inheritance,
+native initial-empty inventory and the resulting unique owned root. The existing
+session-read regex is not general session ownership authorization: all live read
+IDs must match that verified root. No such read/root proof was reached here.
+
+This update does not alter the original first-failure cohort, broaden its fence,
+authorize A→B/eviction, or reopen browser ownership. Exact cleanup remains the
+forced failure cleanup documented above; no positive guest/host join acceptance.
