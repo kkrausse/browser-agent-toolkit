@@ -26,12 +26,16 @@ const manifest=await Bun.file(join(frozen,'prepared/manifest.json')).json();
 if(manifest.runtimeVersion!==receipt.version||manifest.dependencies.policy.runtimeVersion!==receipt.version)throw Error('Payload runtime mismatch');
 for(const asset of [...manifest.assets.filter((a:any)=>a.kind==='file'),manifest.bundle,manifest.image].filter(Boolean))if(await hash(join(frozen,'prepared',asset.file))!==asset.sha256||(await Bun.file(join(frozen,'prepared',asset.file)).size)!==asset.bytes)throw Error('Payload mismatch '+asset.file);
 const server=join(baseline,'vivari/.runtime/opencode-release-2.0.3/.runtime/opencode-bun-server/server.js');
-const serverHash=await hash(server);
-if(serverHash!=='1df4bc41c0f6c7350da9d5953f3139586f760a7931fe411bdcabb3460098a929')throw Error('Pinned server mismatch');
+const baselineServerHash=await hash(server);
+if(baselineServerHash!=='1df4bc41c0f6c7350da9d5953f3139586f760a7931fe411bdcabb3460098a929')throw Error('Pinned baseline server mismatch');
 // Also bind the actual delivered server bytes to this hash, not just a sibling file.
 const serverAssets=manifest.assets.filter((a:any)=>a.kind==='file'&&a.destination==='/app/server.js');
-if(serverAssets.length!==1||serverAssets[0].sha256!==serverHash)throw Error('Delivered server does not match pinned codec');
-const bundle=await Bun.file(server).text(),end=bundle.indexOf('\n// ',bundle.indexOf('var init_client7 ='));
+const serverHash='648140f53c48820106d4727fd29f1914f8f86a4e2c3f3430551eb9dd41a806b5';
+const serverReceipt=JSON.parse(manifest.opencode.receipt);
+if(serverAssets.length!==1||serverAssets[0].sha256!==serverHash||serverReceipt.source.version!=='2.0.3'||serverReceipt.outputs['server.js'].sha256!==serverHash)throw Error('Delivered SK server pin mismatch');
+const deliveredServer=join(frozen,'prepared',serverAssets[0].file);
+if(await hash(deliveredServer)!==serverHash)throw Error('Actual delivered server hash mismatch');
+const bundle=await Bun.file(deliveredServer).text(),end=bundle.indexOf('\n// ',bundle.indexOf('var init_client7 ='));
 if(end<=0||!bundle.includes('function makeSuccessSchema(endpoint5)'))throw Error('Pinned extraction anchors absent');
 await Bun.write(join(output,'pinned-codec.mjs'),bundle.slice(0,end)+'\ninit_client7(); export {ClientApi as Api, exports_Schema as Schema, exports_Effect as Effect, makeSuccessSchema, exports_HttpServerResponse as HttpServerResponse, exports_HttpApiSchema as HttpApiSchema};\n');
 await Bun.write(join(output,'sk-opencode-live-codec.mjs'),await Bun.file(join(snapshot,'examples/todo-app/tests/sk-opencode-live-codec.mjs')).arrayBuffer());
@@ -61,5 +65,5 @@ if(!result.success)throw new AggregateError(result.logs,'Consumer build failed')
 const stageHashes:Record<string,string>={};
 for(const dir of ['client','chat','workspace','host-source'])for await(const file of new Bun.Glob('**/*').scan({cwd:join(output,dir),onlyFiles:true}))stageHashes[dir+'/'+file]=await hash(join(output,dir,file));
 for(const file of ['committed-source.tar','pinned-codec.mjs','sk-opencode-live-codec.mjs'])stageHashes[file]=await hash(join(output,file));
-await writeFile(join(output,'stage.json'),JSON.stringify({status:'offline-prepared-only',output,frozen,sourceRevision:revision,sourceArchiveSha256:stageHashes['committed-source.tar'],runtimeRevision:receipt.revision,runtimeVersion:receipt.version,verifiedFrozenFiles:verified,frozenReceiptSha256:await hash(join(frozen,'receipt.json')),frozenHashes:receipt.hashes,serverSha256:serverHash,dependencies,stageHashes,retentionAccepted:false,remoteZeroRef:false,liveRuns:0},null,2),{flag:'wx'});
+await writeFile(join(output,'stage.json'),JSON.stringify({status:'offline-prepared-only',output,frozen,sourceRevision:revision,sourceArchiveSha256:stageHashes['committed-source.tar'],runtimeRevision:receipt.revision,runtimeVersion:receipt.version,verifiedFrozenFiles:verified,frozenReceiptSha256:await hash(join(frozen,'receipt.json')),frozenHashes:receipt.hashes,serverSha256:serverHash,baselineServerSha256:baselineServerHash,serverReceipt,dependencies,stageHashes,retentionAccepted:false,remoteZeroRef:false,liveRuns:0},null,2),{flag:'wx'});
 console.log(JSON.stringify({output,sourceRevision:revision,verifiedFrozenFiles:verified,serverHash,clientSha256:stageHashes['client/sk-opencode-live-client.js'],liveRuns:0}));
