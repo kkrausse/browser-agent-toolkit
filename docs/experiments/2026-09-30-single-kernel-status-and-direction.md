@@ -30,7 +30,7 @@ fewer workers. Keep the baseline as the comparison/control and fallback.
 | Close target retention | Unchanged-runtime case-1 live control passed with termination/lock/census observations. Historical cause still unknown; full suite pending. |
 | Cached installed artifacts | Endpoint/PID-egress repairs pass offline; minimal native-fetch browser stop gate passed. Lazy-loader case still blocks cache admission; optimization paused. No on adapter or measured gain. |
 | OpenCode process retention | Root requalification stopped at browser-session setup, no guest launch. Shared-config stable-root toy frozen but unexecuted. No reuse/remote-release proof. |
-| Workspace switching/stress | Conservative integrated app completed 19 stages/five generations; focused suite blocked before first body by duplicate-library observer. Editor switching/recovery separately assigned. No retention timing comparison. |
+| Workspace switching/stress | App completed 19 stages/five generations; repaired focused harness enters live QA. Editor first save rejected chat-busy; switches/recovery unrun and kernel target retained after Exit. Investigation assigned. |
 
 The sections below preserve the original evaluation and chronological follow-ups;
 earlier “pending”/failure statements are snapshot facts, not erased by later bounded
@@ -1033,6 +1033,35 @@ does not authorize the rest automatically. Later milestones cover root/PID scope
 remaining async domains, persistence, host integration and independent qualification.
 No implementation/install/test/benchmark or live operation occurred in this study;
 the user has requested scope only. Existing editor live QA retains its browser slot.
+
+### Follow-up: editor save/close fail qualification; repaired focused suite starts
+
+Editor cohort report `955265d` reached initial preview/chat, native New chat/model
+selection and owned source marker, but first explicit Save rejected at capture's
+second idle check: `Chat became busy; workspace was not replaced`. No precise
+chat/SSE timing cause was captured. Zero of four switches, reload recovery and 503
+recovery completed. See
+[editor cohort](2026-09-30-conservative-editor-switch-recovery-live-qa.md).
+
+Cleanup-only public Exit saved 35 exact source files and one flat native export,
+without qualifying session remapping/hierarchy or switching. Exit returned in
+867ms, yet the same kernel target remained approximately 32.5 seconds after close,
+despite empty locks. Normal orderly-close acceptance is not established; later
+owned page/session/host destruction cleared targets and verified PID/port absence.
+All 9,677 frozen/run files remained unchanged; exclusive browser slot released.
+
+Offline investigation agent `ses_f0b7bf03fffevgWrgVkfYm36fs` owns exact source/raw
+evidence review of save admission and editor/kernel-close paths, separating proven
+mechanisms from unobserved timing. Intended report:
+`2026-09-30-editor-save-close-source-investigation.md`. No production fix, Effect
+migration or assertion relaxation is authorized by this research assignment.
+
+Independent focused QA agent `ses_f0b7c6858ffeoa8A7AHo2fy5VE` now owns the exclusive
+visible slot for the separately frozen observer-identity repair's unchanged cases
+0–9. Intended report `2026-09-30-focused-observer-repaired-live-qa.md`. It must stop
+at the first failure, retain original deadlines and distinguish its scope from
+the editor failures. The integrated app phase remains bounded passing evidence,
+not full-suite/editor acceptance or retirement of historical close failures.
 
 ## Next validation and stress-test sequence
 
