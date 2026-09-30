@@ -11,7 +11,8 @@ if(receipt.offline||!receipt.version||receipt.topology?.policy!=='single-kernel'
 for(const [file,hash] of Object.entries(receipt.hashes))if(assetHash(await readFile(join(output,file)))!==hash)throw Error('Frozen acceptance artifact mismatch: '+file);
 const contracts=process.argv[3]==='--contracts';
 const diagnostic=process.argv[3]==='--spawn-diagnostic';
-const port=contracts||diagnostic?0:Number(process.argv[3]??0);
+const reload=process.argv[3]==='--reload';
+const port=contracts||diagnostic||reload?0:Number(process.argv[3]??0);
 if(port!==0)throw Error('Use an OS-assigned fresh port; existing origins must remain untouched');
 const todos=new Map<string,Todo>();
 const headers={'Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'require-corp','Cache-Control':'no-store','Service-Worker-Allowed':'/'};
@@ -26,7 +27,7 @@ const server=Bun.serve({hostname:'127.0.0.1',port:0,async fetch(request){
   if(path==='/inspect-empty')return new Response('<!doctype html><title>Fresh acceptance origin inspection</title>',{headers:{...headers,'Content-Type':'text/html'}});
   if(path==='/distribution')return Response.json({name:'vivari',version:receipt.version,assetBaseUrl:'/runtime/'},{headers});
   if(path==='/events'&&request.method==='POST'){const event=await request.text();await appendFile(join(output,'contract-events.jsonl'),JSON.stringify({at:new Date().toISOString(),event})+'\n');return new Response('retained',{headers});}
-  if(path==='/')return new Response('<!doctype html><title>Single-kernel correctness acceptance</title><h1>Single-kernel correctness acceptance</h1><iframe style="width:100%;height:450px"></iframe><pre>Loading isolated consumer</pre><script type="module" src="/client/'+(diagnostic?'single-kernel-spawn-diagnostic-client':contracts?'single-kernel-cases-client':'single-kernel-client')+'.js"></script>',{headers:{...headers,'Content-Type':'text/html'}});
+  if(path==='/')return new Response('<!doctype html><title>Single-kernel correctness acceptance</title><h1>Single-kernel correctness acceptance</h1><iframe style="width:100%;height:450px"></iframe><pre>Loading isolated consumer</pre><script type="module" src="/client/'+(reload?'single-kernel-reload-client':diagnostic?'single-kernel-spawn-diagnostic-client':contracts?'single-kernel-cases-client':'single-kernel-client')+'.js"></script>',{headers:{...headers,'Content-Type':'text/html'}});
   if(path.startsWith('/unused-model/'))return new Response('Model calls prohibited',{status:403,headers});
   if(path.startsWith('/api/'))return fetchRequestHandler({endpoint:'/api',req:request,router:appRouter,createContext:({req})=>({req,todos})});
   if(path==='/editing-policy')return Response.json({allowed:false},{headers});

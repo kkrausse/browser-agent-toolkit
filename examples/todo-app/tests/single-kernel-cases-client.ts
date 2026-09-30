@@ -8,7 +8,7 @@ let active=false,failed=false;
 const attempted=new Set<string>();
 observeBrowserCases(async(phase,workspace)=>{
   const diagnostics=await diagnoseWorkspace(workspace);assertSingleKernelDiagnostics(diagnostics);
-  if(phase==='stopped')assertZeroWork(diagnostics);
+  if(phase==='stopped'){assertZeroWork(diagnostics);if((diagnostics as any).spawnCapture?.ownedSpills!==0)throw Error('Focused case left owned spawn spills');}
   evidence.topology.push({phase,diagnostics});log('single-kernel-topology',{phase,diagnostics});
 });
 const api={evidence,async run(index:number,step:number){
