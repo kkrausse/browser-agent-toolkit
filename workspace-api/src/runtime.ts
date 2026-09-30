@@ -55,6 +55,12 @@ export namespace Runtime {
         }, error => { executionFailures.push(error); executions.delete(execution); });
         if (stopped) await execution.stop();
         return execution;
+      } catch (error) {
+        // A pre-PID kernel loader can fail cleanup before an Execution exists.
+        // Keep that receipt after pending-launch removal; stop must not detach
+        // merely because allSettled observed and discarded its rejection.
+        if (error instanceof WorkspaceError && error.code === "CLEANUP_FAILED") executionFailures.push(error);
+        throw error;
       } finally { pendingLaunches.delete(promise); }
     };
     let stopping: Promise<void> | undefined;
