@@ -14,7 +14,7 @@ let codecCount=0,codecPending=0,captured=false;
 const server=Bun.serve({hostname:'127.0.0.1',port:0,async fetch(request){
  const url=new URL(request.url),path=url.pathname;
  if(path==='/inspect-empty')return new Response('<!doctype html><title>Fresh origin inspection</title>',{headers});
- if(path==='/stage')return Response.json({...stage,frozenHashes:undefined,stageHashes:undefined},{headers});
+ if(path==='/stage')return Response.json({...stage,clientSha256:stage.stageHashes['client/sk-opencode-live-client.js'],frozenHashes:undefined,stageHashes:undefined},{headers});
  if(path==='/')return new Response('<!doctype html><title>SK pinned mounted qualification — no retention</title><h1>Real OpenCode controller qualification</h1><p>No prompt, model, tool, reset or retention operation is exposed.</p><button id="start">Start one owned qualification</button><p id="status">awaiting-start</p><p>Native selected session: <strong id="session">None</strong></p><pre id="snapshot">Not mounted</pre><button id="admit" disabled>Confirm rendered empty idle root and join cleanup</button><script type="module" src="/client/sk-opencode-live-client.js"></script>',{headers:{...headers,'content-type':'text/html'}});
  if(path.startsWith('/prohibited-model/'))return new Response('Inference prohibited',{status:403,headers});
  if(path==='/codec'&&request.method==='POST'){

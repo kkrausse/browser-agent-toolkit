@@ -9,9 +9,10 @@ const endpoint=Object.values(Api.groups).flatMap(g=>Object.values(g.endpoints)).
 if(!endpoint) throw Error('Missing pinned endpoint');
 const bytes=Buffer.from(record.bodyBase64,'base64');
 const success=[...endpoint.success][0];
-let domain=record.status===204?HttpApiSchema.NoContent.make():Schema.decodeSync(success)(JSON.parse(bytes.toString()));
+const wire=record.status===204?undefined:JSON.parse(bytes.toString());
+let domain=record.status===204?HttpApiSchema.NoContent.make():Schema.decodeSync(success)(wire);
 if((record.path==='/api/session'&&record.method==='GET')||record.path.endsWith('/message')) {
-  if(domain.cursor.previous!==null||domain.cursor.next!==null) throw Error('Qualification requires unpaginated fresh inventory');
+  if(wire.cursor.previous!==null||wire.cursor.next!==null) throw Error('Qualification requires unpaginated fresh inventory');
   domain={...domain,cursor:{previous:undefined,next:undefined}};
 }
 const encoded=HttpServerResponse.toWeb(await Effect.runPromise(Schema.encodeEffect(makeSuccessSchema(endpoint))(domain)));

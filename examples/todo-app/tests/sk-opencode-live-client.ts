@@ -1,7 +1,7 @@
 import {diagnoseWorkspace} from '@kev-browser-agent-kit/workspace';
 import {WorkspaceController} from '@kev-browser-agent-kit/workspace/react';
 import {loadPrepared,preparedApps,installOpenCodeConfig,createOpenCodeCandidateLaunch,openCodeCandidateLaunch as descriptor} from '@kev-browser-agent-kit/opencode-chat/browser';
-import {createChatController} from '../../../opencode-chat/src/controller';
+import {createChatController} from 'sk-opencode-qualified-controller';
 
 // Deliberate actual-controller UI: read-only snapshot, no ChatView send/tool actions.
 // All writes are initial preparation of this NEW owned origin, before server launch.
@@ -23,8 +23,15 @@ async function run(){
  start.disabled=true;
  const watchdog=setTimeout(()=>{poison??=Error('Qualification deadline; unresolved ownership retained');evidence.status='failed';evidence.error=String(poison);display();},180000);
  try{
+  const freshRoot=await navigator.storage.getDirectory();
+  for await(const key of (freshRoot as any).keys())throw Error('Origin already contains OPFS '+key);
+  assert((await indexedDB.databases()).length===0&&(await caches.keys()).length===0&&(await navigator.serviceWorker.getRegistrations()).length===0&&localStorage.length===0,'Fresh native origin storage required');
+  evidence.freshOrigin={url:location.origin,opfsEmpty:true,indexedDBEmpty:true,cachesEmpty:true,serviceWorkersEmpty:true,localStorageEmpty:true};
   const stage=await (await fetch('/stage')).json();evidence.stage=stage;
   assert(stage.sourceRevision&&stage.runtimeVersion&&stage.serverSha256,'Served stage identity missing');
+  const servedClient=new Uint8Array(await (await fetch('/client/sk-opencode-live-client.js')).arrayBuffer());
+  assert(await sha(servedClient)===stage.clientSha256,'Served committed-source client hash mismatch');
+  evidence.servedClientSha256=await sha(servedClient);
   const manifest=await loadPrepared('/prepared/',owner.signal);
   assert(manifest.runtimeVersion===stage.runtimeVersion,'Runtime/payload mismatch');
   const workspace=await owner.open({name:'vivari',version:stage.runtimeVersion,assetBaseUrl:'/runtime/'});

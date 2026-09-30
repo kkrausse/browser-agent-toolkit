@@ -9,6 +9,19 @@ async function codec(record:unknown){
  p.stdin.write(JSON.stringify(record));p.stdin.end();
  const [stdout,stderr,exit]=await Promise.all([new Response(p.stdout).text(),new Response(p.stderr).text(),p.exited]);return {stdout,stderr,exit};
 }
+// Generate positive wire fixtures using the real transport serializer, not the
+// input object's JSON property order. These are codec tests, never live receipts.
+async function encodeFixture(path:string,method:string,status:number,body:unknown){
+ const code=`const {Api,Schema,Effect,makeSuccessSchema,HttpServerResponse,HttpApiSchema}=await import(process.argv[1]);
+ const [path,method,status,body]=JSON.parse(process.argv[2]);
+ const endpoint=Object.values(Api.groups).flatMap(g=>Object.values(g.endpoints)).find(e=>e.method===method&&(e.path===path||e.path.replace(':sessionID','ses_A')===path));
+ let domain=status===204?HttpApiSchema.NoContent.make():Schema.decodeSync([...endpoint.success][0])(body);
+ if((path==='/api/session'&&method==='GET')||path.endsWith('/message'))domain={...domain,cursor:{previous:undefined,next:undefined}};
+ const web=HttpServerResponse.toWeb(await Effect.runPromise(Schema.encodeEffect(makeSuccessSchema(endpoint))(domain)));
+ console.log(JSON.stringify({path,method,status:web.status,headers:[...web.headers],bodyBase64:Buffer.from(await web.arrayBuffer()).toString('base64')}));`;
+ const p=Bun.spawn(['node','--input-type=module','-e',code,'file://'+join(resolve(output!),'pinned-codec.mjs'),JSON.stringify([path,method,status,body])],{stdout:'pipe',stderr:'pipe'});
+ const [stdout,stderr,exit]=await Promise.all([new Response(p.stdout).text(),new Response(p.stderr).text(),p.exited]);if(exit)throw Error(stderr);return JSON.parse(stdout);
+}
 const project={id:'project',directory:'/workspace',canonical:'/workspace'},location={directory:'/workspace',project};
 const root={...session('ses_A'),location:{directory:'/workspace'}};
 const fixtures:[string,string,number,unknown][]=[
@@ -27,9 +40,7 @@ const fixtures:[string,string,number,unknown][]=[
  ['/api/session/ses_A/form','GET',200,{data:[]}],
 ];
 for(const [path,method,status,body] of fixtures)codecTest('actual delivered SK pinned HttpApi codec fixture '+method+' '+path,async()=>{
- const text=body===undefined?'':JSON.stringify(body);
- const headers=status===204?[]:[['content-type','application/json'],['content-length',String(Buffer.byteLength(text))]];
- const result=await codec({path,method,status,headers,bodyBase64:Buffer.from(text).toString('base64')});
+ const result=await codec(await encodeFixture(path,method,status,body));
  expect(result.exit,result.stderr).toBe(0);expect(JSON.parse(result.stdout).qualified).toBe(true);
 },20000);
 codecTest('actual codec rejects replacement codec shortcuts, wire drift and forbidden reset',async()=>{

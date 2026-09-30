@@ -6,7 +6,7 @@ const frozen=join(root,'.diagnostics/single-kernel-e35eab4-full-fresh-2026-09-30
 const baseline=resolve(root,'../browser-agent-toolkit');
 const runtime=resolve(root,'../vivari-single-kernel');
 const output=resolve(process.argv[2]??join(root,'.diagnostics/sk-opencode-live-'+crypto.randomUUID()));
-async function command(args:string[],cwd=root){const p=Bun.spawn(args,{cwd,stdout:'pipe',stderr:'pipe'});const [out,err,exit]=await Promise.all([new Response(p.stdout).text(),new Response(p.stderr).text(),p.exited]);if(exit)throw Error(err||out);return out.trim();}
+async function command(args:string[],cwd=root,trim=true){const p=Bun.spawn(args,{cwd,stdout:'pipe',stderr:'pipe'});const [out,err,exit]=await Promise.all([new Response(p.stdout).text(),new Response(p.stderr).text(),p.exited]);if(exit)throw Error(err||out);return trim?out.trim():out;}
 const hash=async(path:string)=>new Bun.CryptoHasher('sha256').update(await Bun.file(path).arrayBuffer()).digest('hex');
 const revision=await command(['git','rev-parse',process.env.SK_OPENCODE_SOURCE_REVISION??'HEAD']);
 await command(['git','merge-base','--is-ancestor','55ae98c',revision]);
@@ -42,7 +42,7 @@ await Bun.write(join(output,'sk-opencode-live-codec.mjs'),await Bun.file(join(sn
 // Snapshot the exact e35 host sources; never consume a concurrently edited checkout.
 const host=join(output,'host-source');
 const hostFiles=(await command(['git','ls-tree','-r','--name-only',receipt.revision,'--','packages/core/src/host-sdk'],runtime)).split('\n').filter(Boolean);
-for(const file of hostFiles)await Bun.write(join(host,file.slice('packages/core/src/host-sdk/'.length)),await command(['git','show',receipt.revision+':'+file],runtime)+'\n');
+for(const file of hostFiles)await Bun.write(join(host,file.slice('packages/core/src/host-sdk/'.length)),await command(['git','show',receipt.revision+':'+file],runtime,false));
 for(const pkg of ['workspace-api','opencode-chat'])await symlink(join(root,pkg,'node_modules'),join(snapshot,pkg,'node_modules'));
 const dependencies:Record<string,unknown>={};
 for(const name of ['@opencode/client','@opencode/plugin','effect','react','react-dom']){
@@ -58,12 +58,25 @@ for(const [pkg,entry,name] of [['workspace-api','index.ts','index'],['workspace-
 const result=await Bun.build({entrypoints:[join(snapshot,'examples/todo-app/tests/sk-opencode-live-client.ts')],outdir:join(output,'client'),target:'browser',plugins:[{name:'built-consumer',setup(b){
  b.onResolve({filter:/^@kev-browser-agent-kit\/workspace(?:\/(react|diagnostics|delivery))?$/},a=>({path:join(output,'workspace',(a.path.split('/')[2]??'index')+'.js')}));
  b.onResolve({filter:/^@kev-browser-agent-kit\/opencode-chat\/browser$/},()=>({path:join(output,'chat/browser.js')}));
- b.onResolve({filter:/opencode-chat\/src\/controller$/},()=>({path:join(output,'chat/controller.js')}));
+ b.onResolve({filter:/^sk-opencode-qualified-controller$/},()=>({path:join(output,'chat/controller.js')}));
  b.onResolve({filter:/^react(?:\/jsx-runtime)?$/},a=>({path:require.resolve(a.path,{paths:[join(root,'workspace-api')]} )}));
 }}]});
 if(!result.success)throw new AggregateError(result.logs,'Consumer build failed');
+const common={target:'ES2023',module:'ESNext',moduleResolution:'Bundler',jsx:'react-jsx',strict:true,skipLibCheck:true,lib:['ES2023','DOM','DOM.Iterable'],types:['bun','react'],typeRoots:[join(root,'workspace-api/node_modules/@types'),join(root,'opencode-chat/node_modules/@types')]};
+const tsc=join(root,'workspace-api/node_modules/typescript/bin/tsc');
+const paths:Record<string,string[]>={'@vivari/core/host':[join(frozen,'host/index.d.ts')]};
+for(const [pkg,entries] of [['workspace-api',['index.ts','react.tsx','diagnostics.ts','delivery.ts']],['opencode-chat',['browser.ts','controller.ts']]] as const){
+ const name=pkg==='workspace-api'?'workspace':'chat',sourceRoot=join(snapshot,pkg,'src');
+ if(pkg==='workspace-api')paths['@kev-browser-agent-kit/workspace']=[join(sourceRoot,'index.ts')];
+ await Bun.write(join(output,name+'.tsconfig.json'),JSON.stringify({compilerOptions:{...common,declaration:true,emitDeclarationOnly:true,rootDir:sourceRoot,outDir:join(output,name),paths},files:entries.map(entry=>join(sourceRoot,entry))}));
+ await command(['bun',tsc,'-p',join(output,name+'.tsconfig.json')]);
+ if(pkg==='workspace-api')for(const entry of ['index','react','diagnostics','delivery'])paths['@kev-browser-agent-kit/workspace'+(entry==='index'?'':'/'+entry)]=[join(output,'workspace',entry+'.d.ts')];
+}
+paths['@kev-browser-agent-kit/opencode-chat/browser']=[join(output,'chat/browser.d.ts')];paths['sk-opencode-qualified-controller']=[join(output,'chat/controller.d.ts')];
+await Bun.write(join(output,'consumer.tsconfig.json'),JSON.stringify({compilerOptions:{...common,noEmit:true,paths},files:['sk-opencode-live-client.ts','sk-opencode-live-prepare.ts','sk-opencode-live-serve.ts','sk-opencode-live-staging.test.ts'].map(file=>join(snapshot,'examples/todo-app/tests',file))}));
+await command(['bun',tsc,'-p',join(output,'consumer.tsconfig.json')]);
 const stageHashes:Record<string,string>={};
 for(const dir of ['client','chat','workspace','host-source'])for await(const file of new Bun.Glob('**/*').scan({cwd:join(output,dir),onlyFiles:true}))stageHashes[dir+'/'+file]=await hash(join(output,dir,file));
-for(const file of ['committed-source.tar','pinned-codec.mjs','sk-opencode-live-codec.mjs'])stageHashes[file]=await hash(join(output,file));
+for(const file of ['committed-source.tar','pinned-codec.mjs','sk-opencode-live-codec.mjs','workspace.tsconfig.json','chat.tsconfig.json','consumer.tsconfig.json'])stageHashes[file]=await hash(join(output,file));
 await writeFile(join(output,'stage.json'),JSON.stringify({status:'offline-prepared-only',output,frozen,sourceRevision:revision,sourceArchiveSha256:stageHashes['committed-source.tar'],runtimeRevision:receipt.revision,runtimeVersion:receipt.version,verifiedFrozenFiles:verified,frozenReceiptSha256:await hash(join(frozen,'receipt.json')),frozenHashes:receipt.hashes,serverSha256:serverHash,baselineServerSha256:baselineServerHash,serverReceipt,dependencies,stageHashes,retentionAccepted:false,remoteZeroRef:false,liveRuns:0},null,2),{flag:'wx'});
 console.log(JSON.stringify({output,sourceRevision:revision,verifiedFrozenFiles:verified,serverHash,clientSha256:stageHashes['client/sk-opencode-live-client.js'],liveRuns:0}));
