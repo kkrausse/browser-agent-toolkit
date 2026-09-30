@@ -2,12 +2,13 @@
 
 ## Running origin
 
-Prepared on September 30, 2026 without runtime rebuilding or browser automation:
+Current working origin on September 30, 2026, after wrapper fix `24c9042` and
+parent-operated Bun Browser Control CLI smoke verification:
 
-- URL: **http://127.0.0.1:53971/**
-- Bun server PID: **82790** (leave running for user exploration).
-- Log: `/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit-single-kernel/.diagnostics/single-kernel-live-interactive-server.log`.
-- Owned output/receipt: `/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit-single-kernel/.diagnostics/single-kernel-interactive-1790777922990/live-origin.json`.
+- URL: **http://127.0.0.1:54770/**
+- Bun server PID: **88406** (leave running; live browser/editor remains active).
+- Owned output: `/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit-single-kernel/.diagnostics/single-kernel-interactive-1790778679425`.
+- Ownership receipt: `live-origin.json` in that output directory.
 - Frozen input: `.diagnostics/single-kernel-e35eab4-full-attempt1`.
 - Runtime source: `e35eab4af7a53ff08eb70c09df59c40b78bfdd67`.
 - Distribution: `bfad1c4df939a808e476ee2803dddb9c7833a84c969edd8f106b3d5b440a426e`.
@@ -17,6 +18,28 @@ application and frozen browser workspace/delivery/OpenCode startup libraries are
 reused unchanged. The interactive React/chat UI and server adapter are compiled
 from this checkout into new ignored output. This is an exploratory consumer,
 not a new browser-qualified production build or an E2E pass.
+
+The previous origin **http://127.0.0.1:53971/** / PID **82790** remains serving,
+but its old browser workspace exited orderly. It contains the pre-fix wrapper
+and is **not recommended** for exploration. Use the current origin above.
+
+## Bounded live verification
+
+Parent-owned CLI session `quiet-panda-336` verified chat **Ready**, a hydrated
+preview, TODO creation/completion, explicit `/src/home.tsx` load/save and Vite
+HMR, stable **Session & model** disclosure, and **New chat** hydration completion
+(`ses_f0d43c5f2ffeoENBgXI9XWrE0E`; no model call). After resetting the observer,
+CRUD/HMR produced **zero preview navigations**. Exit → Open editor button →
+full page reload → Open editor reached Ready; the edited heading and completed
+TODO survived that reload. The heading was then restored to **Todos** with
+Save and flush/HMR verified, and only the owned smoke-test TODO was deleted,
+returning the preview to **No todos yet**.
+
+This is a **fresh wrapper boot + manual CRUD/HMR/persistence bounded pass**,
+not full E2E/model inference, worker-census, or performance qualification. The
+separate fresh full E2E worker-cleanup failure below remains unresolved. Detailed
+chronology and the asynchronous checkbox assertion caveat are in
+`2026-09-30-single-kernel-live-wrapper-24c9042-verification.md`.
 
 ## Use
 
@@ -38,8 +61,9 @@ not a new browser-qualified production build or an E2E pass.
 
 Only one live editor tab should own this origin at a time. Do not clear browser
 storage or run qualification drivers on this user exploration origin. Browser
-boot and HMR/chat behavior require parent/user observation; preparation did not
-automate a browser. Source-mode Studio/Python LSP are not enabled or newly qualified.
+boot and HMR/chat behavior received only the bounded parent observation above;
+initial preparation did not automate a browser. Source-mode Studio/Python LSP
+are not enabled or newly qualified.
 The source panel is a small explicit-save host utility, not a Studio parity claim.
 
 ## Restart safely
@@ -81,4 +105,5 @@ aggregate status is **failed**, not passed. Retained definitive evidence:
 Preparation checks: strict TypeScript consumer check passed; HTTP 200 confirmed
 for HTML, JS/CSS, prepared manifest, distribution, diagnostics configuration,
 editing policy and TODO API. HTML/JS/CSS carry COOP/COEP isolation headers. No
-runtime rebuild, browser operation, inference call, canonical pin change or push.
+runtime rebuild, inference call, canonical pin change or push. These preparation
+checks precede the parent-operated browser follow-up recorded above.

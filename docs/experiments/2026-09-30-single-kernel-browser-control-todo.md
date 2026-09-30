@@ -91,3 +91,28 @@ against the same frozen qualification libraries (two outputs; nothing written or
 served). TODO consumer tests: 99 passed, one failed because
 `reuse-pilot-fence.test.ts` imports an absent historical `.diagnostics` runtime
 source endpoint; the failure is unrelated to this prop-identity repair.
+
+### Follow-up: wrapper loop resolved in bounded live verification
+
+After fix `24c9042` (stable module-level `hostPaths`/readiness callbacks), the
+parent transitioned the same Bun CLI session `quiet-panda-336` to a fresh wrapper
+origin **http://127.0.0.1:54770/**, PID **88406**, output
+`.diagnostics/single-kernel-interactive-1790778679425`. The old origin's browser
+workspace exited orderly; its server remains serving but is not recommended.
+The initial old-wrapper observer recorded **2,828 iframe navigation events**
+before that exit. With the new origin's observer reset, CRUD and source-save HMR
+recorded **zero preview navigations**. Chat Ready, hydrated preview, TODO
+creation/completion, stable Session & model disclosure, New chat hydration,
+and Exit/reload/reopen persistence were observed. The preview heading was restored
+and only the owned test TODO removed afterward; the live editor remains active.
+
+An immediate Playwright checkbox `check` encountered a controlled asynchronous
+state mismatch; a subsequent independent wait verified the checkbox was checked.
+This is not a claim that every automation action passed its immediate assertion.
+The attachment-loop diagnostic todo is **resolved for this bounded wrapper
+follow-up**, not a Browser Control defect. The separate fresh full E2E
+worker-cleanup failure remains unresolved; no worker-census, performance, or
+model-inference qualification follows. No runtime rebuild or private credential.
+
+Evidence: `~/.browser-control/sessions/quiet-panda-336/journal.jsonl` and
+`2026-09-30-single-kernel-live-wrapper-24c9042-verification.md`.
