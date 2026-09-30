@@ -141,7 +141,7 @@ await controller.ready;
 </div>;
 
 // Only when this endpoint scope is truly finished (not each view unmount):
-controller.dispose();
+await controller.dispose();
 ```
 
 React >=18 is an **optional peer**. Importing/installing the root does not require
@@ -203,7 +203,7 @@ Actions return promises and reject on failure, also recording visible errors:
 | `replyPermission(id, 'once'\|'always'\|'reject')` | Pinned permission response |
 | `replyQuestion(id, string[][])` / `rejectQuestion(id)` | Backward-compatible question view; adapts question-tool forms to keyed form replies / cancellation |
 | `clearError()` | Dismiss local operation error |
-| `dispose()` | Abort only controller-owned requests/SSE/timers/listeners |
+| `dispose()` | Freeze admission and await controller-owned transport settlement, body cancellation, scopes and runtime disposal; does not interrupt/join remote server work |
 
 Snapshot fields: connection, sessionID, sessions, models, model, native messages,
 execution (`idle/running/retrying/unknown`), interruptRequested, sending, loading,

@@ -2,6 +2,7 @@ import { Cause, Deferred, Effect, Exit, Fiber, ManagedRuntime, Scope, Stream } f
 import { ChatError, OpenCodeAPI, type ChatAPIError, type NativeEvent } from "./api";
 import { createV2SessionReducer } from "./vendor/reducer";
 import { questionFromForm, formAnswer } from "./forms";
+import { createReaderFence } from "./reader-fence";
 import type {
   ChatController,
   ChatExport,
@@ -26,7 +27,8 @@ function freeze<T>(value: T): T {
 export function createChatController(options: ChatOptions): ChatController {
   if (!options.directory?.trim())
     throw new Error("Caller directory is required");
-  const runtime = ManagedRuntime.make(OpenCodeAPI.layer(options.endpoint, options.directory));
+  const readers = createReaderFence(options.endpoint);
+  const runtime = ManagedRuntime.make(OpenCodeAPI.layer(readers.endpoint, options.directory));
   const lifetime = Scope.makeUnsafe();
   const reducer = createV2SessionReducer();
   let state: ChatSnapshot = freeze({
@@ -57,6 +59,7 @@ export function createChatController(options: ChatOptions): ChatController {
   const answered = new Set<string>();
   let recovery: Fiber.Fiber<void, never> | undefined;
   let mutation: symbol | undefined;
+  let disposal: Promise<void> | undefined;
   const publish = (patch: Partial<ChatSnapshot>) => {
     if (disposed) return;
     state = freeze({ ...state, ...patch });
@@ -80,9 +83,11 @@ export function createChatController(options: ChatOptions): ChatController {
     })));
   });
   // Promises exist only at the public React boundary; scopes own all request fibers.
-  const run = <A, E>(effect: Effect.Effect<A, E, OpenCodeAPI>, scope = selectionScope) =>
-    runtime.runPromise(action(effect).pipe(Effect.forkIn(scope), Effect.flatMap(Fiber.join),
+  const run = <A, E>(effect: Effect.Effect<A, E, OpenCodeAPI>, scope = selectionScope) => {
+    if (disposed) return Promise.reject(new Error("Chat controller is disposed"));
+    return runtime.runPromise(action(effect).pipe(Effect.forkIn(scope), Effect.flatMap(Fiber.join),
       Effect.catchCause(cause => Effect.fail(new ChatError({ message: Cause.pretty(cause) })))));
+  };
   // Archive reads must not publish errors or depend on the selected session.
   // The root lifetime still guarantees that disposal cancels their requests.
   const runArchive = <A, E>(effect: Effect.Effect<A, E, OpenCodeAPI>) => {
@@ -590,14 +595,26 @@ export function createChatController(options: ChatOptions): ChatController {
     rejectQuestion: id => run(reply("question", id, (api, sessionID) => api.cancelForm(sessionID, id))),
     clearError: () => publish({ error: undefined }),
     dispose() {
-      if (disposed) return;
+      if (disposal) return disposal;
       disposed = true;
       generation++;
       // Closing the root scope interrupts and joins streams, timers and requests.
       // ManagedRuntime then releases the official client's service layer.
-      void Effect.runPromise(Scope.close(lifetime, Exit.void)).then(() => runtime.dispose());
+      const joinedReaders = readers.close();
+      void joinedReaders.catch(() => {});
+      disposal = (async () => {
+        try {
+          await Effect.runPromise(Scope.close(lifetime, Exit.void));
+        } finally {
+          try { await joinedReaders; }
+          finally { await runtime.dispose(); }
+        }
+      })();
+      // Existing UI cleanup callers may ignore the promise; awaiters still see failure.
+      void disposal.catch(() => {});
       if (state.sessionID) reducer.clear(state.sessionID);
       listeners.clear();
+      return disposal;
     },
   };
   Object.defineProperty(controller, "ready", {

@@ -89,5 +89,7 @@ export interface ChatController {
   replyQuestion(id: string, answers: QuestionAnswers): Promise<void>;
   rejectQuestion(id: string): Promise<void>;
   clearError(): void;
-  dispose(): void;
+  /** Freeze admission, join local readers/finalizers and release the client runtime.
+   * Does not interrupt or join remote server execution. Repeated calls share completion. */
+  dispose(): Promise<void>;
 }

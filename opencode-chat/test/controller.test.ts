@@ -12,8 +12,8 @@ function start(f = fixture()) {
   controllers.push(c);
   return { f, c };
 }
-afterEach(() => {
-  controllers.splice(0).forEach((c) => c.dispose());
+afterEach(async () => {
+  await Promise.all(controllers.splice(0).map((c) => c.dispose()));
 });
 
 test("headless bootstrap uses injected string fetch, marker, requests, immutable stable snapshots and no session mutation", async () => {
