@@ -6,7 +6,9 @@ const url=process.argv[2];if(!url)throw Error('Explicit unique origin URL requir
 const modulePath=process.env.SK_ENDPOINT_OWNER_QA_PLAYWRIGHT;
 if(!modulePath)throw Error('Explicit installed Playwright module path required');
 const {chromium}=await import(modulePath);
-const browser=await chromium.launch({headless:true});
+const executablePath=process.env.SK_ENDPOINT_OWNER_QA_CHROMIUM??chromium.executablePath();
+if(!await Bun.file(executablePath).exists())throw Error('Selected Chromium executable missing: '+executablePath+'; explicitly choose an installed executable or separately authorize installation');
+const browser=await chromium.launch({headless:true,executablePath});
 const context=await browser.newContext();const page=await context.newPage();
 const errors:string[]=[];page.on('pageerror',(error:Error)=>errors.push(String(error)));
 const consoleErrors:string[]=[];page.on('console',(message:{type():string;text():string})=>{if(message.type()==='error')consoleErrors.push(message.text());});
@@ -21,7 +23,7 @@ try{
  const held=await page.evaluate(()=>(window as unknown as {endpointOwnerQA:unknown}).endpointOwnerQA);
  await page.getByRole('button',{name:'Release / reject cancellation',exact:true}).click();await phase(new URL(url).searchParams.get('case')==='reject'?'ownership-negative':'complete');
  const final=await page.evaluate(()=>(window as unknown as {endpointOwnerQA:unknown}).endpointOwnerQA);
- console.log(JSON.stringify({held,final,errors,consoleErrors,cleanupLabel:new URL(url).searchParams.get('case')==='reject'?'forced-profile-disposal-after-expected-ownership-negative-NOT-normal-close':'normal-fixture-close-before-profile-disposal'},null,2));
+ console.log(JSON.stringify({held,final,errors,consoleErrors,executablePath,cleanupLabel:new URL(url).searchParams.get('case')==='reject'?'forced-profile-disposal-after-expected-ownership-negative-NOT-normal-close':'normal-fixture-close-before-profile-disposal'},null,2));
  if(errors.length)throw Error('Raw browser exceptions observed');
 }catch(error){
  console.error(JSON.stringify({failure:String(error),errors,consoleErrors,cleanupLabel:'forced-profile-disposal-after-failure-NOT-normal-close'}));throw error;
