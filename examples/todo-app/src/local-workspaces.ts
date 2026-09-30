@@ -4,7 +4,10 @@ import type { ChatSnapshot } from '@kev-browser-agent-kit/opencode-chat'
 import { orderSessions, sessionBundleSchema } from './workspace-sessions'
 
 export const identityPath = '/.todo-workspace.json'
-const excluded = new Set(['node_modules', '.git', '.server', '.editor', '.react-router', 'build', '.env', '.env.local', '.env.production', '.todo-workspace.json'])
+// Prepared backend archives and experiment receipts/scripts belong to managed
+// delivery, not logical source snapshots. Never copy them into the catalog or
+// restore a receipt supplied by an incoming workspace over installed state.
+const excluded = new Set(['node_modules', '.browser-editor-backends', '.browser-editor-cache', '.git', '.server', '.editor', '.react-router', 'build', '.env', '.env.local', '.env.production', '.todo-workspace.json'])
 export function safeSourcePath(path: string): boolean {
   return path.startsWith('/') && path !== '/' && !path.split('/').slice(1).some(part => !part || part === '.' || part === '..' || /[\\\0]/.test(part) || excluded.has(part) || part.startsWith('.env.'))
 }
