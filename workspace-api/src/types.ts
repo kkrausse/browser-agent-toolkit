@@ -87,6 +87,8 @@ export interface Endpoint {
   readonly url: string;
   readonly port: number;
   readonly closed: Promise<{ reason: string }>;
+  /** Disposal plus all endpoint HTTP read/cancel work, not admission closure. */
+  readonly settled: Promise<void>;
   /** Streaming response; buffered upload (8 MiB). Manual redirect behavior. */
   fetch(input: string, init?: RequestInit): Promise<Response>;
   /** Attach a mounted browser iframe using this endpoint's owning transport.

@@ -191,10 +191,16 @@ export class WorkspaceController {
     const pending: Promise<unknown>[] = [];
     const own = <T,>(task: Promise<T>): Promise<T> => { pending.push(task); void task.catch(() => {}); return task; };
     let endpoint: Endpoint | undefined;
+    let endpointDisposed = false;
+    const disposeEndpoint = () => {
+      if (!endpoint || endpointDisposed) return;
+      endpointDisposed = true; endpoint.dispose();
+    };
     try {
       endpoint = await scope.stage('service.listen', () => budget.stage('listen', signal => Promise.race([
         own(this.runtime!.expose(port, { signal: AbortSignal.any([signal, controller.signal]) }).then(exposed => {
-          if (signal.aborted) { exposed.dispose(); signal.throwIfAborted(); }
+          endpoint = exposed;
+          if (signal.aborted) { disposeEndpoint(); signal.throwIfAborted(); }
           // Ownership starts on acceptance, not on winning the exit/output race.
           endpoint = exposed;
           return exposed;
@@ -211,7 +217,7 @@ export class WorkspaceController {
       const failed = Promise.race([earlyExit, outputFailure]);
       void failed.catch(() => {});
       const service = { execution, endpoint, connection, drained, failed };
-      const settlement = Promise.allSettled([execution.exited, drained]).then(results => {
+      const settlement = Promise.allSettled([execution.exited, drained, endpoint.settled]).then(results => {
         const errors = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
         if (errors.length) throw new AggregateError(errors.map(result => result.reason), `${name} settlement failed`);
       });
@@ -234,9 +240,13 @@ export class WorkspaceController {
       return service;
     } catch (error) {
       diagnostics.record("service.failed", { name, error });
-      startup.abort(error); controller.abort(error); budget.dispose(); endpoint?.dispose();
+      startup.abort(error); controller.abort(error); budget.dispose(); disposeEndpoint();
       diagnostics.record('service.cleanup.join.start', { name, phase: 'readiness', quiescence: 'unproven' });
       const cleanup = await Promise.allSettled([execution.stop(), drained, ...pending]);
+      // expose may accept after the readiness race; pending above owns acceptance.
+      disposeEndpoint();
+      const endpointCleanup = await Promise.allSettled(endpoint ? [endpoint.settled] : []);
+      for (const result of endpointCleanup) if (result.status === 'rejected') this.cleanupFailures.push(result.reason);
       for (const [index, result] of cleanup.entries()) if (result.status === 'rejected') {
         if (index < 2) this.cleanupFailures.push(result.reason);
         diagnostics.record('service.cleanup.settled', { name, error: result.reason });
@@ -274,8 +284,14 @@ export class WorkspaceController {
     const service = this.snapshot.services[name], shutdown = this.shutdowns.get(name); this.detach(name);
     if (!service) return;
     service.endpoint.dispose();
-    if (shutdown) await shutdown();
-    else { await service.execution.stop(); await service.drained; }
+    const results = await Promise.allSettled([
+      shutdown ? shutdown() : service.execution.stop(), service.drained, service.endpoint.settled,
+    ]);
+    const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (failures.length) {
+      this.cleanupFailures.push(...failures.map(result => result.reason));
+      throw new AggregateError(failures.map(result => result.reason), 'Service cleanup failed; quiescence unproven');
+    }
   }
   async stopRuntime() {
     await this.stopServices();

@@ -32,6 +32,7 @@ export namespace Runtime {
     const executions = new Set<Execution>();
     const pendingLaunches = new Set<Promise<Execution>>();
     const endpoints = new Set<Endpoint>();
+    const endpointFailures: unknown[] = [];
     const lifetime = new AbortController();
     const check = () => { if (stopped) throw new WorkspaceError("CLOSED", "Runtime stopped"); };
     const node = async (launchOptions: NodeLaunchOptions, binding?: Record<string, unknown>): Promise<Execution> => {
@@ -61,8 +62,16 @@ export namespace Runtime {
         const listenerId = await host.waitForListener(port, signal);
         check();
         const endpoint = createEndpoint(host, port, listenerId, lifetime.signal);
+        if (!endpoint.settled || typeof endpoint.settled.then !== "function") {
+          endpoint.dispose();
+          const error = new Error("Host SDK lacks endpoint cleanup receipts; ownership unproven");
+          endpointFailures.push(error);
+          throw error;
+        }
         endpoints.add(endpoint);
-        void endpoint.closed.then(() => endpoints.delete(endpoint));
+        void endpoint.settled.then(() => endpoints.delete(endpoint), error => {
+          endpointFailures.push(error); endpoints.delete(endpoint);
+        });
         return endpoint;
       },
       stop() {
@@ -70,7 +79,13 @@ export namespace Runtime {
           stopped = true; lifetime.abort(new WorkspaceError("CLOSED", "Runtime stopped"));
           for (const endpoint of endpoints) endpoint.dispose();
           await Promise.allSettled([...pendingLaunches]);
-          await Promise.all([...executions].map(e => e.stop()));
+          const results = await Promise.allSettled([
+            ...[...executions].map(e => e.stop()),
+            ...[...endpoints].map(endpoint => endpoint.settled),
+          ]);
+          const failures = [...endpointFailures];
+          for (const result of results) if (result.status === "rejected") failures.push(result.reason);
+          if (failures.length) throw new AggregateError([...new Set(failures)], "Runtime cleanup failed; workspace remains attached");
           state.attached = false;
         })();
       },

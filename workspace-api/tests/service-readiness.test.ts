@@ -13,7 +13,7 @@ function fixture() {
   const calls: string[] = [];
   let processSignal!: AbortSignal;
   const execution: Execution = { stdout: stream, stderr: stream, exited, writeStdin() {}, closeStdin() {}, async stop() { calls.push('stop'); resolveExit({ exitCode: 143, signal: 'SIGTERM', forced: true }); } };
-  const endpoint = { url: 'http://service.invalid', dispose() { calls.push('dispose'); } };
+  const endpoint = { url: 'http://service.invalid', settled: Promise.resolve(), dispose() { calls.push('dispose'); } };
   const runtime = { async node(options: NodeLaunchOptions) { processSignal = options.signal!; return execution; }, async expose(_port: number, _options: {signal: AbortSignal}) { return endpoint; }, async stop() {} };
   const controller = new WorkspaceController();
   Object.defineProperty(controller, 'runtime', { get: () => runtime });
@@ -68,7 +68,7 @@ test('uncooperative connect is bounded and never publishes a service', async () 
 
 test('overall budget does not reset after listener stage succeeds', async () => {
   const f = fixture();
-  f.runtime.expose = async () => { await Bun.sleep(20); return {url:'http://service.invalid',dispose(){f.calls.push('dispose');}}; };
+  f.runtime.expose = async () => { await Bun.sleep(20); return {url:'http://service.invalid',settled:Promise.resolve(),dispose(){f.calls.push('dispose');}}; };
   await expect(f.controller.launch('vite', {entry:'/vite.js'}, 5173, async () => {await Bun.sleep(40); throw Error('late connect settled')}, undefined, {listenMs:100,connectMs:100,overallMs:40})).rejects.toThrow('overall budget exhausted');
   expect(f.calls).toEqual(['dispose','stop']);
 });

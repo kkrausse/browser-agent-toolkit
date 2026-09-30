@@ -12,7 +12,7 @@ test('published EOF service survives cancellation until ordered shutdown and dra
     closeStdin() { calls.push('eof'); resolveExit({ exitCode: 0, signal: null, forced: false }); },
     async stop() { calls.push('kill'); resolveExit({ exitCode: 143, signal: 'SIGTERM', forced: true }); },
   };
-  const endpoint = { url: 'http://service.invalid', dispose() { calls.push('endpoint.dispose'); } };
+  const endpoint = { url: 'http://service.invalid', settled: Promise.resolve(), dispose() { calls.push('endpoint.dispose'); } };
   const runtime = {
     async node(options: NodeLaunchOptions) {
       processSignal = options.signal;
