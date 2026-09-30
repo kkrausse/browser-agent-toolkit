@@ -670,6 +670,32 @@ followed by headless only after a visible pass. Intended report:
 `2026-09-30-controller-swap-model-live-qa-followup.md`. The failed original cohort
 remains failed; no result is replayed/relabelled into green.
 
+### Follow-up: stable-root feasibility supports a bounded alternative experiment
+
+Source-only report commit `7aa5cf2` confirms public `stopService('vite')` already
+expresses selective preview shutdown without stopping retained OpenCode. Distinct
+stable physical project directories avoid same-key eviction/reacquisition at switch
+time; stable server directory alone does not. See
+[technical feasibility](2026-09-30-stable-opencode-workspace-source-feasibility.md).
+
+Actual integration gaps include fixed `/workspace` recipes, chat controller caching
+by Service, tool cwd defaults and missing enforced session/client ownership. Global
+ModelsDev refresh reaches retained locations; no-inference does not prove inactivity
+or drain. Process continuity requires execution-object identity, health PID,
+listener generation and host-owner evidence together; public Execution lacks PID/
+execId. No source/assets/tests/runtime execution changed in that investigation.
+
+New dedicated toy-preparation agent `ses_f0c0afefdffeLvuXohD76AIZn5` prepares two
+unchanged physical roots, one server delivery/start, finite fenced location requests
+and optional supported selective preview restart. It must retain raw actual-codec,
+source/route-epoch/continuity evidence; no eviction/SSE/native chat/inference/tool
+execution, no changed production layout. Background-owner assumptions remain
+explicit, and no old root may be destructively replaced. Intended report:
+`2026-09-30-stable-root-opencode-toy-preparation.md`. It is offline-only until parent
+reviews the bounded scope and assigns independent live QA after current hardening.
+This tests the user's long-term retention direction without choosing the final
+refactor or claiming full workspace/session/background safety.
+
 ## Next validation and stress-test sequence
 
 After the first candidates are ready, commission separate test agents rather than
