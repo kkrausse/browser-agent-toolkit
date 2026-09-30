@@ -30,6 +30,7 @@ const fixtures:[string,string,number,unknown][]=[
  ['/api/project/current','GET',200,project],
  ['/api/plugin','GET',200,{location,data:[{id:'editor.javascript',source:{type:'local',path:'/workspace/.server/config/opencode/plugins/editor-javascript.js'},features:{server:true},state:{status:'active'}}]}],
  ['/api/model','GET',200,{location,data:[model]}],
+ ['/api/model/default','GET',200,{location,data:model}],
  ['/api/plugin/await-activation','POST',204,undefined],
  ['/api/session','POST',200,{data:root}],
  ['/api/session/ses_A','GET',200,{data:root}],

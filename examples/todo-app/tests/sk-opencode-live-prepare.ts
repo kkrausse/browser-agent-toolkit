@@ -62,7 +62,7 @@ const result=await Bun.build({entrypoints:[join(snapshot,'examples/todo-app/test
  b.onResolve({filter:/^react(?:\/jsx-runtime)?$/},a=>({path:require.resolve(a.path,{paths:[join(root,'workspace-api')]} )}));
 }}]});
 if(!result.success)throw new AggregateError(result.logs,'Consumer build failed');
-const common={target:'ES2023',module:'ESNext',moduleResolution:'Bundler',jsx:'react-jsx',strict:true,skipLibCheck:true,lib:['ES2023','DOM','DOM.Iterable'],types:['bun','react'],typeRoots:[join(root,'workspace-api/node_modules/@types'),join(root,'opencode-chat/node_modules/@types')]};
+const common={target:'ES2023',module:'ESNext',moduleResolution:'Bundler',jsx:'react-jsx',strict:true,noUncheckedIndexedAccess:true,skipLibCheck:true,lib:['ES2023','DOM','DOM.Iterable'],types:['bun','react'],typeRoots:[join(root,'workspace-api/node_modules/@types'),join(root,'opencode-chat/node_modules/@types')]};
 const tsc=join(root,'workspace-api/node_modules/typescript/bin/tsc');
 const paths:Record<string,string[]>={'@vivari/core/host':[join(frozen,'host/index.d.ts')]};
 for(const [pkg,entries] of [['workspace-api',['index.ts','react.tsx','diagnostics.ts','delivery.ts']],['opencode-chat',['browser.ts','controller.ts']]] as const){
