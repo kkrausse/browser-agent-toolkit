@@ -347,6 +347,31 @@ of retention-on or permission to skip manual/live QA.
   without changing the 15-second bound. No server/browser run has occurred for this
   control. Cases 2–9/full combined acceptance remain unqualified.
 
+### Follow-up: OpenCode preparation returned; real-server foundation queued
+
+Commit `9e09cb8` added dedicated restrictive prerequisite gates and an actual-
+controller qualification entrypoint; 12 offline tests/99 assertions and targeted
+strict typecheck passed. See [preparation report](2026-09-30-single-kernel-opencode-retention-preparation.md).
+The mounted test uses mock transport/ownership/codec callbacks. There is **no
+served real-server qualification, eviction, switch, process-retention integration,
+or new speedup result**. General remote release remains unproved; preparation
+receipts keep remote proof/eviction authorization/retention acceptance false.
+
+The prerequisite gate permits only exclusive serial normally consumed reviewed
+finite routes and fails closed on cancellation, concurrency, execution/tool/PTY
+or identity mismatch. Actual controller bootstrap may overlap finite reads, so
+mounted plumbing success does not imply that this separate serial gate was met.
+The final test history includes seven test-assertion deadlock timeouts and a corrected
+location-routing failure; these were not live server failures or excluded live samples.
+
+New agent `ses_f0c5a466bffeh5lnJia894WoOY` is staging a runnable real pinned-server
+qualification foundation with genuine codec parity, raw evidence and source/session
+identity checks, using fresh output only. Intended report:
+`2026-09-30-single-kernel-opencode-live-qualification-staging.md`. It is not authorized
+to evict or enable retention. Browser QA follows the current chat lab and queued
+close diagnostic under one owner; an actual restricted A→B retention attempt needs
+separate gate review, and general reuse still requires remote ownership guarantees.
+
 ## Next validation and stress-test sequence
 
 After the first candidates are ready, commission separate test agents rather than
