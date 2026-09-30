@@ -127,3 +127,23 @@ bun run --cwd examples/todo-app test src/workspace-switch.test.ts src/workspace-
 - Verify existing TODO items survived activation and remain shared after switches.
 
 Only the parent may append actual browser results and claim live completion.
+
+## Startup null-field correction (after first browser activation)
+
+Parent reported startup snapshot failure `Invalid type: Expected string but received
+null` while retained source and native chats remained active. The app-owned session
+pagination schema rejected the server's terminal `cursor.next: null` (also documented
+in the vendored `SessionsResponse` wire contract). It now accepts nullable/absent
+cursor fields without relaxing non-string validation. Native root `parentID: null`
+is normalized to absent; all other native bundle fields remain intact. No native
+sessions, source, browser storage, served assets, or host process were modified.
+
+- Regression suite: **21 tests / 96 assertions pass**, including terminal null
+  pagination on export and replacement cleanup, null root/opaque bundle fields,
+  absent/null cursor containers, and rejection of numeric cursors/parent IDs.
+- Focused live-consumer typecheck and verified-asset UI staging build pass.
+- New staging for parent-only activation:
+  `/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit-single-kernel/.diagnostics/todo-workspace-ui-staging-20260930-null-cursors`
+- Browser acceptance remains **pending**. These tests use null-valued wire fixtures;
+  this worker did not inspect the parent's authenticated live response or reload
+  the browser and does not claim that startup or workspace switching is verified.

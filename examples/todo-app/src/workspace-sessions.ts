@@ -3,7 +3,7 @@ import type { Service } from '@kev-browser-agent-kit/workspace/react'
 
 // Native OpenCode bundles, not ChatController.exportChats() transcript archives.
 export const sessionBundleSchema = v.strictObject({
-  info: v.looseObject({ id: v.pipe(v.string(), v.minLength(1)), parentID: v.optional(v.string()) }),
+  info: v.looseObject({ id: v.pipe(v.string(), v.minLength(1)), parentID: v.pipe(v.nullish(v.string()), v.transform(value => value ?? undefined)) }),
   messages: v.array(v.record(v.string(), v.unknown())),
 })
 export type SessionBundle = v.InferOutput<typeof sessionBundleSchema>
@@ -35,7 +35,9 @@ async function request(service: Service, path: string, init?: RequestInit): Prom
   if (!response.ok) throw Error(`Native session transfer ${path}: HTTP ${response.status}`)
   return response.json()
 }
-const pageSchema = v.object({ data: v.array(v.object({ id: v.string() })), cursor: v.optional(v.object({ next: v.optional(v.string()) })) })
+// The server sends null for exhausted pagination cursors. Treat only null or
+// absent fields as exhaustion; malformed non-string cursors must still fail.
+const pageSchema = v.object({ data: v.array(v.object({ id: v.string() })), cursor: v.nullish(v.object({ next: v.nullish(v.string()) })) })
 
 export async function captureSessions(service: Service): Promise<SessionBundle[]> {
   const sessions: SessionBundle[] = [], ids = new Set<string>()
@@ -48,7 +50,7 @@ export async function captureSessions(service: Service): Promise<SessionBundle[]
       const transfer = v.parse(v.object({ data: sessionBundleSchema }), await request(service, `/api/session/${encodeURIComponent(id)}/export`))
       sessions.push(transfer.data)
     }
-    cursor = page.cursor?.next
+    cursor = page.cursor?.next ?? undefined
     if (ids.size > 10_000) throw Error('Too many sessions to save')
   } while (cursor)
   return orderSessions(sessions)

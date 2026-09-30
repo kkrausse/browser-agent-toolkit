@@ -44,3 +44,37 @@ test('native import clears persisted old rows, remaps child/parent IDs and verif
 test('malformed native transfer fails instead of silently dropping chat sessions', async () => {
   await expect(captureSessions(service(async url => Response.json(url.pathname === '/api/session' ? { data: [{ id: 'bad' }] } : { data: { info: { id: 'bad' } } })))).rejects.toThrow()
 })
+test('native export accepts terminal null cursors and nullable root fields without dropping bundle data', async () => {
+  const paths: string[] = []
+  const bundle = { info: { id: 'root', parentID: null, title: null, metadata: null }, messages: [{ id: 'message', model: null, parts: [] }] }
+  const exported = await captureSessions(service(async url => {
+    paths.push(url.pathname)
+    return Response.json(url.pathname === '/api/session'
+      ? { data: [{ id: 'root' }], cursor: { previous: null, next: null } }
+      : { data: bundle })
+  }))
+  expect(paths).toEqual(['/api/session', '/api/session/root/export'])
+  expect(exported).toEqual([{ ...bundle, info: { ...bundle.info, parentID: undefined } }])
+})
+test('native empty session lists accept absent and null cursor containers', async () => {
+  for (const page of [{ data: [] }, { data: [], cursor: null }, { data: [], cursor: { next: null } }]) {
+    expect(await captureSessions(service(async () => Response.json(page)))).toEqual([])
+  }
+})
+test('native import clears old rows when list pagination ends with null', async () => {
+  let oldExists = true
+  const calls: string[] = []
+  const ids = await restoreSessions(service(async (url, init) => {
+    calls.push((init?.method ?? 'GET') + ' ' + url.pathname)
+    if (init?.method === 'DELETE') { oldExists = false; return Response.json({}) }
+    return Response.json({ data: oldExists ? [{ id: 'old' }] : [], cursor: { next: null } })
+  }), [])
+  expect(ids.size).toBe(0)
+  expect(calls).toEqual(['GET /api/session', 'DELETE /api/session/old', 'GET /api/session'])
+})
+test('non-string native cursors and parent IDs still fail validation', async () => {
+  await expect(captureSessions(service(async () => Response.json({ data: [], cursor: { next: 42 } })))).rejects.toThrow()
+  await expect(captureSessions(service(async url => Response.json(url.pathname === '/api/session'
+    ? { data: [{ id: 'bad' }], cursor: { next: null } }
+    : { data: { info: { id: 'bad', parentID: 42 }, messages: [] } })))).rejects.toThrow()
+})
