@@ -288,6 +288,36 @@ After individual qualification, run a combined workspace-switch stress test agai
 the integrated frozen candidate. Do not report “everything accepted” before these
 live checks and their cleanup/preservation assertions are complete.
 
+### Follow-up: cached-artifact preparation returned; safe integration still blocked
+
+The cached-artifact agent completed commits `09cfe47` and `d5f165e`, without push.
+Its [detailed report](2026-09-30-single-kernel-cached-artifact-retention.md) records:
+
+- Source snapshots now exclude managed backend archives/cache receipts, alongside
+  dependencies. Legacy saved images containing those paths fail validation before
+  mutation; this is not a silent migration and needs live compatibility QA.
+- A byte-exact dependency/config admission helper was added but remains unwired.
+  It is not complete runtime/artifact/config-transitive-input safety proof.
+- Deterministic regression exposed fallback delivery beginning before an audit
+  output reader settled. A resolved stop alone was insufficient to establish joined
+  reader ownership. Existing installed-reuse also deletes Vite disk caches and
+  needs supported cache-preserving before/after audits, not an ignored subtree.
+- 38 offline tests/320 assertions passed; app-only external-library bundle and
+  standalone admission typecheck passed. Full consumer staging was blocked by
+  missing built toolkit packages. No live browser/headless-browser/manual/stress
+  acceptance, service operation or speedup measurement occurred.
+- Conservative defaults, pending recovery journal and native session restoration
+  remain; both services restart and the existing kernel remains retained.
+
+The parent assigned a **new shared-library prerequisite agent**,
+`ses_f0c647241ffe7bz6oIZ122tv6C`, to repair joined audit cancellation/reader/exit
+ownership and prepare a supported opt-in cache-preserving audit contract. Its
+intended report is `2026-09-30-cached-retention-library-prerequisites.md`. It owns
+the relevant workspace library helpers/tests, not app retention wiring or sibling
+chat/runtime work. App integration and live off/on testing remain gated on that
+repair and review. This is continuation of the authorized perf work, not acceptance
+of retention-on or permission to skip manual/live QA.
+
 ## Next validation and stress-test sequence
 
 After the first candidates are ready, commission separate test agents rather than
