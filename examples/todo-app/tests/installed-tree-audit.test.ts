@@ -33,6 +33,21 @@ test('package mutation and unexpected package path fail closed',()=>{
   const f=fixture(); writeFileSync(f.root+'/workspace/node_modules/pkg/index.js','malicious'); expect(f.run().valid).toBe(false)
   writeFileSync(f.root+'/workspace/node_modules/pkg/index.js','immutable'); writeFileSync(f.root+'/workspace/node_modules/pkg/extra.js','extra'); expect(f.run().reason).toContain('unexpected installed path')
 })
+test('stopped-tree snapshots cannot certify an active writer between audits',()=>{
+  const f=fixture(), path=f.root+'/workspace/node_modules/pkg/index.js'
+  const before=f.run()
+  // Characterization, not permission to retain a writer: the immutable bytes
+  // can be consumed while corrupted, then restored before the next snapshot.
+  writeFileSync(path,'malicious')
+  const consumed=readFileSync(path,'utf8')
+  writeFileSync(path,'immutable')
+  const after=f.run()
+  expect(consumed).toBe('malicious')
+  expect(before.valid).toBe(true)
+  expect(after.valid).toBe(true)
+  expect(after.checked).toBe(before.checked)
+  expect(after.cacheDigest).toBe(before.cacheDigest)
+})
 test('cache symlinks and cache/manifest overlap rejected',()=>{
   const f=fixture(); symlinkSync('pkg',f.root+'/workspace/node_modules/.vite-temp'); expect(f.run().reason).toContain('cache symlink')
   expect(()=>installedTreeAuditScript([...f.entries,{kind:'directory',destination:'/workspace/node_modules/.vite-temp',mode:0o755}])).toThrow('overlaps')
