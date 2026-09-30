@@ -50,3 +50,26 @@ test('endpoint routing retains preview prefix/listener and rejects host-root/oth
   await expect(fence.fetch(pilotRequestURL(endpoint,'/api/session/example/move'),{method:'POST'})).rejects.toThrow('forbidden');
   expect(calls).toBe(1);
 });
+test('corrected caller URL reaches the pinned SDK as the exact guest route', async () => {
+  const source = '../../../.diagnostics/reviewed-client-prep-2026-09-30T02-30-20-204Z/runtime-source/packages/core/src/host-sdk/browser/endpoint.ts';
+  const {createEndpoint} = await import(source);
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'location');
+  Object.defineProperty(globalThis, 'location', {configurable:true,value:{href:'http://127.0.0.1:43225/'}});
+  const sent: any[] = [];
+  const host = {listeners:new Map([[4096,'owned']]),on:()=>()=>{},post:(...args:any[])=>{sent.push(args);throw Error('offline transport boundary');}};
+  const endpoint = createEndpoint(host,4096,'owned',new AbortController().signal);
+  try {
+    const route = '/api/config?location%5Bdirectory%5D=%2Fworkspace';
+    await expect(endpoint.fetch(pilotRequestURL(endpoint.url,route))).rejects.toThrow('offline transport boundary');
+    expect(sent[0][0]).toBe('workspace-http-stream');
+    expect(sent[0][1].request.path).toBe(route);
+    expect(sent[0][1].port).toBe(4096);
+    expect(sent[0][1].listenerId).toBe('owned');
+    await expect(endpoint.fetch(new URL('/api/config',endpoint.url).href)).rejects.toThrow('another endpoint');
+    expect(sent.length).toBe(1);
+  } finally {
+    endpoint.dispose();
+    if(previous) Object.defineProperty(globalThis,'location',previous);
+    else Reflect.deleteProperty(globalThis,'location');
+  }
+});
