@@ -11,3 +11,7 @@ dist/
 /vendor/
 /.release/
 /.prepared-opencode/
+*.excs
+/docs/runtime-architecture.svg
+/docs/runtime-architecture.png
+/docs/runtime-architecture.preview.*
