@@ -52,13 +52,13 @@ for(const name of ['@opencode/client','@opencode/plugin','effect','react','react
 if((dependencies['@opencode/client'] as any).version!=='2.0.3'||(dependencies.effect as any).version!=='4.0.0-rc.112')throw Error('Installed dependency pin mismatch');
 const external=['react','react/jsx-runtime','@kev-browser-agent-kit/workspace','@kev-browser-agent-kit/workspace/react','@kev-browser-agent-kit/workspace/diagnostics','@kev-browser-agent-kit/workspace/delivery'];
 for(const [pkg,entry,name] of [['workspace-api','index.ts','index'],['workspace-api','react.tsx','react'],['workspace-api','diagnostics.ts','diagnostics'],['workspace-api','delivery.ts','delivery'],['opencode-chat','browser.ts','browser'],['opencode-chat','controller.ts','controller']]){
- const result=await Bun.build({entrypoints:[join(snapshot,pkg!,'src',entry!)],outdir:join(output,pkg==='workspace-api'?'workspace':'chat'),naming:name+'.js',target:'browser',external,plugins:[{name:'frozen-host',setup(b){b.onResolve({filter:/^@vivari\/core\/host$/},()=>({path:join(host,'index.ts')}));}}]});
+ const result=await Bun.build({entrypoints:[join(snapshot,pkg!,'src',entry!)],outdir:join(output,pkg==='workspace-api'?'workspace':'chat'),naming:name+'.js',target:'browser',jsx:{runtime:'automatic',development:false},external,plugins:[{name:'frozen-host',setup(b){b.onResolve({filter:/^@vivari\/core\/host$/},()=>({path:join(host,'index.ts')}));}}]});
  if(!result.success)throw new AggregateError(result.logs,'Separate library build failed');
 }
 const result=await Bun.build({entrypoints:[join(snapshot,'examples/todo-app/tests/sk-opencode-live-client.ts')],outdir:join(output,'client'),target:'browser',plugins:[{name:'built-consumer',setup(b){
  b.onResolve({filter:/^@kev-browser-agent-kit\/workspace(?:\/(react|diagnostics|delivery))?$/},a=>({path:join(output,'workspace',(a.path.split('/')[2]??'index')+'.js')}));
  b.onResolve({filter:/^@kev-browser-agent-kit\/opencode-chat\/browser$/},()=>({path:join(output,'chat/browser.js')}));
- b.onResolve({filter:/^sk-qualified-controller$/},()=>({path:join(output,'chat/controller.js')}));
+ b.onResolve({filter:/opencode-chat\/src\/controller$/},()=>({path:join(output,'chat/controller.js')}));
  b.onResolve({filter:/^react(?:\/jsx-runtime)?$/},a=>({path:require.resolve(a.path,{paths:[join(root,'workspace-api')]} )}));
 }}]});
 if(!result.success)throw new AggregateError(result.logs,'Consumer build failed');
