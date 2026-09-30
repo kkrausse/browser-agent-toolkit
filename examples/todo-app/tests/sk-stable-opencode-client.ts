@@ -29,8 +29,10 @@ async function finite(root:Root,token:number,path:'/api/health'|'/api/config'|'/
   for(const [key,value] of new URL(endpointURL).searchParams)url.searchParams.set(key,value);
   url.searchParams.set('location[directory]',roots[root]);
   const method=path==='/api/plugin/await-activation'?'POST':'GET';
-  const response=await endpoint.fetch(url.href,{method,headers:{authorization},signal:AbortSignal.timeout(20000)});
+  const signal=AbortSignal.timeout(20000);
+  const response=await endpoint.fetch(url.href,{method,headers:{authorization},signal});
   const bytes=new Uint8Array(await response.arrayBuffer());
+  signal.throwIfAborted();
   const record:any={root,directory:roots[root],epoch:token,method,path,url:url.href,status:response.status,headers:[...response.headers],bodyBase64:base64(bytes),sha256:await sha(bytes),requestBodyBytes:0};
   evidence.requests.push(record);await preserve('/response',record);
   healthy();assert(token===epoch&&root===(candidate??selected),'Stale response rejected before publication');assert(response.ok,'Guest HTTP failure');
@@ -54,6 +56,8 @@ async function rootBytes(){
 }
 async function continuity(root:Root,token:number){
  healthy();assert(service.execution===execution&&service.endpoint===endpoint&&endpoint.url===endpointURL,'Execution/endpoint identity changed');
+ const currentStage=await (await fetch('/stage',{signal:AbortSignal.timeout(20000)})).json();
+ assert(JSON.stringify(currentStage.hostOwner)===JSON.stringify(stage.hostOwner)&&currentStage.sourceRevision===stage.sourceRevision&&currentStage.clientSha256===stage.clientSha256,'Exclusive host-owner/stage identity changed');
  assert(JSON.stringify(await rootBytes())===JSON.stringify(baseline),'Immutable A/B root bytes changed');
  const health=(await finite(root,token,'/api/health')).data;
  assert(health.healthy&&health.version==='2.0.3'&&Number.isSafeInteger(health.pid),'Actual health shape');
@@ -93,6 +97,8 @@ async function start(){
  const runtime=await owner.startRuntime({apps:preparedApps(manifest,'/prepared/',owner.signal,delivery=>evidence.events.push({delivery}))});
  await runtime.tools.apps();evidence.deliveries++;
  await installOpenCodeConfig(workspace,{modelBaseURL:location.origin+'/prohibited-model/'});
+ let projectsExists=false;try{await workspace.fs.stat('/projects');projectsExists=true;}catch(error){assert(String(error).includes('ENOENT'),'Unexpected root existence check failure');}
+ assert(!projectsExists,'Fixed project roots must be newly owned, never reused');
  await workspace.fs.mkdir('/projects');
  for(const key of ['A','B'] as const){const path='/projects/'+key;await workspace.fs.mkdir(path);await workspace.fs.writeFile(path+'/marker.txt','stable-root-'+key+'-'+crypto.randomUUID());await workspace.fs.writeFile(path+'/opencode.json',JSON.stringify({name:'immutable-root-'+key,snapshot:false}));}
  await workspace.flush();baseline=await rootBytes();evidence.initialRoots=baseline;
