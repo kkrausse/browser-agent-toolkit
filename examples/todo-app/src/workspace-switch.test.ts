@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { switchWorkspace } from './workspace-switch'
+import { workspaceSwitchPresentation } from './workspace-switch-presentation'
 import { idleChat, validateWorkspace, safeSourcePath, captureSource, type SavedWorkspace, type Catalog } from './local-workspaces'
 import { orderSessions } from './workspace-sessions'
 import type { Workspace } from '@kev-browser-agent-kit/workspace'
@@ -64,6 +65,28 @@ describe('local workspace switching', () => {
     await expect(switchWorkspace({ ...f.options, start: async () => { throw Error('start failed') } })).rejects.toThrow()
     expect(f.persisted().activeId).toBe(f.outgoing.id)
     expect(f.persisted().pending?.name).toBe('B')
+  })
+  test('successful startup retains neutral progress until final catalog commit', async () => {
+    const f = fixture()
+    const result = await switchWorkspace({ ...f.options, persist: async next => {
+      if (!next.pending) {
+        expect(f.events).toContain('start')
+        expect(f.persisted().activeId).toBe(f.outgoing.id)
+        expect(workspaceSwitchPresentation(f.persisted().pending, true)?.phase).toBe('switching')
+      }
+      await f.options.persist(next)
+    } })
+    expect(workspaceSwitchPresentation(result.pending, false)).toBeUndefined()
+  })
+  test('failed final catalog commit becomes recovery despite successful startup', async () => {
+    const f = fixture()
+    await expect(switchWorkspace({ ...f.options, persist: async next => {
+      if (!next.pending) throw Error('commit failed')
+      await f.options.persist(next)
+    } })).rejects.toThrow('commit failed')
+    expect(f.events).toContain('start')
+    expect(f.persisted().activeId).toBe(f.outgoing.id)
+    expect(workspaceSwitchPresentation(f.persisted().pending, false)?.phase).toBe('recovery')
   })
   test('snapshot rejects unsafe paths and missing selected native sessions', () => {
     expect(safeSourcePath('/src/home.tsx')).toBe(true)

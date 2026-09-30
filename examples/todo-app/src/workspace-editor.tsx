@@ -9,6 +9,7 @@ import { startBrowserEditor } from './start-editor'
 import { captureSource, createWorkspaceStore, identityPath, idleChat, restoreSource, safeSourcePath, upsert, validateWorkspace, writeIdentity, type Catalog, type SavedWorkspace } from './local-workspaces'
 import { captureSessions, restoreSessions } from './workspace-sessions'
 import { switchWorkspace } from './workspace-switch'
+import { workspaceSwitchPresentation } from './workspace-switch-presentation'
 import '@kev-browser-agent-kit/opencode-chat/editor.css'
 import './workspace-editor.css'
 
@@ -30,7 +31,8 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
   const locked = useRef(false)
   const [actionBusy, setActionBusy] = useState(false)
   const [note, setNote] = useState('Source and native chats are local to this browser. TODO items remain shared in host memory.')
-  const { chat, error: chatError } = useWorkspaceChat(controller, restoring || pending ? undefined : state.services.chat)
+  const switchPresentation = workspaceSwitchPresentation(pending, actionBusy)
+  const { chat, error: chatError } = useWorkspaceChat(controller, restoring || switchPresentation?.phase === 'recovery' ? undefined : state.services.chat)
   const chatState = useSyncExternalStore(chat?.subscribe ?? noopSubscribe, chat?.getSnapshot ?? (() => emptyChat), chat?.getSnapshot ?? (() => emptyChat))
   const blocked = actionBusy || state.busy || !!pending || !state.runtime || !idleChat(chat?.getSnapshot())
 
@@ -65,7 +67,8 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
         const ids = await restoreSessions(service, incoming.sessions)
         mappedSelection = incoming.selectedSessionId ? ids.get(incoming.selectedSessionId) : undefined
       } : undefined,
-      chatConnectReady: () => { setRestoring(false); setPending(undefined) },
+      // Allow hydration, but retain the UI checkpoint until the catalog commit.
+      chatConnectReady: () => { setRestoring(false) },
     })
     const service = controller.getSnapshot().services.chat
     if (!incoming) {
@@ -170,11 +173,11 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
     <div className="todo-workspace-preview"><EditorPreview controller={controller} service={state.services.vite} name="vite" hostPaths={hostPaths} isReady={isPreviewReady} />{!state.services.vite && <p>Opening workspace preview…</p>}</div>
     <aside className="todo-workspace-panel" aria-label="Browser workspace controls">
       <header><strong>TODO browser editor</strong>{controls}<p role="status">{note}</p></header>
-      {pending && <div role="alert" className="todo-workspace-recovery"><p>Interrupted switch to {pending.name}. Both saved images are retained; chat is unavailable until recovery.</p><button disabled={state.busy || actionBusy} onClick={() => action('Retry interrupted switch', () => replace(pending, true))}>Retry interrupted switch</button>{catalog.current.workspaces.find(item => item.id === catalog.current.activeId) && <button disabled={state.busy || actionBusy} onClick={() => action('Recover outgoing workspace', () => replace(catalog.current.workspaces.find(item => item.id === catalog.current.activeId)!, true))}>Recover outgoing workspace</button>}</div>}
+      {pending && switchPresentation && <div role={switchPresentation.role} className={switchPresentation.phase === 'recovery' ? 'todo-workspace-recovery' : undefined}><p>{switchPresentation.message}</p>{switchPresentation.phase === 'recovery' && <><button disabled={state.busy || actionBusy} onClick={() => action('Retry interrupted switch', () => replace(pending, true))}>Retry interrupted switch</button>{catalog.current.workspaces.find(item => item.id === catalog.current.activeId) && <button disabled={state.busy || actionBusy} onClick={() => action('Recover outgoing workspace', () => replace(catalog.current.workspaces.find(item => item.id === catalog.current.activeId)!, true))}>Recover outgoing workspace</button>}</>}</div>}
       <div className="todo-workspace-chat" inert={actionBusy || state.busy || !!pending || restoring}>
-        {chat && !pending && !restoring ? <ChatView controller={chat} showModels showSessions /> : <p>{chatError || (pending ? 'Recover the interrupted switch to reconnect chat.' : 'Starting OpenCode…')}</p>}
+        {chat && !pending && !restoring ? <ChatView controller={chat} showModels showSessions /> : <p>{switchPresentation?.phase === 'switching' ? 'Connecting workspace chat…' : switchPresentation?.phase === 'recovery' ? 'Recover the interrupted switch to reconnect chat.' : chatError || 'Starting OpenCode…'}</p>}
       </div>
-      <footer><p role="status">{state.status}</p>{state.error && <p role="alert">{state.error}</p>}{state.error && !pending && <button disabled={state.busy || actionBusy} onClick={() => action('Retry editor startup', () => boot())}>Retry editing</button>}<small>{blocked && !state.busy && !pending ? `Workspace actions wait for connected, idle chat (${chatState.execution}).` : 'Switching fully stops and restarts preview and OpenCode.'}</small><details><summary>Debug · Activity</summary><pre>{state.logs.join('\n')}</pre></details></footer>
+      <footer><p role="status">{switchPresentation ? switchPresentation.phase === 'switching' ? 'Workspace switch in progress…' : 'Workspace recovery required.' : state.status}</p>{state.error && <p role="alert">{state.error}</p>}{state.error && !pending && <button disabled={state.busy || actionBusy} onClick={() => action('Retry editor startup', () => boot())}>Retry editing</button>}<small>{blocked && !state.busy && !pending ? `Workspace actions wait for connected, idle chat (${chatState.execution}).` : 'Switching fully stops and restarts preview and OpenCode.'}</small><details><summary>Debug · Activity</summary><pre>{state.logs.join('\n')}</pre></details></footer>
     </aside>
   </div>
 }
