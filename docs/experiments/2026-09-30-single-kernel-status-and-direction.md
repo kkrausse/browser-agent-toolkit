@@ -889,6 +889,29 @@ an explicit limitation of any broader shutdown/source-replacement guarantee and
 must be considered in integrated results and the final decision. No all-writer
 quiescence or general stop-completion claim is justified by the repaired paths.
 
+### Follow-up: guest-loopback fixture failure; integrated candidate preparation
+
+Native-fetch visible cohort `267e01c` observed genuine candidate workers and guest
+PID 1, but eleven requests addressed virtual guest `127.0.0.1` and failed with
+ECONNREFUSED. Owned backend received zero requests. Native abort, stop joins,
+queued suppression and pin/publication assertions were not reached; headless zero.
+Forced page/session destruction and verified host/PID/listener absence are cleanup,
+not acceptance. See [native-fetch cohort](2026-09-30-pid-egress-native-fetch-live-qa.md).
+
+A new separately preserved cohort corrects the fixture to supported
+`host.vivari.internal` routing, first requiring one token-qualified guest-to-owned-
+backend round trip before any shutdown action. Candidate/production code unchanged;
+prior failure is not replayed into green. Agent `ses_f0bb96551ffeDRP5f7QzZaMgm0`
+again owns the exclusive visible slot. Intended report:
+`2026-09-30-pid-egress-native-routing-followup.md`.
+
+In parallel, offline agent `ses_f0bab2941ffeK6LyykN6Varirh` prepares one matching
+conservative full-app frozen candidate and original acceptance commands, followed
+by bounded workspace switching/reload/startup-failure recovery. No optimization
+flags, new process topology or production changes are requested. Intended report:
+`2026-09-30-conservative-full-app-acceptance-preparation.md`. Independent integrated
+live QA follows browser-slot release; build preparation alone is not acceptance.
+
 ## Next validation and stress-test sequence
 
 After the first candidates are ready, commission separate test agents rather than
