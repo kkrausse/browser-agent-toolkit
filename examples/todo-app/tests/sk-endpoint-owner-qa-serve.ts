@@ -14,7 +14,7 @@ let origin='';
 const server=Bun.serve({hostname:'127.0.0.1',port:0,async fetch(request){
  const path=new URL(request.url).pathname;
  if(request.method==='GET'&&path==='/')return new Response('<!doctype html><title>Endpoint source ownership QA</title><h1>Held / rejected stream cancellation</h1><p>Real isolated workspace, public built runtime/controller. No inference. One fresh origin/profile per case. Rejected ownership is not normal close acceptance.</p><button id="start">Start owned fixture</button><button id="close" disabled>Close admission / hold cancel</button><button id="stop" disabled>Request runtime stop</button><button id="replace" disabled>Attempt replacement (public guard)</button><button id="release" disabled>Release / reject cancellation</button><pre></pre><script type="module" src="/client/sk-endpoint-owner-qa-client.js"></script>',{headers:{...headers,'content-type':'text/html'}});
- if(path==='/stage')return Response.json({...stage,hashes:undefined,origin,hostPID:process.pid},{headers});
+ if(path==='/stage')return Response.json({...stage,hashes:undefined,origin,hostPID:process.pid,clientSha256:stage.hashes['client/sk-endpoint-owner-qa-client.js']},{headers});
  if(path==='/evidence'&&request.method==='POST'){
   const text=await request.text();if(text.length>4*1024*1024)return new Response('Too large',{status:413,headers});
   await writeFile(join(evidence,'browser-'+(count++)+'.json'),text,{flag:'wx'});return Response.json({saved:true},{headers});

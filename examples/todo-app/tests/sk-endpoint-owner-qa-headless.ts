@@ -9,6 +9,7 @@ const {chromium}=await import(modulePath);
 const browser=await chromium.launch({headless:true});
 const context=await browser.newContext();const page=await context.newPage();
 const errors:string[]=[];page.on('pageerror',(error:Error)=>errors.push(String(error)));
+const consoleErrors:string[]=[];page.on('console',(message:{type():string;text():string})=>{if(message.type()==='error')consoleErrors.push(message.text());});
 try{
  await page.goto(url);
  const phase=async(expected:string)=>{await page.waitForFunction((value:string)=>(window as unknown as {endpointOwnerQA:{phase:string}}).endpointOwnerQA.phase===value,expected,{timeout:120000});};
@@ -20,6 +21,8 @@ try{
  const held=await page.evaluate(()=>(window as unknown as {endpointOwnerQA:unknown}).endpointOwnerQA);
  await page.getByRole('button',{name:'Release / reject cancellation',exact:true}).click();await phase(new URL(url).searchParams.get('case')==='reject'?'ownership-negative':'complete');
  const final=await page.evaluate(()=>(window as unknown as {endpointOwnerQA:unknown}).endpointOwnerQA);
- console.log(JSON.stringify({held,final,errors,cleanupLabel:new URL(url).searchParams.get('case')==='reject'?'forced-profile-disposal-after-expected-ownership-negative-NOT-normal-close':'normal-fixture-close-before-profile-disposal'},null,2));
+ console.log(JSON.stringify({held,final,errors,consoleErrors,cleanupLabel:new URL(url).searchParams.get('case')==='reject'?'forced-profile-disposal-after-expected-ownership-negative-NOT-normal-close':'normal-fixture-close-before-profile-disposal'},null,2));
  if(errors.length)throw Error('Raw browser exceptions observed');
+}catch(error){
+ console.error(JSON.stringify({failure:String(error),errors,consoleErrors,cleanupLabel:'forced-profile-disposal-after-failure-NOT-normal-close'}));throw error;
 }finally{await context.close();await browser.close();}

@@ -31,7 +31,8 @@ const state={scope:'real-workspace-public-built-library-fixture',mode,ownerMode,
 const render=()=>{document.querySelector('pre')!.textContent=JSON.stringify(state,null,2);};
 const assert=(ok:unknown,message:string)=>{if(!ok)throw Error(message);};
 const sha=async(bytes:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(bytes))),b=>b.toString(16).padStart(2,'0')).join('');
-const observe=(promise:Promise<unknown>,key:'closed'|'settled'|'fetch'|'stop')=>{void promise.then(value=>{state[key]='fulfilled';state.events.push({key,value});render();},error=>{state[key]='rejected';state.events.push({key,error:String(error)});render();});};
+const errorEvidence=(error:unknown):unknown=>error instanceof AggregateError?{message:String(error),errors:error.errors.map(errorEvidence)}:String(error);
+const observe=(promise:Promise<unknown>,key:'closed'|'settled'|'fetch'|'stop')=>{void promise.then(value=>{state[key]='fulfilled';state.events.push({key,value});render();},error=>{state[key]='rejected';state.events.push({key,error:errorEvidence(error)});render();});};
 window.addEventListener('error',e=>{state.browserErrors.push(e.message);render();});
 window.addEventListener('unhandledrejection',e=>{state.browserErrors.push(String(e.reason));render();});
 Object.defineProperty(window,'endpointOwnerQA',{get:()=>JSON.parse(JSON.stringify(state))});
@@ -41,7 +42,11 @@ async function start(){
  const root=await navigator.storage.getDirectory();
  for await(const key of (root as unknown as {keys():AsyncIterable<string>}).keys())throw Error('Nonempty fresh origin: '+key);
  assert((await indexedDB.databases()).length===0&&(await caches.keys()).length===0&&(await navigator.serviceWorker.getRegistrations()).length===0&&localStorage.length===0,'Fresh origin/profile required');
- state.events.push(await (await fetch('/stage')).json());
+ const stage=await (await fetch('/stage')).json();
+ assert(stage.hostRevision==='724909bff00c9c0994ecde7c767a218ae2af25a0'&&stage.toolkitRevision==='7713686e26d1fe61da5c75b37796875126f60e11','Exact repaired built inputs required');
+ assert(stage.origin===location.origin+'/','Exact fresh host origin');
+ assert(await sha(new Uint8Array(await (await fetch('/client/sk-endpoint-owner-qa-client.js')).arrayBuffer()))===stage.clientSha256,'Served consumer identity');
+ state.events.push(stage);
  const dist=await (await fetch('/runtime/distribution.json')).json();
  assert(dist.topology?.policy==='single-kernel','Single kernel required');
  distribution={name:'vivari',version:dist.version,assetBaseUrl:'/runtime/'};
@@ -57,7 +62,7 @@ async function start(){
  state.events.push({endpointURL:endpoint.url,entry:'/workspace/owner-qa.cjs',route:'/owner-upload'});
  upload=new ReadableStream<Uint8Array>({
   pull(controller){state.pulls++;readStarted();if(state.pulls===1)controller.enqueue(new TextEncoder().encode('OWNER_SOURCE_MARKER'));if(mode==='reentrant')endpoint.dispose();render();},
-  async cancel(reason){state.cancels++;state.events.push({sourceCancelReason:String(reason)});cancelStarted();render();await gate;if(mode==='reject'){state.cancel='rejected';render();throw Error('OWNER_SOURCE_CANCEL_REJECTED');}state.cancel='fulfilled';render();},
+  async cancel(reason){state.cancels++;state.cancel='held';state.events.push({sourceCancelReason:String(reason)});cancelStarted();render();await gate;if(mode==='reject'){state.cancel='rejected';render();throw Error('OWNER_SOURCE_CANCEL_REJECTED');}state.cancel='fulfilled';render();},
  },{highWaterMark:0});
  observe(endpoint.fetch('/owner-upload',{method:'POST',body:upload,duplex:'half'} as RequestInit),'fetch');
  await readReceipt;
@@ -74,6 +79,9 @@ async function start(){
 async function closeAdmission(){
  assert(state.phase==='reading','Read receipt required');endpoint.dispose();endpoint.dispose();
  await endpoint.closed;await cancelReceipt;
+ let staleRejection='';
+ try{await endpoint.fetch('/health');throw Error('Stale endpoint accepted');}catch(error){assert(String(error).includes('Endpoint disposed'),'Exact stale admission rejection: '+String(error));staleRejection=String(error);}
+ state.events.push({staleRejection});
  // Guest graceful exit is independent of the held host cancellation receipt.
  service.execution.closeStdin();
  const [exit]=await Promise.all([service.execution.exited,service.drained]);
@@ -86,11 +94,12 @@ async function closeAdmission(){
 }
 async function stop(){
  assert(state.phase==='held','Held checkpoint required');
- stopping=ownerMode==='controller'?owner.stopRuntime():owner.runtime!.stop();observe(stopping,'stop');
+ state.stop='pending';stopping=ownerMode==='controller'?owner.stopRuntime():owner.runtime!.stop();observe(stopping,'stop');
  assert(state.settled==='pending','Endpoint source still owned');state.phase='stopping';enable('replace');enable('release');render();
 }
 async function replacement(){
  assert(state.phase==='stopping'||state.phase==='negative','Only retained owner may be probed');
+ assert(state.stop===(state.phase==='negative'?'rejected':'pending'),'Exact pending/rejected stop checkpoint');
  try{const unexpected=await Runtime.start({workspace,distribution});state.replacementAttempts.push('UNEXPECTED_ACCEPTANCE');await unexpected.stop();throw Error('Replacement escaped public attachment guard');}
  catch(error){assert(String(error).includes('already has an active runtime'),'Exact public attachment rejection: '+String(error));state.replacementAttempts.push(String(error));}
  assert(state.stop!=='fulfilled','Stop must not succeed while held/rejected');render();
@@ -115,6 +124,6 @@ async function finish(){
  const saved=await fetch('/evidence',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(state)});assert(saved.ok,'Evidence save failed');
 }
 for(const [id,action] of [['start',start],['close',closeAdmission],['stop',stop],['replace',replacement],['release',finish]] as const){
- document.getElementById(id)!.addEventListener('click',()=>{(document.getElementById(id) as HTMLButtonElement).disabled=true;void action().catch(error=>{state.error=String(error);state.phase='failed-owner-retained';render();throw error;});});
+ document.getElementById(id)!.addEventListener('click',()=>{(document.getElementById(id) as HTMLButtonElement).disabled=true;void action().catch(async error=>{state.error=String(error);state.phase='failed-owner-retained';render();await fetch('/evidence',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(state)});throw error;});});
 }
 render();
