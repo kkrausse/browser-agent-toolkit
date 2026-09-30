@@ -23,11 +23,13 @@ Chat rc.112 remains independent and unchanged.
   receipt and now composes its loader-owner close. SDK `exited.cleanupError` and
   rejecting `stop()` remain the observable public bridge.
 - Pre-PID: `const owner=kernel.createLaunchOwner()`;
-  `await kernel.ensureCommandLoaded(command,null,owner)`;
-  `owner.commit(() => kernel.launch(...))` is a synchronous admission/publication
-  bridge. `owner.close()` freezes admission synchronously and returns the exact
-  memoized joined Promise (including failure). Production proc-spawn/proc-kill uses
-  this same seam; no test-only Effect supervisor.
+  `await kernel.launchLoaded(command,args,{...options,onStarted(pid) {...}},owner)`
+  is the actual orchestration called by production `spawnProcess`. The synchronous
+  `onStarted` callback installs routing and publishes `proc-started` inside admission
+  commit. `owner.close()` is production pre-PID `proc-kill`: synchronous freeze and
+  exact memoized native join. `launchLoaded` rejects only after that close settles,
+  attaches `cleanupError` on failed cleanup, and joins any allocated PID if launch
+  publication fails. Node fixtures can import the identical host method; no sidecar.
 - `Kernel.closeLoaderOperations()` closes root loader admission and joins launch,
   PID-interest and shared operation receipts. It explicitly does **not** promise
   all-kernel/VFS/OPFS quiescence. Diagnostic `lazyLoader` counters are observations,
@@ -51,3 +53,9 @@ is joined if invoked as a registered loader, but only tsgo has the migrated nati
 body/installer adapter. Path confinement/symlink safety is not claimed.
 
 Build/source/provenance and regression receipts will be appended after checks.
+
+Latest adapter contract: rollback awaits each native restore/unlink/rmdir result
+(ordinary Rust VFS calls remain synchronous); async injected leaf cleanup is joined,
+and all rollback errors aggregate with the original installation failure. The
+toolkit Runtime pre-PID `CLEANUP_FAILED` ledger bridge is committed as `73dbae7`.
+Core strict check and SDK typecheck pass; complete SDK rebuild/freeze still pending.
