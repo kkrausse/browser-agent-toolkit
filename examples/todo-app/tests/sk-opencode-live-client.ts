@@ -57,14 +57,13 @@ async function run(){
    fence.admitFreshOrigin(); // Only after storage, committed-client and frozen A0 identity admission.
   let endpoint:any,healthPID:number|undefined;
   const requestURL=(path:string)=>{const u=new URL(path.replace(/^\//,''),endpoint.url);for(const [k,v] of new URL(endpoint.url).searchParams)u.searchParams.set(k,v);u.searchParams.set('location[directory]','/workspace');return u.href;};
-  const transport=(input:RequestInfo|URL,init?:RequestInit):Promise<Response>=>{
-   if(closed||poison)return Promise.reject(Error('Qualification admissions closed'));
+   const transport=(input:RequestInfo|URL,init?:RequestInit):Promise<Response>=>{
     const request=new Request(input,init);
     const task=(async()=>{
      const captured=await captureQualificationRequest(request,record=>evidence.requestAttempts.push(record),record=>preserve('/request-evidence',record));
      const requestBytes=captured.bytes;
      let route:ReturnType<typeof fence.admit>;
-     try{route=fence.admit(request,new URL(endpoint.url),requestBytes);captured.record.admission='admitted';}
+     try{assert(!closed&&!poison,'Qualification admissions closed');route=fence.admit(request,new URL(endpoint.url),requestBytes);captured.record.admission='admitted';}
      catch(error){captured.record.admission='rejected';Object.assign(captured.record,{error:String(error)});throw error;}
      const {path,sse,create,inventory}=route;
      if(create){
@@ -74,6 +73,7 @@ async function run(){
       Object.assign(captured.record,{pinnedRequestSchema:receipt});
      }
      const headers=new Headers(request.headers);headers.set('authorization',authorization);
+     assert(!closed&&!poison,'Qualification admissions closed before guest transport');
      const response=await endpoint.fetch(request.url,{method:request.method,headers,signal:request.signal,...(requestBytes.length?{body:requestBytes}:{})});
      if(sse&&response.ok){evidence.sse={path,status:response.status,headers:[...response.headers],locallyJoined:false};return response;}
      const bytes=new Uint8Array(await response.arrayBuffer());
