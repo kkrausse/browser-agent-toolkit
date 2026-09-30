@@ -4,6 +4,7 @@ import type { SourceDelivery } from "@kev-browser-agent-kit/workspace/delivery"
 import { WorkspaceController } from "@kev-browser-agent-kit/workspace/react"
 import { installOpenCodeConfig, loadPrepared, preparedApps, startOpenCode } from "@kev-browser-agent-kit/opencode-chat/browser"
 import { createDiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics'
+import { installedTreeAuditTool } from './installed-tree-audit'
 
 type Variant = "baseline" | "kernel" | "dependencies" | "incremental" | "reload"
 type Sample = { name: string; milliseconds: number; detail?: unknown }
@@ -15,6 +16,8 @@ const candidate = parameters.get("candidate") ?? "baseline"
 const variant = (parameters.get("variant") ?? "baseline") as Variant
 const captureResetEvidence = parameters.get('fsEvidence') === '1'
 const installOnly = parameters.get('services') === 'none'
+const matched = parameters.get('matched') === 'phase9'
+if (matched && !['baseline', 'dependencies'].includes(variant)) throw Error('Phase9 requires restarted services')
 if (!["baseline", "kernel", "dependencies", "incremental", "reload"].includes(variant)) throw new Error("Unknown experiment variant")
 const controller = new WorkspaceController({ onDiagnostic: event => events.push(event) })
 const output = document.querySelector("pre")!
@@ -29,11 +32,12 @@ const fixture = (generation: number): SourceDelivery => {
   const config = manifest.project['/vite.config.ts']
   if (typeof home !== 'string' || typeof config !== 'string') throw new Error('Expected todo source/config fixture')
   return {...manifest.project,
-    '/src/home.tsx': "import {runPdfWorkload} from './pdf-workload'\n" + home.replace("import { useState }", "import { useEffect, useState }").replace('export default function Home() {', `export default function Home() { useEffect(() => { document.querySelector('main')?.setAttribute('data-hydrated', '${generation}'); }, []);`).replace('<h1>Todos</h1>', `<h1 data-generation="${generation}">Todos ${generation}</h1><button type="button" id="pdf-workload" onClick={async (event) => {const button = event.currentTarget; button.dataset.bytes = String(await runPdfWorkload());}}>Generate fixture PDF</button>`),
+    '/src/home.tsx': (matched ? "import {workspace} from './switch-import'\n" : '') + "import {runPdfWorkload} from './pdf-workload'\n" + home.replace("import { useState }", "import { useEffect, useState }").replace('export default function Home() {', `export default function Home() { useEffect(() => { document.querySelector('main')?.setAttribute('data-hydrated', '${generation}'); }, []);`).replace('<h1>Todos</h1>', `<h1 ${matched ? 'data-workspace={workspace}' : ''} data-generation="${generation}">Todos ${generation}</h1><button type="button" id="pdf-workload" onClick={async (event) => {const button = event.currentTarget; button.dataset.bytes = String(await runPdfWorkload());}}>Generate fixture PDF</button>`),
     '/src/pdf-workload.ts': `import {PDFDocument} from 'pdf-lib'; export async function runPdfWorkload() {const pdf = await PDFDocument.create(); pdf.addPage().drawText('Todo dependency workload'); return (await pdf.save()).length;}`,
     '/vite.config.ts': config.replace('defineConfig({', `defineConfig({ cacheDir: '/workspace/.browser-editor-cache/vite',`),
     '/binary.dat': {encoding: 'base64', data: 'AAEC/w=='},
     [generation % 2 ? '/switch-a-only.ts' : '/switch-b-only.ts']: `export const workspace = '${generation % 2 ? 'A' : 'B'}';`,
+    ...(matched ? {'/src/switch-import.ts': `export {workspace} from '../switch-${generation % 2 ? 'a' : 'b'}-only'`} : {}),
   }
 }
 // Read-only, bounded evidence. Only recurse into manifest-declared directories:
@@ -95,9 +99,9 @@ let generation = 1
 let switching = false
 const diagnostics = createDiagnosticScope(event => {events.push(event); if (event.event === 'delivery.installed-environment') samples.push({name: event.event, milliseconds: 0, detail: event.data})})
 async function runtime(generation = 1): Promise<void> {
-  const apps = preparedApps(manifest, `/prepared/${candidate}/`, controller.signal, text => console.info(text), diagnostics, {experimentalReuseInstalled: canReuse})
-  const instance = await timed("runtime.start", () => controller.startRuntime({ apps, replaceSource: experimentalSourceReplacementTool(fixture(generation), {incremental: variant === 'incremental'}) }))
-  await timed("environment.deliver", () => instance.tools.apps())
+  const apps = preparedApps(manifest, `/prepared/${candidate}/`, controller.signal, text => console.info(text), diagnostics, {experimentalReuseInstalled: canReuse && !matched})
+  const instance = await timed("runtime.start", () => controller.startRuntime({ apps, audit: installedTreeAuditTool(manifest.assets), replaceSource: experimentalSourceReplacementTool(fixture(generation), {incremental: variant === 'incremental'}) }))
+  if (!matched || generation === 1 || variant === 'baseline') await timed("environment.deliver", () => instance.tools.apps())
   await timed("environment.flush", () => controller.workspace!.flush())
 }
 async function replacement(generation: number): Promise<void> {
@@ -109,7 +113,7 @@ async function services(generation: number): Promise<void> {
   await timed("config", () => installOpenCodeConfig(controller.workspace!, {modelBaseURL: location.origin + "/unused-model/"}))
   await Promise.all([
     timed("preview.ready", async () => {
-      const service = await controller.launch("vite", manifest.preview, 5173, async endpoint => ({url: endpoint.url, fetch: (input, init) => endpoint.fetch(String(input), init)}))
+       const service = await timed('vite.launch', () => controller.launch("vite", manifest.preview, 5173, async endpoint => ({url: endpoint.url, fetch: (input, init) => endpoint.fetch(String(input), init)})))
       const response = await service.endpoint.fetch("/", {signal: AbortSignal.timeout(60000)})
       if (!response.ok) throw new Error(`Preview HTTP ${response.status}`)
       const iframe = document.querySelector("iframe")!
@@ -133,20 +137,31 @@ async function start(): Promise<void> {
   if (variant !== "reload") await observedClear(1)
   await timed("source.install", () => installSource(controller.workspace!, fixture(1), {existing: "replace"}))
   await runtime()
-  if (!installOnly) await services(1)
+  if (matched) await audit('initial')
+   if (!installOnly) await timed('services.wall', () => services(1))
   await controller.workspace!.flush()
 }
 async function switchWorkspace(): Promise<void> {
   if (switching) throw new Error('An experiment switch is already running')
+  if (matched && (api.error || generation >= 6)) throw Error('Phase9 stopped or fixed budget exhausted')
   switching = true
   const nextGeneration = generation + 1
   try {
   await timed("switch.total", async () => {
     const ownedServices = Object.entries(controller.getSnapshot().services)
     if (captureResetEvidence) resetEvidence.push({phase: 'before.stop', generation, processes: await diagnoseWorkspace(controller.workspace!)})
-    await timed("runtime.stop", () => controller.stopRuntime())
+     await timed("runtime.stop", async () => {
+       await controller.stopRuntime()
+       if (matched) await Promise.all(ownedServices.map(async ([, service]) => {await service.execution.exited; await service.drained}))
+     })
     if (captureResetEvidence) resetEvidence.push({phase: 'after.stop', generation, processes: await diagnoseWorkspace(controller.workspace!),
       services: await Promise.all(ownedServices.map(async ([name, service]) => ({name, exit: await service.execution.exited, drained: await service.drained.then(() => true)})))})
+    if (matched) {
+      await Promise.all(ownedServices.map(async ([, service]) => {await service.execution.exited; await service.drained}))
+      const stopped = await diagnoseWorkspace(controller.workspace!)
+      resetEvidence.push({phase:'phase9.stopped', generation, stopped})
+      assertStopped(stopped)
+    }
     if (variant === "baseline" || variant === "kernel") {
       await observedClear()
       if (variant === "baseline") {
@@ -158,9 +173,26 @@ async function switchWorkspace(): Promise<void> {
     } else {
       // Runtime wrapper is cheap; all previous executions were stopped above.
       await runtime(nextGeneration)
+      if (matched) {
+        // In this fixed fixture, dependency and configuration inputs must not vary
+        // across generations. Source receipts alone are not an installed-tree proof.
+        const compatible = await timed('validation.compatibility', async () => {
+          if (manifest.dependencies.policy.runtimeVersion !== distribution.version) return false
+          for (const path of ['/package.json', '/bun.lock', '/vite.config.ts', '/react-router.config.ts', '/tsconfig.json']) {
+            const wanted = fixture(nextGeneration)[path]
+            if (typeof wanted !== 'string') return false
+            const actual = new TextDecoder().decode(await controller.workspace!.fs.readFile(path))
+            if (actual !== wanted) return false
+          }
+          return true
+        }).catch(() => false)
+        const valid = await audit('before-retain')
+        if (!valid || !compatible) await fullResetFallback(nextGeneration)
+      }
       await timed("source.replace", () => replacement(nextGeneration))
+      if (matched) await audit('after-replacement')
     }
-    if (!installOnly) await services(nextGeneration)
+     if (!installOnly) await timed('services.wall', () => services(nextGeneration))
     await timed("switch.flush", () => controller.workspace!.flush())
   })
   generation = nextGeneration
@@ -170,6 +202,43 @@ async function switchWorkspace(): Promise<void> {
     write()
     throw error
   } finally { switching = false }
+}
+function assertStopped(value: unknown): void {
+  // Keep exact shape handling fail-closed; a missing diagnostic field is not zero.
+  const d = value as Record<string, any>
+  if (!Array.isArray(d.procs) || d.procs.length || !Array.isArray(d.listeners) || d.listeners.length
+    || d.pendingHttp !== 0 || d.fetch?.inflight !== 0 || d.fetch?.queued !== 0 || d.fetch?.active !== 0) throw Error('Stopped kernel diagnostics incomplete/nonzero: ' + JSON.stringify(d))
+}
+let retainedCacheDigest: string | undefined
+async function audit(phase: string): Promise<boolean> {
+  const runtime = controller.runtime as Awaited<ReturnType<typeof controller.startRuntime<{audit: ReturnType<typeof installedTreeAuditTool>}>>>
+  const result = await timed('validation.' + phase, () => runtime.tools.audit()).catch(error => {
+    if (phase !== 'before-retain') throw error
+    return {valid:false,checked:0,reason:String(error),cacheDigest:undefined}
+  })
+  resetEvidence.push({phase:'phase9.audit', point:phase,generation,result})
+  if (phase === 'before-retain') retainedCacheDigest = result.cacheDigest
+  if (phase === 'after-replacement' && result.cacheDigest !== retainedCacheDigest) throw Error('Cache bytes changed during source replacement')
+  if (!result.valid && phase === 'after-replacement') await fullResetFallback(generation + 1)
+  if (!result.valid && phase !== 'before-retain') throw Error('Installed tree audit failed: ' + result.reason)
+  return result.valid
+}
+async function fullResetFallback(nextGeneration: number): Promise<never> {
+  await timed('fallback.full-reset', async () => {
+    await controller.stopRuntime()
+    assertStopped(await diagnoseWorkspace(controller.workspace!))
+    await observedClear()
+    await controller.close()
+    await controller.open(distribution)
+    await installSource(controller.workspace!, fixture(nextGeneration), {existing:'replace'})
+    const apps = preparedApps(manifest, `/prepared/${candidate}/`, controller.signal, text => console.info(text), diagnostics)
+    const fresh = await controller.startRuntime({apps})
+    await fresh.tools.apps()
+    await controller.workspace!.flush()
+  })
+  resetEvidence.push({phase:'phase9.full-reset-fallback',generation:nextGeneration})
+  // Mandatory recovery is not a matched reuse pass; never launch incoming services.
+  throw Error('Installed tree/input untrusted: full reset fallback completed; cohort stopped')
 }
 async function verifySource(): Promise<{files: number; generation: number}> {
   let files = 0
@@ -247,7 +316,7 @@ Object.assign(window, { editorPerformanceExperiment: api })
 try {
   await timed("startup.total", start)
   api.ready = true
-  document.querySelector("button")!.addEventListener("click", () => { void switchWorkspace().catch(error => { api.error = String(error); write() }) })
+  if (!matched) document.querySelector("button")!.addEventListener("click", () => { void switchWorkspace().catch(error => { api.error = String(error); write() }) })
 } catch (error) {
   api.error = String(error)
   output.textContent += "\n" + api.error
