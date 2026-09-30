@@ -2,6 +2,36 @@ import {test, expect} from 'bun:test';
 import {createPilotFence, resetPilot, pilotReuseAllowed, pilotRequestURL, type ReuseIdentity} from './reuse-pilot-fence';
 const url = 'http://pilot/api/config';
 const deferred = <T>() => { let resolve!: (value: T) => void; const promise = new Promise<T>(r => resolve = r); return {promise,resolve}; };
+test('HTTP 200 semantic rejection retains complete bytes/hash/headers and normal transport without admitting reset', async () => {
+  const text = '{"data":[],"cursor":{"next":42}}';
+  const fence = createPilotFence(async () => new Response(text, {headers:{'content-type':'application/json','x-proof':'complete'}}), false, undefined, true);
+  await expect(fence.fetch('http://pilot/api/session')).rejects.toThrow('paged');
+  const record = fence.records[0]!;
+  expect(record.status).toBe(200); expect(record.state).toBe('failed');
+  expect(record.transport).toBe('normal'); expect(record.semantic).toBe('rejected');
+  expect(atob(record.wire!.bodyBase64)).toBe(text);
+  expect(record.wire!.bytes).toBe(new TextEncoder().encode(text).length);
+  expect(record.wire!.sha256).toBe(new Bun.CryptoHasher('sha256').update(text).digest('hex'));
+  expect(record.wire!.headers).toContainEqual(['x-proof','complete']);
+  fence.freeze(); await expect(fence.drain(100)).rejects.toThrow('normal completion unproven');
+});
+test('aborting an outstanding body cancels its reader and leaves transport uncertain', async () => {
+  let cancelled = false;
+  const joined = deferred<void>();
+  const cancellation = new AbortController();
+  const fence = createPilotFence(async (_url, init) => {
+    expect(init?.signal).toBeDefined();
+    return new Response(new ReadableStream({cancel(){cancelled=true;return joined.promise;}}));
+  });
+  const call = fence.fetch(url, {signal:cancellation.signal});
+  let settled = false; void call.catch(() => {settled=true;});
+  await Bun.sleep(1); cancellation.abort();
+  await Bun.sleep(1); expect(cancelled).toBe(true); expect(settled).toBe(false);
+  joined.resolve();
+  await expect(call).rejects.toThrow();
+  expect(cancelled).toBe(true); expect(fence.records[0]!.transport).toBe('failed');
+  expect(fence.records[0]!.wire).toBeUndefined();
+});
 test('fully consumed normal responses precede awaited disposal, DELETE, writes, acquisition', async () => {
   const body = deferred<Uint8Array>(); const disposal = deferred<void>(); const deletion = deferred<void>(); const order: string[] = [];
   const fence = createPilotFence(async () => new Response(new ReadableStream({async start(c) { c.enqueue(await body.promise); c.close(); }})));

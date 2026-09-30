@@ -140,3 +140,92 @@ deployment, push, model calls or production strategy change occurred.
 
 The production cancelled/concurrent-reader admission/drain/remote-release fence
 remains a separate unresolved gap. This failed restricted pilot cannot close it.
+
+## Read-only contract follow-up — blocked; no new pilot
+
+The limited follow-up used only Browser Control CLI 0.8.2 with existing session
+`clever-comet-943`. One read verified the unchanged 43226 page and its existing
+request inventory. One browser-context GET of that exact retained session-list
+preview URL was attempted with `AbortSignal.timeout(20000)`. It ended with
+`page.evaluate: TimeoutError: signal timed out`, before any response headers,
+status or bytes became available. The signal aborted that request. There was no
+retry, additional endpoint request, credential guessing, new session/server,
+navigation, reload, reset, disposal, DELETE or cleanup. Other retained resources
+were not inspected or touched. The attempt does **not** prove the guest handler
+received a request. No live-byte fixture or raw HTTP 200 parity is claimed.
+
+The original transport is a function-local closure in the served module; it
+retains the generated Basic credential and `endpoint.fetch`. The public
+`window.reusePilot` exports only `evidence` and `done`. Its failed/stopped fence
+cannot admit new calls. Browser `fetch` of a preview URL is not the original
+message-channel `endpoint.fetch`, which posts `workspace-http-stream` directly
+to its existing host. Recovering that transport/credential without restarting,
+reloading, creating another owner or bypassing browser boundaries is unresolved.
+**No further cold attempt is ready or authorized.** An authorized, supported
+read-only handle to the existing owned transport is needed first.
+
+### Serialization review correction (source evidence, not captured wire)
+
+Frozen packaged `server.js` hash remains
+`1df4bc41c0f6c7350da9d5953f3139586f760a7931fe411bdcabb3460098a929`.
+The prior assertion that undefined cursor entries are simply omitted overlooked
+the HttpApi JSON encoding stage. `applyResponseEncoding` calls `toCodecJson`
+(453095–453098); `Undefined.toCodecJson` encodes undefined as null
+(21892–21906). Session-list and message cursor fields use `Schema.optional`,
+not the schema package's omission-preserving `optional3` helper. Their empty
+handlers explicitly construct both undefined keys (556179–556205 and
+555456–555475). Thus the source-derived empty JSON example is:
+
+```json
+{"data":[],"cursor":{"previous":null,"next":null}}
+```
+
+This is a **source-derived example, not recovered original response bytes**.
+It explains why hand-written `JSON.stringify({data:[],cursor:{}})` fixtures
+cannot establish wire parity. The parser/fixtures remain unchanged pending the
+required captured response; no generic JSON acceptance or guessed nullable
+relaxation was introduced. Pagination is in the body, not pagination headers:
+these schemas do not use `WithHeaders`, and the SDK preserves list/message
+envelopes. JSON response status defaults to 200; NoContent is explicitly 204.
+
+Remaining planned contracts reviewed at route metadata/handler/JSON boundary:
+
+| Route | Packaged success contract / observation limit |
+| --- | --- |
+| GET health | Bare healthy/version/pid object; previously live observed, raw bytes unavailable |
+| GET config | Bare Config.Entry array; optional3 fields omit undefined; previously observed |
+| GET project/current | Bare id/directory/canonical identity; previously observed |
+| GET plugin, model | Location plus data array envelope; previously observed; new read aborted originally |
+| POST plugin/await-activation | NoContent 204; previously observed; not called in follow-up |
+| GET session | Session.Info array plus body cursor; original 200 rejected, raw bytes unavailable |
+| POST session / GET session/:id | `{data: Session.Info}`; schema optional3 fields omission-preserving; create uses explicit payload location or process cwd; neither live observed here |
+| GET session/active | `{data: Record<Session.ID, {type:"running"}>}`; not live observed here |
+| GET session/:id/message | Message.Info array plus previous/next body cursor using JSON optional encoding; not live observed here |
+| GET session/:id/permission, form | `{data: Request[]}` / `{data: Form.Info[]}`; not live observed here |
+| GET debug/location | Bare Location.Ref array; not live observed here |
+| DELETE debug/location | NoContent 204, handler invalidates requestRef location; **unobserved write response**, not executed |
+| POST session/:id/interrupt | Bare interrupted boolean; forbidden, not executed |
+
+The missing session ID precludes observing session-scoped success responses
+without creation, which is explicitly forbidden in this follow-up. Error responses
+for fabricated IDs would not establish those success shapes and were not requested.
+Current public V2 docs were consulted but differ from this frozen release and
+were not substituted for packaged metadata.
+
+### Failure evidence hardening (offline only)
+
+The finite fence now stores complete body bytes as base64, response headers,
+byte length and SHA-256 **before** any decoder or semantic validator runs.
+`transport: normal` is independent of `semantic: rejected` and overall failed
+admission. A 200 contract rejection retains exact evidence but still freezes
+future admission and blocks drain/reset. An abort cancels the outstanding body
+reader, joins its cancellation promise and forwards the normalized request signal to transport; partial bodies
+are not labeled complete or hashed as successful wire evidence. Raw response
+records are private experiment evidence and must be redacted before any fixture
+is committed. This source edit does not modify the already served old page.
+
+Focused offline result: **73 pass, 0 fail, 333 assertions** across contract, pilot
+fence, controller, reader fence and location fence, including byte/hash/
+header retention on HTTP 200 semantic failure and outstanding-reader cancellation.
+Targeted TypeScript check and `git diff --check` passed. No actual-wire equivalence proof, live parser verification or reuse eligibility
+has been established by this follow-up.

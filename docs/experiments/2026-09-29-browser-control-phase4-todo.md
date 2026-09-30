@@ -1,5 +1,19 @@
 # Browser Control project todo: phase-4 execution-context interruption
 
+## 2026-09-30: retained pilot preview-route read timeout
+
+- [ ] Identify a supported read-only route to the retained owned endpoint transport.
+  Browser Control **0.8.2**, session `clever-comet-943`, unchanged page
+  `http://127.0.0.1:43226/`. One `page.evaluate` browser fetch of the existing
+  `/preview/4096/api/session` URL with a 20-second abort signal returned
+  `TimeoutError: signal timed out`, not response status/bytes. Expected: complete
+  read-only API response; actual: route did not yield a response before abort.
+  The original `endpoint.fetch` uses a message channel, not browser fetch.
+  Recovery: none; request signal aborted, page/server retained unchanged, no retry
+  or reset. This is a route/transport diagnostic, not proof of a driver defect.
+  See the absolute report path:
+  `/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit/docs/experiments/2026-09-30-opencode-contract-preflight-controlled-reuse-pilot.md`.
+
 - [x] Diagnose `page.evaluate: Execution context was destroyed, most likely because
   of a navigation.` with Browser Control **0.8.2** (Bun-backed CLI).
 
