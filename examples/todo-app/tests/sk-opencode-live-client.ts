@@ -2,26 +2,33 @@ import {diagnoseWorkspace} from '@kev-browser-agent-kit/workspace';
 import {WorkspaceController} from '@kev-browser-agent-kit/workspace/react';
 import {loadPrepared,preparedApps,installOpenCodeConfig,createOpenCodeCandidateLaunch,openCodeCandidateLaunch as descriptor} from '@kev-browser-agent-kit/opencode-chat/browser';
 import {createChatController} from 'sk-opencode-qualified-controller';
+import {captureQualificationRequest,createQualificationFence,qualifyRootResult} from './sk-opencode-live-fence';
+import {guardedFailureCleanup} from './sk-opencode-live-failure-cleanup';
 
 // Deliberate actual-controller UI: read-only snapshot, no ChatView send/tool actions.
 // All writes are initial preparation of this NEW owned origin, before server launch.
-const evidence:any={status:'awaiting-start',retentionAccepted:false,remoteZeroRef:false,requests:[],events:[],attempts:0};
+const evidence:any={status:'awaiting-start',retentionAccepted:false,remoteZeroRef:false,requestAttempts:[],requests:[],events:[],attempts:0,backgroundWork:'delivered-models.fetch:true-global-refresh-not-drained'};
 const owner=new WorkspaceController({captureProcessOutput:true,onDiagnostic:event=>evidence.events.push(event)});
 const sha=async(bytes:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes as BufferSource)),b=>b.toString(16).padStart(2,'0')).join('');
 const base64=(bytes:Uint8Array)=>{let text='';for(let i=0;i<bytes.length;i+=8192)text+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(text);};
 const assert=(value:unknown,message:string)=>{if(!value)throw Error(message);};
-let admitted=false,closed=false,poison:unknown,creates=0;
+let admitted=false,closed=false,poison:unknown;
+const fence=createQualificationFence();
 const pending=new Set<Promise<unknown>>();
 const status=document.querySelector('#status')!,sessionText=document.querySelector('#session')!,snapshotText=document.querySelector('#snapshot')!;
 const start=document.querySelector<HTMLButtonElement>('#start')!,admit=document.querySelector<HTMLButtonElement>('#admit')!;
-let acceptUI:()=>void;
-const uiAdmission=new Promise<void>(resolve=>{acceptUI=resolve;});
+let acceptUI:()=>void,rejectUI:(error:unknown)=>void;
+const uiAdmission=new Promise<void>((resolve,reject)=>{acceptUI=resolve;rejectUI=reject;});
+void uiAdmission.catch(()=>{});
 admit.onclick=()=>{if(evidence.status!=='mounted-awaiting-ui-admission'||admitted)return;admitted=true;admit.disabled=true;acceptUI();};
 const display=()=>{status.textContent=evidence.status;};
 async function run(){
  if(evidence.attempts++)throw Error('One-shot owner already used');
  start.disabled=true;
- const watchdog=setTimeout(()=>{poison??=Error('Qualification deadline; unresolved ownership retained');evidence.status='failed';evidence.error=String(poison);display();},180000);
+  const watchdog=setTimeout(()=>{poison??=Error('Qualification deadline; unresolved ownership retained');rejectUI(poison);evidence.status='failed';evidence.error=String(poison);display();},180000);
+ let workspace:any,service:any,chat:ReturnType<typeof createChatController>|undefined,unsubscribe:(()=>void)|undefined;
+ let projectID:string|undefined,ownedRootID:string|undefined;
+ const preserve=async(path:string,value:unknown)=>{const response=await fetch(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(value),signal:AbortSignal.timeout(20000)});assert(response.ok,'Evidence preservation failed: '+path);};
  try{
   const freshRoot=await navigator.storage.getDirectory();
   for await(const key of (freshRoot as any).keys())throw Error('Origin already contains OPFS '+key);
@@ -34,7 +41,7 @@ async function run(){
   evidence.servedClientSha256=await sha(servedClient);
   const manifest=await loadPrepared('/prepared/',owner.signal);
   assert(manifest.runtimeVersion===stage.runtimeVersion,'Runtime/payload mismatch');
-  const workspace=await owner.open({name:'vivari',version:stage.runtimeVersion,assetBaseUrl:'/runtime/'});
+   workspace=await owner.open({name:'vivari',version:stage.runtimeVersion,assetBaseUrl:'/runtime/'});
   const runtime=await owner.startRuntime({apps:preparedApps(manifest,'/prepared/',owner.signal,delivery=>evidence.events.push({delivery}))});
   await runtime.tools.apps();
   await installOpenCodeConfig(workspace,{modelBaseURL:location.origin+'/prohibited-model/'});
@@ -46,31 +53,42 @@ async function run(){
   const password=crypto.randomUUID()+crypto.randomUUID(),authorization='Basic '+btoa('opencode:'+password);
   const launch=createOpenCodeCandidateLaunch({password,ripgrepBinDirectory:manifest.opencode.support.binDirectory});
   const {OPENCODE_PASSWORD:_,...publicEnvironment}=launch.env!;
-  evidence.identity={files:initialFiles,sourceMarker:marker,sourceRevision:stage.sourceRevision,runtimeRevision:stage.runtimeRevision,runtimeVersion:manifest.runtimeVersion,serverSha256:stage.serverSha256,dependencies:manifest.dependencies,opencode:manifest.opencode,cwd:launch.cwd,environment:publicEnvironment,ownerID:crypto.randomUUID(),directory:'/workspace',workspaceID:'<absent>',launches:1};
+   evidence.identity={files:initialFiles,sourceMarker:marker,sourceRevision:stage.sourceRevision,runtimeRevision:stage.runtimeRevision,runtimeVersion:manifest.runtimeVersion,serverSha256:stage.serverSha256,dependencies:manifest.dependencies,opencode:manifest.opencode,cwd:launch.cwd,environment:publicEnvironment,ownerID:crypto.randomUUID(),directory:'/workspace',workspaceID:'<absent>',launches:1};
+   fence.admitFreshOrigin(); // Only after storage, committed-client and frozen A0 identity admission.
   let endpoint:any,healthPID:number|undefined;
   const requestURL=(path:string)=>{const u=new URL(path.replace(/^\//,''),endpoint.url);for(const [k,v] of new URL(endpoint.url).searchParams)u.searchParams.set(k,v);u.searchParams.set('location[directory]','/workspace');return u.href;};
   const transport=(input:RequestInfo|URL,init?:RequestInit):Promise<Response>=>{
    if(closed||poison)return Promise.reject(Error('Qualification admissions closed'));
-   const request=new Request(input,init),url=new URL(request.url),base=new URL(endpoint.url),prefix=base.pathname.endsWith('/')?base.pathname:base.pathname+'/';
-   const path='/'+url.pathname.slice(prefix.length),sse=path==='/api/event'&&request.method==='GET';
-   const allowed=request.method==='GET'&&(['/api/health','/api/config','/api/project/current','/api/plugin','/api/model','/api/model/default','/api/session','/api/session/active'].includes(path)||/^\/api\/session\/[A-Za-z0-9_-]+(?:\/(message|permission|form))?$/.test(path)||sse)||request.method==='POST'&&['/api/session','/api/plugin/await-activation'].includes(path);
-   if(!allowed||url.origin!==base.origin||!url.pathname.startsWith(prefix)||url.searchParams.get('location[directory]')!=='/workspace'||url.searchParams.has('location[workspace]')||request.headers.has('x-opencode-workspace')){poison=Error('Forbidden route/location');return Promise.reject(poison);}
-   for(const [key,value] of base.searchParams)if(url.searchParams.get(key)!==value){poison=Error('Listener ownership mismatch');return Promise.reject(poison);}
-   if(request.method==='POST'&&path==='/api/session'&&++creates!==1){poison=Error('Only one native fresh root permitted');return Promise.reject(poison);}
-   const task=(async()=>{
-    const requestBytes=request.body?new Uint8Array(await request.arrayBuffer()):undefined;
-    if(path==='/api/session'&&request.method==='POST'){const body=JSON.parse(new TextDecoder().decode(requestBytes));assert(Object.keys(body).every(k=>k==='location')&&!body.id&&!body.parentID,'Unexpected root create settings');}
-    const headers=new Headers(request.headers);headers.set('authorization',authorization);
-    const response=await endpoint.fetch(request.url,{method:request.method,headers,signal:request.signal,...(requestBytes?{body:requestBytes}:{})});
-    assert(response.ok,'Guest HTTP '+response.status);
-    if(sse){evidence.sse={path,status:response.status,headers:[...response.headers],locallyJoined:false};return response;}
-    const bytes=new Uint8Array(await response.arrayBuffer());request.signal.throwIfAborted();
+    const request=new Request(input,init);
+    const task=(async()=>{
+     const captured=await captureQualificationRequest(request,record=>evidence.requestAttempts.push(record),record=>preserve('/request-evidence',record));
+     const requestBytes=captured.bytes;
+     let route:ReturnType<typeof fence.admit>;
+     try{route=fence.admit(request,new URL(endpoint.url),requestBytes);captured.record.admission='admitted';}
+     catch(error){captured.record.admission='rejected';Object.assign(captured.record,{error:String(error)});throw error;}
+     const {path,sse,create,inventory}=route;
+     if(create){
+      const proof=await fetch('/codec',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...captured.record,path,mode:'root-request-schema'}),signal:AbortSignal.timeout(20000)});
+      const text=await proof.text();assert(proof.ok,'Actual delivered root request schema rejected: '+text.slice(0,500));
+      const receipt=JSON.parse(text);assert(receipt.qualified===true&&receipt.kind==='root-request-schema'&&receipt.path===path&&receipt.method===request.method&&receipt.bytes===requestBytes.length,'Root schema receipt mismatch');
+      Object.assign(captured.record,{pinnedRequestSchema:receipt});
+     }
+     const headers=new Headers(request.headers);headers.set('authorization',authorization);
+     const response=await endpoint.fetch(request.url,{method:request.method,headers,signal:request.signal,...(requestBytes.length?{body:requestBytes}:{})});
+     if(sse&&response.ok){evidence.sse={path,status:response.status,headers:[...response.headers],locallyJoined:false};return response;}
+     const bytes=new Uint8Array(await response.arrayBuffer());
     const record={method:request.method,path,url:request.url,status:response.status,headers:[...response.headers],bodyBase64:base64(bytes),sha256:await sha(bytes)};
-    evidence.requests.push(record); // Preserve failure bytes before codec validation.
+     evidence.requests.push(record); // Preserve failure bytes before codec validation.
+     await preserve('/response-evidence',record);
+     assert(response.ok,'Guest HTTP '+response.status);request.signal.throwIfAborted();
     const proof=await fetch('/codec',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(record),signal:AbortSignal.timeout(20000)});
     const proofText=await proof.text();assert(proof.ok,'Pinned codec qualification failed: '+proofText.slice(0,500));
     const parity=JSON.parse(proofText);assert(parity.qualified===true&&parity.method===request.method&&parity.path===path&&parity.status===response.status&&parity.bytes===bytes.length,'Pinned codec receipt mismatch');
-    Object.assign(record,{pinnedCodec:parity});
+     Object.assign(record,{pinnedCodec:parity});
+     if(path.endsWith('/message')||path.endsWith('/permission')||path.endsWith('/form')){const data=JSON.parse(new TextDecoder().decode(bytes)).data;assert(Array.isArray(data)&&data.length===0,'Native root hydration must be empty');}
+     if(path==='/api/session/active'){const data=JSON.parse(new TextDecoder().decode(bytes)).data;assert(data&&typeof data==='object'&&Object.keys(data).length===0,'Global execution not empty');}
+     if(inventory)fence.admitEmptyInventory(JSON.parse(new TextDecoder().decode(bytes)).data);
+     if(create){assert(projectID,'Owned project missing');ownedRootID=qualifyRootResult(JSON.parse(new TextDecoder().decode(bytes)).data,projectID!,evidence.previousSessionIDs);fence.ownRoot(ownedRootID);evidence.ownedRootID=ownedRootID;}
     return new Response(response.status===204?null:bytes,{status:response.status,headers:response.headers});
    })().catch(error=>{poison??=error;throw error;});
    pending.add(task);return task.finally(()=>pending.delete(task));
@@ -84,7 +102,7 @@ async function run(){
    return d;
   };
   evidence.status='launching';display();
-  const service=await owner.launch('qualification-chat',launch,descriptor.port,async exposed=>{
+   service=await owner.launch('qualification-chat',launch,descriptor.port,async exposed=>{
    endpoint=exposed;
    // launch waits for listener; no readiness retries or unrelated RPC are admitted.
    const health=await json('/api/health');assert(health.healthy&&health.version==='2.0.3'&&Number.isSafeInteger(health.pid),'Pinned native health');healthPID=health.pid;evidence.health=health;
@@ -95,21 +113,22 @@ async function run(){
   const processIdentity=(d:typeof evidence.before)=>d.procs.map((p:any)=>({pid:p.pid,ppid:p.ppid,command:p.command,cwd:p.cwd}));
   evidence.identity.process=processIdentity(evidence.before);
   const inventory=await json('/api/session');assert(inventory.data.length===0,'Fresh origin contains persisted native sessions');evidence.previousSessionIDs=inventory.data.map((s:any)=>s.id);
-  const project=await json('/api/project/current'),config=await json('/api/config'),plugins=await json('/api/plugin'),models=await json('/api/model');
+   const project=await json('/api/project/current'),config=await json('/api/config'),plugins=await json('/api/plugin'),models=await json('/api/model');
+   projectID=project.id;
   assert(plugins.data.some((p:any)=>p.id==='editor.javascript'&&p.state.status==='active')&&plugins.data.some((p:any)=>p.id==='editor.model-headers'&&p.state.status==='active'),'Real plugins not activated');
   const selected=config.find((c:any)=>c.path===descriptor.configPath)?.info;
   assert(selected?.providers?.opencode?.settings?.apiKey==='editor-host-proxy'&&models.data.some((m:any)=>m.providerID===descriptor.model.providerID&&m.id===descriptor.model.id&&m.enabled),'Model marker/catalog admission failed');
   const configuredModel=selected.model;
   assert(configuredModel==='opencode/'+descriptor.model.id||configuredModel?.providerID===descriptor.model.providerID&&configuredModel.model===descriptor.model.id,'Explicit configured default model marker mismatch');
   evidence.catalog={project,config,plugins,models};
-  const chat=createChatController({endpoint:{url:requestURL(''),fetch:transport},directory:'/workspace',startNewSession:true,handshakeTimeoutMs:20000});
-  const render=()=>{const snapshot=chat.getSnapshot();evidence.snapshot=snapshot;sessionText.textContent=snapshot.sessionID??'None';snapshotText.textContent=JSON.stringify(snapshot,null,2);};
-  const unsubscribe=chat.subscribe(render);render();
+   chat=createChatController({endpoint:{url:requestURL(''),fetch:transport},directory:'/workspace',startNewSession:true,handshakeTimeoutMs:20000});
+   const render=()=>{const snapshot=chat!.getSnapshot();evidence.snapshot=snapshot;sessionText.textContent=snapshot.sessionID??'None';snapshotText.textContent=JSON.stringify(snapshot,null,2);};
+   unsubscribe=chat.subscribe(render);render();
   await chat.ready;render();const snapshot=chat.getSnapshot();
-  assert(!snapshot.error&&!snapshot.loading&&snapshot.sessionID&&snapshot.messages.length===0&&snapshot.execution==='idle'&&snapshot.permissions.length===0&&snapshot.questions.length===0,'Actual controller fresh idle hydration failed');
+   assert(!snapshot.error&&!snapshot.loading&&snapshot.sessionID&&snapshot.messages.length===0&&snapshot.execution==='idle'&&snapshot.permissions.length===0&&snapshot.questions.length===0&&snapshot.unsupportedForms.length===0,'Actual controller fresh idle hydration failed');
   assert(snapshot.defaultModel?.providerID===descriptor.model.providerID&&snapshot.defaultModel.id===descriptor.model.id,'Real controller default model marker mismatch');
   const session=(await json('/api/session/'+snapshot.sessionID)).data;evidence.session=session;
-  assert(session.id===snapshot.sessionID&&session.projectID===project.id&&session.location.directory==='/workspace'&&session.location.workspaceID===undefined&&session.parentID===undefined&&session.fork===undefined&&session.model===undefined&&session.permissions===undefined&&session.metadata===undefined,'Native root inheritance mismatch');
+   assert(session.id===snapshot.sessionID&&session.id===ownedRootID,'Controller must select exact owned root');qualifyRootResult(session,project.id,evidence.previousSessionIDs);
   assert((await json('/api/session/active')).data&&Object.keys((await json('/api/session/active')).data).length===0,'Active execution not empty');
   evidence.status='mounted-awaiting-ui-admission';admit.disabled=false;display();
   await uiAdmission;assert(!poison,'Deadline/transport failed during manual UI admission');
@@ -123,7 +142,25 @@ async function run(){
   assert(evidence.executionExit.exitCode===0&&evidence.executionExit.signal===null&&evidence.executionExit.forced===false,'Guest did not cleanly exit with joined outputs');
   evidence.zero=await diagnoseWorkspace(workspace);assert(evidence.zero.procs.length===0&&evidence.zero.listeners.length===0&&evidence.zero.pendingHttp===0,'Guest cleanup not zero work');
   await owner.close();evidence.status='mounted-qualification-only';
- }catch(error){closed=true;poison??=error;evidence.status='failed';evidence.error=String(error);/* retain uncertain ownership; no retry/reset/replacement/forced cleanup */}
+  }catch(error){
+   closed=true;poison??=error;evidence.status='failed';evidence.error=String(error);display();
+   try{
+    // Preserve the failed cohort BEFORE any disposal, EOF or ownership release.
+    await preserve('/failed-evidence',evidence);
+    assert(workspace&&service,'Known returned guest/service ownership required; ambiguous launch retained');
+    evidence.failureCleanup=await guardedFailureCleanup({
+     dispose:async()=>{unsubscribe?.();if(chat)await chat.dispose();if(evidence.sse)evidence.sse.locallyJoined=true;},
+     finiteJoin:async()=>{await Promise.allSettled([...pending]);},
+     guestEOFJoin:async()=>{
+      service.execution.closeStdin();let timer:ReturnType<typeof setTimeout>|undefined;
+      try{const [exit]=await Promise.race([Promise.all([service.execution.exited,service.drained]),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error('Failure EOF join uncertain; no forced stop')),15000);})]);evidence.executionExit=exit;assert(exit.exitCode===0&&exit.signal===null&&exit.forced===false,'Failure guest not clean/non-forced');}
+      finally{clearTimeout(timer);}
+     },
+     zeroWork:async()=>{evidence.zero=await diagnoseWorkspace(workspace);assert(evidence.zero.procs.length===0&&evidence.zero.listeners.length===0&&evidence.zero.pendingHttp===0,'Failure cleanup zero work unproven');return evidence.zero;},
+     workspaceClose:async()=>{await owner.close();},
+    });
+   }catch(cleanupError){evidence.failureCleanup={kind:'guarded-failure-cleanup',qualificationPassed:false,completed:false,error:String(cleanupError)};}
+  }
  clearTimeout(watchdog);display();
  const exported=await fetch('/evidence',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(evidence)});
  evidence.exported=exported.ok;return evidence;

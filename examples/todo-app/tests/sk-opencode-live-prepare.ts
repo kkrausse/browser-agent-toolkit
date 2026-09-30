@@ -10,6 +10,7 @@ async function command(args:string[],cwd=root,trim=true){const p=Bun.spawn(args,
 const hash=async(path:string)=>new Bun.CryptoHasher('sha256').update(await Bun.file(path).arrayBuffer()).digest('hex');
 const revision=await command(['git','rev-parse',process.env.SK_OPENCODE_SOURCE_REVISION??'HEAD']);
 await command(['git','merge-base','--is-ancestor','55ae98c',revision]);
+await command(['git','merge-base','--is-ancestor','691cd5a',revision]); // Current committed chat repair, never a sibling's unstaged integration.
 if(! (await command(['git','rev-parse','HEAD'],baseline)).startsWith('64de522'))throw Error('Read-only baseline pin changed');
 await mkdir(output); // Must not exist; preserve partial failures for investigation.
 const snapshot=join(output,'source');await mkdir(snapshot);
@@ -73,11 +74,11 @@ for(const [pkg,entries] of [['workspace-api',['index.ts','react.tsx','diagnostic
  if(pkg==='workspace-api')for(const entry of ['index','react','diagnostics','delivery'])paths['@kev-browser-agent-kit/workspace'+(entry==='index'?'':'/'+entry)]=[join(output,'workspace',entry+'.d.ts')];
 }
 paths['@kev-browser-agent-kit/opencode-chat/browser']=[join(output,'chat/browser.d.ts')];paths['sk-opencode-qualified-controller']=[join(output,'chat/controller.d.ts')];
-await Bun.write(join(output,'consumer.tsconfig.json'),JSON.stringify({compilerOptions:{...common,noEmit:true,paths},files:['sk-opencode-live-client.ts','sk-opencode-live-prepare.ts','sk-opencode-live-serve.ts','sk-opencode-live-host-owner.ts','sk-opencode-live-staging.test.ts'].map(file=>join(snapshot,'examples/todo-app/tests',file))}));
+await Bun.write(join(output,'consumer.tsconfig.json'),JSON.stringify({compilerOptions:{...common,noEmit:true,paths},files:['sk-opencode-live-client.ts','sk-opencode-live-prepare.ts','sk-opencode-live-serve.ts','sk-opencode-live-host-owner.ts','sk-opencode-live-staging.test.ts','sk-opencode-live-root-repair.test.ts','sk-opencode-live-fence.ts','sk-opencode-live-failure-cleanup.ts'].map(file=>join(snapshot,'examples/todo-app/tests',file))}));
 await command(['bun',tsc,'-p',join(output,'consumer.tsconfig.json')]);
 const stageHashes:Record<string,string>={};
 for(const dir of ['client','chat','workspace','host-source'])for await(const file of new Bun.Glob('**/*').scan({cwd:join(output,dir),onlyFiles:true}))stageHashes[dir+'/'+file]=await hash(join(output,dir,file));
 for(const file of ['committed-source.tar','pinned-codec.mjs','sk-opencode-live-codec.mjs','workspace.tsconfig.json','chat.tsconfig.json','consumer.tsconfig.json'])stageHashes[file]=await hash(join(output,file));
-for(const file of ['sk-opencode-live-serve.ts','sk-opencode-live-host-owner.ts','sk-opencode-live-prepare.ts','sk-opencode-live-client.ts','sk-opencode-live-codec.mjs','sk-opencode-live-staging.test.ts'])stageHashes['source/examples/todo-app/tests/'+file]=await hash(join(snapshot,'examples/todo-app/tests',file));
+for(const file of ['sk-opencode-live-serve.ts','sk-opencode-live-host-owner.ts','sk-opencode-live-prepare.ts','sk-opencode-live-client.ts','sk-opencode-live-codec.mjs','sk-opencode-live-staging.test.ts','sk-opencode-live-root-repair.test.ts','sk-opencode-live-fence.ts','sk-opencode-live-failure-cleanup.ts'])stageHashes['source/examples/todo-app/tests/'+file]=await hash(join(snapshot,'examples/todo-app/tests',file));
 await writeFile(join(output,'stage.json'),JSON.stringify({status:'offline-prepared-only',output,frozen,sourceRevision:revision,sourceArchiveSha256:stageHashes['committed-source.tar'],runtimeRevision:receipt.revision,runtimeVersion:receipt.version,verifiedFrozenFiles:verified,frozenReceiptSha256:await hash(join(frozen,'receipt.json')),frozenHashes:receipt.hashes,serverSha256:serverHash,baselineServerSha256:baselineServerHash,serverReceipt,dependencies,stageHashes,retentionAccepted:false,remoteZeroRef:false,liveRuns:0},null,2),{flag:'wx'});
 console.log(JSON.stringify({output,sourceRevision:revision,verifiedFrozenFiles:verified,serverHash,clientSha256:stageHashes['client/sk-opencode-live-client.js'],liveRuns:0}));

@@ -10,13 +10,25 @@ if(await hash(join(stage.frozen,'receipt.json'))!==stage.frozenReceiptSha256)thr
 for(const [file,expected] of Object.entries(stage.frozenHashes))if(await hash(join(stage.frozen,file))!==expected)throw Error('Frozen artifact changed '+file);
 if(await Bun.file(join(output,'owned-origin.json')).exists())throw Error('Stage origin already owned; no host replacement');
 const headers={'Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'require-corp','Cache-Control':'no-store','Service-Worker-Allowed':'/'};
-let codecCount=0,codecPending=0,captured=false,hostJoinAllowed=false;
+let codecCount=0,codecPending=0,captured=false,hostJoinAllowed=false,failureJoinAllowed=false,failedPreserved=false,requestCount=0,responseCount=0;
 const server=Bun.serve({hostname:'127.0.0.1',port:0,async fetch(request){
  const url=new URL(request.url),path=url.pathname;
  if(path==='/inspect-empty')return new Response('<!doctype html><title>Fresh origin inspection</title>',{headers});
  if(path==='/stage')return Response.json({...stage,clientSha256:stage.stageHashes['client/sk-opencode-live-client.js'],frozenHashes:undefined,stageHashes:undefined},{headers});
  if(path==='/')return new Response('<!doctype html><title>SK pinned mounted qualification — no retention</title><h1>Real OpenCode controller qualification</h1><p>No prompt, model, tool, reset or retention operation is exposed.</p><button id="start">Start one owned qualification</button><p id="status">awaiting-start</p><p>Native selected session: <strong id="session">None</strong></p><pre id="snapshot">Not mounted</pre><button id="admit" disabled>Confirm rendered empty idle root and join cleanup</button><script type="module" src="/client/sk-opencode-live-client.js"></script>',{headers:{...headers,'content-type':'text/html'}});
- if(path.startsWith('/prohibited-model/'))return new Response('Inference prohibited',{status:403,headers});
+  if(path.startsWith('/prohibited-model/'))return new Response('Inference prohibited',{status:403,headers});
+  if(['/request-evidence','/response-evidence'].includes(path)&&request.method==='POST'){
+   const text=await request.text(),record=JSON.parse(text),bytes=Buffer.from(record.bodyBase64,'base64');
+   if(new Bun.CryptoHasher('sha256').update(bytes).digest('hex')!==record.sha256)return new Response('Body digest mismatch',{status:422,headers});
+   const name=path==='/request-evidence'?'request-attempt-'+requestCount++:'finite-response-'+responseCount++;
+   await writeFile(join(output,name+'.json'),text,{flag:'wx'});return Response.json({preserved:true},{headers});
+  }
+  if(path==='/failed-evidence'&&request.method==='POST'){
+   if(failedPreserved||captured)return new Response('Failure preservation unavailable',{status:409,headers});
+   const text=await request.text(),evidence=JSON.parse(text);
+   if(evidence.status!=='failed'||evidence.retentionAccepted!==false||evidence.remoteZeroRef!==false)return new Response('Failed scope required',{status:400,headers});
+   await writeFile(join(output,'failed-before-cleanup.json'),text,{flag:'wx'});failedPreserved=true;return Response.json({preserved:true},{headers});
+  }
  if(path==='/codec'&&request.method==='POST'){
   codecPending++;const index=codecCount++;
   try{
@@ -35,13 +47,19 @@ const server=Bun.serve({hostname:'127.0.0.1',port:0,async fetch(request){
   const text=await request.text(),evidence=JSON.parse(text);
   if(!['failed','mounted-qualification-only'].includes(evidence.status)||evidence.retentionAccepted!==false||evidence.remoteZeroRef!==false)return new Response('Invalid terminal scope',{status:400,headers});
   captured=true;await writeFile(join(output,'live-evidence.json'),text,{flag:'wx'});
-  hostJoinAllowed=evidence.status==='mounted-qualification-only'&&evidence.zero?.procs?.length===0&&evidence.zero?.listeners?.length===0&&evidence.zero?.pendingHttp===0&&evidence.executionExit?.exitCode===0&&evidence.executionExit?.forced===false&&evidence.executionExit?.signal===null;
+   hostJoinAllowed=evidence.status==='mounted-qualification-only'&&evidence.zero?.procs?.length===0&&evidence.zero?.listeners?.length===0&&evidence.zero?.pendingHttp===0&&evidence.executionExit?.exitCode===0&&evidence.executionExit?.forced===false&&evidence.executionExit?.signal===null;
+   failureJoinAllowed=failedPreserved&&evidence.status==='failed'&&evidence.failureCleanup?.kind==='guarded-failure-cleanup'&&evidence.failureCleanup?.qualificationPassed===false&&evidence.failureCleanup?.completed===true&&evidence.zero?.procs?.length===0&&evidence.zero?.listeners?.length===0&&evidence.zero?.pendingHttp===0&&evidence.executionExit?.exitCode===0&&evidence.executionExit?.forced===false&&evidence.executionExit?.signal===null;
   return Response.json({captured:true,sha256:new Bun.CryptoHasher('sha256').update(text).digest('hex')},{headers});
  }
- if(path==='/host-join'&&request.method==='POST'){
+  if(path==='/host-join'&&request.method==='POST'){
   if(!captured||!hostJoinAllowed||codecPending)return new Response('Successful guest join/zero-work receipt required; failed ownership retained',{status:409,headers});
   const response=Response.json({ownedHostStopping:true,pid:process.pid},{headers});setTimeout(()=>void server.stop(false),50);return response;
- }
+  }
+  if(path==='/failure-host-join'&&request.method==='POST'){
+   if(!captured||!failureJoinAllowed||codecPending)return new Response('Preserved failure and guarded guest cleanup required; uncertain ownership retained',{status:409,headers});
+   await writeFile(join(output,'failure-host-join-request.json'),JSON.stringify({kind:'guarded-failure-cleanup',qualificationPassed:false,pid:process.pid}),{flag:'wx'});
+   const response=Response.json({ownedHostStopping:true,qualificationPassed:false,pid:process.pid},{headers});setTimeout(()=>void server.stop(false),50);return response;
+  }
  const decoded=decodeURIComponent(path);if(decoded.includes('..'))return new Response('Not found',{status:404,headers});
  let file:string|undefined;
  if(decoded==='/client/sk-opencode-live-client.js')file=join(output,decoded.slice(1));

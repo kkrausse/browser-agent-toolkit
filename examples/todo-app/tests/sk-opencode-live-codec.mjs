@@ -8,6 +8,14 @@ if(!allowed) throw Error('Unqualified codec route');
 const endpoint=Object.values(Api.groups).flatMap(g=>Object.values(g.endpoints)).find(e=>e.method===record.method && (e.path===record.path || e.path.replace(':sessionID',record.path.split('/')[3])===record.path));
 if(!endpoint) throw Error('Missing pinned endpoint');
 const bytes=Buffer.from(record.bodyBase64,'base64');
+if(record.mode==='root-request-schema'){
+ if(record.method!=='POST'||record.path!=='/api/session')throw Error('Only fresh root request schema qualified');
+ const payload=endpoint.payload.get('application/json').schemas[0];
+ const decoded=Schema.decodeSync(payload)(JSON.parse(bytes.toString()),{onExcessProperty:'error'});
+ const canonical=Buffer.from(JSON.stringify(Schema.encodeSync(payload)(decoded)));
+ console.log(JSON.stringify({qualified:true,kind:'root-request-schema',method:record.method,path:record.path,bytes:bytes.length,canonicalBodyBase64:canonical.toString('base64')}));
+ process.exit(0);
+}
 const success=[...endpoint.success][0];
 const wire=record.status===204?undefined:JSON.parse(bytes.toString());
 let domain=record.status===204?HttpApiSchema.NoContent.make():Schema.decodeSync(success)(wire);

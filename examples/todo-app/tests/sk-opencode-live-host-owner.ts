@@ -16,7 +16,7 @@ const stdout=new Response(child.stdout).text(),stderr=new Response(child.stderr)
 let exited=false;void child.exited.then(()=>{exited=true;});
 while(!await Bun.file(join(output,'owned-origin.json')).exists()&&!exited)await Bun.sleep(100);
 let origin:any;
-if(await Bun.file(join(output,'owned-origin.json')).exists()){origin=await Bun.file(join(output,'owned-origin.json')).json();console.log(JSON.stringify({...origin,initiatorPID:process.pid,finish:'POST /host-join only after terminal evidence capture; then await this initiator exit'}));}
+if(await Bun.file(join(output,'owned-origin.json')).exists()){origin=await Bun.file(join(output,'owned-origin.json')).json();console.log(JSON.stringify({...origin,initiatorPID:process.pid,finish:'POST /host-join after success, or /failure-host-join ONLY after preserved failure and guarded cleanup; await initiator completion'}));}
 // No timeout/force kill masquerading as a join. Parent owns escalation if retained.
 const [out,err,exit]=await Promise.all([stdout,stderr,child.exited]);
 await writeFile(join(output,'host-process-join.json'),JSON.stringify({pid:child.pid,exit,stdout:out,stderr:err,stdoutJoined:true,stderrJoined:true}),{flag:'wx'});
@@ -31,3 +31,4 @@ const absent=await new Promise<boolean>((resolve,reject)=>{
 if(!absent)throw Error('Owned host listener still present');
 await writeFile(join(output,'host-listener-absence.json'),JSON.stringify({url:origin.url,listenerAbsent:true,childJoined:true,initiatorCompleting:true}),{flag:'wx'});
 console.log(JSON.stringify({hostJoined:true,listenerAbsent:true,output}));
+if(await Bun.file(join(output,'failure-host-join-request.json')).exists())throw Error('Qualification FAILED; guarded host cleanup joined, not a pass');
