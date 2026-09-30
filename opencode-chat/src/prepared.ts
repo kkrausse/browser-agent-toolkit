@@ -5,7 +5,7 @@ import { openCodeCandidateLaunch } from './opencode-launch';
 import type { ProjectFile } from './project-file';
 import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
 import { managedDeliveryTool } from '@kev-browser-agent-kit/workspace/delivery';
-import type { ManagedBundle, ManagedVfsImage } from '@kev-browser-agent-kit/workspace/delivery';
+import type { InstalledCachePolicy, ManagedBundle, ManagedVfsImage } from '@kev-browser-agent-kit/workspace/delivery';
 
 export interface PreparedOpenCode {
   id: string; format: typeof openCodeCandidateLaunch.format; receiptSha256: string; sourceRevision: string; receipt: string;
@@ -80,12 +80,22 @@ export async function loadPrepared(base: string, signal: AbortSignal, diagnostic
   return manifest;
 }
 
-export function preparedApps(manifest: PreparedManifest, base: string, signal: AbortSignal, report: (text: string) => void, diagnostics: DiagnosticScope = createDiagnosticScope(), options: { experimentalReuseInstalled?: boolean } = {}): ToolDescriptor<void, void> {
+export interface PreparedAppsOptions {
+  experimentalReuseInstalled?: boolean;
+  /** Opt-in stopped-tree audit. Caller must join ALL services before each install.
+   * Invalid audits still redeliver conservatively; failed ownership proof rejects. */
+  experimentalPreserveInstalledCaches?: { servicesStopped: true; policy: InstalledCachePolicy };
+}
+
+export function preparedApps(manifest: PreparedManifest, base: string, signal: AbortSignal, report: (text: string) => void, diagnostics: DiagnosticScope = createDiagnosticScope(), options: PreparedAppsOptions = {}): ToolDescriptor<void, void> {
+  if (options.experimentalPreserveInstalledCaches && !options.experimentalReuseInstalled) throw Error('Cache preservation requires explicit installed reuse');
   validateTree(manifest.assets);
   validatePreparedBackendArchives(manifest);
   if (!manifest.bundle) throw Error('Prepared managed bundle is required; regenerate this editor preparation');
   const delivery = managedDeliveryTool({ format: 'managed-tree-v1', roots: treeRoots, entries: manifest.assets, bundle: manifest.bundle, image: manifest.image }, { baseUrl: base, signal, report,
-    experimentalReuseInstalled: options.experimentalReuseInstalled ? { runtimeVersion: manifest.runtimeVersion, disposablePaths: ['/workspace/node_modules/.vite-temp', '/workspace/node_modules/.vite'], onResult: result => diagnostics.record('delivery.installed-environment', result) } : undefined });
+    experimentalReuseInstalled: options.experimentalReuseInstalled ? { runtimeVersion: manifest.runtimeVersion,
+      ...(options.experimentalPreserveInstalledCaches ? { preserveCaches: options.experimentalPreserveInstalledCaches } : { disposablePaths: ['/workspace/node_modules/.vite-temp', '/workspace/node_modules/.vite'] }),
+      onResult: result => diagnostics.record('delivery.installed-environment', result) } : undefined });
   return { name: 'browser-editor-apps', version: manifest.runtimeVersion, async bind(context) {
     const install = await delivery.bind(context);
     return async () => {
