@@ -31,7 +31,7 @@ async function stage(name:string,task:()=>Promise<unknown>,ms=policy.stageMs){
   finally{active=false;clearTimeout(timer!);}
 }
 async function diagnostics(){const d=await diagnoseWorkspace(owner.workspace!);assertSingleKernelDiagnostics(d);return d;}
-async function zero(){const d=await diagnostics();assertZeroWork(d);return d;}
+async function zero(){const d=await diagnostics();assertZeroWork(d);assert((d as any).spawnCapture?.ownedSpills===0,'Owned spawn spill records not zero');return d;}
 async function capture(stream:AsyncIterable<Uint8Array>,label='unlabelled'){
   const chunks:Uint8Array[]=[];let size=0;const channelDecoder=new TextDecoder();
   const channels=evidence.guestChannels??={};const channel=channels[label]??={bytes:0,text:'',truncated:false};

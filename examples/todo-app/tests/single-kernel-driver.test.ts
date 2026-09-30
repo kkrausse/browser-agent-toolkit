@@ -34,3 +34,11 @@ test('actual Chrome census permits relay and dynamic processes but rejects hidde
   targets.pop();targets.push({targetId:'opaque-child',type:'worker',url:'data:text/javascript,opaque',openerId:'kernel'});
   await expect(execute()).rejects.toThrow('Chrome worker topology mismatch');expect(detached).toBe(3);
 });
+test('close census observes target propagation without replaying stop or hiding auxiliaries',async()=>{
+  const origin='http://127.0.0.1:54321';let targets:any[]=[{targetId:'kernel',type:'worker',url:origin+'/runtime/assets/kernel-worker-fresh.js?opfs-disable='},{targetId:'process',type:'worker',url:origin+'/runtime/assets/process-worker-fresh.js'}];
+  const page={url:()=>origin+'/',context:()=>({newCDPSession:async()=>({send:async()=>({targetInfos:targets}),detach:async()=>{}})})};
+  const observe=()=>runInNewContext(`(async()=>{${inventoryCode(false,true)}})()`,{page,URL,Set,Error,JSON});
+  expect((await observe()).closed).toBe(false);
+  targets=[];expect((await observe()).closed).toBe(true);
+  targets=[{targetId:'extra',type:'worker',url:'blob:'+origin+'/opaque'}];await expect(observe()).rejects.toThrow('Chrome worker topology mismatch');
+});

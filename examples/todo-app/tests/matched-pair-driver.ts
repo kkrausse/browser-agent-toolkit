@@ -91,7 +91,7 @@ export function createDriverCommands(evidence:string, sessions:Record<string,str
         const [stdout,stderr,exit]=joined.map(result=>(result as PromiseFulfilledResult<any>).value)
         await writeFile(join(evidence,id+'.json'),JSON.stringify({stdout,stderr,exit}),{flag:'wx'})
         const result=JSON.parse(stdout)
-        if(exit || !result.ok)throw Error(result.error || stderr || 'Browser command failed')
+        if(exit || !result.ok)throw Error(typeof result.error==='string'?result.error:result.error?.message || stderr || 'Browser command failed')
         if(result.valueUnavailable===true||!Object.hasOwn(result,'value'))throw Error('Browser command value unavailable; evidence incomplete')
         return result.value
       } finally {if(!ambiguous)pending=false}

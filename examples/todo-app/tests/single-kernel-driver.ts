@@ -24,7 +24,7 @@ export function validateOwnedOrigins(app:any,contracts:any,output:string){
   }
   if(app.url===contracts.url||app.contracts!==false||contracts.contracts!==true)throw Error('Distinct app and contracts origins required');
 }
-export function inventoryCode(expectKernel:boolean){
+export function inventoryCode(expectKernel:boolean,observeClose=false){
   return `const origin=new URL(page.url()).origin;
     const cdp=await page.context().newCDPSession(page);
     try{const {targetInfos}=await cdp.send('Target.getTargets');
@@ -34,11 +34,11 @@ export function inventoryCode(expectKernel:boolean){
       const workers=targets.filter(t=>t.type!=='service_worker');
       const kernels=workers.filter(t=>/\\/kernel-worker(?:-[\\w-]+)?\\.js(?:\\?|$)/.test(t.url));
       const processes=workers.filter(t=>/\\/process-worker-[\\w-]+\\.js(?:\\?|$)/.test(t.url));
-      if(kernels.length!==${expectKernel?1:0}||workers.length!==kernels.length+processes.length||(${!expectKernel}&&processes.length))throw Error('Chrome worker topology mismatch: '+JSON.stringify(targets));
+       if(workers.length!==kernels.length+processes.length||(${!observeClose}&&(kernels.length!==${expectKernel?1:0}||(${!expectKernel}&&processes.length))))throw Error('Chrome worker topology mismatch: '+JSON.stringify(targets));
       for(const kernel of kernels){const url=new URL(kernel.url);if(!url.searchParams.has('opfs-disable')||url.search.slice(1).includes('?'))throw Error('Malformed/missing kernel SQLite proxy opt-out flag');}
       const d=${expectKernel?"await page.evaluate(()=>window.singleKernelAcceptance.diagnostics())":"null"};
       if(d&&(d.workers.process!==processes.length||d.workers.kernel!==kernels.length))throw Error('Actual Chrome census differs from runtime registry');
-      return {origin,targets,runtimeWorkers:d?.workers??null};
+       return {origin,targets,runtimeWorkers:d?.workers??null,closed:kernels.length===0&&processes.length===0};
     }finally{await cdp.detach();}`;
 }
 
@@ -50,12 +50,12 @@ if(import.meta.main){
   validateOwnedOrigins(app,contracts,output);
   const receipt=await Bun.file(join(output,'receipt.json')).json();
   if(!receipt.prepared||receipt.topology?.policy!=='single-kernel')throw Error('Full acceptance requires matching prepared apps and single-kernel receipt');
-  if(receipt.revision!=='f5456996d511225d0147682cccddbf16adab4b4e')throw Error('Require authorized causal-fix checkpoint');
+  if(receipt.revision!=='e35eab4af7a53ff08eb70c09df59c40b78bfdd67')throw Error('Require authorized final cleanup checkpoint');
   for(const [file,expected] of Object.entries(receipt.hashes))if(createHash('sha256').update(await readFile(join(output,file))).digest('hex')!==expected)throw Error('Acceptance artifact changed: '+file);
   if(!receipt.driverSources)throw Error('Driver source receipt missing');
   for(const [file,expected] of Object.entries(receipt.driverSources))if(createHash('sha256').update(await readFile(join(root,file))).digest('hex')!==expected)throw Error('Driver changed since preparation: '+file);
   const cli=process.env.BROWSER_CONTROL_CLI??Bun.which('browser-control');if(!cli)throw Error('Bun-backed Browser Control CLI unavailable');
-  const lock=join(root,'.diagnostics/single-kernel-acceptance-f545699.lock');
+  const lock=join(root,'.diagnostics/single-kernel-acceptance-e35eab4.lock');
   const release=await acquirePairLock(lock);
   try{await mkdir(evidence);}catch(error){await release();throw error;} // No action has started; never strand a preflight lock.
   const sessions={app:'single-kernel-app-'+crypto.randomUUID().slice(0,8),contracts:'single-kernel-cases-'+crypto.randomUUID().slice(0,8)};
@@ -143,8 +143,11 @@ if(import.meta.main){
     await writeFile(join(evidence,name+'.json'),text,{flag:'wx'});
   }
   async function retainDiagnostics(){
-    await read('app',`return await page.evaluate(async()=>{window.singleKernelAcceptance.evidence.failureDiagnostics=await Promise.race([window.singleKernelAcceptance.diagnostics(),new Promise(resolve=>setTimeout(()=>resolve({unavailable:'5000ms read deadline'}),5000))]);return {captured:true};});`);
+    await read('app',`return await page.evaluate(async()=>{window.singleKernelAcceptance.evidence.failureDiagnostics=await Promise.race([window.singleKernelAcceptance.diagnostics().catch(error=>({unavailable:String(error)})),new Promise(resolve=>setTimeout(()=>resolve({unavailable:'5000ms read deadline'}),5000))]);return {captured:true};});`);
   }
+  // Worker.terminate is synchronous, but Chrome Target removal propagates later.
+  // Observe only after joined stop/close. Never replay a lifecycle action here.
+  async function closedTargets(condition:string){await poll(condition,inventoryCode(false,true),15000,value=>value.closed);}
   try{
     for(const id of Object.values(sessions))await session(['new',id]);
     await fresh('app',app.url,'singleKernelAcceptance');
@@ -154,22 +157,22 @@ if(import.meta.main){
       await request('app','singleKernelAcceptance','apps');await hydrate(generation);await interactive(generation);await read('app',inventoryCode(true));
       if(generation===1){await request('app','singleKernelAcceptance','hmr');await hydrate(generation,true);await request('app','singleKernelAcceptance','sse');}
     }
-    await request('app','singleKernelAcceptance','close');await read('app',inventoryCode(false));await retain('app','singleKernelAcceptance','app-evidence');
+    await request('app','singleKernelAcceptance','close');await closedTargets('app');await retain('app','singleKernelAcceptance','app-evidence');
     await read('app','await page.reload();return {url:page.url()};');
     await poll('app',`return await page.evaluate(()=>({ready:!!window.singleKernelAcceptance}))`,acceptancePolicy.interactiveMs,value=>value.ready);
     await request('app','singleKernelAcceptance','reloadCheck');await read('app',inventoryCode(true));
-    await request('app','singleKernelAcceptance','close');await read('app',inventoryCode(false));await retain('app','singleKernelAcceptance','reload-evidence');
+    await request('app','singleKernelAcceptance','close');await closedTargets('app');await retain('app','singleKernelAcceptance','reload-evidence');
     await retainBrowserLogs('app','app-browser-logs');
     await fresh('contracts',contracts.url,'singleKernelCases');
     const cases=await read('contracts','return await page.evaluate(()=>window.singleKernelCases.evidence.cases);');
     for(const [index,test] of cases.entries()){
       if(index){
-        await read('contracts',inventoryCode(false));
+        await closedTargets('contracts');
         await read('contracts',`return await page.evaluate(async()=>{const root=await navigator.storage.getDirectory();const removed=[];for await(const name of root.keys()){await root.removeEntry(name,{recursive:true});removed.push(name);}return {ownedStorageRemoved:removed};});`);
       }
       for(let step=0;step<test.steps;step++){
         if(index||step){await read('contracts','await page.reload();return {url:page.url()};');await poll('contracts',`return await page.evaluate(()=>({ready:!!window.singleKernelCases}))`,acceptancePolicy.interactiveMs,value=>value.ready);}
-        await request('contracts','singleKernelCases','run',[index,step]);await read('contracts',inventoryCode(false));await retain('contracts','singleKernelCases','case-'+index+'-'+step);
+        await request('contracts','singleKernelCases','run',[index,step]);await closedTargets('contracts');await retain('contracts','singleKernelCases','case-'+index+'-'+step);
       }
     }
     await retainBrowserLogs('contracts','contract-browser-logs');

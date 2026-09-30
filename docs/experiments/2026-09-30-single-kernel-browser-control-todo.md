@@ -21,3 +21,16 @@ spawnSync → spawn → call`, parked in `Atomics.wait` for opcode 20. The debug
 was resumed and the diagnostic socket closed. No workload was restarted and
 no browser relay restart/session replacement was necessary. Todo resolved as
 diagnostic setup, not a Browser Control runtime defect.
+
+## e35eab4 post-close target propagation observation
+
+Same installed Browser Control version/interface, owned session
+`single-kernel-app-32c23419`, new origin `http://127.0.0.1:54123/`.
+After the joined workspace close, the immediate `Target.getTargets` still returned
+the terminated kernel and PID 14; the harness's strict zero census failed. A single
+later read-only census returned only the owned page. No stop/close replay, reload,
+reset, relay restart or session replacement was attempted. Expected: bounded
+observation of target removal after close; actual: immediate assertion raced target
+propagation. Offline harness repair uses at most 15 seconds of read-only census
+polling and still rejects auxiliary workers immediately. The failed attempt is
+retained, not retroactively marked passed.
