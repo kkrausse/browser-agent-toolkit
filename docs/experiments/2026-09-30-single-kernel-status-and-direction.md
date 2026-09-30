@@ -990,6 +990,50 @@ boundaries, shared interests, cancellation adapters and migration/acceptance ris
 No Effect migration or dependency installation is authorized. Existing conservative
 qualification remains evidence for the current candidate, not an Effect candidate.
 
+### Follow-up: focused observer module-identity repair frozen; live queued
+
+QA-only repair `bc88354` proved the historical negative graph has two WeakMaps,
+while the repaired built graph shares Workspace/Runtime/diagnoseWorkspace and map
+references with exactly one WeakMap. Production libraries/runtime/assets and
+original focused sources are unchanged; all cases0–9 driver actions/assertions/
+deadlines remain and adaptations reverse byte-for-byte. Both typechecks, 9,681
+frozen hashes, 111 candidate hashes and 37 reused native outputs verified.
+Browser/host/guest/inference counts zero. See
+[focused observer repair](2026-09-30-focused-observer-identity-qa-repair.md).
+
+Runnable frozen handoff:
+`/private/var/folders/t_/x48jtnps7n5_0g_pt9xpvbg00000gn/T/opencode/focused-observer-identity-yzELv8/frozen`.
+Use a new run copy, only its contracts host, and
+`SINGLE_KERNEL_AUTHORIZE_RUN=yes bun "$RUN/qa/focused-observer-identity-driver-qa.js" "$RUN" "$EVIDENCE"`.
+Independent live focused acceptance is queued until editor agent
+`ses_f0b884956ffeKdSb2U2oUQKoMl` releases the exclusive browser slot; no parallel
+visible cohort is authorized. Offline identity checks do not qualify focused HTTP/
+close cases, erase the failed original suite, or resolve lazy-loader/full-contract
+limits. Effect scoping remains separate and untouched.
+
+### Follow-up: Effect lifecycle rewrite scope delivered; implementation not authorized
+
+Research report `10ebbe8` recommends an extracted TypeScript Effect lifecycle core
+inside the kernel worker, with a minimal imperative JS/native/SAB bridge. Preserve
+synchronous VFS/syscall/Wasm machinery. Host-only conversion cannot own kernel late
+work; a wholesale JS-kernel translation carries much broader risk. See
+[Effect rewrite scope](2026-09-30-effect-kernel-lifecycle-rewrite-scope.md).
+
+The proposal separates root/PID/launch scopes from shared-operation executions and
+consumer leases, retaining underlying native settlement/failure receipts. Effect
+fiber interruption alone is not promise/native work cancellation or a filesystem
+publication fence. Eventually scoped domains include kernel orchestration, shared
+fetch/install tasks, persistence and SDK/toolkit receipt composition; performance
+and packaging effects require measurement, not assumed improvement.
+
+Next proposed authorization is a bounded actual tsgo-loader/pending-launch pilot:
+two interested callers, last-owner cancellation/join, real installer writes,
+failure/rollback preservation and prevention of late publication. Passing the pilot
+does not authorize the rest automatically. Later milestones cover root/PID scopes,
+remaining async domains, persistence, host integration and independent qualification.
+No implementation/install/test/benchmark or live operation occurred in this study;
+the user has requested scope only. Existing editor live QA retains its browser slot.
+
 ## Next validation and stress-test sequence
 
 After the first candidates are ready, commission separate test agents rather than
