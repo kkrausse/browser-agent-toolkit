@@ -213,3 +213,16 @@ regression results, browser/Node delivery identity, shared-interest semantics,
 remaining limits and a runnable frozen candidate or precise staging blocker.
 No invented completion date or performance gain. Next phase is a reviewed decision,
 not evidence that pilot success means the whole kernel is migrated.
+
+## Execution log
+
+- Regression wave delivered `5ed70ba`:
+  [real-loader gates](2026-09-30-effect-loader-migration-regression-gates.md).
+  Verified baseline reproduces two late cache shims after successful stop. Held
+  vendor, held installer-write and swallowed-loader-failure gates fail at intended
+  assertions. Two-live-interest control passes: one download, only live caller
+  receives a child, exact installed bytes, no stopped-caller SAB publication.
+  Migrated positive results and native abort/pre-PID host launch/rollback/public
+  attachment receipts remain pending. No production migration qualification yet.
+- Previous editor trace preparation `61c0be5` is retained as optional diagnostic
+  evidence tooling; no live activation is requested during first-wave migration.
