@@ -72,7 +72,7 @@ export interface Execution {
   /** Single-reader, byte-preserving channels. Drain concurrently. */
   readonly stdout: AsyncIterable<Uint8Array>;
   readonly stderr: AsyncIterable<Uint8Array>;
-  readonly exited: Promise<{ exitCode: number; signal: string | null; forced: boolean }>;
+  readonly exited: Promise<{ exitCode: number; signal: string | null; forced: boolean; cleanupError?: string }>;
   writeStdin(bytes: Uint8Array): void;
   closeStdin(): void;
   stop(): Promise<void>;

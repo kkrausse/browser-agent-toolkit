@@ -33,6 +33,7 @@ export namespace Runtime {
     const pendingLaunches = new Set<Promise<Execution>>();
     const endpoints = new Set<Endpoint>();
     const endpointFailures: unknown[] = [];
+    const executionFailures: unknown[] = [];
     const lifetime = new AbortController();
     const check = () => { if (stopped) throw new WorkspaceError("CLOSED", "Runtime stopped"); };
     const node = async (launchOptions: NodeLaunchOptions, binding?: Record<string, unknown>): Promise<Execution> => {
@@ -46,7 +47,12 @@ export namespace Runtime {
       try {
         const execution = await promise;
         executions.add(execution);
-        void execution.exited.then(() => executions.delete(execution));
+        void execution.exited.then(result => {
+          // A process can finish before Runtime.stop. Its failed egress cleanup
+          // receipt must survive removal from the live execution registry.
+          if (result.cleanupError) executionFailures.push(new Error(result.cleanupError));
+          executions.delete(execution);
+        }, error => { executionFailures.push(error); executions.delete(execution); });
         if (stopped) await execution.stop();
         return execution;
       } finally { pendingLaunches.delete(promise); }
@@ -83,7 +89,7 @@ export namespace Runtime {
             ...[...executions].map(e => e.stop()),
             ...[...endpoints].map(endpoint => endpoint.settled),
           ]);
-          const failures = [...endpointFailures];
+          const failures = [...endpointFailures, ...executionFailures];
           for (const result of results) if (result.status === "rejected") failures.push(result.reason);
           if (failures.length) throw new AggregateError([...new Set(failures)], "Runtime cleanup failed; workspace remains attached");
           state.attached = false;
