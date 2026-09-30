@@ -35,11 +35,11 @@ await Bun.write(join(output,'pinned-codec.mjs'),bundle.slice(0,end)+'\ninit_clie
 await Bun.write(join(output,'sk-stable-opencode-codec.mjs'),await Bun.file(join(output,'source/examples/todo-app/tests/sk-stable-opencode-codec.mjs')).arrayBuffer());
 const dependencies:any={};for(const name of ['@opencode/client','effect','react','react-dom']){const path=require.resolve(name+'/package.json',{paths:[join(root,'opencode-chat')]});dependencies[name]={version:(await Bun.file(path).json()).version,sha256:await hash(path)};}
 if(dependencies['@opencode/client'].version!=='2.0.3'||dependencies.effect.version!=='4.0.0-rc.112')throw Error('Dependency pin changed');
-const entries=[['workspace-api','index.ts','index'],['workspace-api','react.tsx','react'],['workspace-api','delivery.ts','delivery'],['opencode-chat','browser.ts','browser']] as const;
-const external=['react','react/jsx-runtime','@kev-browser-agent-kit/workspace','@kev-browser-agent-kit/workspace/react','@kev-browser-agent-kit/workspace/delivery'];
-for(const [pkg,entry,name] of entries){const result=await Bun.build({entrypoints:[join(output,'source',pkg,'src',entry)],outdir:join(output,pkg==='workspace-api'?'workspace':'chat'),naming:name+'.js',target:'browser',external,plugins:[{name:'frozen-host',setup(b){b.onResolve({filter:/^@vivari\/core\/host$/},()=>({path:join(host,'index.ts')}));}}]});if(!result.success)throw new AggregateError(result.logs,'Library build');}
+const entries=[['workspace-api','index.ts','index'],['workspace-api','react.tsx','react'],['workspace-api','delivery.ts','delivery'],['workspace-api','diagnostics.ts','diagnostics'],['opencode-chat','browser.ts','browser']] as const;
+const external=['react','react/jsx-runtime','@kev-browser-agent-kit/workspace','@kev-browser-agent-kit/workspace/react','@kev-browser-agent-kit/workspace/delivery','@kev-browser-agent-kit/workspace/diagnostics'];
+for(const [pkg,entry,name] of entries){const result=await Bun.build({entrypoints:[join(output,'source',pkg,'src',entry)],outdir:join(output,pkg==='workspace-api'?'workspace':'chat'),naming:name+'.js',target:'browser',jsx:{runtime:'automatic',development:false},external,plugins:[{name:'frozen-host',setup(b){b.onResolve({filter:/^@vivari\/core\/host$/},()=>({path:join(host,'index.ts')}));}}]});if(!result.success)throw new AggregateError(result.logs,'Library build');}
 const result=await Bun.build({entrypoints:[join(output,'source/examples/todo-app/tests/sk-stable-opencode-client.ts')],outdir:join(output,'client'),target:'browser',plugins:[{name:'separate-built-consumer',setup(b){
- b.onResolve({filter:/^@kev-browser-agent-kit\/workspace(?:\/(react|delivery))?$/},a=>({path:join(output,'workspace',(a.path.split('/')[2]??'index')+'.js')}));
+ b.onResolve({filter:/^@kev-browser-agent-kit\/workspace(?:\/(react|delivery|diagnostics))?$/},a=>({path:join(output,'workspace',(a.path.split('/')[2]??'index')+'.js')}));
  b.onResolve({filter:/^@kev-browser-agent-kit\/opencode-chat\/browser$/},()=>({path:join(output,'chat/browser.js')}));
  b.onResolve({filter:/^react(?:\/jsx-runtime)?$/},a=>({path:require.resolve(a.path,{paths:[join(root,'workspace-api')]} )}));
 }}]});if(!result.success)throw new AggregateError(result.logs,'Consumer build');
@@ -54,7 +54,7 @@ for(const pkg of ['workspace-api','opencode-chat']){
  await Bun.write(join(output,name+'.tsconfig.json'),JSON.stringify({compilerOptions:{...common,declaration:true,emitDeclarationOnly:true,rootDir:sourceRoot,outDir:join(output,name),paths},files:entries.filter(e=>e[0]===pkg).map(e=>join(sourceRoot,e[1]))}));
  // Emit declarations against a separately generated host declaration surface.
  await command(['bun',tsc,'-p',join(output,name+'.tsconfig.json')]);
- if(pkg==='workspace-api')for(const entry of ['index','react','delivery'])paths['@kev-browser-agent-kit/workspace'+(entry==='index'?'':'/'+entry)]=[join(output,'workspace',entry+'.d.ts')];
+ if(pkg==='workspace-api')for(const entry of ['index','react','delivery','diagnostics'])paths['@kev-browser-agent-kit/workspace'+(entry==='index'?'':'/'+entry)]=[join(output,'workspace',entry+'.d.ts')];
 }
 paths['@kev-browser-agent-kit/opencode-chat/browser']=[join(output,'chat/browser.d.ts')];
 await Bun.write(join(output,'consumer.tsconfig.json'),JSON.stringify({compilerOptions:{...common,noEmit:true,paths},files:files.filter(f=>f.endsWith('.ts')).map(f=>join(output,'source/examples/todo-app/tests',f))}));
