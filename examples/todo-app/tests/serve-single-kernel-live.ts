@@ -1,0 +1,63 @@
+// Interactive exploration only: consumes verified qualification bytes without
+// running the E2E driver, rewriting its receipts, or rebuilding the runtime.
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { assetHash } from '../../../workspace-api/scripts/runtime-assets';
+import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
+import { appRouter } from '../src/server/trpcRouter';
+import type { Todo } from '../src/schema/todo';
+
+const root = resolve(import.meta.dir, '../../..');
+const input = resolve(process.argv[2] ?? join(root, '.diagnostics/single-kernel-e35eab4-full-attempt1'));
+const output = resolve(process.argv[3] ?? join(root, '.diagnostics/single-kernel-interactive-' + Date.now()));
+const receipt = await Bun.file(join(input, 'receipt.json')).json();
+if (receipt.offline || !receipt.prepared || receipt.topology?.policy !== 'single-kernel') throw Error('Require qualified prepared single-kernel artifacts');
+for (const [file, hash] of Object.entries(receipt.hashes)) {
+  const path = resolve(input, file);
+  if (!path.startsWith(input + '/')) throw Error('Unsafe receipt path');
+  if (assetHash(await readFile(path)) !== hash) throw Error('Qualification asset mismatch: ' + file);
+}
+await mkdir(output); // New exclusive live origin/log output; never reuse E2E state.
+const built = await Bun.build({
+  entrypoints: [join(import.meta.dir, 'single-kernel-live-client.tsx')], target: 'browser', outdir: output,
+  jsx: { runtime: 'automatic', development: false },
+  plugins: [{ name: 'frozen-qualified-libraries', setup(builder) {
+    builder.onResolve({ filter: /^@kev-browser-agent-kit\/workspace(?:\/(?:react|delivery|diagnostics))?$/ }, args => ({ path: join(input, 'workspace', (args.path.split('/')[2] ?? 'index') + '.js') }));
+    builder.onResolve({ filter: /^@kev-browser-agent-kit\/opencode-chat\/browser$/ }, () => ({ path: join(input, 'chat/browser.js') }));
+    builder.onResolve({ filter: /^(?:react(?:\/.*)?|react-dom(?:\/.*)?)$/ }, args => ({ path: require.resolve(args.path, { paths: [join(root, 'opencode-chat')] }) }));
+  } }],
+});
+if (!built.success) throw new AggregateError(built.logs, 'Interactive UI build');
+const serverAdapter = await Bun.build({ entrypoints: [join(root, 'opencode-chat/src/server.ts')], target: 'bun', outdir: output,
+  plugins: [{ name: 'frozen-server-diagnostics', setup(builder) {
+    builder.onResolve({ filter: /^@kev-browser-agent-kit\/workspace\/diagnostics$/ }, () => ({ path: join(input, 'workspace/diagnostics.js') }));
+  } }],
+});
+if (!serverAdapter.success) throw new AggregateError(serverAdapter.logs, 'Server adapter build');
+const { createBrowserEditorHandler, browserEditorHeaders } = await import(join(output, 'server.js'));
+const editor = createBrowserEditorHandler({
+  preparedDirectory: join(input, 'prepared'), runtimeDirectory: join(input, 'runtime'),
+  providers: { opencode: { baseURL: 'https://opencode.ai/zen/v1', headers: {
+    authorization: `Bearer ${process.env.VIVARI_MODEL_API_KEY || 'public'}`,
+    'user-agent': 'opencode/stable/2.0.3/vivari-opencode-server',
+  } } },
+});
+const todos = new Map<string, Todo>();
+const headers = { ...browserEditorHeaders, 'Cache-Control': 'no-store' };
+const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 240, async fetch(request) {
+  const path = new URL(request.url).pathname;
+  if (path.startsWith('/editor/')) return await editor.fetch(request) ?? new Response('Not found', { status: 404, headers });
+  if (path.startsWith('/api/')) return fetchRequestHandler({ endpoint: '/api', req: request, router: appRouter, createContext: ({ req }) => ({ req, todos }) });
+  if (path === '/editing-policy') return Response.json({ allowed: true, fixture: 'isolated loopback exploration' }, { headers });
+  if (path === '/') return new Response(`<!doctype html><html><head><meta charset="utf-8"><title>Single-kernel live TODO editor</title><link rel="stylesheet" href="/single-kernel-live-client.css"><style>body{margin:0;font:14px system-ui;color:#182230}.live-toolbar{padding:12px;display:flex;gap:16px;align-items:center;border-bottom:1px solid #ddd}.live-toolbar span{font-size:12px;color:#667085}.live-editor{height:75vh}.live-source{padding:12px}.live-source textarea{display:block;width:98%;height:35vh;margin-top:8px;font:13px monospace}.live-source input{width:260px;margin:0 8px}button{cursor:pointer}body>p{padding:16px}</style></head><body><div id="root"></div><script type="module" src="/single-kernel-live-client.js"></script></body></html>`, { headers: { ...headers, 'Content-Type': 'text/html' } });
+  if (!['/single-kernel-live-client.js', '/single-kernel-live-client.css'].includes(path)) return new Response('Not found', { status: 404, headers });
+  const file = Bun.file(join(output, path.slice(1)));
+  return new Response(file, { headers: { ...headers, 'Content-Type': file.type } });
+} });
+const ownership = { url: String(server.url), pid: process.pid, input, output, revision: receipt.revision, version: receipt.version,
+  verifiedArtifacts: Object.keys(receipt.hashes).length, runtimeBuilds: 0, e2e: false,
+  modelProxy: 'opencode Zen (standard example routing)', privateCredentialConfigured: !!process.env.VIVARI_MODEL_API_KEY };
+await writeFile(join(output, 'live-origin.json'), JSON.stringify(ownership, null, 2), { flag: 'wx' });
+console.log(JSON.stringify(ownership));
+process.on('SIGTERM', () => { void server.stop(true).then(() => process.exit(0)); });
+process.on('SIGINT', () => { void server.stop(true).then(() => process.exit(0)); });
