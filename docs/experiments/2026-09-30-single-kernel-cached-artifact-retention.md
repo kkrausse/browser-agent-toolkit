@@ -12,6 +12,11 @@ disposes chat, stops the runtime, clears project/server state, restores source a
 restarts Vite and OpenCode. Its pending journal and session restoration ordering
 are unchanged. No live process or service-location reuse was introduced.
 
+**The existing UI already retains the open workspace/kernel across `stopRuntime`.**
+Kernel retention is not new work or the off/on treatment here. The missing
+treatment is retaining checked installed roots and Vite disk artifacts while still
+restarting both services. Running-service retention is explicitly out of scope.
+
 Actual bounded app work:
 
 - Source snapshots now exclude `.browser-editor-backends` and
@@ -163,3 +168,66 @@ listener rejection and final zero-work cleanup. Include mismatch/tamper/cancel/
 audit-failure recovery qualification separately, not as measured successful reuse.
 Export bounded complete evidence; report audit costs and per-sample spread, not
 just a median. Do not start this comparison without parent coordination.
+
+### Reproducible candidate/QA handoff after user steering
+
+Current candidate is the conservative snapshot/admission preparation at `09cfe47`
+(plus this report follow-up), **not a runnable retention-on treatment**. Do not
+mislabel a query flag that does nothing as an on/off comparison. Once ownership and
+audit contracts are repaired and an explicit adapter is reviewed, parent freezes
+two consumers differing only in that adapter's explicit off/on admission. Both
+retain the existing kernel and restart Vite/OpenCode. Freeze complete git/source
+and served-client hashes, library/prepared/runtime hashes, build logs and test
+fixture hashes; do not change runtime pins or frozen evidence to obtain a pass.
+
+The existing staging utility can build the current app candidate without touching
+a served target, after parent supplies a qualified input and **new nonexistent**
+output directory:
+
+```sh
+bun examples/todo-app/tests/stage-single-kernel-live.ts <qualified-input> <fresh-candidate-staging-directory>
+```
+
+This is a handoff command, **not executed by this task**. Parent must review the
+staging receipt and all resulting bytes, then serve from a new separately owned
+origin; do not follow the utility's old live-asset-copy comment onto an existing
+user/test origin. Browser owner and both fresh origins are assigned by parent.
+Library staging must first solve the missing consumer-package build limitation.
+Serving/candidate compilation is not a qualification receipt.
+
+QA acceptance checklist, mandatory per candidate:
+
+| Check | Current status |
+|---|---|
+| Offline focused tests/app-only external-library bundle | Passed as recorded above |
+| Full frozen-library consumer build | Pending/blocked by package staging |
+| Visible Browser Control CLI manual QA | Pending; parent owns sole browser driver |
+| Headless fresh-origin QA where practical | Pending; must serialize with timed work |
+| Matched off/on timing | Blocked until a real safe on adapter exists |
+| Post-candidate workspace-switch stress | Pending; offline tests are not acceptance |
+
+Use source fixtures A/B with distinct generation markers, add/rename/delete files
+and session hierarchies with distinct native IDs, titles, messages and model fields.
+Never call inference: use deterministic native-session fixtures and catalog/model
+selection. Verify exact source bytes **and recursive path set**, including absence
+of outgoing-only and pre-rename files; incoming active workspace identity; native
+session isolation/parent remapping/selected-session mapping; selected model and
+per-session model metadata after switch and re-open. Any unsupported current model
+preservation behavior is a failed prerequisite to report, not silently assumed.
+Verify fresh endpoints/interactive preview and ready chat; reject stale client or
+old session information. Manual QA exercises UI controls; headless repeats the same
+assertions on separate newly assigned storage, not a different easier workflow.
+
+After both candidates' QA, stress at least 20 alternating A/B switches with periodic
+save and close/reopen, outside the measured cohort. Include agent-added-file
+deletion/rename, empty native sessions and hierarchical fixture sessions. Then run
+separate negative cases: package/lock/config/runtime/artifact/identity mismatch,
+installed file/symlink/cache tamper, cancellation during audit/replacement/start,
+audit reader failure, failed cleanup, failed catalog commit and interrupted retry.
+Expected conservative fallback requires **proved joined ownership before clear**;
+failed/unproved join instead retains pending/outgoing snapshots and forbids start
+or overlapping mutation. Retry must not capture a partial target as outgoing.
+Assert exact stale-file absence again after successful recovery, session/model
+isolation, receipt invalidation on partial delivery and zero work after final exit.
+Keep failure evidence separate from successful reuse measurements. No competing
+headless/manual/stress workload while timing the matched pair.
