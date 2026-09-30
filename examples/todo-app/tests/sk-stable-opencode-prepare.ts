@@ -8,7 +8,7 @@ async function command(args:string[],cwd=root){const p=Bun.spawn(args,{cwd,stdou
 const hash=async(path:string)=>new Bun.CryptoHasher('sha256').update(await Bun.file(path).arrayBuffer()).digest('hex');
 const sourceRevision=(await command(['git','rev-parse',process.env.SK_STABLE_OPENCODE_SOURCE_REVISION??'HEAD'])).trim();
 await command(['git','merge-base','--is-ancestor','7713686',sourceRevision]);
-const files=['sk-stable-opencode-client.ts','sk-stable-opencode-codec.mjs','sk-stable-opencode-serve.ts','sk-stable-opencode-host-owner.ts','sk-stable-opencode-prepare.ts'];
+const files=['sk-stable-opencode-client.ts','sk-stable-opencode-codec.mjs','sk-stable-opencode-codec-fixtures.mjs','sk-stable-opencode-serve.ts','sk-stable-opencode-host-owner.ts','sk-stable-opencode-prepare.ts'];
 for(const file of files)await command(['git','cat-file','-e',sourceRevision+':examples/todo-app/tests/'+file]);
 // Host-only repair is paired with the unchanged e35 kernel/filesystem protocol.
 for(const file of ['packages/core/src/workers/kernel-worker.ts','packages/core/src/workers/kernel-filesystem.ts'])if((await command(['git','diff',runtimeRevision,hostRevision,'--',file],runtime)).trim())throw Error('Host/guest kernel parity changed '+file);
@@ -33,6 +33,8 @@ for(const file of (await command(['git','ls-tree','-r','--name-only',hostRevisio
 const end=bundle.indexOf('\n// ',bundle.indexOf('var init_client7 ='));if(end<=0)throw Error('Actual codec extraction failed');
 await Bun.write(join(output,'pinned-codec.mjs'),bundle.slice(0,end)+'\ninit_client7(); export {ClientApi as Api, exports_Schema as Schema, exports_Effect as Effect, makeSuccessSchema, exports_HttpServerResponse as HttpServerResponse, exports_HttpApiSchema as HttpApiSchema};\n');
 await Bun.write(join(output,'sk-stable-opencode-codec.mjs'),await Bun.file(join(output,'source/examples/todo-app/tests/sk-stable-opencode-codec.mjs')).arrayBuffer());
+await Bun.write(join(output,'sk-stable-opencode-codec-fixtures.mjs'),await Bun.file(join(output,'source/examples/todo-app/tests/sk-stable-opencode-codec-fixtures.mjs')).arrayBuffer());
+await Bun.write(join(output,'codec-fixtures.json'),await command(['node',join(output,'sk-stable-opencode-codec-fixtures.mjs')]));
 const dependencies:any={};for(const name of ['@opencode/client','effect','react','react-dom']){const path=require.resolve(name+'/package.json',{paths:[join(root,'opencode-chat')]});dependencies[name]={version:(await Bun.file(path).json()).version,sha256:await hash(path)};}
 if(dependencies['@opencode/client'].version!=='2.0.3'||dependencies.effect.version!=='4.0.0-rc.112')throw Error('Dependency pin changed');
 const entries=[['workspace-api','index.ts','index'],['workspace-api','react.tsx','react'],['workspace-api','delivery.ts','delivery'],['workspace-api','diagnostics.ts','diagnostics'],['opencode-chat','browser.ts','browser']] as const;
@@ -61,6 +63,6 @@ await Bun.write(join(output,'consumer.tsconfig.json'),JSON.stringify({compilerOp
 await command(['bun',tsc,'-p',join(output,'consumer.tsconfig.json')]);
 const stageHashes:any={};
 for(const dir of ['client','workspace','chat','host-source','host-types'])for await(const file of new Bun.Glob('**/*').scan({cwd:join(output,dir),onlyFiles:true}))stageHashes[dir+'/'+file]=await hash(join(output,dir,file));
-for(const file of ['committed-source.tar','pinned-codec.mjs','sk-stable-opencode-codec.mjs','host.tsconfig.json','workspace.tsconfig.json','chat.tsconfig.json','consumer.tsconfig.json',...files.map(f=>'source/examples/todo-app/tests/'+f)])stageHashes[file]=await hash(join(output,file));
+for(const file of ['committed-source.tar','pinned-codec.mjs','sk-stable-opencode-codec.mjs','sk-stable-opencode-codec-fixtures.mjs','codec-fixtures.json','host.tsconfig.json','workspace.tsconfig.json','chat.tsconfig.json','consumer.tsconfig.json',...files.map(f=>'source/examples/todo-app/tests/'+f)])stageHashes[file]=await hash(join(output,file));
 await writeFile(join(output,'stage.json'),JSON.stringify({status:'offline-prepared-only',runnablePrepared:true,sourceRevision,runtimeRevision,hostRevision,runtimeVersion:receipt.version,frozen,frozenHashes:receipt.hashes,frozenReceiptSha256:await hash(join(frozen,'receipt.json')),serverSha256,dependencies,stageHashes,configPolicy:'shared-frozen-global-config',backgroundWork:'models.fetch:true; server-owned global refresh and retained location subscribers not drained',retentionAccepted:false,remoteZeroRef:false,liveRuns:0},null,2),{flag:'wx'});
 console.log(JSON.stringify({output,sourceRevision,hostRevision,runnablePrepared:true,liveRuns:0,retentionAccepted:false}));

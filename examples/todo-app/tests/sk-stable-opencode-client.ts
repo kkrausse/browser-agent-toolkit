@@ -40,7 +40,8 @@ async function finite(root:Root,token:number,path:'/api/health'|'/api/config'|'/
  }catch(error){poison??=error;throw error;}finally{requestBusy=false;}
 }
 async function rootBytes(){
- const result:any={};
+ const result:any={sharedFiles:{}};
+ for(const path of [descriptor.workspaceConfigPath,'/.server/config/opencode/plugins/editor-model-headers.js','/.server/config/opencode/plugins/editor-javascript.js'])result.sharedFiles[path]=await sha(await workspace.fs.readFile(path));
  for(const key of ['A','B'] as const){
   const path=roots[key].slice('/workspace'.length);
   const names=(await workspace.fs.readdir(path)).sort();
