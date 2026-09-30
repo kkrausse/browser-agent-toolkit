@@ -28,7 +28,7 @@ fewer workers. Keep the baseline as the comparison/control and fallback.
 | --- | --- |
 | Chat readiness/drafts | Repaired `691cd5aa`; primary lab passed. Complete visible controller/model fixture passed 9 checkpoints/91 guards; headless follow-up failed and used wrong Playwright version. Whole-app acceptance pending. |
 | Close target retention | Unchanged-runtime case-1 live control passed with termination/lock/census observations. Historical cause still unknown; full suite pending. |
-| Cached installed artifacts | Endpoint/PID-egress repairs pass offline; lazy-loader planted-symlink counterexample still blocks cache admission. Optimization paused pending conservative integrated qualification; no on adapter or measured gain. |
+| Cached installed artifacts | Endpoint/PID-egress repairs pass offline; minimal native-fetch browser stop gate passed. Lazy-loader case still blocks cache admission; optimization paused. No on adapter or measured gain. |
 | OpenCode process retention | Root requalification stopped at browser-session setup, no guest launch. Shared-config stable-root toy frozen but unexecuted. No reuse/remote-release proof. |
 | Workspace switching/stress | Integrated frozen candidate, matched off/on comparison, full applicable E2E and stress/recovery qualification still pending. |
 
@@ -932,6 +932,26 @@ stay offline rather than gating this finite browser check. No production/candida
 change or deadline inflation. Agent `ses_f0bb96551ffeDRP5f7QzZaMgm0` retains the
 exclusive visible slot for the newly authorized cohort; intended report:
 `2026-09-30-pid-egress-minimal-stop-live-qa.md`. Full-app preparation proceeds offline.
+
+### Follow-up: minimal real-browser native-fetch stop gate passes
+
+Visible cohort `465460d` passed against verified exact runtime33fa135/toolkitd0eec346
+candidate. Token-owned host-alias routing, real guest PID 1 and OP_FETCH_ASYNC (30)
+were observed. Exactly one held-header and one open-body request cancelled;
+Execution.stop, both output readers, Runtime.stop and Workspace.close joined.
+Exit was 143/SIGTERM with process `forced:true` and no cleanupError: intentional
+guest termination, **not forced page destruction**. Post-stop process/fetch/pin/cache
+counts were zero and source hash unchanged. Screenshots were visually inspected.
+See [minimal stop live QA](2026-09-30-pid-egress-minimal-stop-live-qa.md).
+
+Visible one pass; headless zero. Queue/shared-owner/abort-ignoring/rollback cases
+remain bounded offline regression coverage. This does not qualify lazy loaders,
+all-writer quiescence, cache retention, long-lived OpenCode or full app switching.
+Normal cleanup completed; owned PID/listener/session absence verified and exclusive
+browser slot released. Offline full-app preparation agent
+`ses_f0bab2941ffeK6LyykN6Varirh` remains assigned; the next live milestone is the
+matching conservative full-app acceptance cohort once its frozen handoff is ready.
+The full-contract markAsUncloneable gap and historical evidence remain unchanged.
 
 ## Next validation and stress-test sequence
 
