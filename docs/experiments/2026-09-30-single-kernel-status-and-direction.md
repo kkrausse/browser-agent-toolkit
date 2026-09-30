@@ -22,6 +22,20 @@ performance comparison or demonstrated reduction in failure rate yet.
 The next milestone is **reliably faster real workspace switching**, not merely
 fewer workers. Keep the baseline as the comparison/control and fallback.
 
+### Latest rollup (after library prerequisite result `d1f60e4`)
+
+| Workstream | Latest state |
+| --- | --- |
+| Chat readiness/drafts | Repaired `691cd5aa`; isolated visible and headless lab passed. Same-view/held-model QA harness being corrected; whole-app acceptance pending. |
+| Close target retention | Unchanged-runtime case-1 live control passed with termination/lock/census observations. Historical cause still unknown; full suite pending. |
+| Cached installed artifacts | Joined script ownership and supported cache audits committed `d1f60e4`; app opt-in integration assigned, retention default off. No new switch-speed result. |
+| OpenCode process retention | Actual-delivered-server foundation staged; A0-only live qualification running, exact artifact lifetime audit running. No retention transition or remote-release proof. |
+| Workspace switching/stress | Integrated frozen candidate, matched off/on comparison, full applicable E2E and stress/recovery qualification still pending. |
+
+The sections below preserve the original evaluation and chronological follow-ups;
+earlier “pending”/failure statements are snapshot facts, not erased by later bounded
+passes. Refer to each latest follow-up's scope before treating any gap as closed.
+
 ## Snapshot identity and evaluation method
 
 - Single-kernel toolkit HEAD before this document:
@@ -503,6 +517,31 @@ See [repair live QA](2026-09-30-chat-readiness-repair-live-qa.md).
   exclusive visible Browser Control ownership for the staged A0-only OpenCode
   qualification. Intended report `2026-09-30-single-kernel-opencode-foundation-live-qa.md`.
   No eviction/source replacement/retention transition is authorized in that cohort.
+
+### Follow-up: cache library ownership/audits repaired; app integration assigned
+
+Commit `d1f60e4` fixes the concrete inherited early ownership-release defect:
+reader/exit/stop settlement must join, cancellation promptly requests stop, and
+`EnvironmentOwnershipError` forbids fallback when cleanup is unproved. Regression
+fails against the inherited runner. Supported bounded stopped-tree cache audits
+and explicit `preparedApps` cache-preservation policy are exported; defaults stay
+unchanged and proven misses remove explicitly scoped stale caches before redelivery.
+See [library report](2026-09-30-cached-retention-library-prerequisites.md).
+
+Validation: 36 focused tests/172 assertions, two isolated built-subpath consumer
+tests/20 assertions, built-export smoke and targeted typechecks passed. Full package
+builds, actual runtime shutdown fidelity and lstat-safe helper-bootstrap installation
+remain unqualified. Library caller attestation `servicesStopped:true` is not a runtime
+ownership receipt. No browser, server, app retention or speedup claim occurred.
+
+New agent `ses_f0c2c2416ffeRDntC3dfCqgMKR` owns guarded default-off app integration
+and narrowly necessary bootstrap-fence work, with complete compatibility admission,
+durable journal ordering, joined stopped services, tools-only before/replacement/after
+audits, equal cache digests and owned conservative recovery. Intended report:
+`2026-09-30-single-kernel-cached-switch-integration.md`. It stages isolated full built
+consumers/frozen off-on candidates but cannot start browser/server work until parent
+assigns the slot. Manual/headless live switching, timings and stress remain mandatory;
+no flag that silently performs no safe retention may be presented as an on treatment.
 
 ## Next validation and stress-test sequence
 
