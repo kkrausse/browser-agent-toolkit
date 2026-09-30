@@ -86,17 +86,15 @@ export async function startBrowserEditor(controller: WorkspaceController, option
           })
           await controller.waitForClient('vite')
         }
-        const results = await Promise.allSettled([
-          preview(),
-          (async () => {
-            const service = await startOpenCode(controller, { prepared: manifest, diagnostics, waitForClient: false })
-            await options.beforeChatConnect?.(service)
-            options.chatConnectReady?.()
-            await controller.waitForClient('chat')
-          })(),
-        ])
-        const failed = results.find((result) => result.status === 'rejected')
-        if (failed?.status === 'rejected') throw failed.reason
+        // Both services share one guest kernel. Qualify the preview before
+        // starting OpenCode's module/plugin boot, as in the qualified single-
+        // kernel suite: cold Vite must not compete with chat for its listen
+        // budget. Keep the same per-service deadlines and failure ownership.
+        await preview()
+        const service = await startOpenCode(controller, { prepared: manifest, diagnostics, waitForClient: false })
+        await options.beforeChatConnect?.(service)
+        options.chatConnectReady?.()
+        await controller.waitForClient('chat')
       },
     ],
   ])
