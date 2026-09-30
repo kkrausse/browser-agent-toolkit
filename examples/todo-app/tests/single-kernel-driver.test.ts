@@ -5,7 +5,7 @@ import {acceptanceRequestCode,runFoundation,validateOwnedOrigins,inventoryCode} 
 test('foundation starts serially and never starts after first failure',async()=>{
   const seen:string[]=[];let active=0;
   await expect(runFoundation(async action=>{expect(++active).toBe(1);seen.push(action);await Bun.sleep(1);--active;if(action==='watches')throw Error('watch failure');})).rejects.toThrow('watch failure');
-  expect(seen).toEqual(['initialize','fetchedBody','childSync','watches']);
+  expect(seen).toEqual(['initialize','minimalAsyncSpawn','minimalSpawnSync','minimalExecSync','fetchedBody','childSync','watches']);
 });
 test('page initiation is one-shot and blocks another token until settlement',async()=>{
   let release!:()=>void,calls=0;

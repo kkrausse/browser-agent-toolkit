@@ -15,7 +15,7 @@ export function acceptanceRequestCode(api:string,action:string,args:unknown[],to
   },${JSON.stringify({api,action,args,token})});`;
 }
 export async function runFoundation(request:(action:string)=>Promise<unknown>){
-  for(const action of ['initialize','fetchedBody','childSync','watches','streaming','recreate'])await request(action);
+  for(const action of ['initialize','minimalAsyncSpawn','minimalSpawnSync','minimalExecSync','fetchedBody','childSync','watches','streaming','recreate'])await request(action);
 }
 export function validateOwnedOrigins(app:any,contracts:any,output:string){
   for(const origin of [app,contracts]){
@@ -82,6 +82,13 @@ if(import.meta.main){
     actionPending=false;if(result.status!=='completed')throw Error(result.error??'Acceptance action failed');
   }
   async function fresh(condition:string,origin:string,api:string){
+    await read(condition,`if(state.singleKernelLogObserver)throw Error('Page log observer already installed');
+      const record=state.singleKernelLogObserver={url:${JSON.stringify(origin)},entries:[],dropped:0};
+      const retain=value=>{if(record.entries.length>=256){record.dropped++;return;}record.entries.push(value);};
+      const safe=text=>String(text).replace(/\\b(?:Basic|Bearer)\\s+[A-Za-z0-9._~+\\/=-]+/gi,'[authorization redacted]').slice(0,4096);
+      page.on('console',message=>{if(['warning','error'].includes(message.type()))retain({type:message.type(),text:safe(message.text()),location:message.location()});});
+      page.on('pageerror',error=>retain({type:'pageerror',text:safe(error.message)}));
+      return {observerInstalled:true};`);
     await read(condition,`if(page.url()!=='about:blank')throw Error('Refuse nonempty session page');await page.goto(${JSON.stringify(origin+'inspect-empty')});return await page.evaluate(async()=>{
       const root=await navigator.storage.getDirectory();for await(const key of root.keys())throw Error('Origin has existing OPFS '+key);
       if((await indexedDB.databases()).length||(await caches.keys()).length||(await navigator.serviceWorker.getRegistrations()).length||localStorage.length)throw Error('Origin not fresh');return {empty:true};});`);
@@ -125,6 +132,13 @@ if(import.meta.main){
     let text='';for(let offset=0;offset<manifest.length;offset+=8000){const part=await read(condition,`return await page.evaluate(({offset,size})=>({offset,text:window.singleKernelEvidenceSnapshot.slice(offset,offset+size)}),${JSON.stringify({offset,size:8000})});`);if(part.offset!==offset||part.text.length!==Math.min(8000,manifest.length-offset))throw Error('Evidence chunk missing');text+=part.text;}
     if(createHash('sha256').update(text).digest('hex')!==manifest.hash)throw Error('Evidence digest mismatch');await writeFile(join(evidence,name+'.json'),text,{flag:'wx'});
   }
+  async function retainBrowserLogs(condition:string,name:string){
+    const manifest=await read(condition,`const observer=state.singleKernelLogObserver;const json=JSON.stringify(observer?{url:observer.url,entries:observer.entries,dropped:observer.dropped}:{unavailable:'Observer not installed'});state.singleKernelLogSnapshot=json;return {length:json.length,hash:modules.crypto.createHash('sha256').update(json).digest('hex')};`);
+    if(!Number.isSafeInteger(manifest.length)||manifest.length>2*1024*1024)throw Error('Browser log snapshot exceeded bound');
+    let text='';for(let offset=0;offset<manifest.length;offset+=8000){const part=await read(condition,`if(typeof state.singleKernelLogSnapshot!=='string')throw Error('Browser log snapshot lost');return {offset:${offset},text:state.singleKernelLogSnapshot.slice(${offset},${offset+8000})};`);if(part.offset!==offset||part.text.length!==Math.min(8000,manifest.length-offset))throw Error('Browser log evidence chunk missing');text+=part.text;}
+    if(createHash('sha256').update(text).digest('hex')!==manifest.hash)throw Error('Browser log snapshot digest changed');
+    await writeFile(join(evidence,name+'.json'),text,{flag:'wx'});
+  }
   try{
     for(const id of Object.values(sessions))await session(['new',id]);
     await fresh('app',app.url,'singleKernelAcceptance');
@@ -139,6 +153,7 @@ if(import.meta.main){
     await poll('app',`return await page.evaluate(()=>({ready:!!window.singleKernelAcceptance}))`,acceptancePolicy.interactiveMs,value=>value.ready);
     await request('app','singleKernelAcceptance','reloadCheck');await read('app',inventoryCode(true));
     await request('app','singleKernelAcceptance','close');await read('app',inventoryCode(false));await retain('app','singleKernelAcceptance','reload-evidence');
+    await retainBrowserLogs('app','app-browser-logs');
     await fresh('contracts',contracts.url,'singleKernelCases');
     const cases=await read('contracts','return await page.evaluate(()=>window.singleKernelCases.evidence.cases);');
     for(const [index,test] of cases.entries()){
@@ -151,13 +166,20 @@ if(import.meta.main){
         await request('contracts','singleKernelCases','run',[index,step]);await read('contracts',inventoryCode(false));await retain('contracts','singleKernelCases','case-'+index+'-'+step);
       }
     }
+    await retainBrowserLogs('contracts','contract-browser-logs');
     for(const id of Object.values(sessions))await session(['delete',id]);
     await writeFile(join(evidence,'result.json'),JSON.stringify({status:'passed',cases:cases.length,generations:acceptancePolicy.generations,retries:0,models:0,servers:'Parent-owned fresh test servers retained; exact PIDs in ownership.json'},null,2),{flag:'wx'});
     await release();console.log(evidence);
   }catch(error){
     // Never navigate/retry/stop after ambiguous initiation or an expired read.
     // Exact pages, origin servers, and global lock remain for inspection/repair.
-    await writeFile(join(evidence,'result.json'),JSON.stringify({status:'failed',error:String(error),expired,actionPending,commandPending:commands.pending,sessions,retained:true},null,2),{flag:'wx'});
+    const captureErrors:string[]=[];
+    if(!expired&&!commands.pending){
+      for(const [condition,api] of [['app','singleKernelAcceptance'],['contracts','singleKernelCases']]){
+        try{const available=await read(condition,`return await page.evaluate(api=>({available:!!window[api]}),${JSON.stringify(api)});`);if(available.available)await retain(condition!,api!,'failure-'+condition);await retainBrowserLogs(condition!,'failure-'+condition+'-browser-logs');}catch(captureError){captureErrors.push(String(captureError));if(expired||commands.pending)break;}
+      }
+    }
+    await writeFile(join(evidence,'result.json'),JSON.stringify({status:'failed',error:String(error),expired,actionPending,commandPending:commands.pending,sessions,retained:true,captureErrors},null,2),{flag:'wx'});
     console.error('Acceptance failed; owned resources retained: '+evidence);throw error;
   }
 }

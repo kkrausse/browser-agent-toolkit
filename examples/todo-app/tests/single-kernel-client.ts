@@ -4,9 +4,13 @@ import {installSource} from '@kev-browser-agent-kit/workspace/delivery';
 import {loadPrepared, preparedApps, installOpenCodeConfig, startOpenCode,openCodeCandidateLaunch} from '@kev-browser-agent-kit/opencode-chat/browser';
 import {previewHTTPThenAttach} from './matched-qualification';
 import {assertZeroWork, assertSingleKernelDiagnostics, fsProbe, streamProbe, childSyncProbe,fetchedBodyProbe} from './single-kernel-contract';
+import {minimalChildProbe,minimalSpawnProbe,spawnProbeFixture,type SpawnProbeMode} from './single-kernel-spawn-probes';
 
 const policy={stageMs:120000,requestMs:20000,generations:5,retries:0};
 const evidence: any={policy,status:'idle',stages:[],events:[],models:0};
+evidence.browserEvents=[];
+window.addEventListener('unhandledrejection',event=>{evidence.browserEvents.push({type:'unhandledrejection',reason:String(event.reason).slice(0,4096)});});
+window.addEventListener('error',event=>{evidence.browserEvents.push({type:'error',message:event.message.slice(0,4096),source:event.filename,line:event.lineno,column:event.colno});});
 let owner=new WorkspaceController({onDiagnostic:event=>evidence.events.push(event),captureProcessOutput:true});
 let active=false, failed=false;
 const attempted=new Set<string>();
@@ -28,7 +32,14 @@ async function stage(name:string,task:()=>Promise<unknown>){
 }
 async function diagnostics(){const d=await diagnoseWorkspace(owner.workspace!);assertSingleKernelDiagnostics(d);return d;}
 async function zero(){const d=await diagnostics();assertZeroWork(d);return d;}
-async function capture(stream:AsyncIterable<Uint8Array>){const chunks:Uint8Array[]=[];let size=0;for await(const chunk of stream){size+=chunk.length;assert(size<1048576,'Probe output exceeded bound');chunks.push(chunk);}return chunks.map(b=>decoder.decode(b)).join('');}
+async function capture(stream:AsyncIterable<Uint8Array>,label='unlabelled'){
+  const chunks:Uint8Array[]=[];let size=0;const channelDecoder=new TextDecoder();
+  const channels=evidence.guestChannels??={};const channel=channels[label]??={bytes:0,text:'',truncated:false};
+  for await(const chunk of stream){size+=chunk.length;assert(size<1048576,'Probe output exceeded bound');chunks.push(chunk);
+    channel.bytes+=chunk.length;const text=channel.text+channelDecoder.decode(chunk,{stream:true});channel.truncated||=text.length>65536;channel.text=text.slice(-65536);
+  }
+  channel.text=(channel.text+channelDecoder.decode()).slice(-65536);return chunks.map(b=>decoder.decode(b)).join('');
+}
 async function initialize(){
   assert(distribution.topology?.policy==='single-kernel','Not a single-kernel distribution');
   const workspace=await owner.open(delivery);assert(workspace.persistence.status==='durable','Persistence not durable');
@@ -36,7 +47,7 @@ async function initialize(){
   await workspace.fs.writeFile('/fs-probe.mjs',fsProbe);
   const execution=await owner.runtime!.node({entry:'/workspace/fs-probe.mjs',cwd:'/workspace'});
   // Attach both drains before awaiting exit; no stdout-only await deadlock.
-  const out=capture(execution.stdout),err=capture(execution.stderr);execution.closeStdin();
+  const out=capture(execution.stdout,'filesystem.stdout'),err=capture(execution.stderr,'filesystem.stderr');execution.closeStdin();
   const [stdout,stderr,exit]=await Promise.all([out,err,execution.exited]);
   assert(exit.exitCode===0&&!exit.forced,'Sync FS probe failed: '+stderr);
   const sync=JSON.parse(stdout.trim());assert(sync.syncFS===true,'Sync FS completion absent');
@@ -80,7 +91,7 @@ async function streaming(){
 async function childSync(){
   await owner.workspace!.fs.writeFile('/parent-sync.cjs',childSyncProbe);
   const execution=await owner.runtime!.node({entry:'/workspace/parent-sync.cjs',cwd:'/workspace'});
-  const out=capture(execution.stdout),err=capture(execution.stderr);execution.closeStdin();
+  const out=capture(execution.stdout,'child-sync.stdout'),err=capture(execution.stderr,'child-sync.stderr');execution.closeStdin();
   const [stdout,stderr,exit]=await Promise.all([out,err,execution.exited]);
   assert(exit.exitCode===0&&!exit.forced,'execSync child failed: '+stderr);
   const result=JSON.parse(stdout.trim());assert(result.execSync&&result.bytes===1048583,'execSync completion');
@@ -88,12 +99,26 @@ async function childSync(){
   for(let i=0;i<binary.length;i++)assert(binary[i]===i%251,'Child host byte corruption');
   return {...result,diagnostics:await zero()};
 }
+async function minimalSpawn(mode:SpawnProbeMode){
+  const workspace=owner.workspace!;
+  await workspace.fs.writeFile('/spawn-existing.txt',spawnProbeFixture);
+  await workspace.fs.writeFile('/minimal-spawn-child.cjs',minimalChildProbe);
+  try{await workspace.fs.stat('/spawn-child-complete.txt');await workspace.fs.remove('/spawn-child-complete.txt');}catch(error){if(!String(error).includes('ENOENT'))throw error;}
+  await workspace.fs.writeFile('/minimal-spawn-parent.cjs',minimalSpawnProbe(mode));
+  const execution=await owner.runtime!.node({entry:'/workspace/minimal-spawn-parent.cjs',cwd:'/workspace'});
+  const out=capture(execution.stdout,'minimal-'+mode+'.stdout'),err=capture(execution.stderr,'minimal-'+mode+'.stderr');execution.closeStdin();
+  const [stdout,stderr,exit]=await Promise.all([out,err,execution.exited]);
+  assert(exit.exitCode===0&&exit.signal===null&&!exit.forced,'Minimal '+mode+' failed: '+stderr);
+  assert(stdout==='PARENT_BEFORE_'+mode+'\nPARENT_AFTER_'+mode+'\n','Minimal '+mode+' completion markers');
+  assert(decoder.decode(await workspace.fs.readFile('/spawn-child-complete.txt'))==='read-completed','Minimal child completion file');
+  return {mode,stdout,stderr,exit,diagnostics:await zero()};
+}
 async function fetchedBody(){
   await owner.workspace!.fs.writeFile('/fetched-body.mjs',fetchedBodyProbe(location.origin));
   const execution=await owner.runtime!.node({entry:'/workspace/fetched-body.mjs',cwd:'/workspace'});
   let readyResolve!:(value:any)=>void;const ready=new Promise<any>(resolve=>{readyResolve=resolve;});
   let stdout='';const out=(async()=>{for await(const bytes of execution.stdout){stdout+=decoder.decode(bytes);assert(stdout.length<65536,'Fetched probe output bound');const line=stdout.split('\n').find(line=>line.includes('evicted-pinned'));if(line)readyResolve(JSON.parse(line));}return stdout;})();
-  const err=capture(execution.stderr);
+  const err=capture(execution.stderr,'fetched-body.stderr');
   const earlyExit=execution.exited.then(exit=>{throw Error('Fetched body guest exited before handoff: '+JSON.stringify(exit));});void earlyExit.catch(()=>{});
   const handoff=await Promise.race([ready,earlyExit]);const pinned=await diagnostics();
   assert(pinned.fetch.pinnedBodies===1&&pinned.fetch.cachedBytes===16*1024*1024,'Evicted held-body pin/cache checkpoint');
@@ -183,6 +208,9 @@ async function sse(){
   return {handshake:true,aborted:true,diagnostics:state};
 }
 const api={evidence,diagnostics,get generation(){return generation;},initialize:()=>stage('filesystem',initialize),fetchedBody:()=>stage('fetched-body-evicted-pin',fetchedBody),childSync:()=>stage('child-sync',childSync),watches:()=>stage('concurrent-watch-flush',watches),streaming:()=>stage('http-backpressure',streaming),recreate:()=>stage('persistence-recreate',recreate),apps:()=>stage('apps-'+(generation+1),apps),hmr:()=>stage('hmr',hmr),sse:()=>stage('opencode-sse-abort',sse),
+  minimalAsyncSpawn:()=>stage('minimal-async-spawn',()=>minimalSpawn('async')),
+  minimalSpawnSync:()=>stage('minimal-spawnSync',()=>minimalSpawn('spawnSync')),
+  minimalExecSync:()=>stage('minimal-execSync',()=>minimalSpawn('execSync')),
   // Never automatic: the parent must authorize retirement after preserving the
   // natural failure. This is cleanup, not a replay or an acceptance pass.
   async retireFailure(authorization:string){
