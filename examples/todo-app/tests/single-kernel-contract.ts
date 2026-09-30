@@ -8,6 +8,10 @@ export function assertSingleKernelDiagnostics(value: unknown): void {
   const workers = (value as any)?.workers;
   if (workers?.kernel !== 1 || workers.filesystem !== 0 || workers.httpCoordinator !== 0 || workers.fetcher !== 0 || workers.other !== 0 || !Number.isSafeInteger(workers.process) || workers.process < 0 || !Array.isArray(workers.processPids) || workers.processPids.length !== workers.process || new Set(workers.processPids).size !== workers.process || workers.processPids.some((pid:unknown)=>!Number.isSafeInteger(pid))) throw Error('Missing/incorrect runtime worker counters: ' + JSON.stringify(workers));
 }
+export function assertKernelWorkerURL(value:string):void{
+  const url=new URL(value);
+  if(!/\/kernel-worker(?:-[\w-]+)?\.js$/.test(url.pathname)||!url.searchParams.has('opfs-disable')||url.search.slice(1).includes('?'))throw Error('Kernel worker URL must preserve Vite query and explicitly disable SQLite OPFS proxy');
+}
 
 export const fsProbe = `import fs from 'node:fs';
 const root='/workspace/kernel-contract'; fs.mkdirSync(root,{recursive:true});
@@ -41,3 +45,27 @@ const server=http.createServer(async(req,res)=>{
   });if(!ready)break;drains++;}}
  res.end();progress();
 });server.listen(5189);process.stdin.resume();process.stdin.on('end',()=>{fs.writeFileSync('/workspace/shutdown-sync.txt','shutdown');server.close(()=>process.exit(0))});`;
+
+export const childSyncProbe = `const fs=require('node:fs'),cp=require('node:child_process');
+const script='/workspace/sync-child.cjs';
+fs.writeFileSync(script,\`const fs=require('node:fs');const b=Buffer.alloc(1048583);for(let i=0;i<b.length;i++)b[i]=i%251;fs.mkdirSync('/workspace/child-sync',{recursive:true});fs.writeFileSync('/workspace/child-sync/binary.dat',b);fs.renameSync('/workspace/child-sync/binary.dat','/workspace/child-sync/renamed.dat');fs.symlinkSync('renamed.dat','/workspace/child-sync/link');if(!fs.lstatSync('/workspace/child-sync/link').isSymbolicLink())throw Error('child lstat');process.stdout.write(fs.readFileSync('/workspace/child-sync/link'));\`);
+const out=cp.execSync('node '+script,{maxBuffer:2097152});
+if(out.length!==1048583)throw Error('execSync child output truncated '+out.length);
+for(let i=0;i<out.length;i++)if(out[i]!==i%251)throw Error('execSync child byte corruption');
+console.log(JSON.stringify({execSync:true,bytes:out.length,childLink:fs.readlinkSync('/workspace/child-sync/link')}));`;
+
+/** Test-only coupling to the fork's existing egress primitive, not browser fetch.
+ * Its metadata/path handoff exercises the same SAB whole-file/fd fallback as npm. */
+export function fetchedBodyProbe(origin:string){return `import fs from 'node:fs';
+if(typeof globalThis.__ocfetchAsync!=='function')throw Error('Required kernel egress primitive __ocfetchAsync unavailable');
+const origin=${JSON.stringify(origin)};
+const first=await globalThis.__ocfetchAsync(origin+'/fetch-fixture?bytes=1048583&key=held');
+if(!first.ok||first.size!==1048583||!first.path)throw Error('Fetched body metadata');
+for(let i=0;i<3;i++){const filler=await globalThis.__ocfetchAsync(origin+'/fetch-fixture?bytes=8388608&key='+i);const bytes=fs.readFileSync(filler.path);if(bytes.length!==8388608)throw Error('Eviction filler truncated');}
+if(!fs.existsSync(first.path))throw Error('Pinned evicted body disappeared before read');
+process.stdin.once('data',()=>{
+ const bytes=fs.readFileSync(first.path);if(bytes.length!==1048583)throw Error('Fetched whole-file fallback length');
+ for(let i=0;i<bytes.length;i++)if(bytes[i]!==i%251)throw Error('Fetched fallback exact bytes');
+ if(fs.existsSync(first.path))throw Error('Evicted pin/body not reclaimed after fd close');
+ console.log(JSON.stringify({phase:'reclaimed',bytes:bytes.length,absent:true}));process.stdin.pause();
+});process.stdin.resume();console.log(JSON.stringify({phase:'evicted-pinned',path:first.path,size:first.size}));`;}

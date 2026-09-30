@@ -20,6 +20,10 @@ export function log(kind: string, detail: unknown) {
 }
 export function drainLogs() { return delivery; }
 
+/** Optional qualification observer; default contracts retain their old behavior. */
+let lifecycleObserver: ((phase: 'started' | 'stopped', workspace: Workspace) => Promise<void>) | undefined;
+export function observeBrowserCases(observer: typeof lifecycleObserver) { lifecycleObserver = observer; }
+
 export async function mount(workspace: Workspace, files: Record<string, string | Uint8Array>) {
   for (const [path, bytes] of Object.entries(files)) {
     const parts = path.split("/").slice(1, -1);
@@ -77,9 +81,10 @@ export async function browserCase<T>(run: (t: {
   let value: T | undefined;
   try {
     runtime = await Runtime.start({ workspace, distribution });
+    await lifecycleObserver?.('started', workspace);
     value = await run({ workspace, runtime });
   } catch (error) { failures.push(error); }
-  try { await runtime?.stop(); } catch (error) { failures.push(error); }
+  try { await runtime?.stop(); await lifecycleObserver?.('stopped', workspace); } catch (error) { failures.push(error); }
   try { await workspace.close(); } catch (error) { failures.push(error); }
   if (failures.length) throw new AggregateError(failures,
     failures.map(error => error instanceof Error ? error.stack ?? error.message : String(error)).join("\n"));

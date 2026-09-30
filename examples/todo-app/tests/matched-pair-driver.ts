@@ -70,7 +70,8 @@ export async function exportEvidence(command:(code:string)=>Promise<any>,id:stri
 }
 
 export function createDriverCommands(evidence:string, sessions:Record<string,string>, expired:()=>boolean,
-  spawn:(args:string[])=>{stdout:ReadableStream;stderr:ReadableStream;exited:Promise<number>}=(args)=>Bun.spawn(args,{stdout:'pipe',stderr:'pipe'})) {
+  spawn:(args:string[])=>{stdout:ReadableStream;stderr:ReadableStream;exited:Promise<number>}=(args)=>Bun.spawn(args,{stdout:'pipe',stderr:'pipe'}),
+  commandPrefix:string[]=['bunx','browser-control']) {
   let sequence=0, pending=false
   return {
     get pending(){return pending},
@@ -81,7 +82,7 @@ export function createDriverCommands(evidence:string, sessions:Record<string,str
       try {
         const id=String(++sequence).padStart(4,'0'), file=join(evidence,id+'.js')
         await writeFile(file,code,{flag:'wx'})
-        const child=spawn(['bunx','browser-control','execute','--json','--session',sessions[condition]!,'--file',file])
+        const child=spawn([...commandPrefix,'execute','--json','--session',sessions[condition]!,'--file',file])
         // Join every drain and exit before relinquishing ownership. A rejected
         // observation cannot prove browser settlement, even after its siblings join.
         const joined=await Promise.allSettled([new Response(child.stdout).text(),new Response(child.stderr).text(),child.exited])

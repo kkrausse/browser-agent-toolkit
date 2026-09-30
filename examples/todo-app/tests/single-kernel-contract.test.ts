@@ -1,5 +1,5 @@
 import {expect, test} from 'bun:test';
-import {assertSingleKernelDiagnostics, assertZeroWork, fsProbe} from './single-kernel-contract';
+import {assertSingleKernelDiagnostics, assertZeroWork, assertKernelWorkerURL,fsProbe} from './single-kernel-contract';
 test('zero-work validation never interprets missing fields as zero', () => {
   expect(()=>assertZeroWork({})).toThrow();
   const zero={procs:[],listeners:[],pendingHttp:0,fetch:{inflight:0,queued:0,active:0}};
@@ -18,4 +18,9 @@ test('probe really contains newline filenames and synchronous operations', () =>
   expect(fsProbe).toContain("'line\\nentry.txt'");
   expect(fsProbe).toContain('fs.lstatSync');
   expect(fsProbe).toContain('fs.readdirSync');
+});
+test('source-mode Vite worker query remains valid with explicit SQLite proxy opt-out',()=>{
+  expect(()=>assertKernelWorkerURL('http://127.0.0.1:54321/packages/kernel-host/kernel-worker.js?worker_file&type=module&opfs-disable')).not.toThrow();
+  expect(()=>assertKernelWorkerURL('http://127.0.0.1:54321/packages/kernel-host/kernel-worker.js?worker_file&type=module?opfs-disable')).toThrow();
+  expect(()=>assertKernelWorkerURL('http://127.0.0.1:54321/runtime/assets/kernel-worker-fresh.js?opfs-disable=')).not.toThrow();
 });

@@ -1,4 +1,5 @@
-node_modules/
+# Also ignore experiment-local dependency-directory symlinks.
+node_modules
 dist/
 .runtime/
 .editor/

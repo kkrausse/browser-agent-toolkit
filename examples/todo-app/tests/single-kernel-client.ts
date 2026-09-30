@@ -1,11 +1,11 @@
 import {diagnoseWorkspace, diagnoseWorkspaceEntry} from '@kev-browser-agent-kit/workspace';
 import {WorkspaceController} from '@kev-browser-agent-kit/workspace/react';
 import {installSource} from '@kev-browser-agent-kit/workspace/delivery';
-import {loadPrepared, preparedApps, installOpenCodeConfig, startOpenCode} from '@kev-browser-agent-kit/opencode-chat/browser';
+import {loadPrepared, preparedApps, installOpenCodeConfig, startOpenCode,openCodeCandidateLaunch} from '@kev-browser-agent-kit/opencode-chat/browser';
 import {previewHTTPThenAttach} from './matched-qualification';
-import {assertZeroWork, assertSingleKernelDiagnostics, fsProbe, streamProbe} from './single-kernel-contract';
+import {assertZeroWork, assertSingleKernelDiagnostics, fsProbe, streamProbe, childSyncProbe,fetchedBodyProbe} from './single-kernel-contract';
 
-const policy={stageMs:120000,requestMs:20000,generations:4,retries:0};
+const policy={stageMs:120000,requestMs:20000,generations:5,retries:0};
 const evidence: any={policy,status:'idle',stages:[],events:[],models:0};
 let owner=new WorkspaceController({onDiagnostic:event=>evidence.events.push(event),captureProcessOutput:true});
 let active=false, failed=false;
@@ -77,15 +77,60 @@ async function streaming(){
   assert(staleRejected,'Disposed endpoint accepted stale request');
   return {stalled,completed,bytes,exit,canceled:true,staleRejected,zero:await zero()};
 }
+async function childSync(){
+  await owner.workspace!.fs.writeFile('/parent-sync.cjs',childSyncProbe);
+  const execution=await owner.runtime!.node({entry:'/workspace/parent-sync.cjs',cwd:'/workspace'});
+  const out=capture(execution.stdout),err=capture(execution.stderr);execution.closeStdin();
+  const [stdout,stderr,exit]=await Promise.all([out,err,execution.exited]);
+  assert(exit.exitCode===0&&!exit.forced,'execSync child failed: '+stderr);
+  const result=JSON.parse(stdout.trim());assert(result.execSync&&result.bytes===1048583,'execSync completion');
+  const binary=await owner.workspace!.fs.readFile('/child-sync/link');assert(binary.length===1048583,'Child host readback length');
+  for(let i=0;i<binary.length;i++)assert(binary[i]===i%251,'Child host byte corruption');
+  return {...result,diagnostics:await zero()};
+}
+async function fetchedBody(){
+  await owner.workspace!.fs.writeFile('/fetched-body.mjs',fetchedBodyProbe(location.origin));
+  const execution=await owner.runtime!.node({entry:'/workspace/fetched-body.mjs',cwd:'/workspace'});
+  let readyResolve!:(value:any)=>void;const ready=new Promise<any>(resolve=>{readyResolve=resolve;});
+  let stdout='';const out=(async()=>{for await(const bytes of execution.stdout){stdout+=decoder.decode(bytes);assert(stdout.length<65536,'Fetched probe output bound');const line=stdout.split('\n').find(line=>line.includes('evicted-pinned'));if(line)readyResolve(JSON.parse(line));}return stdout;})();
+  const err=capture(execution.stderr);
+  const earlyExit=execution.exited.then(exit=>{throw Error('Fetched body guest exited before handoff: '+JSON.stringify(exit));});void earlyExit.catch(()=>{});
+  const handoff=await Promise.race([ready,earlyExit]);const pinned=await diagnostics();
+  assert(pinned.fetch.pinnedBodies===1&&pinned.fetch.cachedBytes===16*1024*1024,'Evicted held-body pin/cache checkpoint');
+  execution.writeStdin(new TextEncoder().encode('read held body'));execution.closeStdin();
+  const [text,stderr,exit]=await Promise.all([out,err,execution.exited]);assert(exit.exitCode===0&&!exit.forced,'Fetched body guest failed: '+stderr);
+  const complete=JSON.parse(text.trim().split('\n').at(-1)!);assert(complete.phase==='reclaimed'&&complete.absent&&complete.bytes===1048583,'Fetched fallback/reclaim completion');
+  const final=await zero();assert(final.fetch.pinnedBodies===0,'Fetched pin retained after close/exit');
+  return {handoff,pinned,complete,diagnostics:final};
+}
+async function watches(){
+  const events:{paths:string[]}[]=[];
+  const unwatch=owner.workspace!.fs.watch(event=>events.push(event));
+  try{
+    await Promise.all(Array.from({length:8},(_,i)=>owner.workspace!.fs.writeFile('/concurrent-'+i+'.txt','final-'+i)));
+    await owner.workspace!.flush();
+    await owner.workspace!.fs.rename('/concurrent-0.txt','/concurrent-renamed.txt');
+    await owner.workspace!.fs.remove('/concurrent-1.txt');await owner.workspace!.flush();
+    const deadline=Date.now()+10000;
+    while(!events.some(event=>event.paths.includes('/concurrent-renamed.txt'))&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,25));
+    assert(events.some(event=>event.paths.includes('/concurrent-renamed.txt')),'Host filesystem watch rename delivery missing');
+    assert(decoder.decode(await owner.workspace!.fs.readFile('/concurrent-renamed.txt'))==='final-0','Concurrent write/rename final bytes');
+    return {events,diagnostics:await zero()};
+  }finally{unwatch();}
+}
 async function recreate(){
   await owner.stopRuntime();await zero();await owner.close();
   owner=new WorkspaceController({onDiagnostic:event=>evidence.events.push(event),captureProcessOutput:true});
   const workspace=await owner.open(delivery);
   assert(decoder.decode(await workspace.fs.readFile('/persist-marker.txt'))==='single-kernel durable marker','Recreate persistence');
   assert((await workspace.fs.stat('/kernel-contract/host-renamed\nentry.txt')).size===5,'Recreate filesystem');
+  assert(decoder.decode(await workspace.fs.readFile('/concurrent-renamed.txt'))==='final-0','Concurrent flush persistence');
+  for(let i=2;i<8;i++)assert(decoder.decode(await workspace.fs.readFile('/concurrent-'+i+'.txt'))==='final-'+i,'Concurrent persisted bytes');
+  let deleted=false;try{await workspace.fs.readFile('/concurrent-1.txt');}catch{deleted=true;}assert(deleted,'Deleted concurrent file restored');
   return {persistence:workspace.persistence,diagnostics:await zero()};
 }
 let generation=0;
+let sourceHome='';
 let manifest: Awaited<ReturnType<typeof loadPrepared>>;
 async function apps(){
   assert(generation<policy.generations,'Fixed generation budget exhausted');
@@ -101,6 +146,7 @@ async function apps(){
     '/src/pdf-workload.ts':`import {PDFDocument} from 'pdf-lib';export async function runPdfWorkload(){const pdf=await PDFDocument.create();pdf.addPage().drawText('Fresh ${marker}/${next}');return(await pdf.save()).length;}`};
   if(generation)await owner.workspace!.fs.remove('/switch-'+(marker==='A'?'b':'a')+'-only.ts');
   await installSource(owner.workspace!,source,{existing:'replace'});
+  sourceHome=source['/src/home.tsx'];
   const runtime=await owner.startRuntime({apps:preparedApps(manifest,'/prepared/',owner.signal,text=>evidence.events.push({delivery:text}))});await runtime.tools.apps();
   await installOpenCodeConfig(owner.workspace!,{modelBaseURL:location.origin+'/unused-model/'});
   // Readiness and cleanup ownership come from the qualified controller. Serial
@@ -113,7 +159,39 @@ async function apps(){
   await owner.workspace!.flush();generation=next;
   return {generation,marker,previewURL:preview.endpoint.url,chatURL:chat.endpoint.url,diagnostics:await diagnostics(),interactive:'pending external Playwright hydration/todo/PDF verification'};
 }
-const api={evidence,diagnostics,get generation(){return generation;},initialize:()=>stage('filesystem',initialize),streaming:()=>stage('http-backpressure',streaming),recreate:()=>stage('persistence-recreate',recreate),apps:()=>stage('apps-'+(generation+1),apps),
+async function hmr(){
+  assert(generation===1&&sourceHome,'HMR requires the first live preview');
+  const updated=sourceHome.replace('<h1 data-generation=', '<h1 data-hmr="single-kernel-fresh-hmr" data-generation=');
+  assert(updated!==sourceHome,'HMR fixture replacement absent');
+  await owner.workspace!.fs.writeFile('/src/home.tsx',updated);await owner.workspace!.flush();
+  return {generation,expected:'single-kernel-fresh-hmr',diagnostics:await diagnostics(),interactive:'pending same-document HMR verification'};
+}
+async function sse(){
+  const service=owner.getSnapshot().services.chat;assert(service,'OpenCode service absent');
+  const abort=new AbortController();
+  const response=await service.connection.fetch('/api/event',{signal:AbortSignal.any([abort.signal,AbortSignal.timeout(policy.requestMs)])});
+  assert(response.ok&&response.headers.get('content-type')?.includes('text/event-stream')&&response.body,'OpenCode event stream headers');
+  const reader=response.body!.getReader();let text='';
+  while(!text.includes('server.connected')){const next=await reader.read();assert(!next.done,'Event stream ended before handshake');text+=decoder.decode(next.value);assert(text.length<65536,'Handshake exceeded bound');}
+  abort.abort('single-kernel SSE abort');
+  try{await reader.read();}catch{}finally{try{await reader.cancel();}catch{}reader.releaseLock();}
+  const deadline=Date.now()+policy.requestMs;let state=await diagnostics();
+  while(state.pendingHttp!==0&&Date.now()<deadline){await new Promise(resolve=>setTimeout(resolve,25));state=await diagnostics();}
+  assert(state.pendingHttp===0,'OpenCode event cancellation left pending HTTP');
+  const health=await service.connection.fetch(openCodeCandidateLaunch.healthPath,{signal:AbortSignal.timeout(policy.requestMs)});
+  assert(health.ok&&(await health.json()).healthy,'OpenCode health after SSE abort');
+  return {handshake:true,aborted:true,diagnostics:state};
+}
+const api={evidence,diagnostics,get generation(){return generation;},initialize:()=>stage('filesystem',initialize),fetchedBody:()=>stage('fetched-body-evicted-pin',fetchedBody),childSync:()=>stage('child-sync',childSync),watches:()=>stage('concurrent-watch-flush',watches),streaming:()=>stage('http-backpressure',streaming),recreate:()=>stage('persistence-recreate',recreate),apps:()=>stage('apps-'+(generation+1),apps),hmr:()=>stage('hmr',hmr),sse:()=>stage('opencode-sse-abort',sse),
+  // Never automatic: the parent must authorize retirement after preserving the
+  // natural failure. This is cleanup, not a replay or an acceptance pass.
+  async retireFailure(authorization:string){
+    if(authorization!=='after-evidence-and-parent-repair-authorization'||!failed||active||evidence.retirement)throw Error('Failure retirement not authorized/available');
+    active=true;evidence.retirement={status:'pending'};
+    try{await owner.stopRuntime();const stopped=await zero();await owner.close();evidence.retirement={status:'completed',stopped};render();return evidence.retirement;}
+    catch(error){evidence.retirement={status:'failed',error:String(error)};render();throw error;}
+    finally{active=false;}
+  },
   reloadCheck:()=>stage('persistence-reload',async()=>{await owner.open(delivery);assert(decoder.decode(await owner.workspace!.fs.readFile('/persist-marker.txt'))==='single-kernel durable marker','Reload persistence');return zero();}),
   close:()=>stage('shutdown',async()=>{await owner.stopRuntime();const stopped=await zero();await owner.close();return stopped;})};
 (window as any).singleKernelAcceptance=api;render();
