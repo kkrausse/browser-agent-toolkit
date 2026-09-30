@@ -41,3 +41,13 @@ Local reproducibility helpers (ignored diagnostics, absolute paths):
 Parent acceptance remains pending: observe a normal switch mid-transition without
 warning/recovery controls, then completion; retain the actual failure/startup journal
 recovery checks. Unit coverage does not claim live browser acceptance.
+
+## Subsequent parent acceptance of healthy switching
+
+The parent subsequently activated the combined paid-availability UI (`f56cbbd`,
+including `9431953`) rather than the warning-only isolated candidate above. During
+SmokeB → SmokeA the exact status was **Switching to Smoke A… Restoring source,
+preview and chat.**, with no Interrupted alert. A completed; returning to B retained
+paid Qwen 3.8 Max and the `OK` transcript without alerts. This supplies the bounded
+healthy-switch live observation, not a new exhaustive recovery/failure qualification.
+See [paid browser acceptance](2026-09-30-zen-paid-browser-acceptance.md).

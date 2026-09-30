@@ -1,5 +1,13 @@
 # Paid Console catalog candidate (not live qualification)
 
+**Historical preparation record.** The statements below describe the pre-activation
+checkpoint, not current live status. The parent subsequently completed the same-port
+handoff, corrected paid availability in `f56cbbd`, and verified one real paid inference
+plus reload/workspace retention. See
+[chronological paid acceptance](2026-09-30-zen-paid-browser-acceptance.md).
+The final picker has 34 options (28 supplied plus six legacy free entries), not an
+exact IRS-only catalog. No frozen qualification receipt was upgraded.
+
 The live TODO host at `http://127.0.0.1:54770/` has **not** been restarted or activated.
 The user chose a **separate** Console pay-as-you-go key through the existing
 `VIVARI_MODEL_API_KEY` environment mechanism. No IRS secret, SOPS configuration,

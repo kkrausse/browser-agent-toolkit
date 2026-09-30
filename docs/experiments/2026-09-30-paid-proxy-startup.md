@@ -58,5 +58,16 @@ the function; raw settings and credentials never do. The model-list route serves
 `catalog.model.available()`, not all models (555564–555566), so a disabled model
 will appear as missing. Four readiness tests pass, including credential omission.
 
-Parent must still activate and verify the corrected availability candidate. No
-claim of successful paid startup or model calls follows from these checks.
+At this preparation checkpoint, parent activation and verification remained
+pending; these offline checks alone did not prove paid startup or inference.
+
+## Subsequent parent live acceptance
+
+The parent activated corrected `f56cbbd` on the same origin and verified Ready,
+paid Muse Spark 1.3 selection/default, and one actual tiny no-tools inference
+returning `OK` and `Run completed`. Paid Qwen 3.8 Max selection and the transcript
+survived Exit/save, reload, reopen and SmokeB → SmokeA → SmokeB. The initial
+disabled-model failures and a rapid New chat/send readiness race remain recorded.
+See [the chronological acceptance report](2026-09-30-zen-paid-browser-acceptance.md)
+for final served hashes, host ownership, 34-option catalog caveat and bounded scope.
+This is parent-reported live evidence, not an independent check by this docs worker.
