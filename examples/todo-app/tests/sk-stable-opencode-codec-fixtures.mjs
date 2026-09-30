@@ -12,7 +12,7 @@ const fixtures=[
 ];
 const receipts=[];
 for(const fixture of fixtures){
- const bytes=Buffer.from(fixture.body),record={...fixture,directory:'/workspace/projects/A',url:'http://fixture.invalid'+fixture.path+'?location%5Bdirectory%5D=%2Fworkspace%2Fprojects%2FA',requestBodyBytes:0,headers:fixture.status===204?[]:[['content-type','application/json']],bodyBase64:bytes.toString('base64'),sha256:createHash('sha256').update(bytes).digest('hex')};
+ const bytes=Buffer.from(fixture.body),record={...fixture,directory:'/workspace/projects/A',url:'http://fixture.invalid'+fixture.path+'?location%5Bdirectory%5D=%2Fworkspace%2Fprojects%2FA',requestBodyBytes:0,headers:fixture.status===204?[]:[['content-type','application/json'],['content-length',String(bytes.length)]],bodyBase64:bytes.toString('base64'),sha256:createHash('sha256').update(bytes).digest('hex')};
  const child=spawnSync(process.execPath,[new URL('./sk-stable-opencode-codec.mjs',import.meta.url).pathname],{input:JSON.stringify(record),encoding:'utf8'});
  if(child.status!==0)throw Error(child.stderr||child.stdout);receipts.push(JSON.parse(child.stdout));
 }
