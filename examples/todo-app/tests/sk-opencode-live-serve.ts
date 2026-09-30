@@ -10,7 +10,7 @@ if(await hash(join(stage.frozen,'receipt.json'))!==stage.frozenReceiptSha256)thr
 for(const [file,expected] of Object.entries(stage.frozenHashes))if(await hash(join(stage.frozen,file))!==expected)throw Error('Frozen artifact changed '+file);
 if(await Bun.file(join(output,'owned-origin.json')).exists())throw Error('Stage origin already owned; no host replacement');
 const headers={'Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'require-corp','Cache-Control':'no-store','Service-Worker-Allowed':'/'};
-let codecCount=0,codecPending=0,captured=false;
+let codecCount=0,codecPending=0,captured=false,hostJoinAllowed=false;
 const server=Bun.serve({hostname:'127.0.0.1',port:0,async fetch(request){
  const url=new URL(request.url),path=url.pathname;
  if(path==='/inspect-empty')return new Response('<!doctype html><title>Fresh origin inspection</title>',{headers});
@@ -34,10 +34,12 @@ const server=Bun.serve({hostname:'127.0.0.1',port:0,async fetch(request){
   if(captured||codecPending)return new Response('Already captured or codec work pending',{status:409,headers});
   const text=await request.text(),evidence=JSON.parse(text);
   if(!['failed','mounted-qualification-only'].includes(evidence.status)||evidence.retentionAccepted!==false||evidence.remoteZeroRef!==false)return new Response('Invalid terminal scope',{status:400,headers});
-  captured=true;await writeFile(join(output,'live-evidence.json'),text,{flag:'wx'});return Response.json({captured:true,sha256:new Bun.CryptoHasher('sha256').update(text).digest('hex')},{headers});
+  captured=true;await writeFile(join(output,'live-evidence.json'),text,{flag:'wx'});
+  hostJoinAllowed=evidence.status==='mounted-qualification-only'&&evidence.zero?.procs?.length===0&&evidence.zero?.listeners?.length===0&&evidence.zero?.pendingHttp===0&&evidence.executionExit?.exitCode===0&&evidence.executionExit?.forced===false&&evidence.executionExit?.signal===null;
+  return Response.json({captured:true,sha256:new Bun.CryptoHasher('sha256').update(text).digest('hex')},{headers});
  }
  if(path==='/host-join'&&request.method==='POST'){
-  if(!captured||codecPending)return new Response('Evidence/codec join missing',{status:409,headers});
+  if(!captured||!hostJoinAllowed||codecPending)return new Response('Successful guest join/zero-work receipt required; failed ownership retained',{status:409,headers});
   const response=Response.json({ownedHostStopping:true,pid:process.pid},{headers});setTimeout(()=>void server.stop(false),50);return response;
  }
  const decoded=decodeURIComponent(path);if(decoded.includes('..'))return new Response('Not found',{status:404,headers});

@@ -48,8 +48,8 @@ codecTest('actual codec rejects replacement codec shortcuts, wire drift and forb
  const record={path:'/api/health',method:'GET',status:200,headers:[['content-type','application/json'],['content-length',String(Buffer.byteLength(text))]],bodyBase64:Buffer.from(text).toString('base64')};
  for(const patch of [{status:201},{headers:[['content-type','text/plain']]},{bodyBase64:Buffer.from(text+' ').toString('base64')},{path:'/api/debug/location',method:'DELETE',status:204,bodyBase64:''},{bodyBase64:Buffer.from('{}').toString('base64')}])expect((await codec({...record,...patch})).exit).not.toBe(0);
 },20000);
-test('host requires authorization without opening listener',async()=>{
- const p=Bun.spawn(['bun',join(import.meta.dir,'sk-opencode-live-serve.ts')],{env:{...process.env,SK_OPENCODE_AUTHORIZE_HOST:''},stdout:'pipe',stderr:'pipe'});
+for(const entry of ['sk-opencode-live-serve.ts','sk-opencode-live-host-owner.ts'])test(entry+' requires authorization without opening listener',async()=>{
+ const p=Bun.spawn(['bun',join(import.meta.dir,entry)],{env:{...process.env,SK_OPENCODE_AUTHORIZE_HOST:''},stdout:'pipe',stderr:'pipe'});
  const [stdout,stderr,exit]=await Promise.all([new Response(p.stdout).text(),new Response(p.stderr).text(),p.exited]);
  expect(exit).not.toBe(0);expect(stdout).toBe('');expect(stderr).toContain('Parent browser-slot authorization required');
 });

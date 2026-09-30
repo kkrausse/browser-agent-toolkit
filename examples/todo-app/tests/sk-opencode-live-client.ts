@@ -68,8 +68,9 @@ async function run(){
     const record={method:request.method,path,url:request.url,status:response.status,headers:[...response.headers],bodyBase64:base64(bytes),sha256:await sha(bytes)};
     evidence.requests.push(record); // Preserve failure bytes before codec validation.
     const proof=await fetch('/codec',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(record),signal:AbortSignal.timeout(20000)});
-    assert(proof.ok,'Pinned codec qualification failed: '+await proof.text().then(t=>t.slice(0,500)));
-    // Body above has been consumed; codec output is captured separately by host.
+    const proofText=await proof.text();assert(proof.ok,'Pinned codec qualification failed: '+proofText.slice(0,500));
+    const parity=JSON.parse(proofText);assert(parity.qualified===true&&parity.method===request.method&&parity.path===path&&parity.status===response.status&&parity.bytes===bytes.length,'Pinned codec receipt mismatch');
+    Object.assign(record,{pinnedCodec:parity});
     return new Response(response.status===204?null:bytes,{status:response.status,headers:response.headers});
    })().catch(error=>{poison??=error;throw error;});
    pending.add(task);return task.finally(()=>pending.delete(task));
@@ -113,6 +114,7 @@ async function run(){
   closed=true;await Promise.all([...pending]);unsubscribe();await chat.dispose();evidence.sse.locallyJoined=true;
   assert(!poison,'Finite request failure');
   await owner.stopServices();await service.drained;evidence.executionExit=await service.execution.exited;
+  assert(evidence.executionExit.exitCode===0&&evidence.executionExit.signal===null&&evidence.executionExit.forced===false,'Guest did not cleanly exit with joined outputs');
   evidence.zero=await diagnoseWorkspace(workspace);assert(evidence.zero.procs.length===0&&evidence.zero.listeners.length===0&&evidence.zero.pendingHttp===0,'Guest cleanup not zero work');
   await owner.close();evidence.status='mounted-qualification-only';
  }catch(error){closed=true;poison??=error;evidence.status='failed';evidence.error=String(error);/* retain uncertain ownership; no retry/reset/replacement/forced cleanup */}
