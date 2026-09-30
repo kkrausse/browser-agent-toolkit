@@ -26,7 +26,7 @@ fewer workers. Keep the baseline as the comparison/control and fallback.
 
 | Workstream | Latest state |
 | --- | --- |
-| Chat readiness/drafts | Repaired `691cd5aa`; isolated visible and headless lab passed. Corrected same-view/held-model harness now in independent live QA; whole-app acceptance pending. |
+| Chat readiness/drafts | Repaired `691cd5aa`; primary visible/headless lab passed. Same-view A→B→A guards passed; model cohort stopped on QA JSON-order mistake, fresh semantic-oracle cohort assigned. Whole-app acceptance pending. |
 | Close target retention | Unchanged-runtime case-1 live control passed with termination/lock/census observations. Historical cause still unknown; full suite pending. |
 | Cached installed artifacts | Library script ownership/audits repaired. App integration found asynchronous endpoint-upload cancellation is not joined by shutdown; owner repair assigned. No on adapter or new switch-speed result. |
 | OpenCode process retention | Exact artifact audit found background refresh invalidates baseline no-background-work premise. A0 foundation live cohort failed local null-settings guard; repair assigned. No reuse or remote-release proof. |
@@ -645,6 +645,30 @@ See [harness repair](2026-09-30-controller-swap-qa-harness-repair.md). Frozen ha
 New independent QA agent `ses_f0c19439effe3pvL2PjB06ciX0` now owns the visible CLI
 slot, then serialized headless coverage where practical. Intended report:
 `2026-09-30-controller-swap-model-live-qa.md`. That assignment is not acceptance.
+
+### Follow-up: same-view isolation observed; model oracle error stops cohort
+
+QA report commit `63dc19a` records three visible checkpoints/ten guards passing,
+then one agent-authored assertion failure, not accepted model coverage. Both
+controllers reached readiness; A→B→A discarded composer-local drafts without text
+crossing controllers, and the actual outer ChatView root stayed identical with
+one Profiler mount. See [model QA](2026-09-30-controller-swap-model-live-qa.md).
+
+The actual held model body was `{"model":{"id":"m2","providerID":"p"}}`;
+the oracle required `providerID` before `id` via string comparison. The same exact
+semantic fields/values were correct. Subsequent post-failure pending/text/disabled
+control observations are retained diagnostics, **not completed release/reject/Enter/
+send checkpoints**. Headless was not run. Exact frozen hashes/screenshots/journal
+and owned server/session/PID/port cleanup were retained; browser slot released.
+
+A separately authorized fresh cohort uses the same frozen candidate/harness but
+checks exact JSON keys/types/values semantically, preserving raw body bytes. All
+other assertions remain, and no production source is changed. The same independent
+QA agent `ses_f0c19439effe3pvL2PjB06ciX0` resumes because this is a small concrete
+oracle correction with shared context; it again owns the exclusive visible slot,
+followed by headless only after a visible pass. Intended report:
+`2026-09-30-controller-swap-model-live-qa-followup.md`. The failed original cohort
+remains failed; no result is replayed/relabelled into green.
 
 ## Next validation and stress-test sequence
 
