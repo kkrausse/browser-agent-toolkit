@@ -19,7 +19,9 @@ let origin:any;
 if(await Bun.file(join(output,'owned-origin.json')).exists()){origin=await Bun.file(join(output,'owned-origin.json')).json();console.log(JSON.stringify({...origin,initiatorPID:process.pid,finish:'POST /host-join after success, or /failure-host-join ONLY after preserved failure and guarded cleanup; await initiator completion'}));}
 // No timeout/force kill masquerading as a join. Parent owns escalation if retained.
 const [out,err,exit]=await Promise.all([stdout,stderr,child.exited]);
-await writeFile(join(output,'host-process-join.json'),JSON.stringify({pid:child.pid,exit,stdout:out,stderr:err,stdoutJoined:true,stderrJoined:true}),{flag:'wx'});
+const failureCleanup=await Bun.file(join(output,'failure-host-join-request.json')).exists();
+const scope=failureCleanup?{kind:'guarded-failure-cleanup',qualificationPassed:false}:{kind:'mounted-foundation-host-cleanup'};
+await writeFile(join(output,'host-process-join.json'),JSON.stringify({...scope,pid:child.pid,exit,stdout:out,stderr:err,stdoutJoined:true,stderrJoined:true}),{flag:'wx'});
 if(exit||!origin)throw Error('Owned host failed: '+err);
 const url=new URL(origin.url);
 const absent=await new Promise<boolean>((resolve,reject)=>{
@@ -29,6 +31,6 @@ const absent=await new Promise<boolean>((resolve,reject)=>{
  socket.setTimeout(3000,()=>{socket.destroy();reject(Error('Listener absence uncertain'));});
 });
 if(!absent)throw Error('Owned host listener still present');
-await writeFile(join(output,'host-listener-absence.json'),JSON.stringify({url:origin.url,listenerAbsent:true,childJoined:true,initiatorCompleting:true}),{flag:'wx'});
-console.log(JSON.stringify({hostJoined:true,listenerAbsent:true,output}));
-if(await Bun.file(join(output,'failure-host-join-request.json')).exists())throw Error('Qualification FAILED; guarded host cleanup joined, not a pass');
+await writeFile(join(output,'host-listener-absence.json'),JSON.stringify({...scope,url:origin.url,listenerAbsent:true,childJoined:true,initiatorCompleting:true}),{flag:'wx'});
+console.log(JSON.stringify({...scope,hostJoined:true,listenerAbsent:true,output}));
+if(failureCleanup)throw Error('Qualification FAILED; guarded host cleanup joined, not a pass');

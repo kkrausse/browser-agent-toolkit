@@ -11,6 +11,7 @@ const hash=async(path:string)=>new Bun.CryptoHasher('sha256').update(await Bun.f
 const revision=await command(['git','rev-parse',process.env.SK_OPENCODE_SOURCE_REVISION??'HEAD']);
 await command(['git','merge-base','--is-ancestor','55ae98c',revision]);
 await command(['git','merge-base','--is-ancestor','691cd5a',revision]); // Current committed chat repair, never a sibling's unstaged integration.
+await command(['git','merge-base','--is-ancestor','d1f60e4',revision]); // Committed helper ownership source; do not ingest peer's in-flight lifecycle repair.
 if(! (await command(['git','rev-parse','HEAD'],baseline)).startsWith('64de522'))throw Error('Read-only baseline pin changed');
 await mkdir(output); // Must not exist; preserve partial failures for investigation.
 const snapshot=join(output,'source');await mkdir(snapshot);

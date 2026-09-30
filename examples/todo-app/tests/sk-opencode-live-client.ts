@@ -141,7 +141,7 @@ async function run(){
   await owner.stopServices();await service.drained;evidence.executionExit=await service.execution.exited;
   assert(evidence.executionExit.exitCode===0&&evidence.executionExit.signal===null&&evidence.executionExit.forced===false,'Guest did not cleanly exit with joined outputs');
   evidence.zero=await diagnoseWorkspace(workspace);assert(evidence.zero.procs.length===0&&evidence.zero.listeners.length===0&&evidence.zero.pendingHttp===0,'Guest cleanup not zero work');
-  await owner.close();evidence.status='mounted-qualification-only';
+   await owner.close();assert(!poison,'Qualification deadline/failure during cleanup');evidence.status='mounted-qualification-only';
   }catch(error){
    closed=true;poison??=error;evidence.status='failed';evidence.error=String(error);display();
    try{
