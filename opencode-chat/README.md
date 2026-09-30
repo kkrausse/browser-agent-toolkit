@@ -350,6 +350,10 @@ ship precompiled utilities: consumers do not install Tailwind, scan this package
 or import a separate UI stylesheet. There is no global preflight or theme;
 utility classes, internal variables, and fallback initialization are isolated
 from host styles. Select popups are portaled and carry their own package styles.
+Source-based harnesses must also use the compiled stylesheet, not `src/styles.css`
+or `src/editor.css`: those omit the popup stacking and other `ocui:` utilities.
+Run `bun run build:styles` in `opencode-chat` to produce `dist/editor.css` without
+rebuilding OpenCode or the workspace runtime, then import that stylesheet.
 Install `react` and `react-dom` when using `/react` or `/editor`; both are optional
 peers so headless consumers need neither. Base UI and the small styling helpers
 are bundled into the UI entries.

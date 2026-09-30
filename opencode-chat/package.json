@@ -74,6 +74,7 @@
   },
   "scripts": {
     "build": "bun build.ts",
+    "build:styles": "bun scripts/build-ui-styles.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:javascript": "bun scripts/test-javascript.ts",

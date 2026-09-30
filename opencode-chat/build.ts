@@ -1,5 +1,5 @@
 import { $ } from "bun";
-import postcss from "postcss";
+import { buildUIStyles } from "./scripts/build-ui-styles";
 import { uiLicenses } from "./scripts/ui-licenses";
 import { readQualifiedOpenCodeApplication } from './src/opencode-application';
 import { fileURLToPath } from 'node:url';
@@ -33,20 +33,7 @@ for (const entry of ['prepare', 'server', 'diagnostics-server']) {
 }
 await Bun.write('dist/application/build-receipt.json', application.receiptBytes);
 for (const asset of application.assets) await Bun.write('dist/application/.runtime/opencode-bun-server/' + asset.file, asset.bytes);
-await $`bunx @tailwindcss/cli -i src/tailwind.css -o dist/ui.css --minify`;
-// Tailwind's internal property names are not covered by its utility prefix.
-// Isolate those too, including the fallback universal property initializer.
-const compiled = postcss.parse((await Bun.file("dist/ui.css").text()).replaceAll("--tw-", "--ocui-tw-"));
-compiled.walkAtRules("layer", rule => { rule.params = rule.params.split(",").map(name => `ocui-${name.trim()}`).join(","); });
-compiled.walkRules(rule => {
-  if (rule.selector === "*,:before,:after,::backdrop") {
-    rule.selector = ".oc-ui,.oc-ui *,.oc-ui::before,.oc-ui::after,.oc-ui *::before,.oc-ui *::after,.oc-ui::backdrop";
-  }
-});
-const ui = compiled.toString();
-await Bun.write("dist/ui.css", ui);
-await Bun.write("dist/styles.css", `${ui}\n${await Bun.file("src/styles.css").text()}`);
-await Bun.write("dist/editor.css", `${await Bun.file("dist/styles.css").text()}\n${await Bun.file("src/editor.css").text()}`);
+await buildUIStyles();
 await Bun.write("dist/THIRD-PARTY-LICENSES.txt", await uiLicenses());
 // A compiled local package has the same public exports without bringing build/test dependencies.
 const metadata = await Bun.file('package.json').json();

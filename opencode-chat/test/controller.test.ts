@@ -537,6 +537,48 @@ test("candidate session creation, model selection and inbox prompt acceptance hy
   expect(c.getSnapshot().messages.map(m => m.id)).toEqual(["msg_actual", "msg_second"]);
 });
 
+test("model selection waits for server acceptance and survives session switches and reconnect", async () => {
+  const f = fixture();
+  const accepted = deferred<Response>();
+  const selected = { providerID: "p", id: "m" };
+  let persisted = false;
+  f.override = (url, init) => {
+    if (url.pathname === "/proxy/api/session/ses1/model") {
+      expect(init.method).toBe("POST");
+      expect(JSON.parse(String(init.body))).toEqual({ model: selected });
+      return accepted.promise.then(response => { persisted = true; return response; });
+    }
+    if (persisted && url.pathname === "/proxy/api/session") return json({
+      data: [{ ...session("ses1"), model: selected }, session("ses2")], cursor: {},
+    });
+  };
+  const { c } = start(f);
+  await c.ready;
+  const selecting = c.selectModel(selected);
+  await tick();
+  expect(c.getSnapshot().model).toBeUndefined();
+  accepted.resolve(new Response(null, { status: 204 }));
+  await selecting;
+  expect(persisted).toBe(true);
+  expect(c.getSnapshot().model).toEqual(selected);
+  await c.selectSession("ses2");
+  await c.selectSession("ses1");
+  expect(c.getSnapshot().model).toEqual(selected);
+  await c.reconnect();
+  expect(c.getSnapshot().model).toEqual(selected);
+  expect(f.calls.some(call => /\/(credential|integration|provider)(\/|$)/.test(call.url.pathname))).toBe(false);
+});
+
+test("rejected model selection leaves the resolved server default and session model unchanged", async () => {
+  const { f, c } = start();
+  await c.ready;
+  f.override = url => url.pathname.endsWith("/ses1/model") ? json({ error: "rejected" }, 409) : undefined;
+  await expect(c.selectModel({ providerID: "p", id: "m" })).rejects.toThrow("409");
+  expect(c.getSnapshot().model).toBeUndefined();
+  expect(c.getSnapshot().defaultModel).toEqual({ providerID: "p", id: "m" });
+  expect(c.getSnapshot().sessions.find(item => item.id === "ses1")?.model).toBeUndefined();
+});
+
 test("controllers remain isolated and disposing one leaves the other subscribed", async () => {
   const one = start(),
     two = start();
