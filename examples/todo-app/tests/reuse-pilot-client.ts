@@ -8,7 +8,7 @@ import {assertPilotRoot} from './reuse-pilot-contract';
 
 // One-shot fresh-origin owner. No public/UI actions or execution endpoints.
 const policy = {coldMs:90000, requestMs:20000, resetMs:60000, drainMs:20000, cleanupMs:15000};
-const evidence: any = {label:'fresh-contract-preflight-controlled-reuse',policy, attempts:{cold:0,reset:0}, events:[], requests:[], samples:[], status:'preparing'};
+const evidence: any = {label:'fresh-codec-fidelity-controlled-reuse',policy, attempts:{cold:0,reset:0}, events:[], requests:[], samples:[], status:'preparing'};
 const owner = new WorkspaceController({onDiagnostic:event=>evidence.events.push(event),captureProcessOutput:true});
 let chat: ChatController | undefined;
 let firstFence: ReturnType<typeof createPilotFence> | undefined;

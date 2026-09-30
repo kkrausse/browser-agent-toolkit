@@ -30,7 +30,7 @@ export function validatePilotResponse(path: string, method: string, status: numb
   else if (route === '/api/session/active') check(object(body.data) && Object.values(body.data).every((active:any)=>active.type === 'running'), 'active data record');
   else if (/^\/api\/session\/[^/]+\/interrupt$/.test(route)) check(typeof body.interrupted === 'boolean', 'interrupt bare result');
   else if ((route === '/api/session' && method === 'POST') || /^\/api\/session\/[^/]+$/.test(route)) pilotSession(body);
-  else if ((route === '/api/session' && method === 'GET') || /\/message$/.test(route)) check(Array.isArray(body.data) && object(body.cursor) && ['next','previous'].every(key=>body.cursor[key] === undefined || typeof body.cursor[key] === 'string'), 'paged data/cursor');
+  else if ((route === '/api/session' && method === 'GET') || /\/message$/.test(route)) check(Array.isArray(body.data) && object(body.cursor) && ['next','previous'].every(key=>body.cursor[key] === undefined || body.cursor[key] === null || typeof body.cursor[key] === 'string'), 'paged data/cursor');
   else if (/\/(permission|form)$/.test(route)) check(Array.isArray(body.data), 'request data array');
   else if (route === '/api/plugin' || route === '/api/model') check(Array.isArray(body.data) && object(body.location) && typeof body.location.directory === 'string', 'location/data envelope');
   else throw Error('Pilot contract: unreviewed route '+method+' '+route);
