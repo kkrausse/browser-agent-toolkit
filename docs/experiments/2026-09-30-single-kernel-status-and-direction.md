@@ -44,6 +44,12 @@ benchmark, runtime rebuild, model call, deployment or pin change was performed f
 the evaluation. A mutable local build receipt is not proof of what a historical
 consumer actually served; frozen run receipts identify that.
 
+**Later artifact correction:** freshly verified delivered OpenCode server bytes
+differ between baseline and frozen single-kernel, despite both reporting 2.0.3.
+See the real-server staging follow-up below. Historical baseline source-review
+line numbers and restricted-retention conclusions require review against the
+actual delivered single-kernel artifact; matching version labels are insufficient.
+
 ## What the architecture changes—and what it does not
 
 Baseline runtime boot creates a kernel worker, filesystem worker, fetcher worker
@@ -433,6 +439,40 @@ Independent QA commit `d8f2a49` records **no passing live cohort**. See
   not wait for pending. Intended report: `2026-09-30-chat-readiness-repair-live-qa.md`.
   This candidate remains **live pending** until that report; original failed cohorts
   are unchanged. Full workspace integration/stress and cases 0–9 still need testing.
+
+### Follow-up: real-server qualification staged; delivered server identity differs
+
+Source `874e759`, report `d9ddab4` prepared an isolated executable real-server
+codec/mounted-controller foundation at
+`/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit-single-kernel/.diagnostics/sk-opencode-live-f50f5e6f-037b-48ac-9a14-5542b35c9e9a`.
+See [staging report](2026-09-30-single-kernel-opencode-live-qualification-staging.md).
+
+- Actual frozen SK server SHA-256:
+  `648140f53c48820106d4727fd29f1914f8f86a4e2c3f3430551eb9dd41a806b5`;
+  baseline reviewed server SHA-256:
+  `1df4bc41c0f6c7350da9d5953f3139586f760a7931fe411bdcabb3460098a929`.
+  Both reverified; no replacement of frozen server bytes. Executable codecs now
+  come from **actual delivered SK bytes**, not a mocked or baseline substitute.
+- 9,588 frozen files verified; isolated library builds/declarations and strict
+  consumer typecheck passed; 29 tests/138 assertions passed, including actual
+  pinned-codec fixture parity. No browser, host/guest server, session or retention
+  run occurred. `retentionAccepted:false`, `remoteZeroRef:false` remain.
+- The stage binds committed source `874e759` with chat ancestry `55ae98c`; it must
+  not be presented as qualification of later chat repair `691cd5a`. Rendered
+  actual-controller admission is not ChatView/composer or workspace-switch QA.
+- Live foundation QA is queued behind current repaired-chat QA; it launches A0
+  only, never evicts or replaces source, and must join both guest and host cleanup.
+  Headless coverage is not supplied by the installed Browser Control CLI; no
+  unsupported headless-launch option is invented.
+- New source-audit agent `ses_f0c34640affedR9vsO0BAkcN4H` will review exact
+  delivered SK lifetime/route/finalizer semantics before any retention gate review.
+  Intended report: `2026-09-30-delivered-opencode-retention-lifetime-audit.md`.
+  This is source review only, no browser or speculative server changes.
+
+The updated global guidance prohibits generic unit-test scaffolding: new tests
+must protect a concrete observed failure/regression or true up an external fixture
+contract. Existing reproduced chat/ownership failures and pinned-codec fixtures
+meet that criterion; subsequent work must preserve this focus.
 
 ## Next validation and stress-test sequence
 
