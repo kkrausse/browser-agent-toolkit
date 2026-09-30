@@ -26,10 +26,10 @@ fewer workers. Keep the baseline as the comparison/control and fallback.
 
 | Workstream | Latest state |
 | --- | --- |
-| Chat readiness/drafts | Repaired `691cd5aa`; primary visible/headless lab passed. Same-view A→B→A guards passed; model cohort stopped on QA JSON-order mistake, fresh semantic-oracle cohort assigned. Whole-app acceptance pending. |
+| Chat readiness/drafts | Repaired `691cd5aa`; primary visible/headless lab passed. Same-view A→B→A observed; model cohorts hit QA-oracle/collapsed-control capture errors. New simplified independent QA assigned; whole-app acceptance pending. |
 | Close target retention | Unchanged-runtime case-1 live control passed with termination/lock/census observations. Historical cause still unknown; full suite pending. |
-| Cached installed artifacts | Library script ownership/audits repaired. App integration found asynchronous endpoint-upload cancellation is not joined by shutdown; owner repair assigned. No on adapter or new switch-speed result. |
-| OpenCode process retention | Exact artifact audit found background refresh invalidates baseline no-background-work premise. A0 foundation live cohort failed local null-settings guard; repair assigned. No reuse or remote-release proof. |
+| Cached installed artifacts | Script/audit joins and endpoint shutdown receipts repaired offline. Cache-app integration resumed with new matching SDK; independent browser ownership fixture preparing. No on adapter/live switch-speed result yet. |
+| OpenCode process retention | Root schema/evidence repair staged; A0 live requalification queued. Stable-root prototype initially blocked on per-root config assumption; shared-config scope approved. No reuse/remote-release proof. |
 | Workspace switching/stress | Integrated frozen candidate, matched off/on comparison, full applicable E2E and stress/recovery qualification still pending. |
 
 The sections below preserve the original evaluation and chronological follow-ups;
@@ -695,6 +695,85 @@ explicit, and no old root may be destructively replaced. Intended report:
 reviews the bounded scope and assigns independent live QA after current hardening.
 This tests the user's long-term retention direction without choosing the final
 refactor or claiming full workspace/session/background safety.
+
+### Follow-up: pinned root repair frozen; independent live qualification queued
+
+Source commits `48d0507`, `20b505c`, `6f88410` and report `a6e17ac` repair the
+concrete foundation null-settings guard and rejected-body evidence gap. Actual
+pinned SDK/request-schema serialization qualifies only six known absent settings
+as null; unknown/non-null inheritance and ambiguous location/duplicate keys remain
+rejected. All attempted request bytes are preserved before admission, finite
+responses before assertions, and session reads bind to the verified fresh root.
+See [root repair](2026-09-30-single-kernel-opencode-root-qualification-repair.md).
+
+Guarded failed-guest EOF/reader/exit/zero-work/workspace-close cleanup is distinctly
+labelled; its `/failure-host-join` leaves initiator exit nonzero, never turns failure
+into acceptance. Unproved cleanup cannot join or start a replacement. Existing
+forced-failure cleanup and missing historical POST bytes are not retroactively repaired.
+
+Final runnable stage:
+`/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit-single-kernel/.diagnostics/sk-opencode-live-fe10b82e-932f-40ff-b249-171bc7c8cdbf`.
+Source is `6f88410877d1027bb5fb7bbd9851a82de431356b`, consumer hash
+`1b4e7e5a98b586033a08691cac9f74833d536cf3c8a9a64343d2bf175e1878d7`;
+actual server remains 648 and runtime e35. Includes `691cd5a`/`d1f60e4`, excludes
+later endpoint/lifecycle repair work. Isolated build/declarations/strict check and
+21 tests/85 assertions passed from committed snapshot; 9,588 frozen inputs/66
+stage entries verified. No browser/server run occurred. Independent A0 live QA
+is queued after the current controller/model cohort releases ownership; this is
+not the repair agent's authorization to launch. Global refresh/remote-finalizer
+gaps and `retentionAccepted:false`/`remoteZeroRef:false` remain unchanged.
+
+### Follow-up: model observer issue, shared-config toy scope, endpoint joins ready
+
+Model follow-up `8cb984b` passed its six semantic-oracle checks and six initial
+visible guards, then failed its capture helper before typing/actions: it queried
+Model via accessible roles while Session & model was legitimately collapsed.
+Zero completed checkpoints/headless runs; old partial `63dc19a` observations are
+not relabelled. See [observer failure](2026-09-30-controller-swap-model-live-qa-followup.md).
+Owned cleanup/slot release verified. New independent QA agent
+`ses_f0bfd7b17ffefehZqFUJ1N3FsY` now owns visible CLI QA, with observation safe for
+collapsed settings and action-time role checks only after trusted expansion.
+Intended report: `2026-09-30-controller-model-complete-live-qa.md`. Production and
+frozen fixture bytes remain unchanged; old failed runner/evidence remain preserved.
+
+Stable-root toy preflight commit `6184166` found actual 648's `config.project:false`
+and token-free virtual config mean immutable global inputs cannot yield root-varying
+GET config bytes. No runnable/live toy was produced. See
+[initial toy blocker](2026-09-30-stable-root-opencode-toy-preparation.md).
+**Parent decision:** retain the same server artifact/global config and permit equal
+config responses; prove distinct filesystem roots and independently observable actual
+server location routing instead. Filesystem markers alone do not prove server context,
+and shared project IDs/worktrees cannot be passed off as distinct routing. Agent
+`ses_f0c0afefdffeLvuXohD76AIZn5` resumes this explicitly revised bounded scope;
+intended report `2026-09-30-stable-root-shared-config-toy-preparation.md`. No new
+server/config identity, eviction, native chat or inference was authorized.
+
+Endpoint owner source commits runtime `a079153`/final `724909b`, toolkit `7713686`,
+report `ec77bbc`, implemented required `Endpoint.settled` independently of prompt
+admission `closed`, joining owned source read/cancel work and retaining failures.
+Runtime/controller shutdown awaits receipts, preserves attachment on rejection and
+blocks replacement. Reentrant source pull correction is included in the final build.
+Eight endpoint cases, 25 toolkit tests, existing close/single-kernel/verify-node and
+VM-import passed; broad contracts still fail on unrelated `markAsUncloneable` under
+Node 24.7.0. See [endpoint repair](2026-09-30-endpoint-upload-shutdown-ownership-repair.md).
+
+Final committed SDK/library/off-only app stage:
+`/private/var/folders/t_/x48jtnps7n5_0g_pt9xpvbg00000gn/T/opencode/endpoint-repair-frozen-H0Z3JO`.
+New SDK hash `d7d63f2784a797340375d7c4500b232512dea6f6639ecb0eeb28dc2a674ac919`;
+worker/native/protocol e35 assets explicitly reused, not relabelled a rebuilt runtime.
+Old SDK endpoints lacking the receipt are rejected by new consumers. No browser/
+server/storage mutation, live ownership proof or cache-on qualification occurred.
+
+Cache-app agent `ses_f0c2c2416ffeRDntC3dfCqgMKR` resumes default-off integration,
+using matching new SDK/source archives, safe helper-bootstrap diagnostics, full
+compatibility/journal/native/session ordering and bounded cache audits; intended
+report `2026-09-30-cached-switch-post-endpoint-integration.md`.
+New independent fixture-preparation agent `ses_f0bf852c9ffeRYIMFZF5DVK5xV` stages
+held/rejected streaming-source browser ownership tests (actual public built SDK/
+library; real guest path where possible), with manual/headless QA pending parent
+slot. Intended report `2026-09-30-endpoint-owner-browser-qa-preparation.md`.
+All preparation remains offline while model QA owns the browser. Narrow browser
+library fixtures must not be presented as whole-guest/switch qualification.
 
 ## Next validation and stress-test sequence
 
