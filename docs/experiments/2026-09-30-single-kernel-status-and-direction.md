@@ -912,6 +912,27 @@ flags, new process topology or production changes are requested. Intended report
 `2026-09-30-conservative-full-app-acceptance-preparation.md`. Independent integrated
 live QA follows browser-slot release; build preparation alone is not acceptance.
 
+### Follow-up: genuine guest route passes; saturation fixture does not reach stop
+
+Routing follow-up `8b58f12` proved guest PID 1 reached the token-owned backend via
+`host.vivari.internal`, returned exact HTTP 200 payload and recorded actual syscall
+30/OP_FETCH_ASYNC through real candidate workers. The held phase issued eleven
+requests but only six held headers reached the server; no body/queue checkpoint
+or stop action occurred before observer timeout. Same-origin HTTP/1 connection
+contention is consistent with the observations, not a proven kernel failure.
+Headless zero; source/78 consumer hashes verified; forced page cleanup explicitly
+excluded from acceptance. See
+[routing follow-up](2026-09-30-pid-egress-native-routing-followup.md).
+
+Parent narrows the next distinct cohort to one held-header plus one open-body
+request, avoiding control-origin saturation. Require genuine guest/backend events
+before trusted Stop, then actual execution/runtime/output/workspace close joins
+and unchanged source receipts. Pool saturation, shared-owner and adversarial cases
+stay offline rather than gating this finite browser check. No production/candidate
+change or deadline inflation. Agent `ses_f0bb96551ffeDRP5f7QzZaMgm0` retains the
+exclusive visible slot for the newly authorized cohort; intended report:
+`2026-09-30-pid-egress-minimal-stop-live-qa.md`. Full-app preparation proceeds offline.
+
 ## Next validation and stress-test sequence
 
 After the first candidates are ready, commission separate test agents rather than
