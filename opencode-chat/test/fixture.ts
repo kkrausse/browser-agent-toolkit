@@ -84,7 +84,7 @@ export function fixture() {
         });
       if (path === "session" && init.method === "POST")
          return json({ data: session("ses_new", "New") });
-      if (path === "model/default") return json({ data: null });
+      if (path === "model/default") return json({ location, data: model });
       if (path === "model")
         return json({
            location, data: [model],

@@ -15,6 +15,7 @@ type MessagePageOptions =
 export interface ChatAPI {
   list(): Effect.Effect<SessionInfo[], ChatAPIError>;
   models(): Effect.Effect<ModelInfo[], ChatAPIError>;
+  defaultModel(): Effect.Effect<ModelRef | undefined, ChatAPIError>;
   messages(id: string, options?: MessagePageOptions): Effect.Effect<Page<Message>, ChatAPIError>;
   create(title?: string): Effect.Effect<SessionInfo, ChatAPIError>;
   model(id: string, model: ModelRef): Effect.Effect<void, ChatAPIError>;
@@ -74,6 +75,10 @@ const makeAPI = Effect.fn("OpenCodeAPI.make")(function*(directory: string, baseU
   }, withAPIError);
   return {
     list, models, messages,
+    defaultModel: Effect.fn("OpenCodeAPI.defaultModel")(function*() {
+      const result = yield* client.model.default({ location });
+      return result.data ? { id: result.data.id, providerID: result.data.providerID } : undefined;
+    }, withAPIError),
     create: Effect.fn("OpenCodeAPI.create")(function*(title?: string) {
       return sessionWire(yield* client.session.create({ title, location }));
     }, withAPIError),

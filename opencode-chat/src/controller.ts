@@ -380,8 +380,10 @@ export function createChatController(options: ChatOptions): ChatController {
         orElse: () => new ChatError({ message: "OpenCode event handshake timed out" }),
       }));
       const [sessions, models] = yield* Effect.all([api.list(), api.models()], { concurrency: "unbounded" });
+      // models() awaits plugin activation before resolving the same location's default.
+      const defaultModel = yield* api.defaultModel();
       if (g !== generation || disposed) return;
-      publish({ sessions, models, connection: "connected" });
+      publish({ sessions, models, defaultModel, connection: "connected" });
       if (selection !== selectionAtStart) return;
       const id = state.sessionID ?? sessions[0]?.id;
       if (options.startNewSession && !state.sessionID) yield* createSession();

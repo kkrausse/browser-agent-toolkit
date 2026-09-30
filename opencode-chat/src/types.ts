@@ -61,6 +61,8 @@ export interface ChatSnapshot {
   sessions: readonly SessionInfo[];
   models: readonly ModelInfo[];
   model?: ModelRef;
+  /** Resolved location default; does not mutate the session's model selection. */
+  defaultModel?: ModelRef;
   messages: readonly SessionMessageInfo[];
   execution: "idle" | "running" | "retrying" | "unknown";
   interruptRequested: boolean;

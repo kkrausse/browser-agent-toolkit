@@ -563,6 +563,11 @@ export function ChatView({
 
 function ChatSettings({ controller, showSessions, showModels }: ChatViewProps) {
   const state = useChatSnapshot(controller);
+  const defaultModel = state.defaultModel;
+  const defaultName = defaultModel && state.models.find(model => model.id === defaultModel.id && model.providerID === defaultModel.providerID)?.name;
+  const defaultLabel = defaultModel
+    ? `${defaultName ?? defaultModel.id} · ${defaultModel.providerID} (server default)`
+    : state.connection === "connecting" ? "Resolving server default…" : "Server default unavailable";
   return (
         <nav className="oc-controls" aria-label="Chat settings">
           {showSessions && (
@@ -608,7 +613,7 @@ function ChatSettings({ controller, showSessions, showModels }: ChatViewProps) {
                 onValueChange={(value) =>
                   run(controller.selectModel(JSON.parse(value)))
                 }
-                placeholder="Server default"
+                placeholder={defaultLabel}
                 items={state.models
                   .filter((m) => m.enabled)
                   .map((m) => ({

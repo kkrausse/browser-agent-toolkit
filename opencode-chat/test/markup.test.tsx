@@ -15,6 +15,7 @@ test("unsupported candidate forms explain the limitation in the chat UI", async 
     const header = html.slice(html.indexOf('<header class="oc-header">'), html.indexOf("</header>") + 9);
     expect(header).toContain("OpenCode");
     expect(header).toContain("Session &amp; model");
+    expect(header).toContain("Model · p (server default)");
     expect(header).toContain('<div class="oc-toolbar-copy"><strong>OpenCode</strong><details');
     const embedded = renderToStaticMarkup(<ChatView controller={c} showTitle={false} />);
     const embeddedHeader = embedded.slice(embedded.indexOf('<header class="oc-header">'), embedded.indexOf("</header>") + 9);
@@ -28,6 +29,17 @@ test("unsupported candidate forms explain the limitation in the chat UI", async 
     expect(hosted).toContain("Workspace ready");
     expect(hosted).not.toContain('class="oc-connection"');
   } finally { c.dispose(); }
+});
+test("an explicit session selection takes precedence over the resolved server default", async () => {
+  const f = fixture();
+  const c = createChatController({ endpoint: f.endpoint, directory: "/workspace" });
+  try {
+    await c.ready;
+    await c.selectModel({ id: "m", providerID: "p" });
+    const html = renderToStaticMarkup(<ChatView controller={c} />);
+    expect(html).toContain("Model · p");
+    expect(html).not.toContain("(server default)");
+  } finally { await c.dispose(); }
 });
 test("idle messages render as compact run statuses instead of raw JSON", async () => {
   const f = fixture();

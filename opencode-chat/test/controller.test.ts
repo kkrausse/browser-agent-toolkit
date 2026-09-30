@@ -21,6 +21,9 @@ test("headless bootstrap uses injected string fetch, marker, requests, immutable
   await c.ready;
   expect(c.getSnapshot().connection).toBe("connected");
   expect(c.getSnapshot().sessionID).toBe("ses1");
+  expect(c.getSnapshot().defaultModel).toEqual({ id: "m", providerID: "p" });
+  expect(c.getSnapshot().model).toBeUndefined();
+  expect(f.calls.find(call => call.url.pathname.endsWith("/model/default"))?.url.searchParams.get("location[directory]")).toBe("/hidden");
   expect(c.getSnapshot()).toBe(c.getSnapshot());
   expect(Object.isFrozen(c.getSnapshot().sessions)).toBe(true);
   expect(f.calls.every((call) => call.url.host === "injected.invalid")).toBe(
