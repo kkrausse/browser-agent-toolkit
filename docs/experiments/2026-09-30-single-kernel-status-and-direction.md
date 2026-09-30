@@ -28,7 +28,7 @@ fewer workers. Keep the baseline as the comparison/control and fallback.
 | --- | --- |
 | Chat readiness/drafts | Repaired `691cd5aa`; primary lab passed. Complete visible controller/model fixture passed 9 checkpoints/91 guards; headless follow-up failed and used wrong Playwright version. Whole-app acceptance pending. |
 | Close target retention | Unchanged-runtime case-1 live control passed with termination/lock/census observations. Historical cause still unknown; full suite pending. |
-| Cached installed artifacts | Endpoint and PID-egress ownership repairs built offline; independent real-browser egress QA assigned. App admission reassessment resumed against matching candidate; no on adapter or measured gain yet. |
+| Cached installed artifacts | Endpoint/PID-egress repairs pass offline; lazy-loader planted-symlink counterexample still blocks cache admission. Optimization paused pending conservative integrated qualification; no on adapter or measured gain. |
 | OpenCode process retention | Root requalification stopped at browser-session setup, no guest launch. Shared-config stable-root toy frozen but unexecuted. No reuse/remote-release proof. |
 | Workspace switching/stress | Integrated frozen candidate, matched off/on comparison, full applicable E2E and stress/recovery qualification still pending. |
 
@@ -860,6 +860,34 @@ The candidate remains unchanged. Intended report:
 `2026-09-30-pid-egress-native-fetch-live-qa.md`; agent
 `ses_f0bb96551ffeDRP5f7QzZaMgm0` again owns the sole visible CLI slot. No cache-on,
 full-workspace or general remote-drain acceptance follows from this bounded cohort.
+
+### Follow-up: lazy-loader cache admission blocker; prioritize integrated acceptance
+
+Cache reassessment report `a8c8033` confirms repaired endpoint/PID-egress regressions
+pass and all 111 candidate hashes match, but first-use shell tool loading remains
+outside process cleanup. A controlled OP_SPAWN_ASYNC request holds tsgo vendor
+delivery; after successful SDK stop/output joins, the real installer and Rust VFS
+follow a planted `/bin` ancestor symlink and write two shims into the audited Vite
+cache. No child is spawned after exit. This is a planted-tamper offline case, not
+observed TODO/browser corruption. See
+[post-egress cache blocker](2026-09-30-cached-switch-post-egress-integration.md).
+
+Lazy loader admission/settlement/failure ownership or a separately proven narrow
+destination exclusion is still required before admitting cache reuse. A sampled
+zero PID/fetch count or one clean cache audit is not that receipt. No retention
+flag, frozen off/on pair, new performance evidence or production workaround shipped.
+Do not remove/repair unknown symlinks as an admission shortcut.
+
+**Parent priority decision:** pause further cache-retention implementation and
+repair assignments. Finish the already-running supported native-fetch browser
+cohort, then qualify one matching conservative full-app candidate through original
+acceptance and bounded switching/reload/failure recovery. Cache retention and
+long-lived OpenCode reuse remain separate optimization tracks, not automatic
+prerequisites for completing consolidated-kernel evaluation. This does not declare
+conservative switching safe against the lazy-loader case: the unjoined loader is
+an explicit limitation of any broader shutdown/source-replacement guarantee and
+must be considered in integrated results and the final decision. No all-writer
+quiescence or general stop-completion claim is justified by the repaired paths.
 
 ## Next validation and stress-test sequence
 
