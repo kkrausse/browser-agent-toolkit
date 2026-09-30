@@ -1063,6 +1063,25 @@ at the first failure, retain original deadlines and distinguish its scope from
 the editor failures. The integrated app phase remains bounded passing evidence,
 not full-suite/editor acceptance or retirement of historical close failures.
 
+### Follow-up: editor source investigation narrows claims; causal trace still needed
+
+Source/evidence report `f007ed7` verified exact frozen source and retained evidence.
+Save's final-idle rejection is correct conditional guard behavior, but the changed
+predicate and its origin remain unknown. The predicate omits
+`sessionOperationPending`; finite native export does not establish export-induced
+busy/SSE. Do not remove guards or automatically retry to manufacture acceptance.
+See [editor source investigation](2026-09-30-editor-save-close-source-investigation.md).
+
+Normal close source calls native Worker.terminate after workspace flush. Retained
+same-ID target is proven, **continued kernel execution and its retain mechanism are
+not**. Separate concrete boundaries are discarded chat.dispose Promise ownership
+and potentially throwable notifications before native termination; neither is
+established as this cohort's cause. No production changes/tests/live activity
+occurred in the investigation. A bounded future editor cohort needs chat-state/
+capture-stage and close/termination traces before choosing a causal fix; sampled
+locks/targets alone do not resolve ownership. Focused live QA keeps its exclusive
+slot, and Effect remains a scoped proposal rather than an implemented remedy.
+
 ## Next validation and stress-test sequence
 
 After the first candidates are ready, commission separate test agents rather than
