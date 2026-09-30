@@ -39,6 +39,23 @@ consumer worker.
   exports (`@kev-browser-agent-kit/workspace`), with consequent existing type
   errors outside this change. No runtime build was performed to repair that.
 
-Actual normal-pointer selection and persisted model state on the live browser
-server still require parent verification. Unit fixture persistence is not that
-live-server verification, and no inference request was performed here.
+Actual normal-pointer selection and persisted model state initially required
+parent verification. Unit fixture persistence was not live-server verification,
+and no inference request was performed here.
+
+## Parent live follow-up — verified after `98c91a6`
+
+On the unchanged origin `http://127.0.0.1:54770/` / host PID **88406**, the parent
+verified ordinary pointer selection of **Big Pickle** in SmokeA and
+**MiMo-V2.6-Flash Free** in SmokeB. Selected model state was retained across
+native session reselection, workspace switching, and SmokeA Exit → page reload
+→ Open editor. Compiled CSS is integrated and the bounded pointer/model-state
+acceptance is **passed**, not merely style-build-ready. No forced click, model
+inference or private-key configuration is claimed; the default paid model remains
+unconfigured.
+
+Evidence: parent CLI session `quiet-panda-336`,
+`~/.browser-control/sessions/quiet-panda-336/journal.jsonl`.
+Full chronology and the separate hydration console caveat:
+`/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit-single-kernel/docs/experiments/2026-09-30-todo-workspace-browser-acceptance.md`.
+This docs update reports the parent's verification, not an independent rerun.

@@ -75,7 +75,7 @@ Current live host: `http://127.0.0.1:54770/`, PID **88406**.
 Live output:
 `/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit-single-kernel/.diagnostics/single-kernel-interactive-1790778679425`
 
-Final UI staging:
+Initial UI staging (superseded by the verified activation below):
 `/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit-single-kernel/.diagnostics/todo-workspace-ui-staging-20260930-final-v2`
 
 1. Before reloading the old UI, preserve any unsaved raw textarea edits using its
@@ -100,7 +100,47 @@ bun examples/todo-app/tests/typecheck-live-workspaces.ts .diagnostics/single-ker
 bun run --cwd examples/todo-app test src/workspace-switch.test.ts src/workspace-sessions.test.ts src/server/trpcRouter.test.ts
 ```
 
-## Parent's required browser acceptance
+## Parent browser acceptance — bounded pass after `98c91a6`
+
+The parent actually verified the same live origin `http://127.0.0.1:54770/`
+after activating only UI assets from
+`/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit-single-kernel/.diagnostics/single-kernel-ui-98c91a6`.
+Previous UI copies are backed up in
+`/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit-single-kernel/.diagnostics/todo-startup-order-backup-1790783990967`.
+Host PID **88406**, origin, runtime and existing user work were retained.
+
+- Current boot, Current → SmokeA, A → B → A → B → Current passed. SmokeA
+  retained the fixture-edited **Workspace Smoke A** heading and **Big Pickle**;
+  SmokeB retained baseline **Todos** and **MiMo-V2.6-Flash Free**.
+- Fresh SmokeA/B each started with no native sessions; New chat created one
+  native session in each. A's original Current chat was absent, and B had no A
+  native sessions. Global option counts of 3/4 included workspace choices and
+  must not be reported as native-session counts. Return to Current restored its
+  named chat and actual session listbox of **six sessions**, without alerts.
+- Exit → full page reload → Open editor on the same origin restored SmokeA's
+  heading and Big Pickle. Ordinary pointer model selection worked; model state
+  survived session reselection and full workspace restart/reload. No inference.
+- Current is restored and active; the original three-character unsent draft was
+  retained in parent state and restored without exposing its content. SmokeA/B
+  remain saved for exploration. The source editor panel count was **zero**.
+- After returning, the parent created, completed and deleted only its
+  **Workspace round-trip verification** TODO, without errors. Existing user work
+  was preserved; host-memory TODOs remain shared rather than workspace-local.
+- A hydration screenshot logged an attributes mismatch involving
+  `caret-color: transparent`. Automation instrumentation is a possible explanation,
+  not a proven cause; subsequent real CRUD passed. Do not call the entire browser
+  session console-error-free. A user-triggered base-origin reload/switch to Current
+  interrupted testing; the parent paused and observed success but does not count
+  that interruption as a controlled automated pass.
+
+Chronology, earlier failures/recovery and scope limits:
+`/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit-single-kernel/docs/experiments/2026-09-30-todo-workspace-browser-acceptance.md`.
+Parent evidence: `~/.browser-control/sessions/quiet-panda-336/journal.jsonl`;
+screenshot:
+`/private/var/folders/t_/x48jtnps7n5_0g_pt9xpvbg00000gn/T/opencode/todo-workspaces-verified.png`.
+These are parent-reported observations, not an independent docs-worker rerun.
+
+### Acceptance checklist retained for context
 
 - Confirm no raw source panel, full-height preview left/chat right, usable Workspace,
   New workspace, Save workspace and library model/session selectors.
@@ -126,7 +166,8 @@ bun run --cwd examples/todo-app test src/workspace-switch.test.ts src/workspace-
   portal positioning/z-index utilities. No force-click or provider key change.
 - Verify existing TODO items survived activation and remain shared after switches.
 
-Only the parent may append actual browser results and claim live completion.
+Only parent-operated observations above establish live acceptance; the retained
+checklist is not an additional completed test suite.
 
 ## Startup null-field correction (after first browser activation)
 
@@ -144,6 +185,8 @@ sessions, source, browser storage, served assets, or host process were modified.
 - Focused live-consumer typecheck and verified-asset UI staging build pass.
 - New staging for parent-only activation:
   `/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit-single-kernel/.diagnostics/todo-workspace-ui-staging-20260930-null-cursors`
-- Browser acceptance remains **pending**. These tests use null-valued wire fixtures;
+- Browser acceptance was **pending at this correction**. These tests use null-valued wire fixtures;
   this worker did not inspect the parent's authenticated live response or reload
-  the browser and does not claim that startup or workspace switching is verified.
+  the browser and did not claim that startup or workspace switching was verified.
+  Parent follow-up after `98c91a6` is recorded above; the null-cursor correction
+  alone (`9ad44ec`) did not establish working workspace switches.

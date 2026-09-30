@@ -43,6 +43,16 @@ chronology and the asynchronous checkbox assertion caveat are in
 
 ## Use
 
+**September 30 UI update:** the same origin/PID now serves the workspace UI
+activated from `98c91a6`, with no raw source editor panel. The parent verified
+bounded source/session/model switching, same-origin reload and TODO CRUD; Current
+is restored and active, with SmokeA/B saved for exploration. Use Workspace,
+New workspace, Save workspace and the native session/model selectors. The source
+panel instructions below describe the earlier wrapper, not the active UI.
+Paid model defaults remain unconfigured and no inference was attempted.
+Chronology, earlier failures and the hydration console caveat are recorded in
+`/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit-single-kernel/docs/experiments/2026-09-30-todo-workspace-browser-acceptance.md`.
+
 1. Open the URL above in Chromium and choose **Open editor** once.
 2. Wait for the TODO iframe to hydrate and OpenCode chat to connect. Debug ·
    Activity shows boot status and guest logs. No automated switch/test stages run.
