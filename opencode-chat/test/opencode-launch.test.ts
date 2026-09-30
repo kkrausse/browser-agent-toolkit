@@ -44,6 +44,19 @@ test('candidate config merges a caller-provided provider catalog without losing 
   expect(config.providers.opencode.models[openCodeCandidateLaunch.model.id]).toBeDefined();
 });
 
+test('an explicit approved default uses only the supplied catalog, without the contributor fallback', () => {
+  const models = { 'muse-spark-1.3': {
+    name: 'Muse Spark 1.3', package: '@opencode/ai/providers/openai' as const,
+    capabilities: { tools: true, input: ['text'], output: ['text'] },
+    limit: { context: 1048576, output: 131072 }, websocket: false as const,
+  } };
+  const config = createOpenCodeCandidateConfig('http://host/editor/model/opencode/', ['shell'], models, 'muse-spark-1.3');
+  expect(config.model).toBe('opencode/muse-spark-1.3');
+  expect(config.providers.opencode.models).toEqual(models);
+  expect(() => createOpenCodeCandidateConfig('http://host/', [], models, 'missing')).toThrow('absent');
+  expect(() => createOpenCodeCandidateConfig('http://host/', [], models, 'toString')).toThrow('absent');
+});
+
 test('descriptor exposes global config, fixed database, activation barrier and EOF lifecycle', () => {
   expect(openCodeCandidateLaunch.configPath).toBe('/workspace' + openCodeCandidateLaunch.workspaceConfigPath);
   expect(openCodeCandidateLaunch.projectConfig).toBe(false);

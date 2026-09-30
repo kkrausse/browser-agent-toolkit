@@ -11,10 +11,10 @@ const built = await Bun.build({
     build.onResolve({ filter: /^@kev-browser-agent-kit\// }, args => ({ path: args.path, namespace: 'startup-library' }))
     build.onLoad({ filter: /.*/, namespace: 'startup-library' }, () => ({ contents: `
       export const createDiagnosticScope = () => ({});
-      export const loadPrepared = async () => ({runtimeVersion:'pin',project:{},preview:{entry:'vite'}});
+      export const loadPrepared = async () => ({runtimeVersion:'pin',project:{},preview:{entry:'vite'},...globalThis.modelConfig});
       export const preparedApps = () => ({});
       export const installSource = async () => {};
-      export const installOpenCodeConfig = async () => {};
+      export const installOpenCodeConfig = async (_workspace, options) => {globalThis.installedConfig = options};
       export const startOpenCode = async controller => {globalThis.calls.push('chat.start'); return controller.launch('chat');};
     `, loader: 'js' }))
   } }],
@@ -22,11 +22,11 @@ const built = await Bun.build({
 if (!built.success) throw new AggregateError(built.logs)
 const code = await built.outputs[0]!.text()
 
-function harness(failure?: 'listen' | 'http' | 'client' | 'chat') {
+function harness(failure?: 'listen' | 'http' | 'client' | 'chat', modelConfig = {}) {
   const calls: string[] = []
   let release!: () => void
   const gate = new Promise<void>(resolve => { release = resolve })
-  const context: any = { calls, AbortSignal, TextEncoder, location: {port:'54770',protocol:'http:'}, fetch: async () => ({ok:true,json:async()=>({version:'pin'})}) }
+  const context: any = { calls, modelConfig, AbortSignal, TextEncoder, location: {port:'54770',protocol:'http:'}, fetch: async () => ({ok:true,json:async()=>({version:'pin'})}) }
   runInNewContext(code, context)
   const controller: any = {
     signal: new AbortController().signal, diagnostic() {}, log() {},
@@ -44,8 +44,18 @@ function harness(failure?: 'listen' | 'http' | 'client' | 'chat') {
     async waitForClient(name: string) { calls.push(name + '.client'); if (name === 'vite' && failure === 'client') throw Error('client failed') },
     status() {calls.push('ready')},
   }
-  return {calls,release,start:()=>context.start(controller,{beforeChatConnect:async()=>{calls.push('chat.restore')},chatConnectReady:()=>{calls.push('chat.connect')}})}
+  return {calls,release,config:()=>context.installedConfig,start:()=>context.start(controller,{beforeChatConnect:async()=>{calls.push('chat.restore')},chatConnectReady:()=>{calls.push('chat.connect')}})}
 }
+
+test('startup passes the prepared approved catalog and paid default through the library, not a guest rewrite', async () => {
+  const models = { 'muse-spark-1.3': { name: 'Muse Spark 1.3' } }
+  const h = harness(undefined, { modelCatalog: models, editorDefaultModel: 'muse-spark-1.3' })
+  const task = h.start(); h.release(); await task
+  expect(h.config().models).toBe(models)
+  expect(h.config().defaultModel).toBe('muse-spark-1.3')
+  expect(h.config().modelBaseURL).toBe('http://host.vivari.internal:54770/editor/model/opencode/')
+  expect(h.config().additionalToolActions).toEqual(['shell'])
+})
 
 test('cold preview qualification precedes chat boot without altering readiness budgets', async () => {
   const h = harness()

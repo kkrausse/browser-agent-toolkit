@@ -2,7 +2,7 @@ import type { Distribution, Endpoint } from '@kev-browser-agent-kit/workspace'
 import { installSource } from '@kev-browser-agent-kit/workspace/delivery'
 import { createDiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics'
 import type { Connection, Service, WorkspaceController } from '@kev-browser-agent-kit/workspace/react'
-import { installOpenCodeConfig, loadPrepared, preparedApps, startOpenCode } from '@kev-browser-agent-kit/opencode-chat/browser'
+import { installOpenCodeConfig, loadPrepared, preparedApps, startOpenCode, type OpenCodeCandidateModel } from '@kev-browser-agent-kit/opencode-chat/browser'
 
 const base = '/editor/'
 
@@ -26,7 +26,10 @@ export async function startBrowserEditor(controller: WorkspaceController, option
     (event) => controller.diagnostic(event.event, event.data),
     controller.diagnosticRunId,
   )
-  let manifest!: Awaited<ReturnType<typeof loadPrepared>>
+  let manifest!: Awaited<ReturnType<typeof loadPrepared>> & {
+    modelCatalog?: Record<string, OpenCodeCandidateModel>
+    editorDefaultModel?: string
+  }
   let distribution!: Distribution
 
   await controller.steps([
@@ -54,7 +57,10 @@ export async function startBrowserEditor(controller: WorkspaceController, option
         try { await workspace.fs.stat('/.todo-workspace.json'); initialized = true } catch { /* legacy first open */ }
         if (!initialized) await installSource(workspace, manifest.project, { existing: 'preserve' })
         const modelBaseURL = `http://host.vivari.internal:${location.port || (location.protocol === 'https:' ? '443' : '80')}${base}model/opencode/`
-        await installOpenCodeConfig(workspace, { modelBaseURL, additionalToolActions: ['shell'] })
+        await installOpenCodeConfig(workspace, {
+          modelBaseURL, additionalToolActions: ['shell'],
+          models: manifest.modelCatalog, defaultModel: manifest.editorDefaultModel,
+        })
         await workspace.flush()
       },
     ],

@@ -74,12 +74,12 @@ function connection(endpoint: Endpoint, authorization: string): Connection {
 }
 
 /** Write only OpenCode-owned directories, plugin, and global model configuration. */
-export async function installOpenCodeConfig(workspace: Workspace, options: { modelBaseURL: string; additionalToolActions?: string[]; models?: Record<string, OpenCodeCandidateModel> }) {
+export async function installOpenCodeConfig(workspace: Workspace, options: { modelBaseURL: string; additionalToolActions?: string[]; models?: Record<string, OpenCodeCandidateModel>; defaultModel?: string }) {
   for (const directory of openCodeCandidateLaunch.workspaceDirectories) await workspace.fs.mkdir(directory);
   await workspace.fs.mkdir('/.server/config/opencode/plugins');
   await workspace.fs.writeFile('/.server/config/opencode/plugins/editor-model-headers.js', modelHeaderPluginSource(options.modelBaseURL));
   await workspace.fs.writeFile('/.server/config/opencode/plugins/editor-javascript.js', await javascriptPlugin);
-  await workspace.fs.writeFile(openCodeCandidateLaunch.workspaceConfigPath, JSON.stringify(createOpenCodeCandidateConfig(options.modelBaseURL, options.additionalToolActions, options.models)));
+  await workspace.fs.writeFile(openCodeCandidateLaunch.workspaceConfigPath, JSON.stringify(createOpenCodeCandidateConfig(options.modelBaseURL, options.additionalToolActions, options.models, options.defaultModel)));
 }
 
 /** Launch, qualify, and connect the pinned OpenCode server. It starts no preview server. */

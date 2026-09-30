@@ -28,7 +28,7 @@ export const openCodeCandidateLaunch = {
 
 export type OpenCodeCandidateModel = {
   name: string;
-  package: '@opencode/ai/providers/openai';
+  package: '@opencode/ai/providers/openai' | '@opencode/ai/providers/anthropic' | '@opencode/ai/providers/openai-compatible';
   capabilities: { tools: boolean; input: string[]; output: string[] };
   limit: { context: number; input?: number; output: number };
   websocket: false;
@@ -40,16 +40,17 @@ const fallbackModel: OpenCodeCandidateModel = {
   limit: { context: 1048576, output: 131072 }, websocket: false,
 };
 
-/** Match the qualified global configuration; caller supplies its transparent model proxy. */
-export function createOpenCodeCandidateConfig(modelBaseURL: string, additionalToolActions: string[] = [], models: Record<string, OpenCodeCandidateModel> = {}) {
+/** Match the qualified global configuration; an explicit default selects only the supplied catalog. */
+export function createOpenCodeCandidateConfig(modelBaseURL: string, additionalToolActions: string[] = [], models: Record<string, OpenCodeCandidateModel> = {}, defaultModel?: string) {
   const url = new URL(modelBaseURL);
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw Error('Expected credential-free HTTP model proxy URL');
+  if (defaultModel !== undefined && !Object.hasOwn(models, defaultModel)) throw Error('Default model is absent from the supplied catalog');
   return {
     $schema: 'https://opencode.ai/config.json',
-    model: 'opencode/' + openCodeCandidateLaunch.model.id, snapshots: false,
+    model: 'opencode/' + (defaultModel ?? openCodeCandidateLaunch.model.id), snapshots: false,
     permissions: [...new Set(['read', 'edit', 'grep', 'glob', 'runJavascript', ...additionalToolActions])].map(action => ({ action, resource: '*', effect: 'allow' as const })),
     providers: { opencode: { settings: { baseURL: modelBaseURL }, models: {
-      [openCodeCandidateLaunch.model.id]: fallbackModel,
+      ...(defaultModel === undefined ? { [openCodeCandidateLaunch.model.id]: fallbackModel } : {}),
       ...models,
     } } },
   };
