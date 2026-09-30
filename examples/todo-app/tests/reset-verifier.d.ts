@@ -19,3 +19,12 @@ export interface SwitchObservation {
 export function startWorkspaceSwitch(page: Pick<VerificationPage, 'evaluate'>, token: string): Promise<{token: string; status: string}>
 export function waitForVerificationRead<T>(read: () => Promise<T>, accept: (observation: T) => boolean, options?: VerificationOptions): Promise<T>
 export function waitForWorkspaceSwitch(page: VerificationPage, token: string, expectedGeneration: number, options?: VerificationOptions): Promise<SwitchObservation>
+export interface PdfObservation {
+  generation: number
+  token: string
+  status: string
+  pdfBytes: number
+  hydrated: boolean
+}
+export function armPdfWorkload(page: Pick<VerificationPage, 'evaluate'>, generation: number, token: string): Promise<{generation: number; token: string; status: string}>
+export function waitForPdfWorkload(page: VerificationPage, generation: number, token: string, options?: VerificationOptions): Promise<PdfObservation>

@@ -16,16 +16,14 @@ async function verify(expectedGeneration) {
     const d = document.querySelector('iframe')?.contentDocument
     return !!d?.querySelector(`main[data-hydrated="${generation}"] h1[data-generation="${generation}"]`) && !!d.querySelector('input#title:not(:disabled)')
   }, source.generation), Boolean, {timeoutMs: 30000, onContextError: error => receipt.contextReadErrors.push(error)})
-  receipt.stage = 'pdf.click'
+   receipt.stage = 'pdf.arm'
+   const pdfToken = `pdf-${source.generation}-${crypto.randomUUID()}`
+   await ResetVerifier.armPdfWorkload(page, source.generation, pdfToken)
+   receipt.stage = 'pdf.click'
   await page.frameLocator('iframe').getByRole('button', {name: 'Generate fixture PDF'}).click()
   receipt.stage = 'pdf.read'
-  await page.waitForFunction(generation => {
-    const d = document.querySelector('iframe')?.contentDocument
-    return !!d?.querySelector(`main[data-hydrated="${generation}"]`) && Number(d.querySelector('#pdf-workload')?.dataset.bytes) > 0
-  }, source.generation, {timeout: 30000})
-  const pdfBytes = Number(await page.frameLocator('iframe').locator('#pdf-workload').getAttribute('data-bytes'))
-  if (!(pdfBytes > 0)) throw Error(`PDF bytes ${pdfBytes}`)
-  return {...source, pdfBytes}
+   const pdf = await ResetVerifier.waitForPdfWorkload(page, source.generation, pdfToken, {timeoutMs: 30000, onContextError: error => receipt.contextReadErrors.push(error)})
+   return {...source, pdfBytes: pdf.pdfBytes, pdfRun: pdf}
 }
 try {
   await page.waitForFunction(() => window.editorPerformanceExperiment?.ready || window.editorPerformanceExperiment?.error, null, {timeout: 120000})

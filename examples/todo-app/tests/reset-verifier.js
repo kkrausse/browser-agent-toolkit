@@ -16,6 +16,44 @@ export async function startWorkspaceSwitch(page, token) {
   }, token)
 }
 
+// The unchanged matched fixture writes bytes only after await runPdfWorkload().
+// Arm one run on the exact hydrated button, removing any previous completion.
+// A timeout leaves the run pending: neither the click nor the workload is retried.
+export async function armPdfWorkload(page, generation, token) {
+  return page.evaluate(({generation, token}) => {
+    const api = window.editorPerformanceExperiment
+    if (!api || api.error) throw new Error(api?.error || 'Experiment API absent')
+    const d = document.querySelector('iframe')?.contentDocument
+    const button = d?.querySelector('#pdf-workload')
+    if (!d?.querySelector(`main[data-hydrated="${generation}"] h1[data-generation="${generation}"]`) || !button) throw new Error('PDF generation not hydrated')
+    const runs = window.resetPdfVerificationRuns ??= {}
+    if (runs[token] || Object.values(runs).some(run => run.status === 'pending')) throw new Error('PDF run already used or pending')
+    delete button.dataset.bytes
+    button.dataset.verificationRun = token
+    runs[token] = {generation, button, document: d, status: 'pending'}
+    return {generation, token, status: 'armed'}
+  }, {generation, token})
+}
+
+export async function waitForPdfWorkload(page, generation, token, options) {
+  const url = page.url()
+  return waitForVerificationRead(async () => {
+    if (page.url() !== url) throw new Error('Host document URL changed')
+    return page.evaluate(({generation, token}) => {
+      const api = window.editorPerformanceExperiment
+      if (!api || api.error) throw new Error(api?.error || 'Experiment API absent')
+      const run = window.resetPdfVerificationRuns?.[token]
+      if (!run || run.generation !== generation) throw new Error('PDF run observation lost')
+      const d = document.querySelector('iframe')?.contentDocument
+      if (d !== run.document || d?.querySelector('#pdf-workload') !== run.button || run.button.dataset.verificationRun !== token) throw new Error('PDF run document or token changed')
+      const hydrated = !!d.querySelector(`main[data-hydrated="${generation}"] h1[data-generation="${generation}"]`) && !!d.querySelector('input#title:not(:disabled)')
+      const pdfBytes = Number(run.button.dataset.bytes)
+      if (hydrated && Number.isFinite(pdfBytes) && pdfBytes > 0) run.status = 'completed'
+      return {generation, token, status: run.status, pdfBytes, hydrated}
+    }, {generation, token})
+  }, result => result.status === 'completed' && result.hydrated && result.pdfBytes > 0, options)
+}
+
 export async function waitForVerificationRead(read, accept, {
   timeoutMs = 120000, intervalMs = 100, maxContextErrors = 3,
   now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
