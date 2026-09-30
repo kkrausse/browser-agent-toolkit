@@ -1,6 +1,7 @@
 import {mkdir, rmdir, writeFile} from 'node:fs/promises'
 import {join, resolve} from 'node:path'
 import {prospectivePolicy} from './matched-readiness'
+import {createHash} from 'node:crypto'
 
 export const pairPlan = [
   {condition:'baseline', action:'cold', generation:1, measured:false},
@@ -36,6 +37,38 @@ export function requestCode(action: string, token: string) {
   },${JSON.stringify({action,token})})`
 }
 
+// Keep export implementation inside the identity-pinned driver. Every read is
+// pure and bounded on the wire; never send nested arrays to the CLI renderer.
+const evidenceChunkSize=8000
+export function evidenceReadCode(id:string,offset:number|null) {
+  return `return await page.evaluate(async ({id,offset,size})=>{
+    const a=window.editorPerformanceExperiment;
+    if(!a||![a.samples,a.events,a.resetEvidence].every(Array.isArray))throw Error('Evidence API unavailable');
+    const generation=a.resetEvidence.findLast(r=>r.phase==='readiness.budgets')?.generation;
+    if(!Number.isInteger(generation))throw Error('Evidence generation unavailable');
+    const json=JSON.stringify({url:location.href,generation,samples:a.samples,events:a.events,resetEvidence:a.resetEvidence});
+    const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(json))),b=>b.toString(16).padStart(2,'0')).join('');
+    return {id,generation,url:location.href,hash,length:json.length,samples:a.samples.length,events:a.events.length,resetEvidence:a.resetEvidence.length,offset,text:offset===null?'':json.slice(offset,offset+size)};
+  },${JSON.stringify({id,offset,size:evidenceChunkSize})})`
+}
+
+export async function exportEvidence(command:(code:string)=>Promise<any>,id:string,expectedGeneration:number) {
+  const head=await command(evidenceReadCode(id,null))
+  const valid=(v:any)=>v&&v.id===id&&v.generation===expectedGeneration&&typeof v.url==='string'&&/^[a-f0-9]{64}$/.test(v.hash)&&['length','samples','events','resetEvidence'].every(k=>Number.isSafeInteger(v[k])&&v[k]>=0)
+  if(!valid(head)||head.offset!==null||head.text!==''||head.length===0||head.length>32*1024*1024)throw Error('Invalid evidence manifest')
+  let json=''
+  for(let offset=0;offset<head.length;offset+=evidenceChunkSize) {
+    const part=await command(evidenceReadCode(id,offset))
+    if(!valid(part)||['url','hash','length','samples','events','resetEvidence'].some(k=>part[k]!==head[k])||part.offset!==offset||typeof part.text!=='string'||part.text.length!==Math.min(evidenceChunkSize,head.length-offset))throw Error('Incomplete or changed evidence chunk')
+    json+=part.text
+  }
+  const tail=await command(evidenceReadCode(id,null))
+  if(JSON.stringify(tail)!==JSON.stringify(head)||createHash('sha256').update(json).digest('hex')!==head.hash)throw Error('Evidence identity or digest changed')
+  const value=JSON.parse(json)
+  if(value.url!==head.url||value.generation!==expectedGeneration||['samples','events','resetEvidence'].some(k=>!Array.isArray(value[k])||value[k].length!==head[k]))throw Error('Evidence count or generation mismatch')
+  return {manifest:head,value}
+}
+
 export function createDriverCommands(evidence:string, sessions:Record<string,string>, expired:()=>boolean,
   spawn:(args:string[])=>{stdout:ReadableStream;stderr:ReadableStream;exited:Promise<number>}=(args)=>Bun.spawn(args,{stdout:'pipe',stderr:'pipe'})) {
   let sequence=0, pending=false
@@ -58,6 +91,7 @@ export function createDriverCommands(evidence:string, sessions:Record<string,str
         await writeFile(join(evidence,id+'.json'),JSON.stringify({stdout,stderr,exit}),{flag:'wx'})
         const result=JSON.parse(stdout)
         if(exit || !result.ok)throw Error(result.error || stderr || 'Browser command failed')
+        if(result.valueUnavailable===true||!Object.hasOwn(result,'value'))throw Error('Browser command value unavailable; evidence incomplete')
         return result.value
       } finally {if(!ambiguous)pending=false}
     },
@@ -158,7 +192,8 @@ if (import.meta.main) {
           actionPending=false
           await verify(condition,generation)
         }
-        await command(condition,`return await page.evaluate(()=>{const a=window.editorPerformanceExperiment;return {samples:a.samples,events:a.events,resetEvidence:a.resetEvidence}})`)
+        const exported=await exportEvidence(code=>command(condition,code),crypto.randomUUID(),generation)
+        await writeFile(join(evidence,`step-${pairPlan.indexOf(step)}-evidence.json`),JSON.stringify(exported),{flag:'wx'})
         await writeFile(join(evidence,`step-${pairPlan.indexOf(step)}.json`),JSON.stringify({step,status:'PASS'}),{flag:'wx'})
       })(),prospectivePolicy.watchdogMs)})
       await stop('baseline'); await stop('dependencies'); quiescent=true
