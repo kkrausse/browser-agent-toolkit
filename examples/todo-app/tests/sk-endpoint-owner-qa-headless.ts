@@ -22,6 +22,7 @@ try{
  await page.waitForFunction(()=>(window as unknown as {endpointOwnerQA:{replacementAttempts:string[]}}).endpointOwnerQA.replacementAttempts.length===1);
  const held=await page.evaluate(()=>(window as unknown as {endpointOwnerQA:unknown}).endpointOwnerQA);
  await page.getByRole('button',{name:'Release / reject cancellation',exact:true}).click();await phase(new URL(url).searchParams.get('case')==='reject'?'ownership-negative':'complete');
+ await page.waitForFunction(()=>(window as unknown as {endpointOwnerQA:{evidencePersisted:boolean}}).endpointOwnerQA.evidencePersisted);
  const final=await page.evaluate(()=>(window as unknown as {endpointOwnerQA:unknown}).endpointOwnerQA);
  console.log(JSON.stringify({held,final,errors,consoleErrors,executablePath,cleanupLabel:new URL(url).searchParams.get('case')==='reject'?'forced-profile-disposal-after-expected-ownership-negative-NOT-normal-close':'normal-fixture-close-before-profile-disposal'},null,2));
  if(errors.length)throw Error('Raw browser exceptions observed');

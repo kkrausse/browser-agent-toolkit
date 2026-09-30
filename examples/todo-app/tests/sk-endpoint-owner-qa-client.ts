@@ -27,7 +27,7 @@ const cancelReceipt=new Promise<void>(yes=>{cancelStarted=yes;});
 const readReceipt=new Promise<void>(yes=>{readStarted=yes;});
 let stopping:Promise<void>|undefined;
 let upload:ReadableStream<Uint8Array>;
-const state={scope:'real-workspace-public-built-library-fixture',mode,ownerMode,phase:'idle',pulls:0,cancels:0,cancel:'pending',closed:'pending',settled:'pending',fetch:'pending',stop:'not-requested',replacementAttempts:[] as string[],events:[] as unknown[],sourceHash:'',sourcePaths:[] as string[],sourceUnchanged:false,guestUploadRead:false,uploadReaderLocked:false,guestExit:undefined as unknown,readersJoined:false,workspaceClosed:false,error:'',browserErrors:[] as string[]};
+const state={scope:'real-workspace-public-built-library-fixture',mode,ownerMode,phase:'idle',pulls:0,cancels:0,cancel:'pending',closed:'pending',settled:'pending',fetch:'pending',stop:'not-requested',replacementAttempts:[] as string[],events:[] as unknown[],sourceHash:'',sourcePaths:[] as string[],sourceUnchanged:false,guestUploadRead:false,uploadReaderLocked:false,guestExit:undefined as unknown,readersJoined:false,workspaceClosed:false,evidencePersisted:false,error:'',browserErrors:[] as string[]};
 const render=()=>{document.querySelector('pre')!.textContent=JSON.stringify(state,null,2);};
 const assert=(ok:unknown,message:string)=>{if(!ok)throw Error(message);};
 const sha=async(bytes:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(bytes))),b=>b.toString(16).padStart(2,'0')).join('');
@@ -122,6 +122,7 @@ async function finish(){
  }
  render();
  const saved=await fetch('/evidence',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(state)});assert(saved.ok,'Evidence save failed');
+ state.evidencePersisted=true;render();
 }
 for(const [id,action] of [['start',start],['close',closeAdmission],['stop',stop],['replace',replacement],['release',finish]] as const){
  document.getElementById(id)!.addEventListener('click',()=>{(document.getElementById(id) as HTMLButtonElement).disabled=true;void action().catch(async error=>{state.error=String(error);state.phase='failed-owner-retained';render();await fetch('/evidence',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(state)});throw error;});});
