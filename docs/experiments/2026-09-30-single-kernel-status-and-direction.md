@@ -372,6 +372,37 @@ to evict or enable retention. Browser QA follows the current chat lab and queued
 close diagnostic under one owner; an actual restricted A→B retention attempt needs
 separate gate review, and general reuse still requires remote ownership guarantees.
 
+### Follow-up: independent chat live QA failed; repair and close diagnostic assigned
+
+Independent QA commit `d8f2a49` records **no passing live cohort**. See
+[live QA report](2026-09-30-chat-readiness-live-qa.md). Frozen lab JS SHA-256 was
+`332455a344edaa030ea72757de4dd2495a7c823b504f75ae70e472e82f5345ec`.
+
+- Visible Browser Control v0.8.2 session `cosmic-sparrow-334` verified the old draft
+  and zero prompts, then ordinary locator inspection failed with
+  `target.addEventListener is not a function`. The lab's classic-script bundle
+  overwrote native global `addEventListener`; no selector/global repair bypass was
+  used to report a pass.
+- Independent headless Brave Chromium 154.0.8037.58 / Playwright Core 1.62.1
+  completed zero checkpoints and failed its first assertion. Immediate trusted
+  New chat + typing initially appended new text to the old `ses1` draft while Ready;
+  the later pending-creation capture showed a new logical draft with empty text.
+  Actual admission timing versus event/test scheduling requires diagnosis, not a
+  waiting adjustment that removes the immediate-typing acceptance condition.
+- Both cohorts stopped on first failure. Zero prompts/provider calls/persistent
+  storage; only owned resources were closed and their absence verified. Evidence:
+  `/Users/kkrausse/Documents/opencode/chat-readiness-qa-20260930/`.
+- New repair agent `ses_f0c51d9a6ffe1iNG7JTdE7bXqy` owns chat admission/draft
+  timing and module-isolated lab bundling, with a new independent live run required
+  after its candidate is frozen. Intended report:
+  `2026-09-30-chat-readiness-live-failure-repair.md`.
+- Chat QA released browser ownership. New diagnostic agent
+  `ses_f0c510edbffeptJkqc3uMjERXB` now has exclusive visible Browser Control CLI
+  ownership for the unchanged-runtime close control, case 1 first and separate
+  abort-before-headers control only after a pass. It must correlate native terminate,
+  Web Locks and Chrome targets within the original bound. Intended report:
+  `2026-09-30-single-kernel-close-retention-live-qa.md`. Assignment is not acceptance.
+
 ## Next validation and stress-test sequence
 
 After the first candidates are ready, commission separate test agents rather than
