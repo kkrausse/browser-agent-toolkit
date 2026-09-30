@@ -403,6 +403,37 @@ Independent QA commit `d8f2a49` records **no passing live cohort**. See
   Web Locks and Chrome targets within the original bound. Intended report:
   `2026-09-30-single-kernel-close-retention-live-qa.md`. Assignment is not acceptance.
 
+### Follow-up: close control passes; repaired chat enters independent QA
+
+- Live close report commit `f09b1b9` records case 1,0 run once on unchanged `e35eab4`:
+  native terminate called/returned once, observed live ownership, then zero owner
+  locks/kernel/guest targets in all 91 original-window samples (first empty sample
+  149 ms after joined close). Observer dropped/query failures were zero; all 9,588
+  frozen inputs reverified before/after. This is **no retention reproduced**, not
+  a causal repair or historical stale-target/leak classification. See
+  [close live QA](2026-09-30-single-kernel-close-retention-live-qa.md).
+- That run used the existing extension-connected Brave profile and a new owned
+  origin/session, not a pristine profile. Dark Reader inserted a session-storage
+  marker; strict zero-storage preflight failed and the stated marker was retained.
+  A full-page screenshot timeout was recorded; bounded viewport/manual inspection
+  succeeded. Case 0, headless/full-suite/performance checks were not run. Exact
+  owned server/session/PID/port absence was verified and browser ownership released.
+- Chat repair code commit `691cd5aa0880349968773047402adec0bfeb16df`, report
+  `6712c2b`, causally reproduced both prior failures, then moved creation/selection
+  admission synchronously ahead of scheduled work and isolated lab declarations
+  in an IIFE. 66 targeted tests/325 assertions and targeted typecheck/build passed;
+  package peers and inherited disposal flake remain limitations. See
+  [repair report](2026-09-30-chat-readiness-live-failure-repair.md).
+- Frozen chat staging:
+  `/private/var/folders/t_/x48jtnps7n5_0g_pt9xpvbg00000gn/T/opencode/chat-readiness-repair-0nXBtN/`,
+  bundle SHA-256 `16ae8532768e09441c458b07d255b9b88cabfd3af0a22a1b2ca3c134e9d83bb4`.
+  New independent QA agent `ses_f0c40f179ffeFwTifmd7zRF5nu` now owns the visible
+  Browser Control slot, followed by serialized headless coverage and separately
+  labelled same-view controller-switch QA where supported. Immediate typing may
+  not wait for pending. Intended report: `2026-09-30-chat-readiness-repair-live-qa.md`.
+  This candidate remains **live pending** until that report; original failed cohorts
+  are unchanged. Full workspace integration/stress and cases 0–9 still need testing.
+
 ## Next validation and stress-test sequence
 
 After the first candidates are ready, commission separate test agents rather than
