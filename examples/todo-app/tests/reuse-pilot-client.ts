@@ -4,10 +4,11 @@ import {installOpenCodeConfig, loadPrepared, preparedApps, createOpenCodeCandida
 import {createChatController} from '../../../opencode-chat/src/controller';
 import type {ChatController} from '../../../opencode-chat/src/types';
 import {createPilotFence, resetPilot, pilotReuseAllowed, pilotRequestURL} from './reuse-pilot-fence';
+import {assertPilotRoot} from './reuse-pilot-contract';
 
 // One-shot fresh-origin owner. No public/UI actions or execution endpoints.
 const policy = {coldMs:90000, requestMs:20000, resetMs:60000, drainMs:20000, cleanupMs:15000};
-const evidence: any = {policy, attempts:{cold:0,reset:0}, events:[], requests:[], samples:[], status:'preparing'};
+const evidence: any = {label:'fresh-contract-preflight-controlled-reuse',policy, attempts:{cold:0,reset:0}, events:[], requests:[], samples:[], status:'preparing'};
 const owner = new WorkspaceController({onDiagnostic:event=>evidence.events.push(event),captureProcessOutput:true});
 let chat: ChatController | undefined;
 let firstFence: ReturnType<typeof createPilotFence> | undefined;
@@ -36,7 +37,7 @@ async function run() {
     const query=new URLSearchParams({'location[directory]':'/workspace'}).toString();
     let endpoint: any;
     const transport=async (input: string,init: RequestInit={}) => {assert(!stopped,'Pilot stopped'); const headers=new Headers(init.headers); headers.set('authorization',authorization); return endpoint.fetch(input,{...init,headers});};
-    const makeFence=(admin=false) => {const fence=createPilotFence(transport,admin,endpoint.url); evidence.requests.push(fence.records); return fence;};
+    const makeFence=(admin=false) => {const fence=createPilotFence(transport,admin,endpoint.url,true); evidence.requests.push(fence.records); return fence;};
     const json=async (fence: ReturnType<typeof createPilotFence>,path: string,method='GET') => (await fence.fetch(pilotRequestURL(endpoint.url,path),{method,signal:AbortSignal.timeout(policy.requestMs)})).json();
     const qualify=async (fence: ReturnType<typeof createPilotFence>,marker: string) => {
       const health=await json(fence,descriptor.healthPath); assert(health.healthy && health.version==='2.0.3','Pinned health');
@@ -51,10 +52,10 @@ async function run() {
     const attach=async (fence: ReturnType<typeof createPilotFence>,marker:string) => {
       chat=createChatController({endpoint:{url:endpoint.url,fetch:fence.fetch},directory:'/workspace',startNewSession:true,handshakeTimeoutMs:policy.requestMs});
       await chat.ready; const snapshot=chat.getSnapshot(); assert(!snapshot.error&&!snapshot.loading&&snapshot.sessionID&&snapshot.messages.length===0,'Fresh hydrated empty '+marker);
-      const session=await json(fence,'/api/session/'+snapshot.sessionID);
-      assert(!session.parentID&&session.location?.directory==='/workspace'&&!session.location?.workspaceID&&!session.fork,'Root explicit location');
-      assert(!session.model&&!session.permissions&&!session.metadata,'No inherited settings');
-      evidence[marker].session=session; evidence[marker].snapshot=snapshot;
+      const sessionEnvelope=await json(fence,'/api/session/'+snapshot.sessionID);
+      evidence[marker].sessionEnvelope=sessionEnvelope; evidence[marker].snapshot=snapshot;
+      evidence[marker].session=assertPilotRoot(sessionEnvelope,snapshot.sessionID!);
+      assert(evidence[marker].session.projectID===evidence[marker].project.id&&snapshot.execution==='idle'&&snapshot.permissions.length===0&&snapshot.questions.length===0,'Fresh idle project session '+marker);
     };
     evidence.attempts.cold++; evidence.status='cold'; render();
     const service=await timed('cold.launch-through-hydration',()=>bounded(async()=>{
@@ -71,7 +72,7 @@ async function run() {
     const admin=makeFence(true);
     await timed('reset.total',()=>bounded(()=>resetPilot({fence:firstFence!,deadlineMs:policy.drainMs,
       dispose:()=>timed('reset.dispose',async()=>{await chat!.dispose(); evidence.outgoingDisposed=true;}),
-      evict:()=>timed('reset.DELETE',async()=>{await admin.fetch(pilotRequestURL(endpoint.url,'/api/debug/location?'+query),{method:'DELETE',signal:AbortSignal.timeout(policy.requestMs)}); evidence.evicted=true;}),
+      evict:()=>timed('reset.DELETE',async()=>{evidence.resetAdmission={exclusive:true,finiteNormal:firstFence!.records.filter(r=>r.state==='normal').length,unresolved:firstFence!.records.filter(r=>r.state==='pending'||r.state==='failed').length,localDisposed:evidence.outgoingDisposed,zeroRefs:'inferred from owned finite normal handler completion; not a remote receipt'}; assert(evidence.resetAdmission.unresolved===0&&evidence.outgoingDisposed,'Reset admission'); await admin.fetch(pilotRequestURL(endpoint.url,'/api/debug/location?'+query),{method:'DELETE',signal:AbortSignal.timeout(policy.requestMs)}); evidence.evicted=true;}),
       replace:()=>timed('reset.source-config-write',()=>write('B')),
       acquire:()=>timed('reset.reinit-hydration',async()=>{secondFence=makeFence(); await qualify(secondFence,'B'); await attach(secondFence,'B');}),
     }),policy.resetMs));
@@ -83,7 +84,7 @@ async function run() {
     evidence.after=await diagnoseWorkspace(workspace); assert(evidence.after.procs.length===1,'No execution children');
     await timed('cleanup',()=>bounded(async()=>{secondFence!.freeze(); await secondFence!.drain(policy.drainMs); await chat!.dispose(); await owner.stopServices(); await service.drained; evidence.exit=await service.execution.exited; evidence.zero=await diagnoseWorkspace(workspace); assert(evidence.zero.procs.length===0&&evidence.zero.listeners.length===0&&evidence.zero.pendingHttp===0,'Final zero work'); await owner.close();},policy.cleanupMs));
     assert(!stopped,'Stopped before success'); evidence.status='passed';
-  } catch(error) {evidence.status='failed'; evidence.error=String(error); evidence.stack=error instanceof Error?error.stack:undefined; /* First failure: retain owned page/server. No DELETE, retry or replacement cleanup. */}
+  } catch(error) {stopped=true;evidence.status='failed'; evidence.error=String(error); evidence.stack=error instanceof Error?error.stack:undefined; /* First failure: retain owned page/server. No DELETE, retry or replacement cleanup. */}
   clearTimeout(watchdog); render(); return evidence;
 }
 (window as any).reusePilot={evidence,done:run()};

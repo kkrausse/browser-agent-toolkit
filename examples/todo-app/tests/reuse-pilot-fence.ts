@@ -1,5 +1,6 @@
 // Experiment-only: valid solely for the independently reviewed packaged 2.0.3
 // finite handlers, exclusive ownership, and no execution/model/tool requests.
+import {validatePilotResponse} from './reuse-pilot-contract';
 export interface RequestRecord {
   id: number; method: string; url: string;
   state: 'pending' | 'normal' | 'failed' | 'stream';
@@ -11,7 +12,7 @@ export function pilotRequestURL(endpointURL: string, guestPath: string) {
   for (const [key, value] of base.searchParams) if (!url.searchParams.has(key)) url.searchParams.append(key, value);
   return url.href;
 }
-export function createPilotFence(fetch: (input: string, init?: RequestInit) => Promise<Response>, administrative = false, endpointURL?: string) {
+export function createPilotFence(fetch: (input: string, init?: RequestInit) => Promise<Response>, administrative = false, endpointURL?: string, contracts = false) {
   const records: RequestRecord[] = [];
   const pending = new Set<Promise<unknown>>();
   let frozen = false;
@@ -47,6 +48,7 @@ export function createPilotFence(fetch: (input: string, init?: RequestInit) => P
         const bytes = await response.arrayBuffer();
         request.signal.throwIfAborted();
         if (!response.ok) throw Error('Finite HTTP ' + response.status);
+        if (contracts) validatePilotResponse(pathname, request.method, response.status, new TextDecoder().decode(bytes));
         record.state = 'normal'; record.finished = performance.now();
         return new Response(response.status === 204 ? null : bytes, {status: response.status, headers: response.headers});
       } catch (error) {
