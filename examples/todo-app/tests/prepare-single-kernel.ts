@@ -56,7 +56,7 @@ await declarations('chat',join(root,'opencode-chat/src'),['browser.ts','prepare.
 paths['@kev-browser-agent-kit/opencode-chat/browser']=[join(output,'chat/browser.d.ts')];
 paths['@kev-browser-agent-kit/opencode-chat/prepare']=[join(output,'chat/prepare.d.ts')];
 paths['@/*']=[join(root,'examples/todo-app/src/*')];
-await Bun.write(join(output,'consumer.tsconfig.json'),JSON.stringify({compilerOptions:{...common,allowJs:true,noEmit:true,paths},files:['single-kernel-client.ts','single-kernel-cases-client.ts','single-kernel-driver.ts','single-kernel-driver.test.ts','single-kernel-spawn-probes.test.ts','analyze-single-kernel-evidence.ts','prepare-single-kernel.ts','serve-single-kernel.ts','setup-single-kernel-deps.ts','single-kernel-prepare-apps-consumer.ts','build-single-kernel-app-preparer.ts','snapshot-single-kernel-app-input.ts'].map(file=>join(import.meta.dir,file))}));
+await Bun.write(join(output,'consumer.tsconfig.json'),JSON.stringify({compilerOptions:{...common,allowJs:true,noEmit:true,paths},files:['single-kernel-client.ts','single-kernel-cases-client.ts','single-kernel-spawn-diagnostic-client.ts','single-kernel-spawn-diagnostic-driver.ts','single-kernel-spawn-diagnostic-driver.test.ts','single-kernel-driver.ts','single-kernel-driver.test.ts','single-kernel-spawn-probes.test.ts','analyze-single-kernel-evidence.ts','prepare-single-kernel.ts','serve-single-kernel.ts','setup-single-kernel-deps.ts','single-kernel-prepare-apps-consumer.ts','build-single-kernel-app-preparer.ts','snapshot-single-kernel-app-input.ts'].map(file=>join(import.meta.dir,file))}));
 await command(['bun',tsc,'-p',join(output,'consumer.tsconfig.json')]);
 const result=await Bun.build({entrypoints:[join(import.meta.dir,'single-kernel-client.ts')],outdir:join(output,'client'),target:'browser',plugins:[{name:'isolated-libraries',setup(builder){
   builder.onResolve({filter:/^@kev-browser-agent-kit\/workspace(?:\/(?:react|delivery|diagnostics))?$/},args=>({path:join(output,'workspace',(args.path.split('/')[2]??'index')+'.js')}));
@@ -64,6 +64,8 @@ const result=await Bun.build({entrypoints:[join(import.meta.dir,'single-kernel-c
   builder.onResolve({filter:/^react(?:\/jsx-runtime)?$/},args=>({path:require.resolve(args.path,{paths:[join(root,'workspace-api')]} )}));
 }}]});
 if(!result.success)throw new AggregateError(result.logs,'Consumer build failed');
+const diagnosticClient=await Bun.build({entrypoints:[join(import.meta.dir,'single-kernel-spawn-diagnostic-client.ts')],outdir:join(output,'client'),target:'browser',plugins:[{name:'isolated-diagnostic-library',setup(builder){builder.onResolve({filter:/^@kev-browser-agent-kit\/workspace$/},()=>({path:join(output,'workspace/index.js')}));}}]});
+if(!diagnosticClient.success)throw new AggregateError(diagnosticClient.logs,'Spawn diagnostic consumer build');
 const cases=await Bun.build({entrypoints:[join(import.meta.dir,'single-kernel-cases-client.ts')],outdir:join(output,'client'),target:'browser',plugins:[{name:'isolated-contract-library',setup(builder){
   builder.onResolve({filter:/^@kev-browser-agent-kit\/workspace$/},()=>({path:join(output,'workspace/test-library.js')}));
   builder.onResolve({filter:/\/src\/(?:index|workspace)\.js$/},args=>{
