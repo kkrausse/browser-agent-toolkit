@@ -30,7 +30,7 @@ fewer workers. Keep the baseline as the comparison/control and fallback.
 | Close target retention | Unchanged-runtime case-1 live control passed with termination/lock/census observations. Historical cause still unknown; full suite pending. |
 | Cached installed artifacts | Endpoint/PID-egress repairs pass offline; minimal native-fetch browser stop gate passed. Lazy-loader case still blocks cache admission; optimization paused. No on adapter or measured gain. |
 | OpenCode process retention | Root requalification stopped at browser-session setup, no guest launch. Shared-config stable-root toy frozen but unexecuted. No reuse/remote-release proof. |
-| Workspace switching/stress | Integrated frozen candidate, matched off/on comparison, full applicable E2E and stress/recovery qualification still pending. |
+| Workspace switching/stress | Conservative integrated app completed 19 stages/five generations; focused suite blocked before first body by duplicate-library observer. Editor switching/recovery separately assigned. No retention timing comparison. |
 
 The sections below preserve the original evaluation and chronological follow-ups;
 earlier “pending”/failure statements are snapshot facts, not erased by later bounded
@@ -952,6 +952,43 @@ browser slot released. Offline full-app preparation agent
 `ses_f0bab2941ffeK6LyykN6Varirh` remains assigned; the next live milestone is the
 matching conservative full-app acceptance cohort once its frozen handoff is ready.
 The full-contract markAsUncloneable gap and historical evidence remain unchanged.
+
+### Follow-up: conservative integrated app passes; focused observer identity blocks suite
+
+Integrated cohort `70d8c23` completed all 19 application stages and five hydrated
+TODO/PDF generations, same-document HMR, SSE handshake/cancellation, orderly
+shutdown and durable reload. Scoped worker censuses after close/reload found no
+workers within the unchanged window. Actual matching assets and all 9,677 frozen/
+run-copy files reverified; no inference. See
+[full-app cohort](2026-09-30-conservative-full-app-live-acceptance.md).
+
+The overall suite remains failed: focused case0/step0 stopped before its HTTP body.
+Two bundled workspace library instances maintain distinct WeakMaps: the test opens
+Workspace from one while diagnoseWorkspace reads the other, causing `Workspace is
+not open`. Zero focused steps passed, cases1–9 unrun. No production regression is
+established by this observer mismatch. Editor cases/headless did not run in that
+cohort. Owned hosts/ports/sessions/lock absence verified; exclusive slot released.
+
+QA-only repair agent `ses_f0b88df12ffe0FQWu6KU1UZ6Us` prepares a separately frozen
+focused harness resolving observer/test to the same built module, preserving all
+case actions/assertions/deadlines. Intended report:
+`2026-09-30-focused-observer-identity-qa-repair.md`. No production WeakMap workaround
+or rewritten acceptance checks are authorized; failed cohort remains immutable.
+
+Separately, editor QA agent `ses_f0b884956ffeKdSb2U2oUQKoMl` now owns the exclusive
+visible CLI slot for a fresh run copy's ordinary switching and bounded reload/503
+recovery. The passed integrated application phase permits this independent check,
+not a claim the blocked focused suite passed. Intended report:
+`2026-09-30-conservative-editor-switch-recovery-live-qa.md`. Exact source/native
+session/journal receipts are required; unavailable fault-injection checkpoints must
+be labelled unrun, not forced or simulated into acceptance.
+
+User additionally requested an Effect rewrite scope. Research agent
+`ses_f0b8c8f65ffeMHvPDOXWBc1a1l` owns only
+`2026-09-30-effect-kernel-lifecycle-rewrite-scope.md`, comparing lifecycle rewrite
+boundaries, shared interests, cancellation adapters and migration/acceptance risks.
+No Effect migration or dependency installation is authorized. Existing conservative
+qualification remains evidence for the current candidate, not an Effect candidate.
 
 ## Next validation and stress-test sequence
 
