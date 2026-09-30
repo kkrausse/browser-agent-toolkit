@@ -1,0 +1,21 @@
+import {expect, test} from 'bun:test';
+import {assertSingleKernelDiagnostics, assertZeroWork, fsProbe} from './single-kernel-contract';
+test('zero-work validation never interprets missing fields as zero', () => {
+  expect(()=>assertZeroWork({})).toThrow();
+  const zero={procs:[],listeners:[],pendingHttp:0,fetch:{inflight:0,queued:0,active:0}};
+  expect(()=>assertZeroWork(zero)).not.toThrow();
+  expect(()=>assertZeroWork({...zero,pendingHttp:1})).toThrow();
+});
+test('topology is explicit, not inferred from empty processes', () => {
+  expect(()=>assertSingleKernelDiagnostics({procs:[]})).toThrow();
+  const workers={kernel:1,filesystem:0,httpCoordinator:0,fetcher:0,other:0,process:2,processPids:[1,2]};
+  expect(()=>assertSingleKernelDiagnostics({workers})).not.toThrow();
+  expect(()=>assertSingleKernelDiagnostics({workers:{...workers,filesystem:1}})).toThrow();
+  expect(()=>assertSingleKernelDiagnostics({workers:{...workers,fetcher:1}})).toThrow();
+  expect(()=>assertSingleKernelDiagnostics({workers:{...workers,processPids:[1,1]}})).toThrow();
+});
+test('probe really contains newline filenames and synchronous operations', () => {
+  expect(fsProbe).toContain("'line\\nentry.txt'");
+  expect(fsProbe).toContain('fs.lstatSync');
+  expect(fsProbe).toContain('fs.readdirSync');
+});

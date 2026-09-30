@@ -50,7 +50,7 @@ export interface ToolContext {
   /** Runtime filesystem, including private installed tool payloads. */
   readFile(path: string): Promise<Uint8Array>;
   installFile(path: string, bytes: Uint8Array): Promise<void>;
-  /** Verify then replace disposable roots in one FS-worker operation, before
+  /** Verify then replace disposable roots in one filesystem-owner operation, before
    * launching readers. Not transactional on write failure. Caller retains bytes. */
   installTree(tree: { roots: string[]; entries: InstallTreeEntry[] }): Promise<TreeInstallResult>;
   /** Install checked preparation-built VFS bodies. The runtime consumes their backing buffers. */

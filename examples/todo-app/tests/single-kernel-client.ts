@@ -1,0 +1,119 @@
+import {diagnoseWorkspace, diagnoseWorkspaceEntry} from '@kev-browser-agent-kit/workspace';
+import {WorkspaceController} from '@kev-browser-agent-kit/workspace/react';
+import {installSource} from '@kev-browser-agent-kit/workspace/delivery';
+import {loadPrepared, preparedApps, installOpenCodeConfig, startOpenCode} from '@kev-browser-agent-kit/opencode-chat/browser';
+import {previewHTTPThenAttach} from './matched-qualification';
+import {assertZeroWork, assertSingleKernelDiagnostics, fsProbe, streamProbe} from './single-kernel-contract';
+
+const policy={stageMs:120000,requestMs:20000,generations:4,retries:0};
+const evidence: any={policy,status:'idle',stages:[],events:[],models:0};
+let owner=new WorkspaceController({onDiagnostic:event=>evidence.events.push(event),captureProcessOutput:true});
+let active=false, failed=false;
+const attempted=new Set<string>();
+const assert=(condition:unknown,message:string)=>{if(!condition)throw Error(message);};
+const decoder=new TextDecoder();
+const distribution=await fetch('/runtime/distribution.json').then(r=>r.json());
+const delivery={name:'vivari',version:distribution.version,assetBaseUrl:'/runtime/'};
+function render(){document.querySelector('pre')!.textContent=JSON.stringify(evidence,null,2);}
+async function stage(name:string,task:()=>Promise<unknown>){
+  if(active||failed||attempted.has(name))throw Error('Acceptance owner busy, terminally failed, or stage already attempted');
+  attempted.add(name);
+  active=true; evidence.status=name;render();
+  let timer: ReturnType<typeof setTimeout>;
+  try {
+    const result=await Promise.race([task(),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error(name+' deadline; owned work retained, no retry')),policy.stageMs);})]);
+    evidence.stages.push({name,result});evidence.status='ready';render();return result;
+  }catch(error){failed=true;evidence.status='failed';evidence.error=String(error);render();throw error;}
+  finally{active=false;clearTimeout(timer!);}
+}
+async function diagnostics(){const d=await diagnoseWorkspace(owner.workspace!);assertSingleKernelDiagnostics(d);return d;}
+async function zero(){const d=await diagnostics();assertZeroWork(d);return d;}
+async function capture(stream:AsyncIterable<Uint8Array>){const chunks:Uint8Array[]=[];let size=0;for await(const chunk of stream){size+=chunk.length;assert(size<1048576,'Probe output exceeded bound');chunks.push(chunk);}return chunks.map(b=>decoder.decode(b)).join('');}
+async function initialize(){
+  assert(distribution.topology?.policy==='single-kernel','Not a single-kernel distribution');
+  const workspace=await owner.open(delivery);assert(workspace.persistence.status==='durable','Persistence not durable');
+  await owner.startRuntime({});
+  await workspace.fs.writeFile('/fs-probe.mjs',fsProbe);
+  const execution=await owner.runtime!.node({entry:'/workspace/fs-probe.mjs',cwd:'/workspace'});
+  // Attach both drains before awaiting exit; no stdout-only await deadlock.
+  const out=capture(execution.stdout),err=capture(execution.stderr);execution.closeStdin();
+  const [stdout,stderr,exit]=await Promise.all([out,err,execution.exited]);
+  assert(exit.exitCode===0&&!exit.forced,'Sync FS probe failed: '+stderr);
+  const sync=JSON.parse(stdout.trim());assert(sync.syncFS===true,'Sync FS completion absent');
+  const large=await workspace.fs.readFile('/large-binary.dat');assert(large.length===1048583,'Large host read truncated');
+  for(let i=0;i<large.length;i++)assert(large[i]===i%251,'Large host read byte corruption');
+  assert(JSON.stringify((await workspace.fs.readdir('/kernel-contract')).sort())===JSON.stringify(sync.names),'Host newline readdir');
+  const link=await diagnoseWorkspaceEntry(workspace,'/kernel-contract/link');assert(link.target==='renamed\nentry.txt','Host link metadata');
+  await workspace.fs.rename('/kernel-contract/renamed\nentry.txt','/kernel-contract/host-renamed\nentry.txt');
+  assert((await workspace.fs.stat('/kernel-contract/host-renamed\nentry.txt')).size===5,'Host rename/stat');
+  await workspace.fs.writeFile('/persist-marker.txt','single-kernel durable marker');await workspace.flush();
+  return {sync,link,diagnostics:await diagnostics()};
+}
+async function streaming(){
+  await owner.workspace!.fs.writeFile('/stream-probe.mjs',streamProbe);
+  const service=await owner.launch('stream',{entry:'/workspace/stream-probe.mjs',cwd:'/workspace'},5189,async endpoint=>{
+    const response=await endpoint.fetch('/health',{signal:AbortSignal.timeout(policy.requestMs)});assert(response.ok&&await response.text()==='healthy','Stream health');
+    return {url:endpoint.url,fetch:(input,init)=>endpoint.fetch(String(input),init)};
+  },{shutdown:'stdin-eof',timeoutMs:10000});
+  const response=await service.endpoint.fetch('/stream',{signal:AbortSignal.timeout(60000)});
+  assert(response.ok&&response.body,'Stream response absent');
+  await new Promise(resolve=>setTimeout(resolve,750));
+  const stalled=JSON.parse(decoder.decode(await owner.workspace!.fs.readFile('/stream-progress.json')));
+  assert(stalled.produced>0&&stalled.produced<256,'Producer did not stall with unread body');
+  const reader=response.body!.getReader();let bytes=0;
+  while(true){const next=await reader.read();if(next.done)break;for(let i=0;i<next.value.length;i++)assert(next.value[i]===Math.floor((bytes+i)/65536)%251,'Stream byte corruption');bytes+=next.value.length;}
+  assert(bytes===256*65536,'Stream truncated');
+  const completed=JSON.parse(decoder.decode(await owner.workspace!.fs.readFile('/stream-progress.json')));
+  assert(completed.produced===256&&completed.drains>0,'Producer completion/drain missing');
+  const cancel=await service.endpoint.fetch('/stream',{signal:AbortSignal.timeout(policy.requestMs)});
+  assert(cancel.body,'Cancellation response absent');await cancel.body!.cancel('single-kernel acceptance cancel');
+  await owner.workspace!.fs.writeFile('/host-during-http.txt','host remains responsive');
+  const health=await service.endpoint.fetch('/health',{signal:AbortSignal.timeout(policy.requestMs)});
+  assert(await health.text()==='healthy','Handler sync FS after HTTP cancellation');
+  await owner.stopServices();await service.drained;const exit=await service.execution.exited;
+  assert(exit.exitCode===0&&!exit.forced,'Stream shutdown not graceful');
+  assert(decoder.decode(await owner.workspace!.fs.readFile('/shutdown-sync.txt'))==='shutdown','Shutdown sync FS missing');
+  let staleRejected=false;try{const stale=await service.endpoint.fetch('/health',{signal:AbortSignal.timeout(policy.requestMs)});await stale.arrayBuffer();}catch{staleRejected=true;}
+  assert(staleRejected,'Disposed endpoint accepted stale request');
+  return {stalled,completed,bytes,exit,canceled:true,staleRejected,zero:await zero()};
+}
+async function recreate(){
+  await owner.stopRuntime();await zero();await owner.close();
+  owner=new WorkspaceController({onDiagnostic:event=>evidence.events.push(event),captureProcessOutput:true});
+  const workspace=await owner.open(delivery);
+  assert(decoder.decode(await workspace.fs.readFile('/persist-marker.txt'))==='single-kernel durable marker','Recreate persistence');
+  assert((await workspace.fs.stat('/kernel-contract/host-renamed\nentry.txt')).size===5,'Recreate filesystem');
+  return {persistence:workspace.persistence,diagnostics:await zero()};
+}
+let generation=0;
+let manifest: Awaited<ReturnType<typeof loadPrepared>>;
+async function apps(){
+  assert(generation<policy.generations,'Fixed generation budget exhausted');
+  const services=Object.values(owner.getSnapshot().services);
+  await owner.stopRuntime();await Promise.all(services.map(async service=>{await service.drained;await service.execution.exited;}));await zero();
+  manifest??=await loadPrepared('/prepared/',owner.signal);assert(manifest.runtimeVersion===delivery.version,'Prepared runtime identity');
+  const next=generation+1,marker=next%2?'A':'B';
+  const home=manifest.project['/src/home.tsx'];assert(typeof home==='string','Todo fixture absent');
+  const source={...manifest.project,
+    '/src/home.tsx':(home as string).replace('import { useState }','import { useEffect, useState }').replace('export default function Home() {',`export default function Home() { useEffect(()=>{document.querySelector('main')?.setAttribute('data-hydrated','${next}');},[]);`).replace('<h1>Todos</h1>',`<h1 data-generation="${next}" data-workspace={workspace}>Todos ${marker}</h1><button id="pdf-workload" type="button" onClick={async e=>{const b=e.currentTarget;b.dataset.bytes=String(await runPdfWorkload());}}>Generate fixture PDF</button>`).replace("import { useEffect, useState }", "import {workspace} from './switch-import';\nimport {runPdfWorkload} from './pdf-workload';\nimport { useEffect, useState }"),
+    '/src/switch-import.ts':`export {workspace} from '../switch-${marker.toLowerCase()}-only';`,
+    ['/switch-'+marker.toLowerCase()+'-only.ts']:`export const workspace='${marker}';`,
+    '/src/pdf-workload.ts':`import {PDFDocument} from 'pdf-lib';export async function runPdfWorkload(){const pdf=await PDFDocument.create();pdf.addPage().drawText('Fresh ${marker}/${next}');return(await pdf.save()).length;}`};
+  if(generation)await owner.workspace!.fs.remove('/switch-'+(marker==='A'?'b':'a')+'-only.ts');
+  await installSource(owner.workspace!,source,{existing:'replace'});
+  const runtime=await owner.startRuntime({apps:preparedApps(manifest,'/prepared/',owner.signal,text=>evidence.events.push({delivery:text}))});await runtime.tools.apps();
+  await installOpenCodeConfig(owner.workspace!,{modelBaseURL:location.origin+'/unused-model/'});
+  // Readiness and cleanup ownership come from the qualified controller. Serial
+  // launch avoids speculative competing starts during this correctness suite.
+  const preview=await owner.launch('vite',manifest.preview,5173,async endpoint=>({url:endpoint.url,fetch:(input,init)=>endpoint.fetch(String(input),init)}));
+  await previewHTTPThenAttach(owner.signal,()=>preview.endpoint.fetch('/',{signal:AbortSignal.timeout(policy.requestMs)}),()=>{
+    const attachment=preview.endpoint.attachPreview(document.querySelector('iframe')!,{hostPaths:['/api','/editing-policy']});owner.registerAttachment('vite',()=>attachment.dispose());
+  });
+  const chat=await startOpenCode(owner,{prepared:manifest,waitForClient:false});
+  await owner.workspace!.flush();generation=next;
+  return {generation,marker,previewURL:preview.endpoint.url,chatURL:chat.endpoint.url,diagnostics:await diagnostics(),interactive:'pending external Playwright hydration/todo/PDF verification'};
+}
+const api={evidence,diagnostics,get generation(){return generation;},initialize:()=>stage('filesystem',initialize),streaming:()=>stage('http-backpressure',streaming),recreate:()=>stage('persistence-recreate',recreate),apps:()=>stage('apps-'+(generation+1),apps),
+  reloadCheck:()=>stage('persistence-reload',async()=>{await owner.open(delivery);assert(decoder.decode(await owner.workspace!.fs.readFile('/persist-marker.txt'))==='single-kernel durable marker','Reload persistence');return zero();}),
+  close:()=>stage('shutdown',async()=>{await owner.stopRuntime();const stopped=await zero();await owner.close();return stopped;})};
+(window as any).singleKernelAcceptance=api;render();
