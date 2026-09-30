@@ -839,6 +839,28 @@ before page operations and preserve any failed cohort. Cache integration agent
 intended report `2026-09-30-cached-switch-post-egress-integration.md`. Neither
 assignment qualifies all RPC/background ownership, cache-on switching or retention.
 
+### Follow-up: browser egress scope narrowed to supported native transport
+
+Preparation report `7b36dcf` verified 111 candidate files, 758 source files, 40
+built assets, 37 reused native outputs, archives and provenance for exact
+33fa135/d0eec346 assets. Genuine guest OP_FETCH_ASYNC is available, but browser
+workers hard-wire native fetch: no supported callback can inject abort-ignoring
+backend continuations or rollback failures. No host, guest or browser was started;
+visible/headless counts remain 0/0 and the exclusive slot was released unused.
+See [browser preparation boundary](2026-09-30-pid-egress-browser-qa.md).
+
+**Parent scope correction:** this blocks adversarial injection, not all browser
+qualification. The same agent resumes with a new distinct supported-native-fetch
+cohort: actual guest fetch, native transport/body cancellation, public stop receipts,
+queued suppression/shared-owner survival where supported observability permits.
+Abort-ignoring/rollback failures remain offline regression evidence and cannot be
+claimed live. Missing private pin/queue instrumentation must be reported as a limit,
+not replaced by server-only inference or used to block every supported live check.
+The candidate remains unchanged. Intended report:
+`2026-09-30-pid-egress-native-fetch-live-qa.md`; agent
+`ses_f0bb96551ffeDRP5f7QzZaMgm0` again owns the sole visible CLI slot. No cache-on,
+full-workspace or general remote-drain acceptance follows from this bounded cohort.
+
 ## Next validation and stress-test sequence
 
 After the first candidates are ready, commission separate test agents rather than
