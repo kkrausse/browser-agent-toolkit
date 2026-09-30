@@ -3,6 +3,8 @@ import { Workspace, Runtime, opfsStore, type Distribution, type Endpoint, type E
 import { createControllerDiagnostics, createDiagnosticScope, safeText, type ControllerDiagnosticOptions } from "./react-diagnostics.js";
 import { shutdownAtEOF } from "./service-shutdown.js";
 import { createProcessOutput } from "./process-output.js";
+import { readinessBudget, type ServiceReadiness } from "./service-readiness.js";
+export type { ServiceReadiness } from "./service-readiness.js";
 
 /** Reusable React boundary: public API ownership, serialization and subscriptions.
  * No sample source, package paths, provider configuration or application ports here. */
@@ -116,10 +118,10 @@ export class WorkspaceController {
     });
     let totalBytes = 0;
     try { for await (const bytes of stream) { if (!totalBytes) diagnostics.record("guest.first-output", { label, bytes: bytes.length }); totalBytes += bytes.length; output.push(bytes); } }
-    catch (error) { this.log(`[${label}] ${message(error)}`); }
+    catch (error) { this.log(`[${label}] ${message(error)}`); throw error; }
     finally { output.flush(); this.log(`[${label}] drained ${totalBytes} bytes (output available in Activity)`); }
   }
-  async launch(name: string, options: NodeLaunchOptions, port: number, connect: (endpoint: Endpoint) => Promise<Connection>, lifecycle?: ServiceLifecycle) {
+  async launch(name: string, options: NodeLaunchOptions, port: number, connect: (endpoint: Endpoint, signal: AbortSignal) => Promise<Connection>, lifecycle?: ServiceLifecycle, readiness?: ServiceReadiness) {
     const diagnostics = this.diagnostics;
     const scope = createDiagnosticScope(event => diagnostics.record(event.event, event.data), diagnostics.runId);
     if (this.snapshot.services[name]) return this.snapshot.services[name]!;
@@ -127,26 +129,41 @@ export class WorkspaceController {
     diagnostics.record("service.launch", { name, port, entry: options.entry, args: options.args, cwd: options.cwd });
     const timeoutMs = lifecycle?.timeoutMs ?? 10000;
     if (lifecycle && (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 120000)) throw Error('Service shutdown timeout must be 1–120000ms');
+    const budget = readinessBudget(readiness, this.signal);
+    diagnostics.record('service.readiness.budget', { name, listenMs: budget.listenMs, connectMs: budget.connectMs, overallMs: budget.overallMs });
     // Cancel incomplete startup immediately. A published EOF-managed service is
     // closed serially by stopService, so lifetime cancellation cannot preempt it.
     const lifetime = this.signal, startup = new AbortController();
-    const abortStartup = () => startup.abort(lifetime.reason);
-    if (lifecycle) {
-      lifetime.throwIfAborted();
-      lifetime.addEventListener('abort', abortStartup, { once: true });
-    }
-    const execution = await scope.stage('service.spawn', () => this.runtime!.node({ ...options, signal: lifecycle ? startup.signal : lifetime }), { name }).catch(error => {
-      lifetime.removeEventListener('abort', abortStartup); throw error;
+    const abortStartup = () => startup.abort(budget.signal.reason);
+    if (budget.signal.aborted) { budget.dispose(); budget.signal.throwIfAborted(); }
+    budget.signal.addEventListener('abort', abortStartup, { once: true });
+    const execution = await scope.stage('service.spawn', () => budget.wait(async () => {
+      const execution = await this.runtime!.node({ ...options, signal: lifecycle ? startup.signal : AbortSignal.any([lifetime, startup.signal]) });
+      // A spawn accepted after cancellation remains owned and must not be published.
+      if (budget.signal.aborted) {
+        const drained = Promise.all([this.drain(execution.stdout, `${name}:stdout`), this.drain(execution.stderr, `${name}:stderr`)]);
+        await execution.stop(); await drained; budget.signal.throwIfAborted();
+      }
+      return execution;
+    }), { name }).catch(error => {
+      budget.signal.removeEventListener('abort', abortStartup); budget.dispose(); throw error;
     });
     const drained = Promise.all([this.drain(execution.stdout, `${name}:stdout`), this.drain(execution.stderr, `${name}:stderr`)]).then(() => {});
+    // A stream error is evidence of process/transport failure, never healthy silence.
+    const outputFailure = drained.then(() => new Promise<never>(() => {}));
+    const earlyExit = execution.exited.then(result => { throw Error(`${name} exited during readiness (${JSON.stringify(result)}). Check Activity and launch configuration`); });
+    void outputFailure.catch(() => {}); void earlyExit.catch(() => {});
     const controller = new AbortController();
     let endpoint: Endpoint | undefined;
     try {
-      endpoint = await scope.stage('service.listen', () => Promise.race([
-        this.runtime!.expose(port, { signal: AbortSignal.any([this.signal, controller.signal, AbortSignal.timeout(30000)]) }),
-        execution.exited.then(result => { throw Error(`${name} exited before listening (${JSON.stringify(result)}). Check Activity and launch configuration`); }),
-      ]), { name });
-      const connection = await scope.stage('service.connect', () => connect(endpoint!), { name });
+      endpoint = await scope.stage('service.listen', () => budget.stage('listen', signal => Promise.race([
+        this.runtime!.expose(port, { signal: AbortSignal.any([signal, controller.signal]) }).then(endpoint => {
+          if (signal.aborted) { endpoint.dispose(); signal.throwIfAborted(); }
+          return endpoint;
+        }),
+        earlyExit, outputFailure,
+      ])), { name });
+      const connection = await scope.stage('service.connect', () => budget.stage('connect', signal => Promise.race([connect(endpoint!, signal), earlyExit, outputFailure])), { name });
       diagnostics.record("service.healthy", { name, port });
       this.signal.throwIfAborted();
       let resolve!: () => void, reject!: (error: Error) => void;
@@ -165,7 +182,7 @@ export class WorkspaceController {
       void execution.exited.then(exited, error => exited(message(error)));
       return service;
     } catch (error) { diagnostics.record("service.failed", { name, error }); endpoint?.dispose(); try { await execution.stop(); await drained; } catch (cleanupError) { diagnostics.record("service.cleanup.failed", { name, error: cleanupError }); } throw error; }
-    finally { controller.abort(); lifetime.removeEventListener('abort', abortStartup); }
+    finally { controller.abort(); budget.signal.removeEventListener('abort', abortStartup); budget.dispose(); }
   }
   registerAttachment(name: string, dispose: () => void) {
     let disposed = false;

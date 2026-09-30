@@ -5,6 +5,7 @@ import { WorkspaceController } from "@kev-browser-agent-kit/workspace/react"
 import { installOpenCodeConfig, loadPrepared, preparedApps, startOpenCode } from "@kev-browser-agent-kit/opencode-chat/browser"
 import { createDiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics'
 import { installedTreeAuditTool } from './installed-tree-audit'
+import { boundedReadiness, matchedReadinessBudgets } from './matched-readiness'
 
 type Variant = "baseline" | "kernel" | "dependencies" | "incremental" | "reload"
 type Sample = { name: string; milliseconds: number; detail?: unknown }
@@ -17,6 +18,7 @@ const variant = (parameters.get("variant") ?? "baseline") as Variant
 const captureResetEvidence = parameters.get('fsEvidence') === '1'
 const installOnly = parameters.get('services') === 'none'
 const matched = parameters.get('matched') === 'phase9'
+const readinessBudgets = matchedReadinessBudgets(parameters)
 if (matched && !['baseline', 'dependencies'].includes(variant)) throw Error('Phase9 requires restarted services')
 if (!["baseline", "kernel", "dependencies", "incremental", "reload"].includes(variant)) throw new Error("Unknown experiment variant")
 const controller = new WorkspaceController({ onDiagnostic: event => events.push(event) })
@@ -110,24 +112,40 @@ async function replacement(generation: number): Promise<void> {
   samples.push({ name: "source.operations", milliseconds: 0, detail: {generation, ...result} })
 }
 async function services(generation: number): Promise<void> {
+  if (matched) {
+    resetEvidence.push({phase:'readiness.budgets',generation,budgets:readinessBudgets})
+    return boundedReadiness(readinessBudgets.overallMs, controller.signal, signal => startServices(generation, signal))
+  }
+  return startServices(generation, controller.signal)
+}
+async function startServices(generation: number, signal: AbortSignal): Promise<void> {
+  const readiness = matched ? {...readinessBudgets, signal} : undefined
   await timed("config", () => installOpenCodeConfig(controller.workspace!, {modelBaseURL: location.origin + "/unused-model/"}))
   await Promise.all([
     timed("preview.ready", async () => {
-       const service = await timed('vite.launch', () => controller.launch("vite", manifest.preview, 5173, async endpoint => ({url: endpoint.url, fetch: (input, init) => endpoint.fetch(String(input), init)})))
-      const response = await service.endpoint.fetch("/", {signal: AbortSignal.timeout(60000)})
-      if (!response.ok) throw new Error(`Preview HTTP ${response.status}`)
-      const iframe = document.querySelector("iframe")!
-      const attachment = service.endpoint.attachPreview(iframe, {hostPaths: ['/api', '/editing-policy']})
-      controller.registerAttachment('vite', () => attachment.dispose())
-      const deadline = performance.now() + 90000
-      while (performance.now() < deadline) {
-        if (iframe.contentDocument?.querySelector(`main[data-hydrated="${generation}"] h1[data-generation="${generation}"]`) && iframe.contentDocument.querySelector('input#title:not(:disabled)')) { controller.clientReady("vite"); return }
-        await new Promise(resolve => setTimeout(resolve, 100))
+      const service = await timed('vite.launch', () => controller.launch("vite", manifest.preview, 5173, async endpoint => ({url: endpoint.url, fetch: (input, init) => endpoint.fetch(String(input), init)}), undefined, readiness))
+      const earlyExit = service.execution.exited.then(exit => {throw Error('Vite exited before interactive readiness: ' + JSON.stringify(exit))})
+      const outputFailure = service.drained.then(() => new Promise<never>(() => {}))
+      void earlyExit.catch(() => {}); void outputFailure.catch(() => {})
+      const previewTask = async (previewSignal: AbortSignal) => {
+        const response = await service.endpoint.fetch("/", {signal: AbortSignal.any([previewSignal, AbortSignal.timeout(60000)])})
+        if (!response.ok) throw new Error(`Preview HTTP ${response.status}`)
+        await response.arrayBuffer()
+        const iframe = document.querySelector("iframe")!
+        const attachment = service.endpoint.attachPreview(iframe, {hostPaths: ['/api', '/editing-policy']})
+        controller.registerAttachment('vite', () => attachment.dispose())
+        const deadline = performance.now() + (matched ? readinessBudgets.hydrationMs : 90000)
+        while (performance.now() < deadline) {
+          previewSignal.throwIfAborted()
+          if (iframe.contentDocument?.querySelector(`main[data-hydrated="${generation}"] h1[data-generation="${generation}"]`) && iframe.contentDocument.querySelector('input#title:not(:disabled)')) { controller.clientReady("vite"); return }
+          await new Promise(resolve => setTimeout(resolve, 100))
+        }
+        throw new Error(`Fresh preview generation ${generation} never appeared`)
       }
-      throw new Error(`Fresh preview generation ${generation} never appeared`)
+      await Promise.race([earlyExit, outputFailure, matched ? boundedReadiness(readinessBudgets.hydrationMs, signal, previewTask) : previewTask(signal)])
     }),
     timed("chat.healthy", async () => {
-      await startOpenCode(controller, {prepared: manifest, waitForClient: false})
+      await startOpenCode(controller, {prepared: manifest, waitForClient: false, readiness})
     }),
   ])
 }

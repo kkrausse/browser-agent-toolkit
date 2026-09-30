@@ -1,5 +1,5 @@
 import type { Endpoint, Workspace } from '@kev-browser-agent-kit/workspace';
-import type { Connection, WorkspaceController } from '@kev-browser-agent-kit/workspace/react';
+import type { Connection, ServiceReadiness, WorkspaceController } from '@kev-browser-agent-kit/workspace/react';
 import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
 import { Effect } from 'effect';
 import { modelHeaderPluginSource } from './model-headers';
@@ -88,15 +88,16 @@ export async function startOpenCode(controller: WorkspaceController, options: {
   serviceName?: string;
   waitForClient?: boolean;
   diagnostics?: DiagnosticScope;
+  readiness?: ServiceReadiness;
 }) {
   await validatePreparedOpenCode(options.prepared);
   const diagnostics = options.diagnostics ?? createDiagnosticScope(event => controller.diagnostic(event.event, event.data), controller.diagnosticRunId);
   const serviceName = options.serviceName ?? 'chat';
   const password = crypto.randomUUID() + crypto.randomUUID(), authorization = 'Basic ' + btoa('opencode:' + password);
-  const service = await controller.launch(serviceName, createOpenCodeCandidateLaunch({ password, ripgrepBinDirectory: options.prepared.opencode.support.binDirectory }), openCodeCandidateLaunch.port, async endpoint => {
-    await verifyOpenCodeReady(endpoint, authorization, controller.signal, diagnostics);
+  const service = await controller.launch(serviceName, createOpenCodeCandidateLaunch({ password, ripgrepBinDirectory: options.prepared.opencode.support.binDirectory }), openCodeCandidateLaunch.port, async (endpoint, signal) => {
+    await verifyOpenCodeReady(endpoint, authorization, signal, diagnostics);
     return connection(endpoint, authorization);
-  }, { shutdown: 'stdin-eof', timeoutMs: 10000 });
+  }, { shutdown: 'stdin-eof', timeoutMs: 10000 }, options.readiness);
   if (options.waitForClient ?? true) await controller.waitForClient(serviceName);
   return service;
 }
