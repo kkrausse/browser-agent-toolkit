@@ -474,6 +474,36 @@ must protect a concrete observed failure/regression or true up an external fixtu
 contract. Existing reproduced chat/ownership failures and pinned-codec fixtures
 meet that criterion; subsequent work must preserve this focus.
 
+### Follow-up: repaired chat passes visible/headless; optional harness still blocked
+
+Independent QA commit `6aa7fd8` records **bounded repaired-lab acceptance** for
+candidate `691cd5aa`, served at fresh origin 57539 with the required frozen hashes.
+See [repair live QA](2026-09-30-chat-readiness-repair-live-qa.md).
+
+- Visible Browser Control QA captured ten gates with no failed assertion: native
+  globals/locators, immediate New chat typing, creation/hydration admission and
+  Enter blocking, preserved draft, exactly one explicit intended prompt, retry,
+  late-result abandonment and draft revisits. Prompt records were local fixture
+  counters, not inference. A deliberately induced creation-error banner persisted
+  on First; clearing that banner was not asserted, so no such lifecycle pass is claimed.
+- Unchanged independent headless script passed six checkpoints/nine captures with
+  zero errors in Brave Chromium 154 / Playwright Core 1.62.1. Separate-page baseline
+  does not prove same-view controller isolation. Screenshots were manually read.
+- Optional same-view wrapper at separate origin 58215 stopped after two passed
+  guards/one failed overstrong textarea-identity assertion. It also broadly held
+  plugin activation, blocking readiness. These are documented QA-harness defects,
+  not proved production defects or accepted same-view/model-mutation coverage.
+  All owned servers/PIDs/ports/sessions/headless resources were joined/absent;
+  browser ownership released. Whole packaged app/disposal flake remain unqualified.
+- New QA-only harness repair agent `ses_f0c2f7248ffeD71LJJ6r2ALZbi` prepares a
+  distinct correct controller-prop-switch/model-route fixture offline; intended
+  report `2026-09-30-controller-swap-qa-harness-repair.md`. Fresh independent live
+  coverage remains required. It may not patch production behavior to satisfy the test.
+- New real-server foundation QA agent `ses_f0c3017fcffemJ1wewPHKzo46p` now has
+  exclusive visible Browser Control ownership for the staged A0-only OpenCode
+  qualification. Intended report `2026-09-30-single-kernel-opencode-foundation-live-qa.md`.
+  No eviction/source replacement/retention transition is authorized in that cohort.
+
 ## Next validation and stress-test sequence
 
 After the first candidates are ready, commission separate test agents rather than
