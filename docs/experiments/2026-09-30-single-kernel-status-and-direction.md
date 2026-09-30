@@ -1117,6 +1117,36 @@ possible implementation mechanism, not a replacement for those contracts. This
 records discussion only; no API redesign or Effect implementation is authorized
 yet, and no all-writer guarantee is claimed for current APIs.
 
+### Direction change: kernel Effect migration authorized; plan and first wave
+
+The user authorized proceeding with the kernel async rewrite, requested a plan
+first, then explicitly directed delegation. Parent committed
+[kernel Effect migration plan](kernel-effect-migration-plan.md) as `e2592d3`.
+Prior scope-only authorization statements remain historical; the new authorization
+covers staged experimental implementation, not release/pin promotion or push.
+
+Extract a TS Effect lifecycle core inside the consolidated kernel while preserving
+synchronous VFS/SAB/WASM and topology. Phase0–1 owns dependency/build/bridge decisions
+and the actual shared tsgo loader/pre-PID launch seam. Next gates transfer process/
+descendant lifetimes, fetch, remaining async writers, persistence and host capture/
+switch contracts. Cache-retention adapter and matched off/on qualification are an
+explicit later deliverable rather than indefinitely deferred after the rewrite.
+Long-lived OpenCode remote ownership remains a separate later boundary.
+
+Implementation agent `ses_f0b649750ffeXKLza4tVNV3jIj` owns runtime production and
+phase0–1 integration; intended report
+`2026-09-30-effect-loader-pilot-implementation.md`. Independent regression agent
+`ses_f0b6415eaffe2pbRMSqCj4VSlX` owns new real-loader negative-control/acceptance
+fixtures and `2026-09-30-effect-loader-migration-regression-gates.md`, not the core.
+Single authoritative ownership per domain; no parallel conflicting API inventions.
+Parent reviews real builds/tests and receipt semantics before assigning next phases.
+
+Old-candidate editor work is narrowed to diagnostic/test preparation. Trace agent
+`ses_f0b716c18ffeVJMNsae8Np5GMB` remains offline, with no new live editor cohort
+authorized. Completed current-candidate evidence is retained as a control, not
+Effect qualification. Browser work is deferred until a matching migrated frozen
+handoff and independent ownership assignment exist. No new pins/defaults changed.
+
 ## Next validation and stress-test sequence
 
 After the first candidates are ready, commission separate test agents rather than
