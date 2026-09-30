@@ -4,6 +4,7 @@ import {createHash} from 'node:crypto';
 import {acquirePairLock,createDriverCommands} from './matched-pair-driver';
 
 export const acceptancePolicy=Object.freeze({stageMs:120000,readMs:15000,interactiveMs:60000,generations:5,retries:0});
+export function acceptanceLock(evidence:string){return resolve(evidence)+'.lock';}
 export function acceptanceRequestCode(api:string,action:string,args:unknown[],token:string){
   return `return await page.evaluate(({api,action,args,token})=>{
     const owner=window[api];if(!owner)throw Error('Acceptance API absent');
@@ -55,7 +56,7 @@ if(import.meta.main){
   if(!receipt.driverSources)throw Error('Driver source receipt missing');
   for(const [file,expected] of Object.entries(receipt.driverSources))if(createHash('sha256').update(await readFile(join(root,file))).digest('hex')!==expected)throw Error('Driver changed since preparation: '+file);
   const cli=process.env.BROWSER_CONTROL_CLI??Bun.which('browser-control');if(!cli)throw Error('Bun-backed Browser Control CLI unavailable');
-  const lock=join(root,'.diagnostics/single-kernel-acceptance-e35eab4.lock');
+  const lock=acceptanceLock(evidence);
   const release=await acquirePairLock(lock);
   try{await mkdir(evidence);}catch(error){await release();throw error;} // No action has started; never strand a preflight lock.
   const sessions={app:'single-kernel-app-'+crypto.randomUUID().slice(0,8),contracts:'single-kernel-cases-'+crypto.randomUUID().slice(0,8)};
