@@ -1,5 +1,5 @@
 import {test, expect} from 'bun:test'
-import {mkdtempSync, mkdirSync, writeFileSync, chmodSync, symlinkSync, readFileSync} from 'node:fs'
+import {mkdtempSync, mkdirSync, writeFileSync, chmodSync, symlinkSync, readFileSync, unlinkSync, rmdirSync} from 'node:fs'
 import {createHash} from 'node:crypto'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
@@ -15,10 +15,10 @@ function fixture() {
   for(const path of directories) chmodSync(root+path,0o755)
   writeFileSync(root+'/workspace/node_modules/pkg/index.js','immutable'); chmodSync(root+'/workspace/node_modules/pkg/index.js',0o644)
   const entries:ManagedEntry[]=[...directories.map(destination=>({kind:'directory' as const,destination,mode:0o755})),{kind:'file',destination:'/workspace/node_modules/pkg/index.js',mode:0o644,bytes:9,sha256:createHash('sha256').update('immutable').digest('hex'),file:'unused'}]
-  const run=()=>{
+  const run=(hashMode: 'stream' | 'direct' = 'stream', profile = false, injectedRequire = require)=>{
     let result:any
-    const script=installedTreeAuditScript(entries).replaceAll('/workspace',root+'/workspace').replaceAll('/opencode-v2',root+'/opencode-v2').replaceAll("'/app'",JSON.stringify(root+'/app'))
-    runInNewContext(script,{require,console:{log:(text:string)=>{result=JSON.parse(text)}}})
+    const script=installedTreeAuditScript(entries,{hashMode,profile}).replaceAll('/workspace',root+'/workspace').replaceAll('/opencode-v2',root+'/opencode-v2').replaceAll("'/app'",JSON.stringify(root+'/app'))
+    runInNewContext(script,{require:injectedRequire,performance,console:{log:(text:string)=>{result=JSON.parse(text)}}})
     return result
   }
   return {root,run,entries}
@@ -28,6 +28,79 @@ test('full hashes and cache inventory preserve bytes without cleanup',()=>{
   const first=f.run(); expect(first.valid).toBe(true); expect(first.checked).toBe(3); expect(first.inventory).toHaveLength(2)
   expect(readFileSync(f.root+'/workspace/node_modules/.vite-temp/config.js','utf8')).toBe('mutable')
   writeFileSync(f.root+'/workspace/node_modules/.vite-temp/config.js','changed'); const second=f.run(); expect(second.valid).toBe(true); expect(second.cacheDigest).not.toBe(first.cacheDigest)
+})
+
+test('direct hash differential full-tree rejection and cache policy controls', () => {
+  const scenarios: Array<(f: ReturnType<typeof fixture>) => void> = [
+    () => {},
+    f => writeFileSync(f.root+'/workspace/node_modules/pkg/index.js','malicious'),
+    f => writeFileSync(f.root+'/workspace/node_modules/pkg/index.js','short'),
+    f => unlinkSync(f.root+'/workspace/node_modules/pkg/index.js'),
+    f => writeFileSync(f.root+'/workspace/node_modules/pkg/extra.js','extra'),
+    f => chmodSync(f.root+'/workspace/node_modules/pkg/index.js',0o600),
+    f => chmodSync(f.root+'/workspace/node_modules/pkg',0o700),
+    f => {unlinkSync(f.root+'/workspace/node_modules/pkg/index.js'); mkdirSync(f.root+'/workspace/node_modules/pkg/index.js')},
+    f => {unlinkSync(f.root+'/workspace/node_modules/pkg/index.js'); symlinkSync('absent',f.root+'/workspace/node_modules/pkg/index.js')},
+    f => mkdirSync(f.root+'/workspace/node_modules/.unknown-cache'),
+    f => symlinkSync('pkg',f.root+'/workspace/node_modules/.vite'),
+    f => {mkdirSync(f.root+'/workspace/node_modules/.vite'); writeFileSync(f.root+'/workspace/node_modules/.vite/cache','bytes')},
+    f => {unlinkSync(f.root+'/workspace/node_modules/pkg/index.js'); symlinkSync('missing',f.root+'/workspace/node_modules/pkg/index.js'); f.entries[2]={kind:'symlink',destination:'/workspace/node_modules/pkg/index.js',target:'expected'}},
+    f => {symlinkSync('index.js',f.root+'/workspace/node_modules/pkg/link'); f.entries.push({kind:'symlink',destination:'/workspace/node_modules/pkg/link',target:'index.js'})},
+    f => {mkdirSync(f.root+'/app'); writeFileSync(f.root+'/app/unknown','x')},
+    f => {rmdirSync(f.root+'/workspace/.browser-editor-cache'); symlinkSync('node_modules/pkg',f.root+'/workspace/.browser-editor-cache')},
+    f => {mkdirSync(f.root+'/workspace/.browser-editor-cache/vite'); symlinkSync('../../node_modules/pkg',f.root+'/workspace/.browser-editor-cache/vite/link')},
+  ]
+  for (const mutate of scenarios) {
+    const f=fixture(); mutate(f)
+    const baseline=f.run(), direct=f.run('direct')
+    expect(direct).toEqual(baseline)
+    for (const mode of ['stream','direct'] as const) {
+      const profiled=f.run(mode,true), {profile,...result}=profiled
+      expect(result).toEqual(baseline)
+      expect(profile.metrics.guestTotal).toBeGreaterThanOrEqual(0)
+    }
+  }
+})
+
+test('direct and stream fail closed on filesystem and hash exceptions', () => {
+  for (const method of ['lstatSync','readdirSync','readFileSync','readlinkSync','createHash','hash']) {
+    const f=fixture()
+    symlinkSync('index.js',f.root+'/workspace/node_modules/pkg/link'); f.entries.push({kind:'symlink',destination:'/workspace/node_modules/pkg/link',target:'index.js'})
+    const injected=((name: string) => {
+      const original=require(name)
+      return new Proxy(original,{get(target,key) { if(key===method) return () => {throw Error('injected failure')}; return target[key] }})
+    }) as typeof require
+    for(const mode of ['stream','direct'] as const) {
+      if(method==='createHash' && mode==='direct' || method==='hash' && mode==='stream') continue
+      expect(f.run(mode,false,injected).valid).toBe(false)
+      expect(f.run(mode,false,injected).reason).toContain('injected failure')
+    }
+  }
+})
+
+test('both auditors join stop, drains and exit on transport, parse and observer failures', async () => {
+  for(const hashMode of ['stream','direct'] as const) for(const failure of ['stdout','stderr','exit','stop','parse','observer']) {
+    let release!: () => void
+    const pending=new Promise<void>(resolve=>{release=resolve})
+    let stopped=false,settled=false
+    const drain=(name:string)=>(async function*(){
+      if(failure===name) throw Error(name+' failure')
+      await pending
+      if(name==='stdout') yield new TextEncoder().encode(failure==='parse'?'bad json':'{"valid":true,"checked":0}')
+    })()
+    const tool=await installedTreeAuditTool([],{hashMode,onTiming:(name)=>{if(failure==='observer' && name==='launch') throw Error('observer failure')}}).bind({
+      installFile:async()=>{},node:async()=>({closeStdin(){},stdout:drain('stdout'),stderr:drain('stderr'),
+        exited:failure==='exit'?Promise.reject(Error('exit failure')):pending.then(()=>({exitCode:0})),
+        stop:async()=>{stopped=true;await pending;if(failure==='stop')throw Error('stop failure')},
+      }),
+    } as any)
+    const task=tool(undefined).then(()=>{settled=true;throw Error('unexpected success')},()=>{settled=true})
+    await Bun.sleep(5)
+    expect(settled).toBe(false)
+    if(['stdout','stderr','exit','observer'].includes(failure)) expect(stopped).toBe(true)
+    release();await task
+    expect(stopped).toBe(true);expect(settled).toBe(true)
+  }
 })
 test('package mutation and unexpected package path fail closed',()=>{
   const f=fixture(); writeFileSync(f.root+'/workspace/node_modules/pkg/index.js','malicious'); expect(f.run().valid).toBe(false)
