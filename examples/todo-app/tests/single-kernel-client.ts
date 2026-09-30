@@ -3,7 +3,7 @@ import {WorkspaceController} from '@kev-browser-agent-kit/workspace/react';
 import {installSource} from '@kev-browser-agent-kit/workspace/delivery';
 import {loadPrepared, preparedApps, installOpenCodeConfig, startOpenCode,openCodeCandidateLaunch} from '@kev-browser-agent-kit/opencode-chat/browser';
 import {previewHTTPThenAttach} from './matched-qualification';
-import {assertZeroWork, assertSingleKernelDiagnostics, fsProbe, streamProbe, childSyncProbe,fetchedBodyProbe} from './single-kernel-contract';
+import {assertZeroWork, assertSingleKernelDiagnostics, fsProbe, streamProbe, childSyncProbe,binaryCaptureBoundariesProbe,fetchedBodyProbe,connectionApiURL} from './single-kernel-contract';
 import {minimalChildProbe,minimalSpawnProbe,spawnProbeFixture,type SpawnProbeMode} from './single-kernel-spawn-probes';
 
 const policy={stageMs:120000,requestMs:20000,generations:5,retries:0};
@@ -19,13 +19,13 @@ const decoder=new TextDecoder();
 const distribution=await fetch('/runtime/distribution.json').then(r=>r.json());
 const delivery={name:'vivari',version:distribution.version,assetBaseUrl:'/runtime/'};
 function render(){document.querySelector('pre')!.textContent=JSON.stringify(evidence,null,2);}
-async function stage(name:string,task:()=>Promise<unknown>){
+async function stage(name:string,task:()=>Promise<unknown>,ms=policy.stageMs){
   if(active||failed||attempted.has(name))throw Error('Acceptance owner busy, terminally failed, or stage already attempted');
   attempted.add(name);
   active=true; evidence.status=name;render();
   let timer: ReturnType<typeof setTimeout>;
   try {
-    const result=await Promise.race([task(),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error(name+' deadline; owned work retained, no retry')),policy.stageMs);})]);
+    const result=await Promise.race([task(),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error(name+' '+ms+'ms deadline; owned work retained, no retry')),ms);})]);
     evidence.stages.push({name,result});evidence.status='ready';render();return result;
   }catch(error){failed=true;evidence.status='failed';evidence.error=String(error);render();throw error;}
   finally{active=false;clearTimeout(timer!);}
@@ -40,10 +40,14 @@ async function capture(stream:AsyncIterable<Uint8Array>,label='unlabelled'){
   }
   channel.text=(channel.text+channelDecoder.decode()).slice(-65536);return chunks.map(b=>decoder.decode(b)).join('');
 }
-async function initialize(){
+async function open(){
   assert(distribution.topology?.policy==='single-kernel','Not a single-kernel distribution');
   const workspace=await owner.open(delivery);assert(workspace.persistence.status==='durable','Persistence not durable');
-  await owner.startRuntime({});
+   await owner.startRuntime({});
+   return {version:distribution.version,revision:distribution.runtimeBuild.source.commit,diagnostics:await diagnostics()};
+}
+async function initialize(){
+  const workspace=owner.workspace!;
   await workspace.fs.writeFile('/fs-probe.mjs',fsProbe);
   const execution=await owner.runtime!.node({entry:'/workspace/fs-probe.mjs',cwd:'/workspace'});
   // Attach both drains before awaiting exit; no stdout-only await deadlock.
@@ -98,6 +102,15 @@ async function childSync(){
   const binary=await owner.workspace!.fs.readFile('/child-sync/link');assert(binary.length===1048583,'Child host readback length');
   for(let i=0;i<binary.length;i++)assert(binary[i]===i%251,'Child host byte corruption');
   return {...result,diagnostics:await zero()};
+}
+async function captureBoundaries(){
+  await owner.workspace!.fs.writeFile('/capture-boundaries.cjs',binaryCaptureBoundariesProbe);
+  const execution=await owner.runtime!.node({entry:'/workspace/capture-boundaries.cjs',cwd:'/workspace'});
+  const out=capture(execution.stdout,'capture-boundaries.stdout'),err=capture(execution.stderr,'capture-boundaries.stderr');execution.closeStdin();
+  const [stdout,stderr,exit]=await Promise.all([out,err,execution.exited]);
+  assert(exit.exitCode===0&&exit.signal===null&&!exit.forced,'Binary capture boundaries failed: '+stderr);
+  const result=JSON.parse(stdout.trim());assert(result.binaryCapture&&result.bothStreams===1048583&&result.execErrors===2,'Binary capture completion');
+  return {...result,exit,diagnostics:await zero()};
 }
 async function minimalSpawn(mode:SpawnProbeMode){
   const workspace=owner.workspace!;
@@ -194,7 +207,7 @@ async function hmr(){
 async function sse(){
   const service=owner.getSnapshot().services.chat;assert(service,'OpenCode service absent');
   const abort=new AbortController();
-  const response=await service.connection.fetch('/api/event',{signal:AbortSignal.any([abort.signal,AbortSignal.timeout(policy.requestMs)])});
+  const response=await service.connection.fetch(connectionApiURL(service.connection.url,'/api/event'),{signal:AbortSignal.any([abort.signal,AbortSignal.timeout(policy.requestMs)])});
   assert(response.ok&&response.headers.get('content-type')?.includes('text/event-stream')&&response.body,'OpenCode event stream headers');
   const reader=response.body!.getReader();let text='';
   while(!text.includes('server.connected')){const next=await reader.read();assert(!next.done,'Event stream ended before handshake');text+=decoder.decode(next.value);assert(text.length<65536,'Handshake exceeded bound');}
@@ -203,11 +216,11 @@ async function sse(){
   const deadline=Date.now()+policy.requestMs;let state=await diagnostics();
   while(state.pendingHttp!==0&&Date.now()<deadline){await new Promise(resolve=>setTimeout(resolve,25));state=await diagnostics();}
   assert(state.pendingHttp===0,'OpenCode event cancellation left pending HTTP');
-  const health=await service.connection.fetch(openCodeCandidateLaunch.healthPath,{signal:AbortSignal.timeout(policy.requestMs)});
+  const health=await service.connection.fetch(connectionApiURL(service.connection.url,openCodeCandidateLaunch.healthPath),{signal:AbortSignal.timeout(policy.requestMs)});
   assert(health.ok&&(await health.json()).healthy,'OpenCode health after SSE abort');
   return {handshake:true,aborted:true,diagnostics:state};
 }
-const api={evidence,diagnostics,get generation(){return generation;},initialize:()=>stage('filesystem',initialize),fetchedBody:()=>stage('fetched-body-evicted-pin',fetchedBody),childSync:()=>stage('child-sync',childSync),watches:()=>stage('concurrent-watch-flush',watches),streaming:()=>stage('http-backpressure',streaming),recreate:()=>stage('persistence-recreate',recreate),apps:()=>stage('apps-'+(generation+1),apps),hmr:()=>stage('hmr',hmr),sse:()=>stage('opencode-sse-abort',sse),
+const api={evidence,diagnostics,get generation(){return generation;},open:()=>stage('open',open),captureBoundaries:()=>stage('binary-capture-boundaries',captureBoundaries,60000),initialize:()=>stage('filesystem',initialize),fetchedBody:()=>stage('fetched-body-evicted-pin',fetchedBody),childSync:()=>stage('child-sync',childSync,20000),watches:()=>stage('concurrent-watch-flush',watches),streaming:()=>stage('http-backpressure',streaming),recreate:()=>stage('persistence-recreate',recreate),apps:()=>stage('apps-'+(generation+1),apps),hmr:()=>stage('hmr',hmr),sse:()=>stage('opencode-sse-abort',sse),
   minimalAsyncSpawn:()=>stage('minimal-async-spawn',()=>minimalSpawn('async')),
   minimalSpawnSync:()=>stage('minimal-spawnSync',()=>minimalSpawn('spawnSync')),
   minimalExecSync:()=>stage('minimal-execSync',()=>minimalSpawn('execSync')),

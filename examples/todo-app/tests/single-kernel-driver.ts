@@ -15,7 +15,7 @@ export function acceptanceRequestCode(api:string,action:string,args:unknown[],to
   },${JSON.stringify({api,action,args,token})});`;
 }
 export async function runFoundation(request:(action:string)=>Promise<unknown>){
-  for(const action of ['initialize','minimalAsyncSpawn','minimalSpawnSync','minimalExecSync','fetchedBody','childSync','watches','streaming','recreate'])await request(action);
+  for(const action of ['open','childSync','captureBoundaries','initialize','minimalAsyncSpawn','minimalSpawnSync','minimalExecSync','fetchedBody','watches','streaming','recreate'])await request(action);
 }
 export function validateOwnedOrigins(app:any,contracts:any,output:string){
   for(const origin of [app,contracts]){
@@ -50,13 +50,16 @@ if(import.meta.main){
   validateOwnedOrigins(app,contracts,output);
   const receipt=await Bun.file(join(output,'receipt.json')).json();
   if(!receipt.prepared||receipt.topology?.policy!=='single-kernel')throw Error('Full acceptance requires matching prepared apps and single-kernel receipt');
+  if(receipt.revision!=='f5456996d511225d0147682cccddbf16adab4b4e')throw Error('Require authorized causal-fix checkpoint');
+  for(const [file,expected] of Object.entries(receipt.hashes))if(createHash('sha256').update(await readFile(join(output,file))).digest('hex')!==expected)throw Error('Acceptance artifact changed: '+file);
   if(!receipt.driverSources)throw Error('Driver source receipt missing');
   for(const [file,expected] of Object.entries(receipt.driverSources))if(createHash('sha256').update(await readFile(join(root,file))).digest('hex')!==expected)throw Error('Driver changed since preparation: '+file);
   const cli=process.env.BROWSER_CONTROL_CLI??Bun.which('browser-control');if(!cli)throw Error('Bun-backed Browser Control CLI unavailable');
-  const release=await acquirePairLock(join(root,'.diagnostics/single-kernel-browser-owner.lock'));
+  const lock=join(root,'.diagnostics/single-kernel-acceptance-f545699.lock');
+  const release=await acquirePairLock(lock);
   try{await mkdir(evidence);}catch(error){await release();throw error;} // No action has started; never strand a preflight lock.
   const sessions={app:'single-kernel-app-'+crypto.randomUUID().slice(0,8),contracts:'single-kernel-cases-'+crypto.randomUUID().slice(0,8)};
-  await writeFile(join(evidence,'ownership.json'),JSON.stringify({output,app,contracts,sessions,policy:acceptancePolicy,receipt,lock:join(root,'.diagnostics/single-kernel-browser-owner.lock')},null,2),{flag:'wx'});
+  await writeFile(join(evidence,'ownership.json'),JSON.stringify({output,app,contracts,sessions,policy:acceptancePolicy,receipt,lock,firstProbeDeadlineMs:20000,captureBoundariesDeadlineMs:60000,oldCohortsUntouched:true},null,2),{flag:'wx'});
   let expired=false,actionPending=false;
   const commands=createDriverCommands(evidence,sessions,()=>expired,undefined,['bun',cli]);
   const command=commands.command;
@@ -78,7 +81,7 @@ if(import.meta.main){
   async function request(condition:string,api:string,action:string,args:unknown[]=[]){
     const token=crypto.randomUUID();actionPending=true;
     await read(condition,acceptanceRequestCode(api,action,args,token));
-    const result=await poll(condition,`return await page.evaluate(token=>{const r=window.singleKernelRuns?.[token];if(!r)throw Error('Owned action lost');return {status:r.status,error:r.error}},${JSON.stringify(token)})`,acceptancePolicy.stageMs,value=>value.status!=='pending');
+    const result=await poll(condition,`return await page.evaluate(token=>{const r=window.singleKernelRuns?.[token];if(!r)throw Error('Owned action lost');return {status:r.status,error:r.error}},${JSON.stringify(token)})`,(action==='childSync'?20000:action==='captureBoundaries'?60000:acceptancePolicy.stageMs)+10000,value=>value.status!=='pending');
     actionPending=false;if(result.status!=='completed')throw Error(result.error??'Acceptance action failed');
   }
   async function fresh(condition:string,origin:string,api:string){
@@ -139,6 +142,9 @@ if(import.meta.main){
     if(createHash('sha256').update(text).digest('hex')!==manifest.hash)throw Error('Browser log snapshot digest changed');
     await writeFile(join(evidence,name+'.json'),text,{flag:'wx'});
   }
+  async function retainDiagnostics(){
+    await read('app',`return await page.evaluate(async()=>{window.singleKernelAcceptance.evidence.failureDiagnostics=await Promise.race([window.singleKernelAcceptance.diagnostics(),new Promise(resolve=>setTimeout(()=>resolve({unavailable:'5000ms read deadline'}),5000))]);return {captured:true};});`);
+  }
   try{
     for(const id of Object.values(sessions))await session(['new',id]);
     await fresh('app',app.url,'singleKernelAcceptance');
@@ -175,6 +181,7 @@ if(import.meta.main){
     // Exact pages, origin servers, and global lock remain for inspection/repair.
     const captureErrors:string[]=[];
     if(!expired&&!commands.pending){
+      try{await retainDiagnostics();}catch(captureError){captureErrors.push(String(captureError));}
       for(const [condition,api] of [['app','singleKernelAcceptance'],['contracts','singleKernelCases']]){
         try{const available=await read(condition,`return await page.evaluate(api=>({available:!!window[api]}),${JSON.stringify(api)});`);if(available.available)await retain(condition!,api!,'failure-'+condition);await retainBrowserLogs(condition!,'failure-'+condition+'-browser-logs');}catch(captureError){captureErrors.push(String(captureError));if(expired||commands.pending)break;}
       }

@@ -12,6 +12,12 @@ export function assertKernelWorkerURL(value:string):void{
   const url=new URL(value);
   if(!/\/kernel-worker(?:-[\w-]+)?\.js$/.test(url.pathname)||!url.searchParams.has('opfs-disable')||url.search.slice(1).includes('?'))throw Error('Kernel worker URL must preserve Vite query and explicitly disable SQLite OPFS proxy');
 }
+/** Authenticated connections resolve URLs normally, unlike Endpoint.fetch's
+ * workspace-relative paths. Keep API requests inside their preview mount. */
+export function connectionApiURL(endpoint:string,path:string):string{
+  if(!path.startsWith('/api/'))throw Error('Expected OpenCode API path');
+  return new URL(path.slice(1),endpoint).href;
+}
 
 export const fsProbe = `import fs from 'node:fs';
 const root='/workspace/kernel-contract'; fs.mkdirSync(root,{recursive:true});
@@ -53,6 +59,17 @@ const out=cp.execSync('node '+script,{maxBuffer:2097152});
 if(out.length!==1048583)throw Error('execSync child output truncated '+out.length);
 for(let i=0;i<out.length;i++)if(out[i]!==i%251)throw Error('execSync child byte corruption');
 console.log(JSON.stringify({execSync:true,bytes:out.length,childLink:fs.readlinkSync('/workspace/child-sync/link')}));`;
+
+export const binaryCaptureBoundariesProbe = `const fs=require('node:fs'),cp=require('node:child_process');
+fs.writeFileSync('/workspace/capture-binary.cjs',"const n=Number(process.argv[2]),b=Buffer.alloc(n);for(let i=0;i<n;i++)b[i]=i%251;process.stdout.write(b);if(process.argv[3]==='both')process.stderr.write(b);");
+const check=(b,n)=>{if(!Buffer.isBuffer(b)||b.length!==n)throw Error('capture length '+n);for(let i=0;i<n;i++)if(b[i]!==i%251)throw Error('capture byte '+i);};
+const sizes=[0,255,700000,800000,1048583];
+for(const n of sizes){const r=cp.spawnSync('node',['/workspace/capture-binary.cjs',String(n)],{maxBuffer:2097152});if(r.error||r.status!==0||r.signal)throw Error('capture exit '+r.error);check(r.stdout,n);}
+const both=cp.spawnSync('node',['/workspace/capture-binary.cjs','1048583','both'],{maxBuffer:2097152});if(both.error||both.status!==0)throw Error('both capture exit');check(both.stdout,1048583);check(both.stderr,1048583);
+const overflow=cp.spawnSync('node',['/workspace/capture-binary.cjs','1048583']);if(overflow.error?.code!=='ENOBUFS'||overflow.status!==null||overflow.signal!=='SIGTERM')throw Error('overflow result');check(overflow.stdout,1048576);
+for(const run of [()=>cp.execSync('node /workspace/capture-binary.cjs 255',{maxBuffer:16}),()=>cp.execFileSync('node',['/workspace/capture-binary.cjs','255'],{maxBuffer:16})]){let e;try{run();}catch(error){e=error;}if(e?.code!=='ENOBUFS')throw Error('bounded error absent');check(e.stdout,16);}
+const encoded=cp.execFileSync('node',['/workspace/capture-binary.cjs','255'],{encoding:'latin1',maxBuffer:1000});if(typeof encoded!=='string'||encoded.length!==255||encoded.charCodeAt(200)!==200)throw Error('capture encoding');
+console.log(JSON.stringify({binaryCapture:true,sizes,bothStreams:1048583,overflow:'ENOBUFS',overflowBytes:1048576,execErrors:2,latin1:true}));`;
 
 /** Test-only coupling to the fork's existing egress primitive, not browser fetch.
  * Its metadata/path handoff exercises the same SAB whole-file/fd fallback as npm. */
