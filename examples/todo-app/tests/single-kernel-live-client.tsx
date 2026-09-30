@@ -7,6 +7,11 @@ import '../../../opencode-chat/src/styles.css';
 import '../../../opencode-chat/src/editor.css';
 
 const controller = new WorkspaceController({ captureProcessOutput: true });
+// EditorPreview uses these identities as attachment-effect dependencies. Keep
+// them stable across controller publications (including preview clientReady).
+const hostPaths = ['/api'];
+const recipe = { start: startBrowserEditor };
+const isPreviewReady = (frame: HTMLIFrameElement) => !!frame.contentDocument?.querySelector('main input#title:not(:disabled)');
 
 function LiveApp() {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
@@ -39,8 +44,7 @@ function LiveApp() {
       <span>Source and chat stay local to this browser origin. TODO data stays in server memory.</span>
     </header>
     {opened ? <div className="live-editor"><BrowserEditor controller={controller} layout="sidebar"
-      recipe={{ start: startBrowserEditor }} hostPaths={['/api']}
-      isPreviewReady={frame => !!frame.contentDocument?.querySelector('main input#title:not(:disabled)')}
+      recipe={recipe} hostPaths={hostPaths} isPreviewReady={isPreviewReady}
       onExit={async () => { await controller.cancelAndClose(); setOpened(false); }} /></div>
       : <p>Choose Open editor to boot the durable workspace, Vite TODO preview and OpenCode server. No automated E2E stages run.</p>}
     <details className="live-source"><summary>Source editor (explicit local save)</summary>
