@@ -310,3 +310,19 @@ not evidence that pilot success means the whole kernel is migrated.
   one visible owner, first failure stops, old origin/frozen bytes never replayed.
   Qualified Node results are already delivered, despite preparation's historical
   pending statement. Phase2 remains gated by this implementation review/qualification.
+- Browser report `4470897`:
+  [loader browser/app QA](2026-09-30-effect-loader-browser-full-app-qa.md).
+  Two actual visible loader cases pass: real compiler7.0.2 and held native vendor
+  abort joined by Runtime stop, no late PID/shim writes after explicit release.
+  Minimal UI leaves Workspace open by design; tab cleanup is not a Workspace.close
+  receipt. Combined app passed eleven foundation stages then apps1 preview readiness
+  failed with TypeError/Failed to fetch; zero generations/focused checks completed.
+  Vite listener and one pending HTTP request observed; cause not established.
+  Public failure retirement joined and cleared targets/locks without changing failure.
+  Source/native/delivery hashes unchanged; exclusive browser slot released.
+- Investigation owner `ses_f0b08e627ffeoCwNjAaWE4XtjG` compares exact failed preview
+  fetch evidence/static transport and preparation/runtime changes against the passing
+  imperative candidate. Intended report
+  `2026-09-30-effect-loader-preview-fetch-investigation.md`; offline only, no
+  speculative repair/phase2 expansion or failed-origin replay. Overall app/pilot
+  qualification remains incomplete despite real loader and qualified Node passes.
