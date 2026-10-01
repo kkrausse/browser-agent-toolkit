@@ -17,9 +17,19 @@
     if (!receipt.armed) return;
     try {
       const entry = { sequence: receipt.events.length + receipt.dropped + 1, wall: Date.now(), mono: performance.now(), event, data };
-      const text = JSON.stringify(entry);
+      // Successful readiness permits the unchanged app action to launch chat.
+      // Never retain its generated authorization value in observer evidence.
+      const sanitize = (key: string, value: any): any => {
+        if (/^(authorization|proxy-authorization|cookie|set-cookie)$/i.test(key)) return '[authorization redacted]';
+        if (key === 'headers' && Array.isArray(value)) return value.map((item, index) => {
+          if (Array.isArray(item)) return /^(authorization|proxy-authorization|cookie|set-cookie)$/i.test(String(item[0])) ? [item[0], '[authorization redacted]'] : item;
+          return index % 2 && /^(authorization|proxy-authorization|cookie|set-cookie)$/i.test(String(value[index - 1])) ? '[authorization redacted]' : item;
+        });
+        return typeof value === 'string' ? value.replace(/\b(?:Basic|Bearer)\s+[A-Za-z0-9._~+\/=-]+/gi, '[authorization redacted]') : value;
+      };
+      const text = JSON.stringify(entry, sanitize);
       if (receipt.events.length >= receipt.limit.events || receipt.bytes + text.length > receipt.limit.bytes) { receipt.dropped++; return; }
-      receipt.bytes += text.length; receipt.events.push(entry);
+      receipt.bytes += text.length; receipt.events.push(JSON.parse(text));
     } catch { receipt.observerErrors++; }
   };
   const signal = (value: AbortSignal, label: string, budgetMs?: number) => {
