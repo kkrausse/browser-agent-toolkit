@@ -400,3 +400,14 @@ not evidence that pilot success means the whole kernel is migrated.
   `ses_f0ad0420dffeEfcgg956Cc1JZh` prepares concrete race/failure/partial-acquisition
   gates (`2026-09-30-effect-process-subtree-regression-gates.md`). Both offline;
   no browser runs or phase2B/3 expansion until matching implementation review.
+- Phase2A regression delivery `5c59695`:
+  [process/subtree gates](2026-09-30-effect-process-subtree-regression-gates.md).
+  Seventeen offline real Kernel/core/Rust-VFS/public-Runtime gates run against the
+  qualified phase1 baseline:2 pass/15 targeted failures/zero unrun. All31 preserved
+  cases plus routing pass. Actual absolute Node24.18 and107candidate/1020manifest/
+  native12inputs37outputs verified before/after. Fault cases cover partial worker
+  acquisition, native termination joins, descendant error aggregation and stale SAB
+  callbacks. These are offline reproductions, not observed browser failures.
+  Migrated positive denominator17 remains pending matching2A production handoff and
+  explicit new-receipt admission; implementation agent remains assigned. No phase2B
+  or fetch-authority expansion follows from baseline negatives.
