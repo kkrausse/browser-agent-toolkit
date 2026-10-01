@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { clearWorkspace } from '@kev-browser-agent-kit/workspace'
+import { clearWorkspace, clearWorkspaceSource, type NodeLaunchOptions } from '@kev-browser-agent-kit/workspace'
 import type { WorkspaceController } from '@kev-browser-agent-kit/workspace/react'
-import { EditorPreview, useWorkspaceChat, chatFor } from '@kev-browser-agent-kit/opencode-chat/editor'
+import { EditorPreview, useWorkspaceChat, attachChat, chatFor, detachChat } from '@kev-browser-agent-kit/opencode-chat/editor'
 import { ChatView } from '@kev-browser-agent-kit/opencode-chat/react'
 import type { ChatSnapshot } from '@kev-browser-agent-kit/opencode-chat'
 import { loadPrepared } from '@kev-browser-agent-kit/opencode-chat/browser'
-import { startBrowserEditor } from './start-editor'
+import { readyStatus, startBrowserEditor, startPreview } from './start-editor'
 import { timedStage } from './editor-timings'
 import { EditorTimings } from './editor-timings-panel'
-import { captureSource, createWorkspaceStore, identityPath, idleChat, restoreSource, safeSourcePath, upsert, validateWorkspace, writeIdentity, type Catalog, type SavedWorkspace } from './local-workspaces'
-import { captureSessions, restoreSessions } from './workspace-sessions'
-import { switchWorkspace } from './workspace-switch'
+import { captureSource, createWorkspaceStore, identityPath, idleChat, restoreSource, retainedRoots, safeSourcePath, upsert, validateWorkspace, writeIdentity, type Catalog, type SavedWorkspace } from './local-workspaces'
+import { captureSessions, restoreSessions, retainedServerBlocker } from './workspace-sessions'
+import { dependencyMismatch, switchWorkspace } from './workspace-switch'
 import { interruptedSwitchError, workspaceSwitchPresentation } from './workspace-switch-presentation'
 import { closeEditor, errorText, exitRecovery, footerError, snapshotErrorCode } from './workspace-exit'
 import '@kev-browser-agent-kit/opencode-chat/editor.css'
@@ -21,6 +21,8 @@ const isPreviewReady = (frame: HTMLIFrameElement) => !!frame.contentDocument?.qu
 const emptyChat: ChatSnapshot = { connection: 'disconnected', execution: 'unknown', sending: false, loading: true, loadingOlder: false, interruptRequested: false, permissions: [], questions: [], unsupportedForms: [], sessions: [], models: [], messages: [], hasOlder: false }
 const noopSubscribe = () => () => {}
 const defaultName = 'Current workspace'
+// A/B switch for measuring: ?workspaceSwitch=full never keeps OpenCode across a switch.
+const fullSwitchForced = () => new URLSearchParams(location.search).get('workspaceSwitch') === 'full'
 
 export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceController; onExit(warning?: string): void }): ReactNode {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot)
@@ -39,6 +41,8 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
   const [actionBusy, setActionBusy] = useState(false)
   // Set when an exit, or the stop inside a switch, failed with the workspace still attached.
   const [closeFailure, setCloseFailure] = useState<string>()
+  // How the running preview was launched; a retained switch relaunches it as it was.
+  const previewLaunch = useRef<NodeLaunchOptions | undefined>(undefined)
   const [note, setNote] = useState('Source and native chats are local to this browser. TODO items remain shared in host memory.')
   const switchPresentation = workspaceSwitchPresentation(pending, actionBusy)
   const { chat, error: chatError } = useWorkspaceChat(controller, restoring || switchPresentation?.phase === 'recovery' ? undefined : state.services.chat)
@@ -100,7 +104,8 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
   }
   async function boot(incoming?: SavedWorkspace): Promise<void> {
     let mappedSelection: string | undefined
-    await startBrowserEditor(controller, {
+    previewLaunch.current = undefined
+    const started = await startBrowserEditor(controller, {
       beforeSource: async () => {
         if (!incoming && catalog.current.pending) throw Error(interruptedSwitchError)
       },
@@ -111,10 +116,15 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
       // Allow hydration, but retain the UI checkpoint until the catalog commit.
       chatConnectReady: () => { setRestoring(false) },
     })
-    const service = controller.getSnapshot().services.chat
+    previewLaunch.current = started.preview
     if (!incoming) {
       try { mappedSelection = JSON.parse(new TextDecoder().decode(await controller.workspace!.fs.readFile(identityPath))).selectedSessionId } catch { /* legacy identity */ }
     }
+    await selectRestored(incoming, mappedSelection)
+  }
+  /** Chat is attached: select the session the workspace had selected and record it. */
+  async function selectRestored(incoming: SavedWorkspace | undefined, mappedSelection: string | undefined): Promise<void> {
+    const service = controller.getSnapshot().services.chat
     if (mappedSelection && service) await timedStage('chat.select-session', async () => { await chatFor(service)?.selectSession(mappedSelection!) })
     if (incoming) await writeIdentity(controller.workspace!, { ...incoming, selectedSessionId: mappedSelection })
     identitySelection.current = mappedSelection
@@ -231,15 +241,48 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
       hold: () => held ?? holdChat('Switching workspace'), capture, persist,
       disposeChat: async () => {
         setRestoring(true)
+        // Also forgets the client, so a server that keeps running gets a fresh one.
         const service = controller.getSnapshot().services.chat
-        if (service) await chatFor(service)?.dispose()
+        if (service) await detachChat(service)
       },
       stop: () => controller.stopRuntime().catch(error => { setCloseFailure(errorText(error)); throw error }),
       replace: async saved => { await clearWorkspace(controller.workspace!); await restoreSource(controller.workspace!, saved) },
       start: saved => boot(saved),
+      retained: {
+        blocker: retainedBlocker,
+        stopPreview: () => controller.stopService('vite'),
+        replaceSource: async saved => { await clearWorkspaceSource(controller.workspace!, { keep: retainedRoots }); await restoreSource(controller.workspace!, saved) },
+        resume,
+      },
+      onPath: taken => controller.diagnostic('switch.path', taken),
     })
     setName(incoming.name)
     setNote(`Opened ${incoming.name}. Outgoing source and native sessions were saved before replacement.`)
+  }
+  /** Asked with chat admission held, before the switch disposes or removes anything. */
+  async function retainedBlocker(outgoing: SavedWorkspace, incoming: SavedWorkspace): Promise<string | undefined> {
+    if (fullSwitchForced()) return 'forced by ?workspaceSwitch=full'
+    const { chat: service, vite } = controller.getSnapshot().services
+    if (!controller.runtime || !service || !vite || !previewLaunch.current) return 'preview or OpenCode is not running'
+    if (!chatFor(service)?.getSnapshot().held) return 'chat admission is not held'
+    // The retained /workspace/node_modules is the outgoing workspace's install.
+    return dependencyMismatch(outgoing.source, incoming.source) ?? await retainedServerBlocker(service)
+  }
+  /** A retained switch's start. Runtime, dependencies, OpenCode's configuration and
+   * its process are as they were, so only the preview is launched; sessions are
+   * replaced as on the full path and a fresh chat client mounts on the same service. */
+  async function resume(incoming: SavedWorkspace): Promise<void> {
+    const service = controller.getSnapshot().services.chat, preview = previewLaunch.current
+    if (!service || !preview) throw Error('OpenCode stopped during the workspace switch')
+    controller.status('Restarting preview; OpenCode keeps running…')
+    await timedStage('switch.start-preview', () => startPreview(controller, preview))
+    const ids = await restoreSessions(service, incoming.sessions)
+    // Allow hydration, but retain the UI checkpoint until the catalog commit.
+    setRestoring(false)
+    // The service's client promise resolved on its first attach; wait for this one.
+    await attachChat(controller, service)
+    await selectRestored(incoming, incoming.selectedSessionId ? ids.get(incoming.selectedSessionId) : undefined)
+    controller.status(readyStatus)
   }
   async function create(): Promise<void> {
     const hold = holdChat('Creating workspace')
@@ -270,7 +313,7 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
       <div className="todo-workspace-chat" inert={actionBusy || state.busy || !!pending || restoring}>
         {chat && !pending && !restoring ? <ChatView controller={chat} showModels showSessions /> : <p>{switchPresentation?.phase === 'switching' ? 'Connecting workspace chat…' : switchPresentation?.phase === 'recovery' ? 'Recover the interrupted switch to reconnect chat.' : chatError || 'Starting OpenCode…'}</p>}
       </div>
-      <footer><p role="status">{switchPresentation ? switchPresentation.phase === 'switching' ? 'Workspace switch in progress…' : 'Workspace recovery required.' : state.status}</p>{footerAlert && <p role="alert">{footerAlert}</p>}{state.error && !pending && <button disabled={state.busy || actionBusy} onClick={() => action('Retry editor startup', open)}>Retry editing</button>}<small>{blocked && !state.busy && !pending ? chat ? `Workspace actions wait for connected, idle chat (${chatState.execution}).` : 'Preview and OpenCode are not running. Retry editing to continue working, or exit.' : 'Switching fully stops and restarts preview and OpenCode.'}</small><details><summary>Debug · Activity</summary><pre>{state.logs.join('\n')}</pre></details></footer>
+      <footer><p role="status">{switchPresentation ? switchPresentation.phase === 'switching' ? 'Workspace switch in progress…' : 'Workspace recovery required.' : state.status}</p>{footerAlert && <p role="alert">{footerAlert}</p>}{state.error && !pending && <button disabled={state.busy || actionBusy} onClick={() => action('Retry editor startup', open)}>Retry editing</button>}<small>{blocked && !state.busy && !pending ? chat ? `Workspace actions wait for connected, idle chat (${chatState.execution}).` : 'Preview and OpenCode are not running. Retry editing to continue working, or exit.' : 'Switching restarts the preview; OpenCode restarts too unless it can be kept.'}</small><details><summary>Debug · Activity</summary><pre>{state.logs.join('\n')}</pre></details></footer>
     </aside>
     <EditorTimings controller={controller} />
   </div>

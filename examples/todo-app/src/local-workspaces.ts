@@ -9,6 +9,10 @@ export const identityPath = '/.todo-workspace.json'
 // delivery, not logical source snapshots. Never copy them into the catalog or
 // restore a receipt supplied by an incoming workspace over installed state.
 const excluded = new Set(['node_modules', '.browser-editor-backends', '.browser-editor-cache', '.git', '.server', '.editor', '.react-router', 'build', '.env', '.env.local', '.env.production', '.todo-workspace.json'])
+/** Top-level /workspace entries a retained switch leaves in place: OpenCode's own
+ * state and configuration, and the two roots managed delivery installs there. Every
+ * other entry is the outgoing workspace's, as on the full path, and is removed. */
+export const retainedRoots = ['.server', 'node_modules', '.browser-editor-backends']
 export function safeSourcePath(path: string): boolean {
   return path.startsWith('/') && path !== '/' && !path.split('/').slice(1).some(part => !part || part === '.' || part === '..' || /[\\\0]/.test(part) || excluded.has(part) || part.startsWith('.env.'))
 }

@@ -1,4 +1,4 @@
-import type { Distribution, Endpoint } from '@kev-browser-agent-kit/workspace'
+import type { Distribution, Endpoint, NodeLaunchOptions } from '@kev-browser-agent-kit/workspace'
 import { installSource } from '@kev-browser-agent-kit/workspace/delivery'
 import { createDiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics'
 import type { Connection, Service, WorkspaceController } from '@kev-browser-agent-kit/workspace/react'
@@ -6,6 +6,7 @@ import { openedElsewhere, openedElsewhereMessage, errorText } from './workspace-
 import { installOpenCodeConfig, loadPrepared, preparedApps, startOpenCode } from '@kev-browser-agent-kit/opencode-chat/browser'
 
 const base = '/editor/'
+export const readyStatus = 'Ready. Ask the agent to change the app; changes stay local to this browser.'
 
 function connection(endpoint: Endpoint): Connection {
   return {
@@ -17,12 +18,25 @@ function connection(endpoint: Endpoint): Connection {
   }
 }
 
-/** The application owns startup order, preview choice, readiness, and logging. */
+/** Launch the Vite preview and wait until the mounted frame shows the application. */
+export async function startPreview(controller: WorkspaceController, preview: NodeLaunchOptions): Promise<void> {
+  await controller.launch('vite', preview, 5173, async (endpoint) => {
+    const response = await endpoint.fetch('/', {
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60_000)]),
+    })
+    if (!response.ok) throw new Error(`Preview HTTP ${response.status}`)
+    return connection(endpoint)
+  })
+  await controller.waitForClient('vite')
+}
+
+/** The application owns startup order, preview choice, readiness, and logging.
+ * Resolves with the preview's launch, which a retained switch reuses. */
 export async function startBrowserEditor(controller: WorkspaceController, options: {
   beforeSource?(controller: WorkspaceController): Promise<void>
   beforeChatConnect?(service: Service): Promise<void>
   chatConnectReady?(): void
-} = {}): Promise<void> {
+} = {}): Promise<{ preview: NodeLaunchOptions }> {
   const diagnostics = createDiagnosticScope(
     (event) => controller.diagnostic(event.event, event.data),
     controller.diagnosticRunId,
@@ -90,21 +104,11 @@ export async function startBrowserEditor(controller: WorkspaceController, option
     [
       'Start preview and OpenCode',
       async () => {
-        const preview = async () => {
-          await controller.launch('vite', manifest.preview, 5173, async (endpoint) => {
-            const response = await endpoint.fetch('/', {
-              signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60_000)]),
-            })
-            if (!response.ok) throw new Error(`Preview HTTP ${response.status}`)
-            return connection(endpoint)
-          })
-          await controller.waitForClient('vite')
-        }
         // Both services share one guest kernel. Qualify the preview before
         // starting OpenCode's module/plugin boot, as in the qualified single-
         // kernel suite: cold Vite must not compete with chat for its listen
         // budget. Keep the same per-service deadlines and failure ownership.
-        await preview()
+        await startPreview(controller, manifest.preview)
         const service = await startOpenCode(controller, { prepared: manifest, diagnostics, waitForClient: false })
         await options.beforeChatConnect?.(service)
         options.chatConnectReady?.()
@@ -112,5 +116,6 @@ export async function startBrowserEditor(controller: WorkspaceController, option
       },
     ],
   ])
-  controller.status('Ready. Ask the agent to change the app; changes stay local to this browser.')
+  controller.status(readyStatus)
+  return { preview: manifest.preview }
 }

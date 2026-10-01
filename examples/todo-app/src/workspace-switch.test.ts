@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
-import { switchWorkspace } from './workspace-switch'
+import { dependencyMismatch, switchWorkspace, type SwitchPath } from './workspace-switch'
 import { workspaceSwitchPresentation } from './workspace-switch-presentation'
-import { idleChat, validateWorkspace, safeSourcePath, captureSource, type SavedWorkspace, type Catalog } from './local-workspaces'
+import { idleChat, validateWorkspace, safeSourcePath, captureSource, retainedRoots, type SavedWorkspace, type Catalog } from './local-workspaces'
 import { orderSessions } from './workspace-sessions'
 import type { Workspace } from '@kev-browser-agent-kit/workspace'
 import type { ChatSnapshot } from '@kev-browser-agent-kit/opencode-chat'
@@ -105,6 +105,67 @@ describe('local workspace switching', () => {
     expect(f.events).toContain('start')
     expect(f.persisted().activeId).toBe(f.outgoing.id)
     expect(workspaceSwitchPresentation(f.persisted().pending, false)?.phase).toBe('recovery')
+  })
+  const retainedFixture = (blocker: () => Promise<string | undefined> = async () => undefined) => {
+    const f = fixture(), paths: SwitchPath[] = []
+    const retained = {
+      blocker: async () => { f.events.push('eligibility'); return blocker() },
+      stopPreview: async () => { f.events.push('stop-preview') }, replaceSource: async () => { f.events.push('replace-source') }, resume: async () => { f.events.push('resume') },
+    }
+    return { ...f, paths, retained, options: { ...f.options, retained, onPath: (taken: SwitchPath) => { paths.push(taken) } } }
+  }
+  test('an eligible switch keeps the server: decided before disposal, and nothing is stopped or cleared', async () => {
+    const f = retainedFixture()
+    const result = await switchWorkspace(f.options)
+    expect(f.events).toEqual(['hold', 'capture', 'persist-pending', 'eligibility', 'dispose-chat', 'stop-preview', 'replace-source', 'resume', 'commit', 'release'])
+    expect(f.paths).toEqual([{ path: 'retained' }])
+    expect(result.activeId).toBe(f.incoming.id)
+  })
+  test('a blocker, a failing eligibility check or a retry takes the unchanged full path with its reason', async () => {
+    const full = ['dispose-chat', 'stop', 'replace', 'start', 'commit']
+    const blocked = retainedFixture(async () => '1 session(s) still running')
+    await switchWorkspace(blocked.options)
+    expect(blocked.events).toEqual(['hold', 'capture', 'persist-pending', 'eligibility', ...full, 'release'])
+    expect(blocked.paths).toEqual([{ path: 'full', reason: '1 session(s) still running' }])
+    const unknown = retainedFixture(async () => { throw Error('health timed out') })
+    await switchWorkspace(unknown.options)
+    expect(unknown.events.slice(4)).toEqual([...full, 'release'])
+    expect(unknown.paths[0]?.reason).toContain('health timed out')
+    const retry = retainedFixture()
+    await switchWorkspace({ ...retry.options, retry: true })
+    expect(retry.events).toEqual(['persist-pending', ...full])
+    expect(retry.paths).toEqual([{ path: 'full', reason: 'retry of an interrupted switch' }])
+  })
+  test('a retained path that fails part way recovers through the full path and never commits before it', async () => {
+    for (const step of ['stopPreview', 'replaceSource', 'resume'] as const) {
+      const f = retainedFixture()
+      const result = await switchWorkspace({ ...f.options, retained: { ...f.retained, [step]: async () => { throw Error(step + ' failed') } } })
+      expect(f.events.slice(f.events.indexOf('dispose-chat', 5))).toEqual(['dispose-chat', 'stop', 'replace', 'start', 'commit', 'release'])
+      expect(f.paths).toEqual([{ path: 'retained' }, { path: 'full', reason: `retained path failed: ${step} failed` }])
+      expect(result.pending).toBeUndefined()
+    }
+    // The full path failing too leaves the journal for Retry interrupted switch.
+    const f = retainedFixture()
+    await expect(switchWorkspace({ ...f.options, retained: { ...f.retained, resume: async () => { throw Error('preview failed') } }, start: async () => { throw Error('start failed') } })).rejects.toThrow('start failed')
+    expect(f.persisted().activeId).toBe(f.outgoing.id)
+    expect(f.persisted().pending?.id).toBe(f.incoming.id)
+    expect(f.events).not.toContain('commit')
+  })
+  test('installed dependencies are reused only for matching dependency sections and lockfiles', () => {
+    const encode = (value: unknown) => new TextEncoder().encode(typeof value === 'string' ? value : JSON.stringify(value))
+    const base = { '/package.json': encode({ name: 'a', dependencies: { react: '19', vite: '7' }, devDependencies: { typescript: '5' } }), '/bun.lock': encode('lock-1'), '/src/home.tsx': encode('A') }
+    // Source, the package name and key order are not dependency inputs.
+    expect(dependencyMismatch(base, { ...base, '/src/home.tsx': encode('B'), '/package.json': encode({ devDependencies: { typescript: '5' }, dependencies: { vite: '7', react: '19' }, name: 'b' }) })).toBeUndefined()
+    expect(dependencyMismatch(base, { ...base, '/package.json': encode({ dependencies: { react: '19', vite: '7', zod: '4' }, devDependencies: { typescript: '5' } }) })).toBe('package.json dependencies differ')
+    expect(dependencyMismatch(base, { ...base, '/package.json': encode({ dependencies: { react: '19', vite: '7' } }) })).toBe('package.json devDependencies differ')
+    expect(dependencyMismatch(base, { ...base, '/bun.lock': encode('lock-2') })).toBe('/bun.lock differs')
+    const { '/bun.lock': _lock, ...unlocked } = base
+    expect(dependencyMismatch(base, unlocked)).toBe('/bun.lock is in only one workspace')
+    expect(dependencyMismatch(unlocked, unlocked)).toBeUndefined()
+    expect(dependencyMismatch(base, { ...base, '/package.json': encode('not json') })).toBe('package.json cannot be compared')
+    expect(dependencyMismatch(base, { ...base, '/package.json': encode('[]') })).toBe('package.json cannot be compared')
+    // A retained root is never restored into: it must not be a source path.
+    for (const root of retainedRoots) expect(safeSourcePath('/' + root + '/file')).toBe(false)
   })
   test('snapshot rejects unsafe paths and missing selected native sessions', () => {
     expect(safeSourcePath('/src/home.tsx')).toBe(true)

@@ -66,6 +66,22 @@ async function exportSessions(service: Service, exportMs: number[]): Promise<Ses
   return orderSessions(sessions)
 }
 
+/** Why this server cannot be kept running across a workspace switch, or undefined:
+ * its process has not exited, it answers health, and no session is running. The
+ * caller holds chat admission, which already keeps the selected session idle. */
+export async function retainedServerBlocker(service: Service): Promise<string | undefined> {
+  const settled = Symbol()
+  const exited = await Promise.race([service.execution.exited.then(() => true, () => true), Promise.resolve(false)])
+  if (exited) return 'OpenCode process exited'
+  if (await Promise.race([service.failed.catch(() => settled), Promise.resolve(undefined)]) === settled) return 'OpenCode process or output failed'
+  const health = await service.connection.fetch(url(service, '/api/health'), { signal: AbortSignal.timeout(5_000) })
+  await health.arrayBuffer()
+  if (!health.ok) return `OpenCode health HTTP ${health.status}`
+  const active = v.parse(v.object({ data: v.record(v.string(), v.unknown()) }), await request(service, '/api/session/active'))
+  const running = Object.keys(active.data).length
+  return running ? `${running} session(s) still running` : undefined
+}
+
 /** Run before attaching a chat client to the replacement server. Its SQLite
  * mount can outlive clearWorkspace, so explicitly remove old native rows. */
 export function restoreSessions(service: Service, sessions: SessionBundle[]): Promise<Map<string, string>> {
