@@ -82,17 +82,21 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
    * OpenCode's own session database under /.server) and never restores a
    * catalog image, and a switch re-captures the outgoing workspace first, so the
    * active image may stay as of the last Save or switch. The full save is kept
-   * where that image is still needed: never captured, renamed (the select
-   * lists catalog names), or a working copy that is not durable. */
+   * where that image is still needed: never captured, or a working copy that is
+   * not durable. A rename only changes a label: the select lists catalog names,
+   * so that entry's name is rewritten and its image is left as it was. */
   async function saveForExit(): Promise<void> {
     const workspace = controller.workspace, service = controller.getSnapshot().services.chat
     const saved = catalog.current.workspaces.find(item => item.id === catalog.current.activeId)
     const title = nameRef.current.trim() || 'Untitled workspace'
-    if (!workspace || !service || !saved || saved.name !== title || workspace.persistence.status !== 'durable') { await saveCurrent(); return }
+    if (!workspace || !service || !saved || workspace.persistence.status !== 'durable') { await saveCurrent(); return }
     await identityWrite.current
     const selectedSessionId = chatFor(service)?.getSnapshot().sessionID
     await writeIdentity(workspace, { id: saved.id, name: title, selectedSessionId })
     identitySelection.current = selectedSessionId
+    // Identity first: if the catalog write is lost, the next exit sees the names
+    // differ and repeats it.
+    if (saved.name !== title) await persist({ ...catalog.current, workspaces: catalog.current.workspaces.map(item => item.id === saved.id ? { ...item, name: title } : item) })
   }
   async function boot(incoming?: SavedWorkspace): Promise<void> {
     let mappedSelection: string | undefined
