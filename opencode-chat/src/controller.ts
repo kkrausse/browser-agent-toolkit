@@ -362,6 +362,11 @@ export function createChatController(options: ChatOptions): ChatController {
     const g = generation,
       scope = connection,
       selectionAtStart = selection;
+    // Milestones for stage timing; observation only.
+    const milestone = (stage: string, data?: Record<string, unknown>) => {
+      try { options.onDiagnostic?.("chat.connect", { stage, ...data }); } catch { /* observer failure */ }
+    };
+    milestone("requested");
     if (state.sessionID) reducer.clear(state.sessionID);
     publish({
       connection: "connecting",
@@ -394,9 +399,12 @@ export function createChatController(options: ChatOptions): ChatController {
         duration: options.handshakeTimeoutMs ?? 15000,
         orElse: () => new ChatError({ message: "OpenCode event handshake timed out" }),
       }));
+      milestone("handshake");
       const [sessions, models] = yield* Effect.all([api.list(), api.models()], { concurrency: "unbounded" });
+      milestone("catalog", { sessions: sessions.length, models: models.length });
       // models() awaits plugin activation before resolving the same location's default.
       const defaultModel = yield* api.defaultModel();
+      milestone("default-model");
       if (g !== generation || disposed) return;
       publish({ sessions, models, defaultModel, connection: "connected" });
       if (selection !== selectionAtStart) return;
@@ -405,6 +413,7 @@ export function createChatController(options: ChatOptions): ChatController {
       else if (id) yield* selectSession(id);
       else if (options.autoCreateSession) yield* createSession();
       else publish({ loading: false, execution: "idle" });
+      milestone("session", { messages: state.messages.length });
     });
     yield* setup.pipe(Effect.forkIn(scope), Effect.flatMap(Fiber.join), Effect.catchCause(cause => Effect.gen(function*() {
       if (g === generation && !disposed) {
