@@ -350,3 +350,16 @@ not evidence that pilot success means the whole kernel is migrated.
   `2026-09-30-effect-preview-adapter-reason-cleanup-qa.md`. No blind browser repeats,
   deadline changes, production fix or phase2 expansion. Preserve old failure and
   assess next integrated gate from concrete adapter evidence rather than guessing.
+- Real-adapter report `85e532e` passes10/10 cases on actual Node24.18 using frozen
+  built SDK/public endpoints/MessageChannels. Exact timeout/source reasons survive;
+  late abort after EOF is a no-op even while cleanup is held; rejection settles
+  without self-join. Adapter sources match qualified baseline. This does not explain
+  historical Failed to fetch or establish browser behavior. See
+  [adapter gates](2026-09-30-effect-preview-adapter-reason-cleanup-qa.md).
+- Parent explicitly approves one unchanged fresh integrated attempt, not a retry
+  loop or deadline adjustment. Owner `ses_f0ae4e59affeMCGi938w74iT2b` takes the sole
+  visible slot for new run-copy's original19stages/fivegenerations +10focusedcases/
+  14steps. Intended report `2026-09-30-effect-loader-fresh-integrated-acceptance.md`.
+  Preserve old447 failure alongside new outcome; first failure stops, no further
+  blind cohorts if it recurs. Phase2 waits for review; any success is bounded
+  compatibility evidence, not a reliability rate or completed kernel migration.
