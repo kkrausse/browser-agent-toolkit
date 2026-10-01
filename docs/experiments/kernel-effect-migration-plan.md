@@ -428,3 +428,13 @@ not evidence that pilot success means the whole kernel is migrated.
   matching delivery preparation `2026-09-30-effect-process-subtree-full-app-preparation.md`.
   Same respective owners resume offline. No browser, phase2B or phase3 authorization
   until matching handoffs/review; previous app passes are not new-cutover acceptance.
+- Phase2A full-app delivery `2f3469a`/`d1b0438` ready:
+  [matching preparation](2026-09-30-effect-process-subtree-full-app-preparation.md).
+  Frozen `effect-process-subtree-full-app-Ct6lIy/frozen` in approved temporary root;
+  receipt `cb2a2a686ccad1e0f1f0da17848e4d3d1b29a27ce8c2b61da02109b221219d88`.
+  9,720 stage hashes/fresh run-copy verified,103candidate/1475inputfreeze/native12/37.
+  New libraries/styles/clients/image, one Workspace graph per client, exact qualified
+  application recipe/output reuse and actual vendor handlers verified. Original
+  driver adaptations reverse exactly; required archive/source hashes exist and match.
+  Normal registry downloads recorded, no live activation. Await independent2A gate
+  results before assigning one matching visible cohort; preparation is not acceptance.
