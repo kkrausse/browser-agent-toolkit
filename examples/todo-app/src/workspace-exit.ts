@@ -1,4 +1,5 @@
 /** Close and open failure decisions, kept out of the component so they can be tested. */
+import { interruptedSwitchError } from './workspace-switch-presentation'
 
 export const errorText = (error: unknown) => error instanceof Error ? error.message : String(error)
 
@@ -56,4 +57,14 @@ export function exitRecovery(state: { errorCode?: string; failure?: string; atta
     message: 'The editor is still open: exit or stop did not complete. Files saved in this browser are kept.' + (state.failure ? ` (${state.failure})` : ''),
     actions: ['retry', 'force'] as const,
   }
+}
+
+/** The controller error for the general footer alert, or '' when a recovery alert
+ * above it already reports that same failure: the exit-recovery alert quoting it as
+ * `exitFailure`, or the interrupted-switch alert for startup's own refusal. One
+ * problem is shown once; any other error, including a newer one, still surfaces. */
+export function footerError(state: { error: string; exitFailure?: string; switchRecovery: boolean }): string {
+  if (state.exitFailure && state.error.includes(state.exitFailure)) return ''
+  if (state.switchRecovery && state.error.includes(interruptedSwitchError)) return ''
+  return state.error
 }
