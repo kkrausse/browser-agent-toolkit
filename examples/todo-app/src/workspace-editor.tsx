@@ -127,16 +127,21 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
   async function open(): Promise<void> {
     catalog.current = await store.read()
     setList(catalog.current.workspaces); setPending(catalog.current.pending); setActiveId(catalog.current.activeId ?? '')
+    // Startup can fail before the identity file is readable (another tab owns the
+    // store, an interrupted switch). The catalog already names the active
+    // workspace, as the select shows; only fill the placeholder.
+    const listed = catalog.current.workspaces.find(item => item.id === catalog.current.activeId)?.name
+    if (listed && nameRef.current === defaultName) setName(listed)
     await boot()
     // First activation adopts the existing durable working copy. It never
     // restores a catalog image over unsaved browser source/native sessions.
     if (!catalog.current.activeId) {
       const hold = holdChat('Saving workspace')
       try { await saveCurrent() } finally { hold.release() }
-    } else if (nameRef.current === defaultName) {
-      // Only fill the placeholder; a retry must not discard a name being edited.
-      const saved = catalog.current.workspaces.find(item => item.id === catalog.current.activeId)
-      let title = saved?.name ?? defaultName
+    } else if (nameRef.current === defaultName || nameRef.current === listed) {
+      // The identity file is the working copy's own name. Only replace what an
+      // open filled in; a retry must not discard a name being edited.
+      let title = listed ?? defaultName
       try { title = JSON.parse(new TextDecoder().decode(await controller.workspace!.fs.readFile(identityPath))).name ?? title } catch { /* legacy identity */ }
       setName(title)
     }
