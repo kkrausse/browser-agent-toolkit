@@ -181,8 +181,10 @@ graceful EOF windows short. Phase 1 may use the budget minus a reserve of
 min(5000, budget/3); a service's EOF `timeoutMs` is clipped to half of phase 1.
 Phase 2, the kernel's shutdown and flush, gets everything left (at least the
 reserve). Running out rejects with `CLEANUP_FAILED` naming what was outstanding and
-is retryable like any other failure. Outside a close, `stopTimeoutMs` (default
-10000) still bounds a direct `stopService`/`stopServices`/`stopRuntime`.
+is retryable like any other failure. `stopRuntime` is phase 1 without the close and
+has the same bound, so a stop inside an application's workspace switch fails when
+an Exit would and in the same state. Outside those, `stopTimeoutMs` (default
+10000) still bounds a direct `stopService`/`stopServices`.
 `dispose()` and the provider's unmount/`pagehide` cleanup cannot be retried by
 anyone, so there a failed or timed-out close falls back to the forced close, whose
 flush is paid from the same budget's reserve, and the unproven cleanup is still
