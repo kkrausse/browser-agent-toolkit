@@ -326,3 +326,15 @@ not evidence that pilot success means the whole kernel is migrated.
   `2026-09-30-effect-loader-preview-fetch-investigation.md`; offline only, no
   speculative repair/phase2 expansion or failed-origin replay. Overall app/pilot
   qualification remains incomplete despite real loader and qualified Node passes.
+- Preview investigation `3009d7a`:
+  [transport/timing investigation](2026-09-30-effect-loader-preview-fetch-investigation.md).
+  Readiness is direct Endpoint.fetch('/') over MessageChannel; HTTP adapters, guest
+  process bundle, protocol and SW match qualified baseline. pendingHttp1 concerns
+  legacy probe, not established readiness stream. Cold optimizer completion at
+  ~21.38s versus baseline~19.64s against 20s request budget is a plausible lead,
+  not proven cause. Missing stack/header/body rejection and abort correlation prevent
+  choosing a production fix. Parent authorizes one fresh passive trace cohort with
+  unchanged deadline/actions and no retry; owner `ses_f0b08e627ffeoCwNjAaWE4XtjG`
+  takes exclusive visible slot. Intended report
+  `2026-09-30-effect-loader-preview-readiness-trace-qa.md`; diagnostic pass alone
+  cannot replace original failed integrated acceptance or authorize phase2.
