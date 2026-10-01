@@ -2,8 +2,8 @@ import {diagnoseWorkspace} from '@kev-browser-agent-kit/workspace';
 import {WorkspaceController} from '@kev-browser-agent-kit/workspace/react';
 import {loadPrepared,preparedApps,installOpenCodeConfig,createOpenCodeCandidateLaunch,openCodeCandidateLaunch as descriptor} from '@kev-browser-agent-kit/opencode-chat/browser';
 import {createChatController} from 'sk-opencode-qualified-controller';
-import {captureQualificationRequest,createQualificationFence,qualifyRootResult} from './sk-opencode-live-fence';
-import {guardedFailureCleanup} from './sk-opencode-live-failure-cleanup';
+import {captureQualificationRequest,createQualificationFence,qualifyRootResult} from '../tests/sk-opencode-live-fence';
+import {guardedFailureCleanup} from '../tests/sk-opencode-live-failure-cleanup';
 
 // Deliberate actual-controller UI: read-only snapshot, no ChatView send/tool actions.
 // All writes are initial preparation of this NEW owned origin, before server launch.

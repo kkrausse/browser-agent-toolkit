@@ -3,7 +3,7 @@ import {WorkspaceController} from '@kev-browser-agent-kit/workspace/react';
 import {installOpenCodeConfig, loadPrepared, preparedApps, createOpenCodeCandidateLaunch, openCodeCandidateLaunch as descriptor} from '@kev-browser-agent-kit/opencode-chat/browser';
 import {createChatController} from '../../../opencode-chat/src/controller';
 import type {ChatController} from '../../../opencode-chat/src/types';
-import {createPilotFence, resetPilot, pilotReuseAllowed, pilotRequestURL} from './reuse-pilot-fence';
+import {createPilotFence, resetPilot, pilotReuseAllowed, pilotRequestURL} from '../tests/reuse-pilot-fence';
 
 // One-shot fresh-origin owner. No public/UI actions or execution endpoints.
 const policy = {coldMs:90000, requestMs:20000, resetMs:60000, drainMs:20000, cleanupMs:15000};

@@ -3,7 +3,7 @@ import {mkdir, writeFile} from 'node:fs/promises'
 import {fetchRequestHandler} from '@trpc/server/adapters/fetch'
 import {appRouter} from '../src/server/trpcRouter'
 import type {Todo} from '../src/schema/todo'
-import {prospectivePolicy} from './matched-readiness'
+import {prospectivePolicy} from '../tests/matched-readiness'
 
 // Future reviewed pair only. Offline preparation is a mandatory separate step.
 // Run from repository root. Never overwrites a previous evidence directory.

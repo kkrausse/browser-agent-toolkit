@@ -1,7 +1,7 @@
 import {diagnoseWorkspace} from '@kev-browser-agent-kit/workspace';
 import {observeBrowserCases, drainLogs, log} from '../../../workspace-api/tests/browser/harness';
 import {singleKernelCases} from './single-kernel-cases';
-import {assertSingleKernelDiagnostics, assertZeroWork} from './single-kernel-contract';
+import {assertSingleKernelDiagnostics, assertZeroWork} from '../tests/single-kernel-contract';
 
 const evidence:any={status:'idle',cases:singleKernelCases.map(({name,steps})=>({name,steps:steps.length})),steps:[],topology:[]};
 let active=false,failed=false;

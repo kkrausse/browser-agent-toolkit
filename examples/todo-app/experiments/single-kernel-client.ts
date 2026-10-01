@@ -2,9 +2,9 @@ import {diagnoseWorkspace, diagnoseWorkspaceEntry} from '@kev-browser-agent-kit/
 import {WorkspaceController} from '@kev-browser-agent-kit/workspace/react';
 import {installSource} from '@kev-browser-agent-kit/workspace/delivery';
 import {loadPrepared, preparedApps, installOpenCodeConfig, startOpenCode,openCodeCandidateLaunch} from '@kev-browser-agent-kit/opencode-chat/browser';
-import {previewHTTPThenAttach} from './matched-qualification';
-import {assertZeroWork, assertSingleKernelDiagnostics, fsProbe, streamProbe, childSyncProbe,binaryCaptureBoundariesProbe,fetchedBodyProbe,connectionApiURL} from './single-kernel-contract';
-import {minimalChildProbe,minimalSpawnProbe,spawnProbeFixture,type SpawnProbeMode} from './single-kernel-spawn-probes';
+import {previewHTTPThenAttach} from '../tests/matched-qualification';
+import {assertZeroWork, assertSingleKernelDiagnostics, fsProbe, streamProbe, childSyncProbe,binaryCaptureBoundariesProbe,fetchedBodyProbe,connectionApiURL} from '../tests/single-kernel-contract';
+import {minimalChildProbe,minimalSpawnProbe,spawnProbeFixture,type SpawnProbeMode} from '../tests/single-kernel-spawn-probes';
 
 const policy={stageMs:120000,requestMs:20000,generations:5,retries:0};
 const evidence: any={policy,status:'idle',stages:[],events:[],models:0};

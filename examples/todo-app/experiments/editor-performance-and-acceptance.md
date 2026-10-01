@@ -3,7 +3,7 @@
 ## Isolated performance experiments
 
 After normal editor preparation (including the receipted Tailwind backend), run
-`bun tests/performance.ts` from `examples/todo-app`. This repacks candidates and
+`bun experiments/performance.ts` from `examples/todo-app`. This repacks candidates and
 serves an isolated loopback-only origin at `http://127.0.0.1:43187`.
 `--sizes-only` repacks without starting the server. Outputs live under ignored
 `.editor/performance/`; library changes require rebuilding the root packages.
@@ -108,15 +108,15 @@ tracked sources; receipts can contain demo source, todo titles, tool inputs/outp
 
 ```sh
 bunx --bun browser-control execute --session SESSION 'state.editorAcceptanceConfig = { url: "http://127.0.0.1:4390/", evidenceDir: "/absolute/private/editor-acceptance", phase: "startup" }; return await snapshot()'
-bunx --bun browser-control execute --session SESSION --file examples/todo-app/tests/editor-acceptance.js
+bunx --bun browser-control execute --session SESSION --file examples/todo-app/experiments/editor-acceptance.js
 
 # Select each subsequent phase, then execute the same file:
 bunx --bun browser-control execute --session SESSION 'state.editorAcceptanceConfig.phase = "open"; return {phase: state.editorAcceptanceConfig.phase}'
-bunx --bun browser-control execute --session SESSION --file examples/todo-app/tests/editor-acceptance.js
+bunx --bun browser-control execute --session SESSION --file examples/todo-app/experiments/editor-acceptance.js
 ```
 
 Run from the repository root or use an absolute script path. Do not run the file
-as `bun tests/editor-acceptance.js`: `page`, `state`, `snapshot`, `fs`, and `path`
+as `bun experiments/editor-acceptance.js`: `page`, `state`, `snapshot`, `fs`, and `path`
 are injected by Browser Control. `sourcePath` defaults to `/src/home.tsx` and
 `headingFrom` to `Todos`. Change them only after inspecting the actual source.
 

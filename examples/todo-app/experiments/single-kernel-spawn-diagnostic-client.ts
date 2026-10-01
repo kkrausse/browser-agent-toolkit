@@ -1,6 +1,6 @@
 import {Workspace,Runtime,opfsStore,diagnoseWorkspace} from '@kev-browser-agent-kit/workspace';
-import {assertZeroWork,assertSingleKernelDiagnostics,childSyncProbe} from './single-kernel-contract';
-import {minimalChildProbe,minimalSpawnProbe,spawnProbeFixture,type SpawnProbeMode} from './single-kernel-spawn-probes';
+import {assertZeroWork,assertSingleKernelDiagnostics,childSyncProbe} from '../tests/single-kernel-contract';
+import {minimalChildProbe,minimalSpawnProbe,spawnProbeFixture,type SpawnProbeMode} from '../tests/single-kernel-spawn-probes';
 const manifest=await fetch('/runtime/distribution.json').then(response=>response.json());
 if(manifest.topology?.policy!=='single-kernel')throw Error('Diagnostic requires a verified single-kernel distribution');
 const distribution={name:'vivari',version:manifest.version,assetBaseUrl:'/runtime/'};

@@ -76,6 +76,6 @@ bun run typecheck
 bun run build
 ```
 
-Browser acceptance scripts are in `tests/`; consult their
-[instructions](tests/README.md). Historical receipts remain in `random` and do not
+Browser acceptance scripts are in `experiments/`; consult their
+[instructions](experiments/editor-performance-and-acceptance.md). Historical receipts remain in `random` and do not
 claim that this relocated example has received a fresh browser acceptance run.

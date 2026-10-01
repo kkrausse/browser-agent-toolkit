@@ -1,6 +1,6 @@
 import {Workspace, Runtime, opfsStore, diagnoseWorkspace} from '@kev-browser-agent-kit/workspace'
 import {managedDeliveryTool} from '@kev-browser-agent-kit/workspace/delivery'
-import {installedTreeAuditTool} from './installed-tree-audit'
+import {installedTreeAuditTool} from '../tests/installed-tree-audit'
 
 // One fresh-origin install, ten audits, no services/source switches/retries.
 const evidence: any = {samples:[], events:[], status:'preparing'}
