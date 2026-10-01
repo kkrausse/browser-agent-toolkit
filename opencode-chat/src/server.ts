@@ -1,8 +1,21 @@
 import { resolve, sep } from 'node:path';
 import { decodeModelHeaders, MODEL_HEADERS } from './model-headers';
+import { parseOpenCodeModelCatalog, withOpenCodeModelCatalog, type OpenCodeModelCatalog } from './opencode-launch';
 import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
 import { handleDiagnosticRequest, editorModelError, type DiagnosticContext, type EditorDiagnosticSink } from './diagnostics-server';
 export { createFileDiagnosticSink, runEditorLogs, readEditorDiagnostics, type EditorDiagnosticSink } from './diagnostics-server';
+
+export { parseOpenCodeModelCatalog, type OpenCodeModelCatalog } from './opencode-launch';
+
+/** Read and validate a public model catalog file ({models, defaultModel}). Throws on any defect. */
+export async function readModelCatalog(path: string): Promise<OpenCodeModelCatalog> {
+  const file = resolve(path);
+  let document: unknown;
+  try { document = await Bun.file(file).json(); }
+  catch (cause) { throw Error(`Model catalog ${file} is not readable JSON`, { cause }); }
+  try { return parseOpenCodeModelCatalog(document); }
+  catch (cause) { throw Error(`Model catalog ${file} is invalid: ${(cause as Error).message}`, { cause }); }
+}
 
 export const browserEditorHeaders = {
   'Cross-Origin-Opener-Policy': 'same-origin',
@@ -83,8 +96,16 @@ export function createBrowserEditorHandler(options: {
   captureModelRequest?(request: Request): Promise<void>;
   /** Invoked for the manifest after app authorization. Receives the request's diagnostic scope. */
   prepare?(diagnostics: DiagnosticScope): Promise<void>;
+  /**
+   * Public model catalog and default delivered with the prepared manifest, replacing the
+   * built-in default model. The editor then offers only these models. Never a credential:
+   * provider keys stay in `providers[].headers`. Changing it needs no new preparation.
+   */
+  modelCatalog?: OpenCodeModelCatalog;
 }) {
   const base = options.base ?? '/editor/';
+  // Fail at construction, not on a browser's first manifest request.
+  const modelCatalog = options.modelCatalog && parseOpenCodeModelCatalog(options.modelCatalog);
   const scope = (context: DiagnosticContext = {}, runId?: string) => createDiagnosticScope(options.diagnostics?.enabled ? event => {
     void Promise.resolve().then(() => options.diagnostics!.write({ clientId: 'server', events: [event] }, context)).catch(error => console.error('Editor diagnostic sink failed', error));
   } : undefined, runId);
@@ -172,6 +193,12 @@ export function createBrowserEditorHandler(options: {
         elapsedMs: Math.round(performance.now() - started), errorCategory: 'transport', error }); return new Response('Model upstream unavailable', { status: 502 }); }
     }
     if (!['GET', 'HEAD'].includes(request.method)) return new Response('Method not allowed', { status: 405 });
+    if (modelCatalog && path === base + 'prepared/manifest.json') {
+      const file = Bun.file(resolve(options.preparedDirectory, 'manifest.json'));
+      if (!await file.exists()) return new Response('Not found', { status: 404 });
+      const response = Response.json(withOpenCodeModelCatalog(await file.json(), modelCatalog), { headers: { ...browserEditorHeaders, 'Cache-Control': 'no-store' } });
+      return request.method === 'HEAD' ? new Response(null, { headers: response.headers }) : response;
+    }
     for (const [prefix, directory] of [['prepared/', options.preparedDirectory], ['runtime/', options.runtimeDirectory]]) {
       if (!path.startsWith(base + prefix)) continue;
       const root = resolve(directory!);

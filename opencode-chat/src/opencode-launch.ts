@@ -63,6 +63,65 @@ export function createOpenCodeCandidateConfig(modelBaseURL: string, additionalTo
   };
 }
 
+/** Public model selection supplied by the host: never a credential, and the only models the editor offers. */
+export interface OpenCodeModelCatalog { models: Record<string, OpenCodeCandidateModel>; defaultModel: string }
+
+const catalogModelFields = ['disabled', 'name', 'package', 'capabilities', 'limit', 'websocket'];
+const catalogPackages = ['@opencode/ai/providers/openai', '@opencode/ai/providers/anthropic', '@opencode/ai/providers/openai-compatible'];
+const strings = (value: unknown) => Array.isArray(value) && value.every(item => typeof item === 'string');
+const size = (value: unknown) => Number.isSafeInteger(value) && (value as number) > 0;
+
+/** Validate an untrusted catalog document (e.g. a JSON file) before it is delivered to browsers and guests. */
+export function parseOpenCodeModelCatalog(input: unknown): OpenCodeModelCatalog {
+  const catalog = input as Partial<OpenCodeModelCatalog> | null;
+  if (!catalog || typeof catalog !== 'object' || Array.isArray(catalog)) throw Error('Model catalog must be an object with models and defaultModel');
+  if (typeof catalog.defaultModel !== 'string' || !catalog.defaultModel) throw Error('Explicit catalog requires a default model');
+  const models = catalog.models;
+  if (!models || typeof models !== 'object' || Array.isArray(models) || !Object.keys(models).length) throw Error('Model catalog requires at least one model');
+  for (const [id, model] of Object.entries(models) as [string, Record<string, unknown> | null][]) {
+    const invalid = (reason: string) => Error(`Model catalog entry ${JSON.stringify(id.slice(0, 100))}: ${reason}`);
+    if (!/^[\w./:-]{1,128}$/.test(id)) throw invalid('invalid model identifier');
+    if (!model || typeof model !== 'object' || Array.isArray(model)) throw invalid('expected an object');
+    // The catalog is published to the browser and the guest. Settings, headers
+    // and bodies could carry credentials, so only the public fields are accepted.
+    const unknown = Object.keys(model).find(field => !catalogModelFields.includes(field));
+    if (unknown) throw invalid(`unsupported field ${JSON.stringify(unknown.slice(0, 100))}`);
+    if (typeof model.name !== 'string' || !model.name) throw invalid('expected a name');
+    if (!catalogPackages.includes(model.package as string)) throw invalid('unsupported provider package');
+    const capabilities = model.capabilities as Record<string, unknown> | undefined, limit = model.limit as Record<string, unknown> | undefined;
+    if (typeof capabilities?.tools !== 'boolean' || !strings(capabilities.input) || !strings(capabilities.output)) throw invalid('expected capabilities {tools, input, output}');
+    if (!size(limit?.context) || !size(limit?.output) || (limit?.input !== undefined && !size(limit.input))) throw invalid('expected limit {context, input?, output}');
+    if (model.websocket !== false) throw invalid('expected websocket: false');
+    if (model.disabled !== undefined && typeof model.disabled !== 'boolean') throw invalid('expected a boolean disabled');
+  }
+  const { defaultModel } = catalog, supplied = models as Record<string, OpenCodeCandidateModel>;
+  // The guest configuration is the authority for default/catalog consistency.
+  createOpenCodeCandidateConfig('http://host/editor/model/opencode/', [], supplied, defaultModel);
+  const selected = supplied[defaultModel]!;
+  if (selected.disabled || !selected.capabilities.tools) throw Error('Default model must be enabled with tools');
+  return { models: supplied, defaultModel };
+}
+
+/** The prepared manifest as delivered with a host-supplied catalog; generated preparation output is not rewritten. */
+export function withOpenCodeModelCatalog<Manifest extends object>(manifest: Manifest, catalog: OpenCodeModelCatalog) {
+  return { ...manifest, modelCatalog: catalog.models, editorDefaultModel: catalog.defaultModel };
+}
+
+/**
+ * Self-contained JS for OpenCode's public global single-file plugin discovery.
+ * The guest's own catalog also lists every free model its provider publishes.
+ * Global plugins run after that catalog is loaded and before the configuration
+ * above is applied, so removing the rest leaves exactly the supplied catalog.
+ */
+export function modelCatalogPluginSource(modelIDs: string[]): string {
+  return `export default { id: 'editor.model-catalog', async setup(ctx) {
+  const supplied = new Set(${JSON.stringify(modelIDs)});
+  await ctx.catalog.transform(catalog => {
+    for (const id of [...(catalog.provider.get('opencode')?.models.keys() ?? [])]) if (!supplied.has(id)) catalog.model.remove('opencode', id);
+  });
+} };`;
+}
+
 /** Requires normally installed ripgrep@0.3.1 (including its executable link). */
 export function createOpenCodeCandidateLaunch(options: { password: string; ripgrepBinDirectory?: string }): NodeLaunchOptions {
   if (!options.password || /[^\x20-\x7e]/.test(options.password)) throw Error('Expected a nonempty ASCII server password');
