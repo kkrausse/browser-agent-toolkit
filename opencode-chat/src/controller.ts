@@ -21,6 +21,10 @@ export { canSend };
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const compareID = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 type Message = ChatSnapshot["messages"][number];
+/** A sent message shown before the server has it, under a local id. `before` is the
+ * transcript the send started from. */
+interface Provisional { id: string; text: string; before: readonly Message[]; inboxID?: string; delivered?: true }
+const isProvisional = (message: Message) => message.id.startsWith("provisional:");
 /** Text deltas are not persisted: a history snapshot taken mid-stream carries a
  * streaming part with less text than the events already delivered. A refresh keeps
  * the delivered text there, so what is on screen never shrinks. */
@@ -92,6 +96,9 @@ export function createChatController(options: ChatOptions): ChatController {
   // whether a refresh was asked for that this request may be too old to satisfy.
   const live = new Set<string>();
   let stale = false;
+  let provisional: Provisional[] = [];
+  // Deliveries seen while a prompt response is outstanding: its inbox id is not known yet.
+  const deliveredEarly = new Set<string>();
   const answered = new Set<string>();
   const dismissing = new Set<string>();
   let recovery: Fiber.Fiber<void, never> | undefined;
@@ -203,6 +210,7 @@ export function createChatController(options: ChatOptions): ChatController {
     requestEvents = [];
     live.clear();
     stale = false;
+    const delivered = new Set(provisional.filter((p) => p.delivered).map((p) => p.id));
     const task = yield* Effect.gen(function*() {
       const api = yield* OpenCodeAPI;
       const [page, permissions, forms, active] = yield* Effect.all([
@@ -214,7 +222,22 @@ export function createChatController(options: ChatOptions): ChatController {
       // they may already be persisted. Refetch after the overlap instead.
       const messages = [...page.data].reverse();
       const ids = new Set(messages.map((m) => m.id));
-      const prefix = state.messages.filter((m) => !ids.has(m.id));
+      // A provisional message gives way to this page when the page holds its persisted
+      // message: the one under its inbox id if the server kept that id, otherwise a
+      // user message with the same text that the transcript did not have when the send
+      // began (the persisted id need not be the inbox id, and carries no reference to
+      // it). A page requested after `session.inbox.delivered` named its inbox id is
+      // authoritative either way. Until then it stays, below everything in the page;
+      // its client-clock timestamp never makes it older history.
+      const claimed = new Set<string>();
+      provisional = provisional.filter((p) => {
+        const persisted = messages.find((m) => m.type === "user" && !claimed.has(m.id) &&
+          (m.id === p.inboxID || (m.text === p.text && !p.before.some((b) => b.id === m.id))));
+        if (persisted) claimed.add(persisted.id);
+        return !persisted && !delivered.has(p.id);
+      });
+      const pending = new Set(provisional.map((p) => p.id));
+      const prefix = state.messages.filter((m) => !ids.has(m.id) && !isProvisional(m));
       const first = messages[0]?.time.created ?? 0;
       const previous = prefix.filter((m) => m.time.created < first);
       // The server returns a cursor for every non-empty page. Once the start of
@@ -227,7 +250,9 @@ export function createChatController(options: ChatOptions): ChatController {
         messages: [
           ...previous,
           ...messages.map((m) => (live.has(m.id) && shown.get(m.id)) || keepStreamed(m, shown.get(m.id))),
-          ...prefix.filter((m) => live.has(m.id) && !previous.includes(m)),
+          // In the order shown: a reply that began streaming stays below its prompt.
+          ...state.messages.filter((m) => pending.has(m.id) ||
+            (live.has(m.id) && prefix.includes(m) && !previous.includes(m))),
         ],
         hasOlder: !!older,
         permissions: permissions
@@ -344,6 +369,11 @@ export function createChatController(options: ChatOptions): ChatController {
       }
     }
     if (e.type === "session.model.selected") publish({ model: e.data.model });
+    if (e.type === "session.inbox.delivered") {
+      const entry = provisional.find((p) => p.inboxID === e.data.inboxID);
+      if (entry) entry.delivered = true;
+      else if (provisional.some((p) => !p.inboxID)) deliveredEarly.add(e.data.inboxID);
+    }
     if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(e.type)) {
       if ("error" in e.data) publish({ error: errorText(JSON.stringify(e.data.error)) });
       settle();
@@ -412,6 +442,8 @@ export function createChatController(options: ChatOptions): ChatController {
     recovery = undefined;
     if (state.sessionID) reducer.clear(state.sessionID);
     answered.clear();
+    provisional = [];
+    deliveredEarly.clear();
     older = undefined;
     reachedStart = false;
     publish({
@@ -455,8 +487,12 @@ export function createChatController(options: ChatOptions): ChatController {
     const milestone = (stage: string, data?: Record<string, unknown>) => diagnostic("chat.connect", { stage, ...data });
     milestone("requested");
     if (state.sessionID) reducer.clear(state.sessionID);
+    // A send cut off by the reconnect is not known to be accepted; history decides.
+    provisional = [];
+    deliveredEarly.clear();
     publish({
       connection: "connecting",
+      messages: state.messages.filter((m) => !isProvisional(m)),
       loading: true,
       error: undefined,
       execution: "unknown",
@@ -659,14 +695,29 @@ export function createChatController(options: ChatOptions): ChatController {
     const g = generation, s = selection, id = yield* sessionID();
     const timeline = (sent = { send: `${Date.now().toString(36)}-${++sendSequence}`, sessionID: id, at: performance.now() });
     sendStage(timeline, "chat.send.clicked", { length: draft.text.length });
-    publish({ sending: true, error: undefined });
+    // Shown at once, in the shape of the persisted user message that replaces it.
+    const entry: Provisional = { id: `provisional:${timeline.send}`, text: draft.text, before: state.messages };
+    provisional.push(entry);
+    publish({
+      sending: true,
+      error: undefined,
+      messages: [...state.messages, { id: entry.id, type: "user", text: draft.text, time: { created: Date.now() } }],
+    });
     yield* Effect.gen(function*() {
       const api = yield* OpenCodeAPI;
       // Before the request: a prompt whose response is lost may still be accepted.
       unsent.delete(id);
-      yield* api.prompt(id, draft.text).pipe(Effect.tapCause(cause => Effect.sync(() =>
-        sendStage(timeline, "chat.send.rejected", { interrupted: Cause.hasInterrupts(cause) }))));
+      const inbox = yield* api.prompt(id, draft.text).pipe(Effect.tapCause(cause => Effect.sync(() => {
+        sendStage(timeline, "chat.send.rejected", { interrupted: Cause.hasInterrupts(cause) });
+        // Withdrawn; the caller still holds the text. A changed selection already dropped it.
+        provisional = provisional.filter((p) => p !== entry);
+        if (state.messages.some((m) => m.id === entry.id))
+          publish({ messages: state.messages.filter((m) => m.id !== entry.id) });
+      })));
       sendStage(timeline, "chat.send.accepted");
+      entry.inboxID = inbox.id;
+      if (deliveredEarly.has(inbox.id)) entry.delivered = true;
+      deliveredEarly.clear();
       if (valid(g, s)) {
         yield* hydrate().pipe(Effect.catchCause(cause => Effect.sync(() => {
           // Prompt acceptance is known. A refresh failure must not invite a

@@ -1,8 +1,8 @@
 import { Context, Effect, Layer, Schema, Stream } from "effect";
 import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
-import { AbsolutePath, Form, Location, Model, OpenCode, Permission, Session, SessionMessage } from "@opencode/client/effect";
+import { AbsolutePath, Form, Location, Model, OpenCode, Permission, Session, SessionInbox, SessionMessage } from "@opencode/client/effect";
 import type { SessionListInput } from "@opencode/client/effect/api";
-import type { ModelRef, SessionInfo, SessionMessageInfo as Message, V2Event as NativeEvent, FormInfo, PermissionRequest } from "./vendor/types";
+import type { ModelRef, SessionInfo, SessionInboxUser, SessionMessageInfo as Message, V2Event as NativeEvent, FormInfo, PermissionRequest } from "./vendor/types";
 import type { ChatEndpoint as ClientEndpoint, ModelInfo } from "./types";
 export type { ModelRef, SessionInfo, Message, NativeEvent };
 
@@ -19,7 +19,8 @@ export interface ChatAPI {
   messages(id: string, options?: MessagePageOptions): Effect.Effect<Page<Message>, ChatAPIError>;
   create(title?: string): Effect.Effect<SessionInfo, ChatAPIError>;
   model(id: string, model: ModelRef): Effect.Effect<void, ChatAPIError>;
-  prompt(id: string, text: string): Effect.Effect<void, ChatAPIError>;
+  /** Resolves with the accepted inbox entry; its id names the later `session.inbox.delivered`. */
+  prompt(id: string, text: string): Effect.Effect<SessionInboxUser, ChatAPIError>;
   interrupt(id: string): Effect.Effect<void, ChatAPIError>;
   active(): Effect.Effect<Readonly<Record<string, { readonly type: "running" }>>, ChatAPIError>;
   permissions(id: string): Effect.Effect<PermissionRequest[], ChatAPIError>;
@@ -46,6 +47,7 @@ const withAPIError = Effect.mapError(apiError);
  * The assertions only bridge the generated wire types' mutable array spelling. */
 const sessionWire = (value: Session.Info) => Schema.encodeSync(Session.Info)(value) as SessionInfo;
 const messageWire = (value: SessionMessage.Info) => Schema.encodeSync(SessionMessage.Info)(value) as Message;
+const inboxWire = (value: SessionInbox.User) => Schema.encodeSync(SessionInbox.User)(value) as SessionInboxUser;
 const formWire = (value: Form.Info) => Schema.encodeSync(Form.Info)(value) as FormInfo;
 const permissionWire = (value: Permission.Request) => Schema.encodeSync(Permission.Request)(value) as PermissionRequest;
 
@@ -86,7 +88,7 @@ const makeAPI = Effect.fn("OpenCodeAPI.make")(function*(directory: string, baseU
       yield* client.session.switchModel({ sessionID: Session.ID.make(id), model: yield* Schema.decodeUnknownEffect(Model.Ref)(model) });
     }, withAPIError),
     prompt: Effect.fn("OpenCodeAPI.prompt")(function*(id: string, text: string) {
-      yield* client.session.prompt({ sessionID: Session.ID.make(id), text });
+      return inboxWire(yield* client.session.prompt({ sessionID: Session.ID.make(id), text }));
     }, withAPIError),
     interrupt: Effect.fn("OpenCodeAPI.interrupt")(function*(id: string) {
       yield* client.session.interrupt({ sessionID: Session.ID.make(id) });

@@ -882,3 +882,42 @@ test("New chat returns to the unsent session it already created instead of creat
   await c.createSession();
   expect(created()).toBe(2);
 });
+
+test("a sent message shows at once, stays last across refreshes and gives way to its persisted message", async () => {
+  const { f, c } = start();
+  // Server history newer than the client clock: the provisional message must not sort as older history.
+  const later = Date.now() + 60_000;
+  f.histories.ses1 = [user("msg_old", "earlier", later)];
+  await c.ready;
+  const prompt = deferred<Response>();
+  f.override = url => url.pathname.endsWith("/prompt") ? prompt.promise : undefined;
+  const shown = () => c.getSnapshot().messages.map(m => m.type === "user" ? m.text : m.id);
+  const seen: string[][] = [];
+  c.subscribe(() => seen.push(shown()));
+  const sending = c.send({ text: "hello" });
+  await tick();
+  expect(shown()).toEqual(["earlier", "hello"]);
+  // A refresh while the prompt is still in flight.
+  f.emit("session.inbox.delivered", { sessionID: "ses1", inboxID: "msg_other" });
+  await new Promise(resolve => setTimeout(resolve, 160));
+  expect(shown()).toEqual(["earlier", "hello"]);
+  // Accepted but not yet delivered: the refresh after acceptance has no such message.
+  prompt.resolve(json({ data: { id: "msg_inbox", sessionID: "ses1", type: "user", payload: { text: "hello" }, delivery: "steer", timeCreated: 1 } }));
+  await sending;
+  expect(shown()).toEqual(["earlier", "hello"]);
+  // Persisted under another id, with the reply already streaming below it.
+  f.histories.ses1 = [user("msg_old", "earlier", later), user("msg_actual", "hello", later + 1),
+    { id: "msg_a", type: "assistant", agent: "build", model: { providerID: "p", id: "m" }, content: [], time: { created: later + 2 } }];
+  f.emit("session.inbox.delivered", { sessionID: "ses1", inboxID: "msg_inbox" });
+  f.emit("session.step.started", { sessionID: "ses1", assistantMessageID: "msg_a", agent: "build", model: { providerID: "p", id: "m" } });
+  await tick();
+  expect(shown()).toEqual(["earlier", "hello", "msg_a"]);
+  await new Promise(resolve => setTimeout(resolve, 160));
+  expect(c.getSnapshot().messages.map(m => m.id)).toEqual(["msg_old", "msg_actual", "msg_a"]);
+  expect(seen.every(texts => texts.filter(text => text === "hello").length === 1)).toBe(true);
+  // A rejected prompt withdraws its message.
+  f.override = url => url.pathname.endsWith("/prompt") ? json({ error: "no" }, 500) : undefined;
+  await expect(c.send({ text: "again" })).rejects.toThrow("ChatAPIError");
+  expect(seen.some(texts => texts.at(-1) === "again")).toBe(true);
+  expect(c.getSnapshot().messages.map(m => m.id)).toEqual(["msg_old", "msg_actual", "msg_a"]);
+});

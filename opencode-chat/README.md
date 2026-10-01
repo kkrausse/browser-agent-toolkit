@@ -196,7 +196,7 @@ Actions return promises and reject on failure, also recording visible errors:
 | `createSession(title?) → Promise<string>` | Explicit creation and selection |
 | `loadOlder()` | Fetch next descending cursor page and prepend in native order |
 | `exportChats()` | Export every directory session (including parent-linked subagents) and every message page as a versioned, deterministic transcript archive |
-| `send({text})` | Submit native text prompt; preserve UI draft on failure |
+| `send({text})` | Submit native text prompt. The message is in `messages` at once under a `provisional:` id, replaced by the persisted message on a refresh and withdrawn if the prompt is rejected; preserve UI draft on failure |
 | `selectModel({providerID,id,variant?})` | Persist explicit session model; `undefined` rejects because pinned API has no reset-to-default operation |
 | `interrupt()` | Explicit server stop request, retained until authoritative idle/interruption; failure can be retried |
 | `reconnect()` | Replace local subscription, hydrate authoritative history/requests/activity |
