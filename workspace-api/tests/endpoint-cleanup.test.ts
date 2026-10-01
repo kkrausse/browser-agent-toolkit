@@ -38,8 +38,11 @@ for (const owner of ['runtime','controller']) for (const rejectCancel of [false,
     if(owner==='runtime')await expect(runtime.expose(5173)).rejects.toThrow('Runtime stopped');
     gate.resolve();
     if(rejectCancel){await expect(stop).rejects.toThrow(owner==='runtime'?'workspace remains attached':'quiescence unproven');expect(state.attached).toBe(true);
-      if(owner==='controller'){await expect(runtime.stop()).rejects.toThrow('workspace remains attached');await expect(controller.stopServices()).rejects.toThrow('quiescence unproven');}
-      await expect(Runtime.start({workspace,distribution})).rejects.toThrow('already has an active runtime');}
+      if(owner==='controller'){await expect(runtime.stop()).rejects.toThrow('workspace remains attached');}
+      await expect(Runtime.start({workspace,distribution})).rejects.toThrow('already has an active runtime');
+      // Each owner reported the gone endpoint's failure once; the retry is not sticky.
+      if(owner==='controller')await controller.stopServices();
+      await runtime.stop();expect(state.attached).toBe(false);}
     else {await stop;if(owner==='controller')await runtime.stop();expect(state.attached).toBe(false);}
     expect(cancels).toBe(1);await expect(request).rejects.toThrow();
   } finally {gate.resolve();for(const port of ports)port.close();if(oldLocation)Object.defineProperty(globalThis,'location',oldLocation);else delete (globalThis as {location?:Location}).location;}

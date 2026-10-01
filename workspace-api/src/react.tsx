@@ -33,7 +33,9 @@ export class WorkspaceController {
   private shutdowns = new Map<string, () => Promise<void>>();
   private pendingLaunches = new Set<Promise<unknown>>();
   private serviceSettlements = new Set<Promise<unknown>>();
-  private cleanupFailures: unknown[] = [];
+  /** Cleanup failures of resources that are already gone (nothing is left to retry).
+   * The next stopServices takes them: reported by one rejection, then acknowledged. */
+  private cleanupReceipts: unknown[] = [];
   private clients = new Map<string, { resolve(): void; reject(error: Error): void; promise: Promise<void> }>();
   private distribution?: Distribution;
   private lifetime = new AbortController();
@@ -163,7 +165,7 @@ export class WorkspaceController {
         const {drained} = this.drainExecution(execution, name);
         const results = await Promise.allSettled([execution.stop(), drained]);
         for (const result of results) if (result.status === 'rejected') {
-          this.cleanupFailures.push(result.reason);
+          this.cleanupReceipts.push(result.reason);
           diagnostics.record('service.cleanup.failed', { name, error: result.reason });
         }
         budget.signal.throwIfAborted();
@@ -175,12 +177,13 @@ export class WorkspaceController {
       // Readiness observation may expire before node accepts the launch. Keep its
       // ownership until late acceptance has been stopped and both streams joined.
       diagnostics.record('service.cleanup.join.start', { name, phase: 'spawn', quiescence: 'unproven' });
+      let failed = false;
       await spawn.then(async execution => {
         const {drained} = this.drainExecution(execution, name);
         const cleanup = await Promise.allSettled([execution.stop(), drained]);
-        for (const result of cleanup) if (result.status === 'rejected') this.cleanupFailures.push(result.reason);
+        for (const result of cleanup) if (result.status === 'rejected') { failed = true; this.cleanupReceipts.push(result.reason); }
       }, cleanupError => diagnostics.record('service.spawn.settled', { name, error: cleanupError }));
-      diagnostics.record('service.cleanup.join.settled', { name, phase: 'spawn', failed: !!this.cleanupFailures.length });
+      diagnostics.record('service.cleanup.join.settled', { name, phase: 'spawn', failed });
       budget.signal.removeEventListener('abort', abortStartup); budget.dispose(); throw error;
     });
     const {drained, failure: outputFailure} = this.drainExecution(execution, name);
@@ -222,7 +225,8 @@ export class WorkspaceController {
         if (errors.length) throw new AggregateError(errors.map(result => result.reason), `${name} settlement failed`);
       });
       this.serviceSettlements.add(settlement);
-      void settlement.then(() => this.serviceSettlements.delete(settlement), () => {});
+      // A settled join is no longer outstanding; its failure survives as a receipt.
+      void settlement.then(() => { this.serviceSettlements.delete(settlement); }, error => { this.serviceSettlements.delete(settlement); this.cleanupReceipts.push(error); });
       if (lifecycle) this.shutdowns.set(name, () => shutdownAtEOF(execution, drained, timeoutMs));
       this.publish({ services: { ...this.snapshot.services, [name]: service }, clients: { ...this.snapshot.clients, [name]: "connecting" } });
       const exited = (result: unknown) => {
@@ -246,12 +250,13 @@ export class WorkspaceController {
       // expose may accept after the readiness race; pending above owns acceptance.
       disposeEndpoint();
       const endpointCleanup = await Promise.allSettled(endpoint ? [endpoint.settled] : []);
-      for (const result of endpointCleanup) if (result.status === 'rejected') this.cleanupFailures.push(result.reason);
+      let failed = false;
+      for (const result of endpointCleanup) if (result.status === 'rejected') { failed = true; this.cleanupReceipts.push(result.reason); }
       for (const [index, result] of cleanup.entries()) if (result.status === 'rejected') {
-        if (index < 2) this.cleanupFailures.push(result.reason);
+        if (index < 2) { failed = true; this.cleanupReceipts.push(result.reason); }
         diagnostics.record('service.cleanup.settled', { name, error: result.reason });
       }
-      diagnostics.record('service.cleanup.join.settled', { name, phase: 'readiness', failed: !!this.cleanupFailures.length });
+      diagnostics.record('service.cleanup.join.settled', { name, phase: 'readiness', failed });
       throw error;
     }
     finally { controller.abort(); budget.signal.removeEventListener('abort', abortStartup); budget.dispose(); }
@@ -288,40 +293,56 @@ export class WorkspaceController {
       shutdown ? shutdown() : service.execution.stop(), service.drained, service.endpoint.settled,
     ]);
     const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
-    if (failures.length) {
-      this.cleanupFailures.push(...failures.map(result => result.reason));
-      throw new AggregateError(failures.map(result => result.reason), 'Service cleanup failed; quiescence unproven');
-    }
+    // The rejection is the report; nothing is retained to fail a later attempt. Work
+    // still running stays joined through serviceSettlements and the runtime itself.
+    if (failures.length) throw new AggregateError(failures.map(result => result.reason), 'Service cleanup failed; quiescence unproven');
   }
   async stopRuntime() {
     await this.stopServices();
     await this.runtime?.stop(); this.publish({ runtime: undefined, progress: [] });
     this.status("Runtime stopped. Files remain open and editable.");
   }
-  /** Join startup ownership and service shutdown without closing the workspace. */
+  /** Join startup ownership and service shutdown without closing the workspace.
+   * A rejection is never sticky: launches, services and settlements leave their
+   * registries as they settle, so calling again joins only what is still outstanding. */
   async stopServices() {
     await Promise.allSettled([...this.pendingLaunches]);
     const results = await Promise.allSettled(Object.keys(this.snapshot.services).map(name => this.stopService(name)));
-    const settlements = await Promise.allSettled([...this.serviceSettlements]);
-    const failures = [...results, ...settlements].filter((result): result is PromiseRejectedResult => result.status === 'rejected');
-    if (failures.length || this.cleanupFailures.length) throw new AggregateError([...this.cleanupFailures, ...failures.map(result => result.reason)], 'Service cleanup failed; quiescence unproven');
+    await Promise.allSettled([...this.serviceSettlements]);
+    const failures = this.cleanupReceipts.splice(0);
+    for (const result of results) if (result.status === 'rejected') failures.push(result.reason);
+    if (failures.length) throw new AggregateError([...new Set(failures)], 'Service cleanup failed; quiescence unproven');
   }
-  async close() {
-    await this.stopRuntime();
-    try { await this.workspace?.close(); }
+  /** Rejects, leaving runtime and workspace in place, while cleanup is unproven; call
+   * again to retry. `force` closes regardless: the workspace is flushed and its host
+   * destroyed, and the unproven cleanup is still thrown, never reported as success. */
+  async close(options: { force?: boolean } = {}) {
+    const unproven: unknown[] = [];
+    try { await this.stopRuntime(); }
+    catch (error) { if (!options.force) throw error; unproven.push(error); }
+    try { await this.workspace?.close({ force: unproven.length > 0 }); }
+    catch (error) { if (!unproven.length) throw error; unproven.push(error); }
     finally { this.distribution = undefined; this.publish({ workspace: undefined, persistence: "closed" }); }
+    if (unproven.length) {
+      // Host destruction ended whatever the abandoned runtime still owned.
+      this.serviceSettlements.clear(); this.publish({ runtime: undefined, progress: [] });
+      this.status("Workspace force-closed; cleanup was not proven.");
+      throw new AggregateError(unproven, 'Workspace force-closed; cleanup unproven');
+    }
     this.status("Workspace flushed and closed. Start workspace restores it.");
   }
-  /** Cancel current work immediately, then close serially. Retry after cleanup failure.
+  /** Cancel current work immediately, then close serially. A failed close leaves the
+   * controller cancelled; calling again retries the outstanding cleanup, and `force`
+   * closes without that proof (see close). Either way a closed controller is reusable.
    * Recipes must observe signal and await all work they start. Do not call inside run(). */
-  cancelAndClose(): Promise<void> {
+  cancelAndClose(options: { force?: boolean } = {}): Promise<void> {
     if (this.closing) return this.closing;
     this.lifetime.abort(new Error("Editing stopped"));
     this.closing = (async () => {
       await this.operation;
       for (const dispose of this.attachments.values()) dispose();
-      await this.close();
-      if (!this.disposed) this.lifetime = new AbortController();
+      try { await this.close(options); }
+      finally { if (!this.snapshot.workspace && !this.snapshot.runtime && !this.disposed) this.lifetime = new AbortController(); }
     })().finally(() => { this.closing = undefined; });
     return this.closing;
   }
