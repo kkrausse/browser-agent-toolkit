@@ -26,9 +26,10 @@ test('completed execution cleanup failure remains owned by Runtime', async () =>
   emit({ type: 'proc-exit', execId, code: 0, cleanupError: 'fixture unlink failed' });
   await execution.exited;
   await expect(execution.stop()).rejects.toThrow('fixture unlink failed');
-  const stop = runtime.stop();
-  await expect(stop).rejects.toThrow('workspace remains attached');
-  expect(runtime.stop()).toBe(stop);
+  await expect(runtime.stop()).rejects.toThrow('workspace remains attached');
   expect(state.attached).toBe(true);
   await expect(Runtime.start({ workspace, distribution })).rejects.toThrow('already has an active runtime');
+  // The receipt was reported; a rejected stop is a state the caller can leave by retrying.
+  await runtime.stop();
+  expect(state.attached).toBe(false);
 });

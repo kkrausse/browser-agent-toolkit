@@ -10,8 +10,18 @@ export interface Runtime<T extends ToolSet = {}> {
   readonly tools: BoundTools<T>;
   node(options: NodeLaunchOptions): Promise<Execution>;
   expose(port: number, options?: { signal?: AbortSignal }): Promise<Endpoint>;
+  /** Rejects while cleanup is unproven and leaves the workspace attached. Calling it
+   * again re-joins the still-live executions/endpoints; failures of resources that
+   * are already gone are reported by one rejection and thereby acknowledged. */
   stop(): Promise<void>;
 }
+/** `stop-failed` is a state the caller can leave: the next stop() is a new attempt
+ * over what is still outstanding, never a replay of the first rejection. */
+type RuntimePhase =
+  | { status: "running" }
+  | { status: "stopping"; attempt: Promise<void> }
+  | { status: "stop-failed" }
+  | { status: "stopped" };
 export interface RuntimeStartOptions<T extends ToolSet = {}> {
   distribution: Distribution;
   workspace: Workspace;
@@ -28,14 +38,15 @@ export namespace Runtime {
     if (JSON.stringify(state.distribution) !== JSON.stringify(options.distribution)) throw new WorkspaceError("DISTRIBUTION_MISMATCH", "Runtime must use the workspace distribution");
     state.attached = true;
     const host = state.host;
-    let stopped = false;
+    let phase: RuntimePhase = { status: "running" };
     const executions = new Set<Execution>();
     const pendingLaunches = new Set<Promise<Execution>>();
     const endpoints = new Set<Endpoint>();
-    const endpointFailures: unknown[] = [];
-    const executionFailures: unknown[] = [];
+    // Cleanup failures of resources that no longer exist. Nothing is left to retry,
+    // so the next stop attempt takes (reports) each exactly once.
+    const receipts: unknown[] = [];
     const lifetime = new AbortController();
-    const check = () => { if (stopped) throw new WorkspaceError("CLOSED", "Runtime stopped"); };
+    const check = () => { if (phase.status !== "running") throw new WorkspaceError("CLOSED", "Runtime stopped"); };
     const node = async (launchOptions: NodeLaunchOptions, binding?: Record<string, unknown>): Promise<Execution> => {
       check();
       const signal = launchOptions.signal ? AbortSignal.any([launchOptions.signal, lifetime.signal]) : lifetime.signal;
@@ -50,20 +61,19 @@ export namespace Runtime {
         void execution.exited.then(result => {
           // A process can finish before Runtime.stop. Its failed egress cleanup
           // receipt must survive removal from the live execution registry.
-          if (result.cleanupError) executionFailures.push(new Error(result.cleanupError));
+          if (result.cleanupError) receipts.push(new Error(result.cleanupError));
           executions.delete(execution);
-        }, error => { executionFailures.push(error); executions.delete(execution); });
-        if (stopped) await execution.stop();
+        }, error => { receipts.push(error); executions.delete(execution); });
+        if (phase.status !== "running") await execution.stop();
         return execution;
       } catch (error) {
         // A pre-PID kernel loader can fail cleanup before an Execution exists.
         // Keep that receipt after pending-launch removal; stop must not detach
         // merely because allSettled observed and discarded its rejection.
-        if (error instanceof WorkspaceError && error.code === "CLEANUP_FAILED") executionFailures.push(error);
+        if (error instanceof WorkspaceError && error.code === "CLEANUP_FAILED") receipts.push(error);
         throw error;
       } finally { pendingLaunches.delete(promise); }
     };
-    let stopping: Promise<void> | undefined;
     const runtime: Runtime<T> = {
       tools: {} as BoundTools<T>, node,
       async expose(port, opts = {}) {
@@ -77,29 +87,38 @@ export namespace Runtime {
         if (!endpoint.settled || typeof endpoint.settled.then !== "function") {
           endpoint.dispose();
           const error = new Error("Host SDK lacks endpoint cleanup receipts; ownership unproven");
-          endpointFailures.push(error);
+          receipts.push(error);
           throw error;
         }
         endpoints.add(endpoint);
         void endpoint.settled.then(() => endpoints.delete(endpoint), error => {
-          endpointFailures.push(error); endpoints.delete(endpoint);
+          receipts.push(error); endpoints.delete(endpoint);
         });
         return endpoint;
       },
       stop() {
-        return stopping ??= (async () => {
-          stopped = true; lifetime.abort(new WorkspaceError("CLOSED", "Runtime stopped"));
+        if (phase.status === "stopping") return phase.attempt;
+        if (phase.status === "stopped") return Promise.resolve();
+        const attempt = (async () => {
+          lifetime.abort(new WorkspaceError("CLOSED", "Runtime stopped"));
           for (const endpoint of endpoints) endpoint.dispose();
           await Promise.allSettled([...pendingLaunches]);
+          // Settled resources left these registries, so a retry joins only live work.
           const results = await Promise.allSettled([
             ...[...executions].map(e => e.stop()),
             ...[...endpoints].map(endpoint => endpoint.settled),
           ]);
-          const failures = [...endpointFailures, ...executionFailures];
+          const failures = receipts.splice(0);
           for (const result of results) if (result.status === "rejected") failures.push(result.reason);
-          if (failures.length) throw new AggregateError([...new Set(failures)], "Runtime cleanup failed; workspace remains attached");
+          if (failures.length) {
+            phase = { status: "stop-failed" };
+            throw new AggregateError([...new Set(failures)], "Runtime cleanup failed; workspace remains attached");
+          }
+          phase = { status: "stopped" };
           state.attached = false;
         })();
+        phase = { status: "stopping", attempt };
+        return attempt;
       },
     };
     const context: ToolContext = {
