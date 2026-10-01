@@ -338,3 +338,15 @@ not evidence that pilot success means the whole kernel is migrated.
   takes exclusive visible slot. Intended report
   `2026-09-30-effect-loader-preview-readiness-trace-qa.md`; diagnostic pass alone
   cannot replace original failed integrated acceptance or authorize phase2.
+- Trace `99748de`/`b2046f4` did not reproduce readiness rejection: stream3 HTTP200
+  at11.12s, 24,367-byte EOF17.31s, timeout afterward20s. Optimizer16.91s does not
+  establish overhead/cause. Page-only capture dropped12 events; legacy-probe/WASM
+  timing missing and driver export hit outer shell timeout. Public cleanup joined;
+  owned targets/locks/session/host removed, 29,163 files/native12/37 unchanged.
+  [Trace result](2026-09-30-effect-loader-preview-readiness-trace-qa.md) is diagnostic,
+  not full-app acceptance or explanation of the old failed cohort.
+- Parent assigns bounded offline real-adapter abort/header/body reason-and-cleanup
+  cases to `ses_f0aeb66cdffetrxtvcEGyMWl1A`; intended report
+  `2026-09-30-effect-preview-adapter-reason-cleanup-qa.md`. No blind browser repeats,
+  deadline changes, production fix or phase2 expansion. Preserve old failure and
+  assess next integrated gate from concrete adapter evidence rather than guessing.
