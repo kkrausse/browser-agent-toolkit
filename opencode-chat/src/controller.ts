@@ -3,6 +3,7 @@ import { ChatError, OpenCodeAPI, type ChatAPIError, type NativeEvent } from "./a
 import { createV2SessionReducer } from "./vendor/reducer";
 import { questionFromForm, formAnswer } from "./forms";
 import { createReaderFence } from "./reader-fence";
+import { canSend, holdBlocker } from "./admission";
 import type {
   ChatController,
   ChatExport,
@@ -12,6 +13,9 @@ import type {
   QuestionRequest,
   QuestionAnswers,
 } from "./types";
+
+// The package root is built from this module, so runtime exports live here.
+export { canSend };
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const compareID = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
@@ -58,14 +62,17 @@ export function createChatController(options: ChatOptions): ChatController {
   let older: string | undefined | null, hydration: Fiber.Fiber<void, ChatAPIError | ChatError> | undefined;
   let requestEvents: NativeEvent[] = [];
   const answered = new Set<string>();
+  const dismissing = new Set<string>();
   let recovery: Fiber.Fiber<void, never> | undefined;
   let mutation: symbol | undefined;
   let draftSequence = 0;
   const draftKeys = new Map<string, string>();
   let disposal: Promise<void> | undefined;
-  const publish = (patch: Partial<ChatSnapshot>) => {
+  // `mutation` is the only record of a pending session operation. The snapshot
+  // flag is stamped on every publish so the two cannot drift.
+  const publish = (patch: Partial<Omit<ChatSnapshot, "sessionOperationPending">>) => {
     if (disposed) return;
-    state = freeze({ ...state, ...patch });
+    state = freeze({ ...state, ...patch, sessionOperationPending: !!mutation });
     for (const listener of listeners) listener();
   };
   const check = () => {
@@ -321,7 +328,6 @@ export function createChatController(options: ChatOptions): ChatController {
     publish({
       sessionID: id,
       draftKey: draftKey ?? (id ? draftKeys.get(id) ?? `session:${id}` : undefined),
-      sessionOperationPending: !!mutation,
       model: state.sessions.find((s) => s.id === id)?.model,
       messages: [],
       permissions: [],
@@ -359,7 +365,6 @@ export function createChatController(options: ChatOptions): ChatController {
     if (state.sessionID) reducer.clear(state.sessionID);
     publish({
       connection: "connecting",
-      sessionOperationPending: false,
       loading: true,
       error: undefined,
       execution: "unknown",
@@ -471,7 +476,7 @@ export function createChatController(options: ChatOptions): ChatController {
     }).pipe(Effect.ensuring(Effect.sync(() => {
       if (mutation === token) {
         mutation = undefined;
-        publish({ sessionOperationPending: false, loading: false });
+        publish({ loading: false });
       }
     })));
   };
@@ -547,8 +552,9 @@ export function createChatController(options: ChatOptions): ChatController {
   });
   const send = Effect.fn("Chat.send")(function*(draft: { text: string }) {
     if (!draft.text.trim()) return yield* new ChatError({ message: "Enter a message" });
-    if (state.connection !== "connected" || state.loading || state.sending || mutation || state.execution !== "idle")
-      return yield* new ChatError({ message: "Chat is not ready to send" });
+    // Re-checked inside the request fiber: a hold may be acquired after the
+    // public call was admitted but before this runs.
+    if (!canSend(state)) return yield* new ChatError({ message: "Chat is not ready to send" });
     const g = generation, s = selection, id = yield* sessionID();
     publish({ sending: true, error: undefined });
     yield* Effect.gen(function*() {
@@ -571,11 +577,11 @@ export function createChatController(options: ChatOptions): ChatController {
   const selectModel = Effect.fn("Chat.selectModel")(function*(model: ModelRef | undefined) {
     if (!model)
       return yield* new ChatError({ message: "Select an explicit model; the pinned API cannot reset a session model" });
-    if (state.execution !== "idle" || mutation || state.sending)
+    if (state.execution !== "idle" || mutation || state.sending || state.held)
       return yield* new ChatError({ message: "Wait for the current operation" });
     const id = yield* sessionID();
     const g = generation, s = selection, token = (mutation = Symbol());
-    publish({ sessionOperationPending: true });
+    publish({}); // republishes the derived pending flag
     yield* Effect.gen(function*() {
       const api = yield* OpenCodeAPI;
       yield* api.model(id, model);
@@ -586,7 +592,7 @@ export function createChatController(options: ChatOptions): ChatController {
     }).pipe(Effect.ensuring(Effect.sync(() => {
       if (mutation === token) {
         mutation = undefined;
-        publish({ sessionOperationPending: false });
+        publish({});
       }
     })));
   });
@@ -602,6 +608,26 @@ export function createChatController(options: ChatOptions): ChatController {
     const request = state.questions.find(q => q.request.id === id)!.request;
     yield* reply("question", id, (api, sessionID) => api.replyForm(sessionID, id, formAnswer(request, answers)));
   });
+  // Unsupported forms have no reply the legacy question UI can express. Cancelling
+  // is the only answer this client can give, and it unblocks the session.
+  const dismissForm = Effect.fn("Chat.dismissForm")(function*(id: string) {
+    if (!state.unsupportedForms.some(f => f.id === id))
+      return yield* new ChatError({ message: "Form is no longer pending" });
+    if (dismissing.has(id)) return yield* new ChatError({ message: "Response is already submitting" });
+    const g = generation, s = selection, session = yield* sessionID();
+    const api = yield* OpenCodeAPI;
+    dismissing.add(id);
+    yield* api.cancelForm(session, id).pipe(Effect.ensuring(Effect.sync(() => dismissing.delete(id))));
+    if (!valid(g, s)) return;
+    answered.add(`question:${id}`);
+    publish({ unsupportedForms: state.unsupportedForms.filter(f => f.id !== id) });
+  });
+  // A hold freezes new intent at the public boundary. Bootstrap selection is
+  // internal and not routed through here; replies and interrupt stay available.
+  const unheld = <A>(intent: () => Promise<A>): Promise<A> =>
+    state.held && !disposed
+      ? Promise.reject(new ChatError({ message: `Chat is held: ${state.held}` }))
+      : intent();
   const admit = <A, E>(intent: () => Effect.Effect<A, E, OpenCodeAPI>) => {
     try { return run(intent(), connection); }
     catch (error) { return Promise.reject(error); }
@@ -614,29 +640,45 @@ export function createChatController(options: ChatOptions): ChatController {
       listeners.add(notify);
       return () => { listeners.delete(notify); };
     },
-    selectSession: id => admit(() => selectSession(id)),
-    reconnect: () => run(reconnect(), lifetime),
-    createSession: title => admit(() => createSession(title)),
+    selectSession: id => unheld(() => admit(() => selectSession(id))),
+    reconnect: () => unheld(() => run(reconnect(), lifetime)),
+    createSession: title => unheld(() => admit(() => createSession(title))),
     loadOlder: () => run(loadOlder()),
     exportChats: () => runArchive(exportChats()),
-    send: draft => {
+    send: draft => unheld(() => {
       // A rejected pending intent must never become a queued send merely because
       // readiness/selection changes before the request fiber gets scheduled.
       if (disposed) return Promise.reject(new Error("Chat controller is disposed"));
-      if (!state.sessionID || state.connection !== "connected" || state.loading || state.sending || mutation || state.execution !== "idle")
-        return Promise.reject(new ChatError({ message: "Chat is not ready to send" }));
+      if (!canSend(state)) return Promise.reject(new ChatError({ message: "Chat is not ready to send" }));
       const g = generation, s = selection;
       return run(Effect.suspend(() => valid(g, s)
         ? send(draft)
         : Effect.fail(new ChatError({ message: "Send selection changed" }))));
-    },
-    selectModel: model => run(selectModel(model)),
+    }),
+    selectModel: model => unheld(() => run(selectModel(model))),
     interrupt: () => run(interrupt()),
     replyPermission: (id, decision) =>
       run(reply("permission", id, (api, sessionID) => api.replyPermission(sessionID, id, decision))),
     replyQuestion: (id, answers) => run(replyQuestion(id, answers)),
     rejectQuestion: id => run(reply("question", id, (api, sessionID) => api.cancelForm(sessionID, id))),
+    dismissForm: id => run(dismissForm(id)),
     clearError: () => publish({ error: undefined }),
+    hold(reason) {
+      check();
+      if (!reason.trim()) throw new ChatError({ message: "A hold needs a reason" });
+      const blocker = holdBlocker(state);
+      if (blocker) throw new ChatError({ message: `Chat cannot be held for "${reason}": ${blocker}` });
+      // The snapshot is the lease: exclusive because a held chat blocks hold().
+      publish({ held: reason });
+      let released = false;
+      return {
+        release() {
+          if (released) return;
+          released = true;
+          publish({ held: undefined });
+        },
+      };
+    },
     dispose() {
       if (disposal) return disposal;
       disposed = true;

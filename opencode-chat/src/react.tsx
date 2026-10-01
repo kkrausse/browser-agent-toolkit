@@ -13,6 +13,7 @@ import type {
   RequestState,
   SessionMessageInfo,
 } from "./types";
+import { canSend } from "./admission";
 import { Markdown } from "./markdown";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -435,13 +436,7 @@ function SessionComposer({ controller }: { controller: ChatController }) {
     [drafts, setDrafts] = useState<Record<string, string>>({});
   const key = state.draftKey ?? state.sessionID ?? "none";
   const text = drafts[key] ?? "";
-  const disabled =
-    !state.sessionID ||
-    state.connection !== "connected" ||
-    state.loading ||
-    state.sending ||
-    state.sessionOperationPending ||
-    state.execution !== "idle";
+  const disabled = !canSend(state);
   const send = () => {
     if (disabled || !text.trim()) return;
     const draft = text;
@@ -507,7 +502,11 @@ export function ChatView({
   footer,
 }: ChatViewProps) {
   const state = useChatSnapshot(controller);
-  const showConnection = !footer || state.connection !== "connected" || state.execution !== "idle" || state.loading || state.sessionOperationPending;
+  const showConnection = !footer || state.connection !== "connected" || state.execution !== "idle" || state.loading || state.sessionOperationPending || !!state.held;
+  // A failed hydrate leaves execution unknown with nothing in flight. Without a
+  // retry the composer would stay disabled until the next server event, if any.
+  const stalled = state.connection === "connected" && state.execution === "unknown" &&
+    !state.loading && !state.sending && !state.sessionOperationPending && !state.held;
   return (
     <section className="oc-chat" aria-label="OpenCode chat">
       {showHeader && <header className="oc-header">
@@ -536,7 +535,11 @@ export function ChatView({
         {state.unsupportedForms.map(form => (
           <div role="alert" key={form.id}>
             <strong>{form.title}</strong>: This form cannot be answered by this chat client.
-            Open it in a compatible OpenCode client to continue. Unsupported fields: {form.fields.map(f => `${f.key} (${f.type})`).join(", ")}.
+            Open it in a compatible OpenCode client to continue, or dismiss it to cancel the request.
+            Unsupported fields: {form.fields.map(f => `${f.key} (${f.type})`).join(", ")}.
+            <div className="oc-actions">
+              <Button type="button" onClick={() => run(controller.dismissForm(form.id))}>Dismiss</Button>
+            </div>
           </div>
         ))}
         {state.questions.map((entry) => <QuestionCard key={entry.request.id} controller={controller} entry={entry} />)}
@@ -546,21 +549,29 @@ export function ChatView({
         {showConnection && (
           <div className="oc-connection"><span role="status">
             {state.connection === "connected"
-              ? state.loading || state.sessionOperationPending
+              ? state.held
+                ? `Paused: ${state.held}`
+                : state.loading || state.sessionOperationPending
                 ? "Preparing chat…"
                 : state.execution === "idle"
                 ? "Ready"
                 : state.execution === "unknown"
-                  ? "Checking execution…"
+                  ? stalled ? "Execution state unknown" : "Checking execution…"
                   : state.execution === "retrying"
                     ? "Retrying…"
                     : "Working…"
               : state.connection}
           </span>
           {state.connection !== "connected" && state.connection !== "connecting" && <Button
+            disabled={!!state.held}
             onClick={() => run(controller.reconnect())}
           >
             Reconnect
+          </Button>}
+          {stalled && <Button
+            onClick={() => run(state.sessionID ? controller.selectSession(state.sessionID) : controller.reconnect())}
+          >
+            Retry
           </Button>}</div>
         )}
         {footer}
@@ -584,6 +595,7 @@ function ChatSettings({ controller, showSessions, showModels }: ChatViewProps) {
                 Session
                 <ChoiceSelect
                   label="Session"
+                  disabled={!!state.held}
                   value={state.sessionID ?? ""}
                   onValueChange={(value) =>
                     run(controller.selectSession(value))
@@ -593,7 +605,7 @@ function ChatSettings({ controller, showSessions, showModels }: ChatViewProps) {
                 />
               </label>
               <Button
-                disabled={state.connection !== "connected" || state.loading || state.sessionOperationPending}
+                disabled={state.connection !== "connected" || state.loading || state.sessionOperationPending || !!state.held}
                 onClick={() => run(controller.createSession())}
               >
                 New chat
@@ -605,12 +617,7 @@ function ChatSettings({ controller, showSessions, showModels }: ChatViewProps) {
               Model
               <ChoiceSelect
                 label="Model"
-                disabled={
-                  !state.sessionID ||
-                  state.connection !== "connected" ||
-                  state.loading || state.sending || state.sessionOperationPending ||
-                  state.execution !== "idle"
-                }
+                disabled={!canSend(state)}
                 value={
                   state.model
                     ? JSON.stringify({

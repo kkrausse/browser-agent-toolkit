@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { createChatController } from "../src";
+import { createChatController, canSend } from "../src";
 import type { ChatController } from "../src/types";
 import { fixture, deferred, json, tick, user, session } from "./fixture";
 const controllers: ChatController[] = [];
@@ -686,4 +686,90 @@ test("official schema rejects incomplete HTTP history rather than publishing it"
   await expect(c.ready).rejects.toThrow("SchemaError");
   expect(c.getSnapshot().messages).toEqual([]);
   expect(c.getSnapshot().connection).toBe("disconnected");
+});
+
+const posted = (f: ReturnType<typeof fixture>, suffix: string) =>
+  f.calls.filter(call => call.init.method === "POST" && call.url.pathname.endsWith(suffix));
+
+test("a held chat rejects send, session and model changes without posting; release restores them", async () => {
+  const { f, c } = start();
+  await c.ready;
+  const hold = c.hold("Saving workspace");
+  expect(c.getSnapshot().held).toBe("Saving workspace");
+  expect(canSend(c.getSnapshot())).toBe(false);
+  await expect(c.send({ text: "hello" })).rejects.toThrow("Chat is held: Saving workspace");
+  await expect(c.createSession()).rejects.toThrow("Chat is held");
+  await expect(c.selectSession("ses2")).rejects.toThrow("Chat is held");
+  await expect(c.selectModel({ providerID: "p", id: "m" })).rejects.toThrow("Chat is held");
+  await expect(c.reconnect()).rejects.toThrow("Chat is held");
+  expect(() => c.hold("second")).toThrow("already held");
+  expect(f.calls.filter(call => call.init.method === "POST" && !call.url.pathname.endsWith("/await-activation"))).toEqual([]);
+  expect(c.getSnapshot().sessionID).toBe("ses1");
+  expect(c.getSnapshot().sessionOperationPending).toBe(false);
+  hold.release();
+  hold.release();
+  expect(c.getSnapshot().held).toBeUndefined();
+  await c.send({ text: "hello" });
+  expect(posted(f, "/prompt")).toHaveLength(1);
+});
+
+test("a send admitted just before a hold either blocks the hold or is never posted", async () => {
+  const { f, c } = start();
+  await c.ready;
+  const sent = c.send({ text: "hello" });
+  void sent.catch(() => {});
+  let hold: ReturnType<ChatController["hold"]> | undefined;
+  try { hold = c.hold("Switching workspace"); } catch { /* the send won admission */ }
+  await sent.catch(() => {});
+  expect(posted(f, "/prompt")).toHaveLength(hold ? 0 : 1);
+});
+
+test("hold cannot be acquired while executing, sending, or with a pending operation or request", async () => {
+  const f = fixture();
+  const { c } = start(f);
+  expect(() => c.hold("early")).toThrow("connecting");
+  await c.ready;
+  f.emit("session.execution.started", { sessionID: "ses1" });
+  await tick();
+  expect(() => c.hold("switch")).toThrow("execution is running");
+  f.emit("session.execution.succeeded", { sessionID: "ses1" });
+  await tick();
+  f.emit("permission.asked", { id: "per_1", sessionID: "ses1", action: "edit", resources: ["file"] });
+  await tick();
+  expect(() => c.hold("switch")).toThrow("permission request is pending");
+  f.emit("permission.replied", { sessionID: "ses1", requestID: "per_1", reply: "once" });
+  await tick();
+  const creating = deferred<Response>();
+  f.override = (url, init) => url.pathname.endsWith("/session") && init.method === "POST" ? creating.promise : undefined;
+  const created = c.createSession();
+  expect(c.getSnapshot().sessionOperationPending).toBe(true);
+  expect(() => c.hold("switch")).toThrow("cannot be held");
+  creating.resolve(json({ data: session("ses_new", "New") }));
+  await created;
+  const prompt = deferred<Response>();
+  f.override = url => url.pathname.endsWith("/prompt") ? prompt.promise : undefined;
+  const sent = c.send({ text: "hello" });
+  await tick();
+  expect(() => c.hold("switch")).toThrow("message is being sent");
+  prompt.resolve(json({ data: { id: "msg_inbox", sessionID: "ses_new", type: "user", payload: { text: "hello" }, delivery: "steer", timeCreated: 1 } }));
+  await sent;
+  expect(c.getSnapshot().held).toBeUndefined();
+  c.hold("switch").release();
+});
+
+test("an unsupported form can be dismissed, cancelling it so the chat can be held again", async () => {
+  const f = fixture();
+  f.forms.push({ id: "frm_numeric", sessionID: "ses1", title: "Budget", fields: [{ key: "budget", type: "number" }] });
+  const { c } = start(f);
+  await c.ready;
+  expect(() => c.hold("switch")).toThrow("question is pending");
+  f.override = url => url.pathname.endsWith("/cancel") ? json({}, 503) : undefined;
+  await expect(c.dismissForm("frm_numeric")).rejects.toThrow("503");
+  expect(c.getSnapshot().unsupportedForms).toHaveLength(1);
+  f.override = undefined;
+  await c.dismissForm("frm_numeric");
+  expect(f.calls.at(-1)!.url.pathname).toBe("/proxy/api/session/ses1/form/frm_numeric/cancel");
+  expect(c.getSnapshot().unsupportedForms).toEqual([]);
+  await expect(c.dismissForm("frm_numeric")).rejects.toThrow("no longer pending");
+  c.hold("switch").release();
 });
