@@ -2,10 +2,10 @@ import { WorkspaceProvider, useWorkspace } from '@kev-browser-agent-kit/workspac
 import { WorkspaceEditor } from './workspace-editor'
 import './editor-panel.css'
 
-export default function EditorPanel({ onExit }: { onExit(): void }) {
+export default function EditorPanel({ onExit }: { onExit(warning?: string): void }) {
   return <WorkspaceProvider><Panel onExit={onExit} /></WorkspaceProvider>
 }
-function Panel({ onExit }: { onExit(): void }) {
+function Panel({ onExit }: { onExit(warning?: string): void }) {
   const { controller } = useWorkspace()
   return <WorkspaceEditor controller={controller} onExit={onExit} />
 }

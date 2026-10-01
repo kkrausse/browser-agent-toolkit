@@ -8,6 +8,7 @@ export default function Editing() {
   const queryClient = useQueryClient()
   const [allowed, setAllowed] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
+  const [exitWarning, setExitWarning] = useState('')
   useEffect(() => {
     const abort = new AbortController()
     void fetch('/editing-policy', { signal: abort.signal }).then(response => response.json())
@@ -18,10 +19,11 @@ export default function Editing() {
   return <>
     <aside style={{ padding: '1rem' }}>
       <small>Local admin fixture · browser-local source saves</small>{' '}
-      <button onClick={() => setIsEditing(true)} disabled={isEditing}>Open editor</button>
+      <button onClick={() => { setExitWarning(''); setIsEditing(true) }} disabled={isEditing}>Open editor</button>
+      {exitWarning && <p role="status">{exitWarning}</p>}
     </aside>
     {isEditing && <Suspense fallback={<p>Loading editor…</p>}>
-      <EditorPanel onExit={() => { setIsEditing(false); void queryClient.invalidateQueries() }} />
+      <EditorPanel onExit={warning => { setExitWarning(warning ?? ''); setIsEditing(false); void queryClient.invalidateQueries() }} />
     </Suspense>}
   </>
 }

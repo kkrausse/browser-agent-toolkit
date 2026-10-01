@@ -2,6 +2,7 @@ import type { Distribution, Endpoint } from '@kev-browser-agent-kit/workspace'
 import { installSource } from '@kev-browser-agent-kit/workspace/delivery'
 import { createDiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics'
 import type { Connection, Service, WorkspaceController } from '@kev-browser-agent-kit/workspace/react'
+import { openedElsewhere, openedElsewhereMessage, errorText } from './workspace-exit'
 import { installOpenCodeConfig, loadPrepared, preparedApps, startOpenCode, type OpenCodeCandidateModel } from '@kev-browser-agent-kit/opencode-chat/browser'
 
 const base = '/editor/'
@@ -44,7 +45,15 @@ export async function startBrowserEditor(controller: WorkspaceController, option
         distribution = { name: 'vivari', version: runtime.version, assetBaseUrl: base + 'runtime/' }
       },
     ],
-    ['Open local workspace', async () => void (await controller.open(distribution))],
+    ['Open local workspace', async () => {
+      try { await controller.open(distribution) }
+      catch (error) {
+        if (!openedElsewhere(error)) throw error
+        // The raw lock detail stays in Activity; the alert says what to do.
+        controller.log(errorText(error))
+        throw new Error(openedElsewhereMessage, { cause: error })
+      }
+    }],
     [
       'Install application source and OpenCode config',
       async () => {
