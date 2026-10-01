@@ -163,7 +163,13 @@ operation and close/release resources serially. Repeated calls share cleanup.
 A rejected close leaves the runtime and workspace in place; calling again re-joins
 only what is still outstanding, so a failure whose resource is already gone is
 reported once. `cancelAndClose({ force: true })` closes regardless (flush, destroy
-the host, detach) and still rejects with the unproven cleanup. Recipes must observe
+the host, detach) and still rejects with the unproven cleanup. No stop waits forever:
+`stopTimeoutMs` (controller/provider option, default 10000) bounds a cancelled
+operation, the service join (after the longest stdin-EOF budget) and the runtime
+stop; a missed deadline rejects with `CLEANUP_FAILED` and is retryable like any
+other failure. `dispose()` and the provider's unmount/`pagehide` cleanup cannot be
+retried by anyone, so there a failed or timed-out close falls back to the forced
+close and the unproven cleanup is still rejected/logged. Recipes must observe
 `controller.signal` and await all launched work. The controller's signal renews once
 it is closed. StrictMode
 effect replay defers admission/disposal. DOM acceptance remains with fresh QA.
