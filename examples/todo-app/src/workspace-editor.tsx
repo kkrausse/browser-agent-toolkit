@@ -17,6 +17,7 @@ const hostPaths = ['/api']
 const isPreviewReady = (frame: HTMLIFrameElement) => !!frame.contentDocument?.querySelector('main input#title:not(:disabled)')
 const emptyChat: ChatSnapshot = { connection: 'disconnected', execution: 'unknown', sending: false, loading: true, loadingOlder: false, interruptRequested: false, permissions: [], questions: [], unsupportedForms: [], sessions: [], models: [], messages: [], hasOlder: false }
 const noopSubscribe = () => () => {}
+const defaultName = 'Current workspace'
 
 export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceController; onExit(): void }): ReactNode {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot)
@@ -24,7 +25,7 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
   const catalog = useRef<Catalog>({ workspaces: [] })
   const [list, setList] = useState<SavedWorkspace[]>([])
   const [activeId, setActiveId] = useState('')
-  const [name, setName] = useState('Current workspace')
+  const [name, setName] = useState(defaultName)
   const nameRef = useRef(name); nameRef.current = name
   const [pending, setPending] = useState<SavedWorkspace>()
   const [restoring, setRestoring] = useState(false)
@@ -83,26 +84,31 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
     if (mappedSelection && service) await chatFor(service)?.selectSession(mappedSelection)
     if (incoming) await writeIdentity(controller.workspace!, { ...incoming, selectedSessionId: mappedSelection })
   }
+  // First mount and Retry editing share this: a first open that failed (for
+  // example while another tab owned the store) must still load the catalog,
+  // adopt an unadopted working copy and show the active workspace's name.
+  async function open(): Promise<void> {
+    catalog.current = await store.read()
+    setList(catalog.current.workspaces); setPending(catalog.current.pending); setActiveId(catalog.current.activeId ?? '')
+    await boot()
+    // First activation adopts the existing durable working copy. It never
+    // restores a catalog image over unsaved browser source/native sessions.
+    if (!catalog.current.activeId) {
+      const hold = holdChat('Saving workspace')
+      try { await saveCurrent() } finally { hold.release() }
+    } else if (nameRef.current === defaultName) {
+      // Only fill the placeholder; a retry must not discard a name being edited.
+      const saved = catalog.current.workspaces.find(item => item.id === catalog.current.activeId)
+      let title = saved?.name ?? defaultName
+      try { title = JSON.parse(new TextDecoder().decode(await controller.workspace!.fs.readFile(identityPath))).name ?? title } catch { /* legacy identity */ }
+      setName(title)
+    }
+  }
   useEffect(() => {
     let cancelled = false
     queueMicrotask(() => {
       if (cancelled) return
-      void controller.run('Open TODO workspace', async () => {
-        catalog.current = await store.read()
-        setList(catalog.current.workspaces); setPending(catalog.current.pending); setActiveId(catalog.current.activeId ?? '')
-        await boot()
-        // First activation adopts the existing durable working copy. It never
-        // restores a catalog image over unsaved browser source/native sessions.
-        if (!catalog.current.activeId) {
-          const hold = holdChat('Saving workspace')
-          try { await saveCurrent() } finally { hold.release() }
-        } else {
-          const saved = catalog.current.workspaces.find(item => item.id === catalog.current.activeId)
-          let title = saved?.name ?? 'Current workspace'
-          try { title = JSON.parse(new TextDecoder().decode(await controller.workspace!.fs.readFile(identityPath))).name ?? title } catch { /* legacy identity */ }
-          setName(title)
-        }
-      })
+      void controller.run('Open TODO workspace', open)
     })
     const close = () => { void controller.cancelAndClose().catch(error => controller.reportError(error)) }
     window.addEventListener('pagehide', close)
@@ -193,7 +199,7 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
       <div className="todo-workspace-chat" inert={actionBusy || state.busy || !!pending || restoring}>
         {chat && !pending && !restoring ? <ChatView controller={chat} showModels showSessions /> : <p>{switchPresentation?.phase === 'switching' ? 'Connecting workspace chat…' : switchPresentation?.phase === 'recovery' ? 'Recover the interrupted switch to reconnect chat.' : chatError || 'Starting OpenCode…'}</p>}
       </div>
-      <footer><p role="status">{switchPresentation ? switchPresentation.phase === 'switching' ? 'Workspace switch in progress…' : 'Workspace recovery required.' : state.status}</p>{state.error && <p role="alert">{state.error}</p>}{state.error && !pending && <button disabled={state.busy || actionBusy} onClick={() => action('Retry editor startup', () => boot())}>Retry editing</button>}<small>{blocked && !state.busy && !pending ? `Workspace actions wait for connected, idle chat (${chatState.execution}).` : 'Switching fully stops and restarts preview and OpenCode.'}</small><details><summary>Debug · Activity</summary><pre>{state.logs.join('\n')}</pre></details></footer>
+      <footer><p role="status">{switchPresentation ? switchPresentation.phase === 'switching' ? 'Workspace switch in progress…' : 'Workspace recovery required.' : state.status}</p>{state.error && <p role="alert">{state.error}</p>}{state.error && !pending && <button disabled={state.busy || actionBusy} onClick={() => action('Retry editor startup', open)}>Retry editing</button>}<small>{blocked && !state.busy && !pending ? `Workspace actions wait for connected, idle chat (${chatState.execution}).` : 'Switching fully stops and restarts preview and OpenCode.'}</small><details><summary>Debug · Activity</summary><pre>{state.logs.join('\n')}</pre></details></footer>
     </aside>
   </div>
 }
