@@ -274,3 +274,15 @@ not evidence that pilot success means the whole kernel is migrated.
   VM-import/postflight unrun. Frozen5c4/9814 assets (106 + 997 hashes) unchanged.
   This does not qualify forthcoming URL-repaired artifacts, browser/full-app or
   the whole runtime contract suite. Baseline compatibility exclusion remains explicit.
+- URL repair runtime `3ee9185` / report `c711c03`:
+  [worker URL repair](2026-09-30-effect-loader-vendor-url-repair.md).
+  Host passes its resolved asset root to the worker; emitted native URL resolution
+  and actual 10,793,012-byte pack delivery through the offline handler pass.
+  Lifecycle core unchanged; 28 gates pass on Node24.7. New worker/SDK distribution
+  `bd39000ff5bbc334f836ad65a4433e627525070413f810d7169132102f49b9f9`,
+  107 candidate/1,020 freeze entries; 37 native outputs verified reused.
+  Independent owner resumes new-revision delivery/Node24.18 checks (report
+  `2026-09-30-effect-loader-url-repaired-independent-qa.md`); delivery owner rebuilds
+  matching full app (report `2026-09-30-effect-loader-url-repaired-full-app-preparation.md`).
+  Neither task has live authorization yet. New receipts replace no historical bytes;
+  browser execution and phase2 remain gated by matching qualified handoffs.
