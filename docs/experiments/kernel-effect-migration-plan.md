@@ -478,3 +478,18 @@ not evidence that pilot success means the whole kernel is migrated.
   `2026-09-30-effect-process-sqlite-close-trace-qa.md`. No full-suite rerun or timeout
   change. First assertion failure stops; any isolated pass remains separate evidence
   beside failedcombinedcohort. No production fix or phase2B/3 authorization yet.
+- Isolated SQLite trace `b754ed6` passes2/2steps and both original15sclose gates,
+  zero retries/models. Native terminate invoked once perstep/returned synchronously,
+  targets subsequently absent; locks briefly outlived close then cleared. See
+  [SQLite trace](2026-09-30-effect-process-sqlite-close-trace-qa.md). Earliercombined
+  failure remains unexplained, not erased; owned resources retired/slotreleased.
+- Parent accepts boundedphase2A based independent17+31, consistent source review,
+  passedfullappworkload and separatelycompletedfocused/SQLite evidence. Not one
+  all-green combinedcohort or reliability claim. No more2A reruns assigned.
+- Parent authorizes2B remaining npm/yarn/pnpm/corepack native transactional adapters,
+  keeping existingcore generation/lease/process contracts. Production owner
+  `ses_f0a678965ffezJl2IX9oNE0fYN` (report
+  `2026-09-30-effect-remaining-loader-adapters-implementation.md`); independentfixture
+  owner `ses_f0a671bdeffeTbX4UDJX649vad` (report
+  `2026-09-30-effect-remaining-loader-regression-gates.md`). Both offline. Phase3
+  fetch/persistence/all-writer/cache guarantees not authorized by this cutover.
