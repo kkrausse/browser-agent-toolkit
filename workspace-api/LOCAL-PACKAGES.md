@@ -159,9 +159,13 @@ generic package does not import Vite or OpenCode. `renderEditor` stays host-owne
 ```
 
 Call `cancelAndClose()` **outside** `run()` to abort immediately, await the current
-operation and close/release resources serially. Repeated calls share cleanup;
-failed cleanup can be retried. Recipes must observe `controller.signal` and await
-all launched work. The controller's signal renews after successful close. StrictMode
+operation and close/release resources serially. Repeated calls share cleanup.
+A rejected close leaves the runtime and workspace in place; calling again re-joins
+only what is still outstanding, so a failure whose resource is already gone is
+reported once. `cancelAndClose({ force: true })` closes regardless (flush, destroy
+the host, detach) and still rejects with the unproven cleanup. Recipes must observe
+`controller.signal` and await all launched work. The controller's signal renews once
+it is closed. StrictMode
 effect replay defers admission/disposal. DOM acceptance remains with fresh QA.
 
 Authorization belongs directly in the app's server request handling: check the
