@@ -23,3 +23,19 @@ fixture scripts and Browser Control execute bodies). They were moved here from
 
 `editor-performance-and-acceptance.md` (formerly `tests/README.md`) documents the
 isolated performance harness and the Browser Control editor acceptance phases.
+
+## Near-duplicates that are deliberately kept
+
+A hygiene review on 2026-09-30 proposed deleting three files as copies of a
+sibling. Each was checked and none is a strict duplicate, so all remain:
+
+- `effect-process-fixture.ts` — differs from `effect-process-fixture-v2.ts` in the
+  stale-loader-rejection scenario (v2's header says v1 is retained on purpose).
+  `effect-process-runner.ts` launches it, and
+  `effect-process-qualified-runner.ts` asserts its SHA-256.
+- `effect-process-runner.ts` — the baseline-only admission against a different
+  pinned runtime revision and receipts than `effect-process-qualified-runner.ts`,
+  which also asserts this file's SHA-256 and would fail without it.
+- `reset-evidence.js` — the phase-1 Browser Control body (fixed ports, no switch
+  token). `../tests/reset-evidence-v2.js` is a rewrite with a different caller
+  protocol, not a superset: 20 of its 35 lines have no counterpart there.
