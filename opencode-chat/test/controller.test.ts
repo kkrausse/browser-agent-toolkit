@@ -773,3 +773,65 @@ test("an unsupported form can be dismissed, cancelling it so the chat can be hel
   await expect(c.dismissForm("frm_numeric")).rejects.toThrow("no longer pending");
   c.hold("switch").release();
 });
+
+test("a history refresh during a streamed answer never shrinks the text or reloads earlier messages", async () => {
+  const f = fixture();
+  const assistant = (text: string, completed?: number) => ({
+    id: "msg_a", type: "assistant", agent: "build", model: { providerID: "p", id: "m" },
+    content: [{ type: "text", text }], time: { created: 2, ...(completed ? { completed } : {}) },
+  });
+  // Like the server: every non-empty page carries a cursor, and deltas are not
+  // persisted, so a streaming part reads as empty until its text ends.
+  let persisted: unknown[] = [user("msg_u", "essay please")];
+  let page: Promise<Response> | undefined;
+  f.override = url => !url.pathname.endsWith("/message") ? undefined
+    : url.searchParams.has("cursor") ? json({ data: [], cursor: {} })
+    : page ?? json({ data: [...persisted].reverse(), cursor: { next: "older" } });
+  const { c } = start(f);
+  await c.ready;
+  const lengths: number[] = [];
+  let reloads = 0;
+  c.subscribe(() => {
+    const state = c.getSnapshot(), message = state.messages.find(m => m.id === "msg_a");
+    if (message?.type === "assistant" && message.content[0]?.type === "text") lengths.push(message.content[0].text.length);
+    if (state.loadingOlder) reloads++;
+  });
+  const cursorCalls = () => f.calls.filter(call => call.url.pathname.endsWith("/message") && call.url.searchParams.has("cursor")).length;
+  const drained = cursorCalls();
+  const ids = { sessionID: "ses1", assistantMessageID: "msg_a" };
+  const text = () => (c.getSnapshot().messages.find(m => m.id === "msg_a") as any)?.content[0]?.text;
+  f.active = { ses1: { type: "running" } };
+  f.emit("session.execution.started", { sessionID: "ses1" });
+  f.emit("session.step.started", { ...ids, agent: "build", model: { providerID: "p", id: "m" } });
+  f.emit("session.text.started", { ...ids, ordinal: 0 });
+  f.emit("session.text.delta", { ...ids, ordinal: 0, delta: "The sky " });
+  await tick();
+  expect(text()).toBe("The sky ");
+  // A refresh starts mid-stream and is slow, as in the browser kernel.
+  persisted = [user("msg_u", "essay please"), assistant("")];
+  const slow = deferred<Response>();
+  page = slow.promise;
+  f.emit("session.inbox.delivered", { sessionID: "ses1", inboxID: "msg_inbox" });
+  await new Promise(resolve => setTimeout(resolve, 160));
+  f.emit("session.text.delta", { ...ids, ordinal: 0, delta: "is blue " });
+  await tick();
+  expect(text()).toBe("The sky is blue ");
+  page = undefined;
+  slow.resolve(json({ data: [...persisted].reverse(), cursor: { next: "older" } }));
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(c.getSnapshot().messages.map(m => m.id)).toEqual(["msg_u", "msg_a"]);
+  expect(text()).toBe("The sky is blue ");
+  f.emit("session.text.delta", { ...ids, ordinal: 0, delta: "because" });
+  await tick();
+  // A fast refresh between two deltas reads the same empty persisted part.
+  f.emit("session.inbox.delivered", { sessionID: "ses1", inboxID: "msg_inbox_2" });
+  await new Promise(resolve => setTimeout(resolve, 160));
+  expect(text()).toBe("The sky is blue because");
+  f.emit("session.text.delta", { ...ids, ordinal: 0, delta: " of scattering." });
+  await tick();
+  expect(text()).toBe("The sky is blue because of scattering.");
+  expect(lengths.every((length, i) => i === 0 || length >= lengths[i - 1]!)).toBe(true);
+  expect(reloads).toBe(0);
+  expect(cursorCalls()).toBe(drained);
+  expect(c.getSnapshot().execution).toBe("running");
+});

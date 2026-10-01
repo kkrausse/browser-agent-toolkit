@@ -19,6 +19,22 @@ export { canSend };
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const compareID = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
+type Message = ChatSnapshot["messages"][number];
+/** Text deltas are not persisted: a history snapshot taken mid-stream carries a
+ * streaming part with less text than the events already delivered. A refresh keeps
+ * the delivered text there, so what is on screen never shrinks. */
+function keepStreamed(snapshot: Message, shown: Message | undefined): Message {
+  if (snapshot.type !== "assistant" || shown?.type !== "assistant" || snapshot.time.completed) return snapshot;
+  return {
+    ...snapshot,
+    content: snapshot.content.map((part, i) => {
+      const live = shown.content[i];
+      return (part.type === "text" || part.type === "reasoning") && live?.type === part.type &&
+        live.text.length > part.text.length && live.text.startsWith(part.text)
+        ? { ...part, text: live.text } : part;
+    }),
+  };
+}
 function freeze<T>(value: T): T {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
     Object.freeze(value);
@@ -60,7 +76,13 @@ export function createChatController(options: ChatOptions): ChatController {
   let connection = Scope.forkUnsafe(lifetime),
     selectionScope = Scope.forkUnsafe(connection);
   let older: string | undefined | null, hydration: Fiber.Fiber<void, ChatAPIError | ChatError> | undefined;
+  // The first page of this selection has been walked back to the start of history.
+  let reachedStart = false;
   let requestEvents: NativeEvent[] = [];
+  // While a history request is in flight: messages changed by live events, and
+  // whether a refresh was asked for that this request may be too old to satisfy.
+  const live = new Set<string>();
+  let stale = false;
   const answered = new Set<string>();
   const dismissing = new Set<string>();
   let recovery: Fiber.Fiber<void, never> | undefined;
@@ -108,6 +130,7 @@ export function createChatController(options: ChatOptions): ChatController {
     ));
   };
   function recover() {
+    if (hydration) stale = true;
     if (disposed || recovery || state.connection !== "connected") return;
     const g = generation,
       s = selection;
@@ -133,6 +156,8 @@ export function createChatController(options: ChatOptions): ChatController {
       rev = revision,
       id = yield* sessionID();
     requestEvents = [];
+    live.clear();
+    stale = false;
     const task = yield* Effect.gen(function*() {
       const api = yield* OpenCodeAPI;
       const [page, permissions, forms, active] = yield* Effect.all([
@@ -147,9 +172,18 @@ export function createChatController(options: ChatOptions): ChatController {
       const prefix = state.messages.filter((m) => !ids.has(m.id));
       const first = messages[0]?.time.created ?? 0;
       const previous = prefix.filter((m) => m.time.created < first);
-      if (!previous.length) older = page.cursor.next;
+      // The server returns a cursor for every non-empty page. Once the start of
+      // history is known, a refresh has nothing older to look for.
+      if (!previous.length && !reachedStart) older = page.cursor.next;
+      // Events kept arriving while this page was in flight and it may predate them:
+      // a message they changed, or created, stays as the events left it.
+      const shown = new Map(state.messages.map((m) => [m.id, m]));
       publish({
-        messages: [...previous, ...messages],
+        messages: [
+          ...previous,
+          ...messages.map((m) => (live.has(m.id) && shown.get(m.id)) || keepStreamed(m, shown.get(m.id))),
+          ...prefix.filter((m) => live.has(m.id) && !previous.includes(m)),
+        ],
         hasOlder: !!older,
         permissions: permissions
           .filter((r) => !answered.has(`permission:${r.id}`))
@@ -166,7 +200,8 @@ export function createChatController(options: ChatOptions): ChatController {
             ...state.questions.find((p) => p.request.id === request.id),
             request,
           })),
-        ...(revision === rev
+        // Events own a known execution state; an unknown one has nothing to protect.
+        ...(revision === rev || state.execution === "unknown"
           ? {
               execution: active[id]
                 ? ("running" as const)
@@ -184,8 +219,9 @@ export function createChatController(options: ChatOptions): ChatController {
           if (valid(g, s)) publish({ loadingOlder: false });
         })));
       }
+      reachedStart = !older;
       for (const e of requestEvents) requestEvent(e);
-      if (revision !== rev) recover();
+      if (stale) recover();
     }).pipe(Effect.forkIn(selectionScope));
     hydration = task;
     yield* Fiber.join(task).pipe(Effect.ensuring(Effect.sync(() => {
@@ -272,13 +308,16 @@ export function createChatController(options: ChatOptions): ChatController {
       });
       recover();
     }
-    if (hydration) {
-      recover();
-      return;
-    }
     const before = state.messages;
     const reduced = reducer.reduce(before, e);
     if (reduced?.touched.length) publish({ messages: reduced.messages });
+    // Events are never held back for a history request: a long answer keeps
+    // streaming. What an event changed outlives the page in flight; an event that
+    // changed nothing here is covered by a refresh after it.
+    if (hydration) {
+      if (reduced?.touched.length) for (const id of reduced.touched) live.add(id);
+      else recover();
+    }
     if (
       reduced &&
       "assistantMessageID" in e.data &&
@@ -325,6 +364,7 @@ export function createChatController(options: ChatOptions): ChatController {
     if (state.sessionID) reducer.clear(state.sessionID);
     answered.clear();
     older = undefined;
+    reachedStart = false;
     publish({
       sessionID: id,
       draftKey: draftKey ?? (id ? draftKeys.get(id) ?? `session:${id}` : undefined),
