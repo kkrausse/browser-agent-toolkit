@@ -363,3 +363,13 @@ not evidence that pilot success means the whole kernel is migrated.
   Preserve old447 failure alongside new outcome; first failure stops, no further
   blind cohorts if it recurs. Phase2 waits for review; any success is bounded
   compatibility evidence, not a reliability rate or completed kernel migration.
+- Fresh-run preparation `735c627` stopped before activation on an extra QA-assumed
+  runtime-source path ENOENT, not an artifact mismatch. Required delivery inventories
+  and native12/37 checks in three actual roots passed; no run copy/host/browser or
+  live attempt. [Preflight report](2026-09-30-effect-loader-fresh-integrated-acceptance.md)
+  retained. Parent reauthorizes the still-unrun gate after correcting only that path
+  assumption. Routine offline setup corrections need not start another review loop;
+  genuine artifact failures and first live assertion failures still stop the cohort.
+  Same owner/sole slot; intended new report
+  `2026-09-30-effect-loader-integrated-acceptance-followup.md`. No deadline/assertion/
+  candidate change, extra blind live retry or phase2 authorization.
