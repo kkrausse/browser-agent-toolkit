@@ -1,4 +1,5 @@
 import {test,expect} from 'bun:test';
+import {existsSync} from 'node:fs';
 import {mkdir,mkdtemp} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -7,6 +8,8 @@ import {session,model,json} from '../../../opencode-chat/test/fixture';
 import {assertPilotRoot,validatePilotResponse} from './reuse-pilot-contract';
 import {createPilotFence,resetPilot,pilotRequestURL} from './reuse-pilot-fence';
 
+// The packaged OpenCode 2.0.3 server is a gitignored local artifact; plain checkouts (CI) lack it.
+const packaged=existsSync(new URL('../../../vivari/.runtime/opencode-release-2.0.3/.runtime/opencode-bun-server/server.js',import.meta.url));
 const project={id:'project',directory:'/workspace',canonical:'/workspace'};
 const location={directory:'/workspace',project};
 const root=(id:string)=>({...session(id),location:{directory:'/workspace'}});
@@ -43,7 +46,7 @@ test('root assertion unwraps raw data; V2 workspaceID, optional settings and det
   expect(()=>validatePilotResponse('/api/session/ses_A/message','GET',200,'{"data":[],"cursor":{"next":null}}')).not.toThrow();
   for (const next of [0,false,[],{}]) expect(()=>validatePilotResponse('/api/session','GET',200,JSON.stringify({data:[],cursor:{next}}))).toThrow();
 });
-test('exact packaged 2.0.3 schema/handler and SDK response adaptation preflight',async()=>{
+test.skipIf(!packaged)('exact packaged 2.0.3 schema/handler and SDK response adaptation preflight',async()=>{
   const bundle=await Bun.file(new URL('../../../vivari/.runtime/opencode-release-2.0.3/.runtime/opencode-bun-server/server.js',import.meta.url)).text();
   expect(new Bun.CryptoHasher('sha256').update(bundle).digest('hex')).toBe('1df4bc41c0f6c7350da9d5953f3139586f760a7931fe411bdcabb3460098a929');
   for (const snippet of ['success: exports_Schema.Struct({ data: exports_session.Info })','success: exports_Schema.Array(exports_location.Ref)','success: exports_HttpApiSchema.NoContent','data: messages3,','previous: first ?','next: last3 ?','return { interrupted: yield* session.interrupt','return { data: yield* session ? read5','workspaceID: optional3(WorkspaceID)','metadata: Metadata3.pipe(optional3)','permissions: exports_permission.Ruleset.pipe(optional3)','id: location3.project.id','return yield* response2(catalog.model.available())','return yield* response2(exports_plugin22.Service.use','config7.entries()']) expect(bundle).toContain(snippet);
@@ -54,7 +57,7 @@ test('exact packaged 2.0.3 schema/handler and SDK response adaptation preflight'
   }
   expect(sdk.slice(sdk.indexOf('const EndpointMessageList ='),sdk.indexOf('const adaptGroupMessage'))).not.toContain('value.data');
 });
-test('pinned HttpApi schemas encode all audited finite responses through actual transport serialization',async()=>{
+test.skipIf(!packaged)('pinned HttpApi schemas encode all audited finite responses through actual transport serialization',async()=>{
   const bundle=await Bun.file(new URL('../../../vivari/.runtime/opencode-release-2.0.3/.runtime/opencode-bun-server/server.js',import.meta.url)).text();
   expect(new Bun.CryptoHasher('sha256').update(bundle).digest('hex')).toBe('1df4bc41c0f6c7350da9d5953f3139586f760a7931fe411bdcabb3460098a929');
   // Exact dependency/protocol prefix, no server bootstrap, handlers or runtime edits.

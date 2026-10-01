@@ -115,6 +115,7 @@ jobs:
             tests/queue.test.ts \
             tests/service-lifecycle.test.ts \
             tests/service-readiness.test.ts \
+            tests/stop-retry-close.test.ts \
             tests/workspace-diagnostics.test.ts
 
       - name: opencode-chat - install
