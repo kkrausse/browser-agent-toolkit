@@ -6,8 +6,8 @@ This example is not a static hosted demo. TODO data is held in server memory.
 
 ## Ordinary application
 
-From the repository root, after supplying the prepared OpenCode prerequisite in
-the [root setup guide](../../README.md):
+From the repository root, with the prerequisites in the
+[root setup guide](../../README.md):
 
 ```sh
 bun run setup
@@ -27,42 +27,41 @@ bun start
 
 Production serves on port 3000 by default (`PORT` overrides it).
 
-## Optional browser editor
+## Browser editor
 
-1. Build and package the runtime following
-   [`vivari/DEVELOPMENT.md`](../../vivari/DEVELOPMENT.md).
-2. Prepare the editor from this directory:
+After `bun run setup` at the repository root, from this directory:
 
-   ```sh
-   bun run prepare:editor
-   bun run build
-   LOCAL_EDITOR_ADMIN=1 PORT=4390 bun start
-   ```
+```sh
+bun run editor
+```
 
-3. Open `http://127.0.0.1:4390` and choose **Open editor**.
+This prepares the editor (`.editor/`), builds the app and serves it with the
+local admin fixture on port 3000 (`PORT` overrides it). Open
+`http://127.0.0.1:3000` and choose **Open editor**. The separate steps are
+`bun run prepare:editor`, `bun run build` and `LOCAL_EDITOR_ADMIN=1 bun start`.
 
 `LOCAL_EDITOR_ADMIN=1` is a loopback-only local fixture, not production
 authentication. The app owns editing authorization in `src/server/editing.ts`;
 model forwarding is wired through `server.ts` and the toolkit server adapter.
-Inspect that configuration before model use;
-no credentials are included. The current example's readiness check selects Muse
-Spark unless a model catalog is supplied; this is not a generic provider/key selector.
 
-### Model catalog
+### Model key and catalog
 
-By default the editor uses the built-in free default model and lists whatever
-free models the provider publishes. To choose the models yourself, give the
-server a public catalog file:
+Chat needs a provider key. Put it in a gitignored `.env.local` in this directory,
+which Bun loads on start:
 
 ```sh
-MODEL_CATALOG=/absolute/path/model-config.json \
-LOCAL_EDITOR_ADMIN=1 PORT=4390 bun start
+VIVARI_MODEL_API_KEY=<key>
 ```
 
-`bun run dev` and `bun run preview` read the same variable. The provider key is
-separate and stays in the environment as `VIVARI_MODEL_API_KEY` (for example
-`bun --env-file=/absolute/path/.env.local server.ts`); never put it in the
-catalog, which is delivered to the browser.
+Without a key the editor, files and preview still work. The server says so at
+start and answers inference requests with a 401 that names the variable instead
+of forwarding them.
+
+With a key, the Model picker offers the enabled models of the checked-in public
+catalog [`model-catalog.json`](model-catalog.json). `MODEL_CATALOG=/absolute/path.json`
+selects another catalog, with or without a key. The key is never put in a
+catalog, which is delivered to the browser. Listing a model does not prove the
+key has access to it.
 
 The file is `{"defaultModel": "<id>", "models": {"<id>": {...}}}`. Each model has
 `name`, `package` (`@opencode/ai/providers/openai`, `.../anthropic` or
@@ -71,49 +70,35 @@ The file is `{"defaultModel": "<id>", "models": {"<id>": {...}}}`. Each model ha
 `disabled`. Other fields are rejected. The default must be an enabled,
 tool-capable model in the catalog.
 
-```json
-{
-  "defaultModel": "muse-spark-1.3",
-  "models": {
-    "muse-spark-1.3": {
-      "name": "Muse Spark 1.3",
-      "package": "@opencode/ai/providers/openai",
-      "capabilities": { "tools": true, "input": ["text", "image"], "output": ["text"] },
-      "limit": { "context": 1048576, "output": 131072 },
-      "websocket": false
-    }
-  }
-}
-```
+The server validates the catalog at startup and refuses to start if it is
+invalid. It adds the catalog to the manifest it serves, so `.editor/` output is
+not modified and changing the catalog needs a server restart, not a new
+`prepare:editor`. Models the catalog does not name are removed, including the
+provider's own free-tier list, which is rejected (HTTP 403) through this proxy.
+Reopen the editor to apply a changed catalog; saved chats keep the model they
+already selected.
 
-The server validates the file at startup and refuses to start if it is missing
-or invalid. It adds the catalog to the manifest it serves, so `.editor/` output
-is not modified and changing the catalog needs a server restart, not a new
-`prepare:editor`. The Model picker then offers exactly the enabled catalog
-models. Models the catalog does not name are removed, including the provider's
-own free-tier list, which is rejected (HTTP 403) through this proxy. Reopen the editor to apply a
-changed catalog; saved chats keep the model they already selected. Listing a
-model does not prove the key has access to it.
+### Preparation
 
-`RUNTIME_DIR` overrides the default `../../workspace-api/dist/runtime`.
-The toolkit package supplies the verified OpenCode application; optionally use
-`OPENCODE_PACKAGE_DIR` to select an equivalent qualified artifact root.
+`prepare:editor` installs the guest's dependencies and writes ignored `.editor/`
+output. It regenerates that (about 15 s) when `package.json`, `bun.lock`, the
+runtime distribution, the OpenCode application, the Tailwind backend or the
+installed toolkit packages changed, and otherwise only refreshes the application
+source (under a second). The served manifest is rebuilt from the generated one
+on every run, so edits made to it do not survive. Delete `.editor/` to force a
+full regeneration.
 
-The browser Tailwind backend has a source-pinned repair. Build it with:
+`RUNTIME_DIR` overrides the default `../../workspace-api/dist/runtime`, and
+`OPENCODE_PACKAGE_DIR` selects an equivalent qualified OpenCode artifact root.
+The browser Tailwind backend is the source-pinned repair built by the root setup
+(`vivari/.runtime/tailwind-wasm-candidate/current.json`; pin in
+`../../opencode-chat/src/tailwind-wasm-candidate.json`). To use another receipt,
+set both `TAILWIND_CANDIDATE_RECEIPT` and `TAILWIND_CANDIDATE_SHA256`.
 
-```sh
-bun ../../vivari/scripts/build-tailwind-wasm-candidate.ts --node /absolute/path/to/node
-```
-
-Use the resulting receipt path and SHA-256 as `TAILWIND_CANDIDATE_RECEIPT` and
-`TAILWIND_CANDIDATE_SHA256` when running `prepare:editor`. Both must be supplied
-together. This is needed for the previously qualified browser CSS/HMR path; see
-the source pin in `../../opencode-chat/src/tailwind-wasm-candidate.json`.
-
-Preparation writes ignored `.editor/` output. The guest uses the same application
-source as the host, and guest API requests are bridged back to this Bun server.
-The browser workspace retains source/chat state independently of the server's
-in-memory TODO list. A local workspace flush is not a server save or Git commit.
+The guest uses the same application source as the host, and guest API requests
+are bridged back to this Bun server. The browser workspace retains source/chat
+state independently of the server's in-memory TODO list. A local workspace flush
+is not a server save or Git commit.
 
 ### Stage timings
 

@@ -27,72 +27,62 @@ an experimental release with clean CI packaging and browser runtime checks.
 
 ## Local setup
 
-Use Bun 1.4.0 (the extraction's package workflow was developed against this
-version). Runtime builds additionally require the toolchain documented in
-[`vivari/DEVELOPMENT.md`](vivari/DEVELOPMENT.md).
+Prerequisites, none of which this repository installs:
 
-```text
-kkrausse/
-  browser-agent-toolkit/
-    vendor/vivari/         # gitignored checkout of the pinned runtime fork
-  irs-tools/               # future consumer; integration not implemented here
-```
+- Bun 1.4.0, git, tar and network access.
+- Rust 1.93.0 with `wasm32-unknown-unknown` and `wasm32-wasip1`, and wasm-pack
+  0.13.1 (`cargo install wasm-pack --version 0.13.1 --locked`), for the runtime.
+- Rust 1.95.0 with `wasm32-wasip1-threads`, for the Tailwind backend.
 
-### Prepared OpenCode prerequisite
-
-The chat build verifies an exact OpenCode 2.0.3 artifact and receipt before copying
-them into the package. This artifact is generated, ignored, and not included in a
-source checkout. Fetch the previously qualified artifact from its checksummed
-GitHub Release asset:
+From the repository root:
 
 ```sh
-bun scripts/setup-opencode.ts
+bun run setup
 ```
 
-To seed another checkout from an existing qualified integration directory:
+Setup reuses whatever already exists and never resets a checkout. In order it:
+
+1. clones the pinned runtime fork into the gitignored `vendor/vivari`
+   (`vivari/scripts/setup-runtime.ts`, only when absent);
+2. builds the runtime, native Wasm included (`vivari/scripts/build-runtime.ts`);
+3. downloads and verifies the prepared OpenCode 2.0.3 application
+   (`scripts/setup-opencode.ts`);
+4. builds the source-pinned Tailwind backend once
+   (`vivari/scripts/setup-tailwind-candidate.ts`; fetches the pinned Node into
+   `vivari/.runtime`);
+5. installs and builds both packages, packages the runtime distribution into
+   `workspace-api/dist/runtime`, then installs and builds the example
+   (`scripts/build.ts --install`).
+
+A first run took about two minutes on an Apple-silicon laptop with warm Cargo and
+Bun download caches, mostly the two Rust builds; a repeat run takes about ten
+seconds. Then start the example with its browser editor:
 
 ```sh
-bun scripts/import-opencode.ts /path/to/integration/vivari
+cd examples/todo-app
+bun run editor
 ```
 
-This copies only the verified receipt and declared application outputs, not
-credentials, caches, or workspace state. Alternatively set `OPENCODE_PACKAGE_DIR`
-to the directory containing the qualified `build-receipt.json` and
-`.runtime/opencode-bun-server/` payload.
+Open `http://127.0.0.1:3000` and choose **Open editor**. See
+[`examples/todo-app/README.md`](examples/todo-app/README.md) for the model key,
+catalog and port. The ordinary TODO application does not require a model key.
 
-The rebuild recipe is in `vivari/experiments/opencode-release-server/`. Rebuilding
-on another host may change artifact identities; a new build is not automatically
-qualified and must not silently replace the pinned contract. The download command
-checks both the archive hash and the existing application receipt/output contract.
-
-### Build and run
-
-First create and build the pinned runtime (requires the native toolchain below):
+Other root commands:
 
 ```sh
-bun vivari/scripts/setup-runtime.ts
-bun vivari/scripts/build-runtime.ts --release
-bun workspace-api/scripts/distribution.ts
-```
-
-Once the runtime and prepared OpenCode prerequisite are available, from this repository root:
-
-```sh
-bun run setup           # install, build both packages, install/build the example
-bun run dev             # rebuild/refresh local packages, then start the example
+bun run build           # rebuild both packages and repackage the runtime distribution
+bun run dev             # rebuild/refresh local packages, then start the example in dev mode
 bun run build:example   # rebuild/refresh and produce the example production build
 bun run test
 bun run typecheck
 ```
 
-Open `http://localhost:5173` for development. The ordinary TODO application does
-not require a model key. See [`examples/todo-app/README.md`](examples/todo-app/README.md)
-for browser-editor preparation and local model configuration.
-
 `bun run build` builds the library packages in dependency order. Root commands
 refresh Bun's installed local package copies, so changes are included on the next
 build without version bumps or a manual dependency update. Local consumers use
-`workspace-api/dist/lib` and `opencode-chat/dist`.
+`workspace-api/dist/lib` and `opencode-chat/dist`. After editing the runtime fork,
+run `bun vivari/scripts/build-runtime.ts` and then `bun run build`; see
+[`vivari/DEVELOPMENT.md`](vivari/DEVELOPMENT.md).
 
 **Live cross-package watching is not wired yet.** During a running example dev
 session, toolkit source changes need a restart via `bun run dev` to rebuild and
@@ -100,12 +90,32 @@ refresh dependencies. Ordinary example source edits use the app's existing HMR.
 The automatic toolkit watcher and `irs-tools` build/deploy integration are later
 work, not guarantees of this extraction.
 
+### Prepared OpenCode prerequisite
+
+The chat build verifies an exact OpenCode 2.0.3 artifact and receipt before copying
+them into the package. The artifact is generated, ignored, and not included in a
+source checkout. `bun run setup` fetches the previously qualified artifact from its
+checksummed GitHub Release asset into `vivari/.runtime/opencode-release-2.0.3`
+(`bun scripts/setup-opencode.ts` does only that step). Without network access,
+seed it from another checkout that has it, or point `OPENCODE_PACKAGE_DIR` at the
+directory holding the qualified `build-receipt.json` and
+`.runtime/opencode-bun-server/` payload:
+
+```sh
+bun scripts/import-opencode.ts /path/to/integration/vivari
+```
+
+The rebuild recipe is in `vivari/experiments/opencode-release-server/`. Rebuilding
+on another host may change artifact identities; a new build is not automatically
+qualified and must not silently replace the pinned contract.
+
 ## Runtime and application delivery
 
 The JS library packages, Vivari workers/WASM distribution, and prepared application
-dependencies are separate build inputs. Build the runtime fork, package its
-distribution, and prepare the example as described in the linked setup guides.
-Runtime changes generally require restarting the browser workspace.
+dependencies are separate build inputs. The runtime is the fork's single-kernel
+line: one kernel worker plus guest process workers, and distribution packaging
+rejects any other worker layout. Runtime changes require reloading the browser
+workspace.
 
 This is a compatibility POC, not arbitrary native Linux or stock Node/Bun execution.
 OpenCode and tool delivery retain explicit compatibility packaging. The TODO

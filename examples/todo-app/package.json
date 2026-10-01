@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "prepare:editor": "bun prepare.ts",
+    "editor": "bun run prepare:editor && bun run build && LOCAL_EDITOR_ADMIN=1 bun start",
     "dev": "bunx --bun concurrently -k -n vite,api 'react-router dev' 'bun --hot server.ts'",
     "build": "bun --bun react-router build",
     "start": "NODE_ENV=production bun server.ts",

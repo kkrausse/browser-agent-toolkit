@@ -1,12 +1,12 @@
 // Build the standalone fork. Dev accepts local edits; --release requires committed source.
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { integrationRoot as root, resolveRuntimeSource, runtimeConfig } from './runtime-source.mjs';
 import { cacheMatches, fileManifest, fingerprint, hashFile, sha256, treeFiles } from './runtime-fingerprint.mjs';
 
 const args = process.argv.slice(2);
 if (args.includes('--help')) {
-  console.log('Usage: bun scripts/build-runtime.ts [fork|patched|baseline] [--native] [--release] [--revision <commit>]\nDefault: sibling fork (VIVARI_SOURCE override), incremental native + core build.\n--native: force all Rust/WASM build commands. --release: require clean source at runtime-source.json revision.\n--revision <commit>: verify a different committed revision (also recorded in receipt); never checks out or resets source.\nDev builds accept any HEAD and local edits. Baseline: existing .runtime/baseline or VIVARI_BASELINE_SOURCE checkout.\nFresh checkout: bun scripts/setup-runtime.ts');
+  console.log('Usage: bun scripts/build-runtime.ts [fork|patched|baseline] [--native] [--release] [--revision <commit>]\nDefault: vendor/vivari (VIVARI_SOURCE override), incremental native + core build.\n--native: force all Rust/WASM build commands. --release: require clean source at runtime-source.json revision.\n--revision <commit>: verify a different committed revision (also recorded in receipt); never checks out or resets source.\nDev builds accept any HEAD and local edits. Baseline: existing .runtime/baseline or VIVARI_BASELINE_SOURCE checkout.\nFresh checkout: bun scripts/setup-runtime.ts');
   process.exit(0);
 }
 let requestedRevision: string | undefined;
@@ -60,8 +60,12 @@ function save(path: string, value: unknown) {
   writeFileSync(temporary, JSON.stringify(value, null, 2) + '\n');
   renameSync(temporary, path);
 }
-// The upstream-based candidate uses npm's authoritative lockfile.
-command(['npm', 'ci', '--no-audit', '--no-fund']);
+// package-lock.json stays authoritative: Bun installs the exact versions it pins.
+// Bun writes its migrated lockfile beside it; drop that so the source stays clean.
+const migratedLock = join(source, 'bun.lock');
+const ownsLock = existsSync(migratedLock);
+command(['bun', 'install', '--frozen-lockfile']);
+if (!ownsLock) rmSync(migratedLock, { force: true });
 const nativeCrates = ['vfs', 'codec', 'crypto', 'wasi-demo'];
 const excluded = new Set(['target', 'pkg', 'pkg-node', '.git', 'node_modules']);
 const nativeFiles = nativeCrates.flatMap(crate => treeFiles(source, `packages/${crate}`, excluded));
@@ -113,7 +117,7 @@ if (!release) {
   mkdirSync(retained, { recursive: true });
   if (existsSync(join(dist, 'assets'))) cpSync(join(dist, 'assets'), retained, { recursive: true });
 }
-command(['npm', 'run', 'build:core']);
+command(['bun', 'run', '--cwd', 'packages/core', 'build']);
 const currentAssets = new Set(treeFiles(dist));
 if (!release) for (const name of treeFiles(retained)) {
   const destination = join(dist, 'assets', name);

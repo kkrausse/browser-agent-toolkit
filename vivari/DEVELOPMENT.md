@@ -25,30 +25,29 @@ historical. Source migration provenance lives in the fork's `FORK.md`.
 
 ## Setup
 
-From the toolkit root, clone the pinned fork into `vendor/vivari`:
+`bun run setup` at the toolkit root does all of this (see the root README). The
+individual steps, from the toolkit root:
 
 ```sh
-bun vivari/scripts/setup-runtime.ts
+bun vivari/scripts/setup-runtime.ts    # clone the pinned fork into vendor/vivari; refuses an existing path
+bun vivari/scripts/build-runtime.ts    # install, native Wasm when inputs changed, SDK and workers
+bun run build                          # packages, then workspace-api/dist/runtime
 ```
 
-Use Bun and the qualified native toolchain: Rust 1.93.0 with
-`wasm32-unknown-unknown` and `wasm32-wasip1`, wasm-pack 0.13.1. Use Node 24.18.0
-for the qualified headless checks. The build does not install the Rust toolchain.
+Toolchain: Bun, Rust 1.93.0 with `wasm32-unknown-unknown` and `wasm32-wasip1`,
+and wasm-pack 0.13.1 (`cargo install wasm-pack --version 0.13.1 --locked`). The
+build does not install the Rust toolchain and does not need Node or npm: it
+installs the fork's dependencies with Bun from the fork's `package-lock.json`
+and removes the `bun.lock` Bun writes beside it, so the checkout stays clean.
+Use Node 24.18.0 for the qualified headless checks.
+
 The workspace package's local host SDK dependency resolves through `vendor/vivari`.
 For a different editable checkout, use a `vendor/vivari` symlink to it (before
 installing dependencies) and set `VIVARI_SOURCE` to that same checkout so the host
 SDK and worker distribution are built from matching source.
 
-From `browser-agent-toolkit/vivari`:
-
-```sh
-bun run setup
-bun scripts/build-runtime.ts
-```
-
-The build installs frozen fork dependencies, builds native artifacts when their
-inputs change, and builds the SDK/workers. Normal working-tree edits are allowed.
-There is no clone/reset/reapply cycle during ordinary development.
+Normal working-tree edits are allowed. There is no clone/reset/reapply cycle
+during ordinary development.
 
 ## Edit → build → check
 
@@ -64,11 +63,17 @@ There is no clone/reset/reapply cycle during ordinary development.
    bun run verify
    ```
 
-4. Package the workspace distribution from the toolkit repository root:
+4. Package the workspace distribution from the toolkit repository root
+   (`bun run build` also does this):
 
    ```sh
    bun workspace-api/scripts/distribution.ts
    ```
+
+   Packaging requires the single-kernel layout: one kernel worker and guest
+   process workers only. `VIVARI_WORKER_TOPOLOGY=unrestricted` is the explicit
+   opt-out for a build that still has filesystem or HTTP workers. The output
+   directory's `assets/` is replaced, so it holds this build's files only.
 
 5. Run the affected workspace/browser qualification and commit your own files
    in each repository. Do not count an import or zero exit as server acceptance.
@@ -91,8 +96,14 @@ Workspace distribution packaging verifies emitted asset hashes against the
 receipt and carries that receipt forward.
 
 Build caches and retained immutable assets stay separate from editable source.
-Running kernels may still need old hashed worker URLs: do not delete retained
-assets during a normal rebuild. Restart/reload to adopt the new runtime.
+A development build keeps older hashed worker files in the fork's
+`packages/core/dist/assets` and marks them `retained` in the receipt; the
+packaged distribution leaves them out. Reload the browser workspace after
+repackaging: a kernel started from an older distribution cannot fetch its
+worker files from the new one.
+
+With Rust 1.93.0 and wasm-pack 0.13.1 on macOS arm64, the pinned revision's
+native Wasm rebuilds to the hashes in the fork's `docs/single-kernel-build.md`.
 
 ## Adding tools
 
@@ -163,3 +174,14 @@ OpenTUI, old OpenCode packagers, and cumulative patch experiments remain in the
 original repository. This extraction retains runtime build tools, the current
 OpenCode release recipe, the standalone ripgrep tool packager, and Tailwind backend
 preparation. The cumulative runtime patch workflow is retired.
+
+## Tailwind backend
+
+`bun vivari/scripts/setup-tailwind-candidate.ts` reuses the candidate recorded in
+`.runtime/tailwind-wasm-candidate/current.json`, or builds the source pin in
+`opencode-chat/src/tailwind-wasm-candidate.json` with
+`build-tailwind-wasm-candidate.ts`. It needs Rust 1.95.0 with
+`wasm32-wasip1-threads`; the pinned Node is downloaded, checksummed, into
+`.runtime/` unless `--node /absolute/path` is given. Builds are identical except
+for the Wasm `build_id`, so each machine's receipt hash differs. The example's
+`prepare:editor` uses the recorded candidate by default.
