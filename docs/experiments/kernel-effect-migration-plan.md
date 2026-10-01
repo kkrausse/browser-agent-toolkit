@@ -242,3 +242,13 @@ not evidence that pilot success means the whole kernel is migrated.
   rather than bypassing its verifier. Intended report
   `2026-09-30-effect-loader-full-app-delivery-preparation.md`. Both tasks are offline;
   no phase2 expansion or release promotion follows until review.
+- Expanded independent report `a401707`:
+  [expanded qualification](2026-09-30-effect-loader-expanded-independent-qa.md).
+  All 10 expanded gates pass, zero unrun; preserved 4 loader/6 PID-egress/8 endpoint
+  cases pass. All 106 candidate and 997 freeze entries verify. Native held work
+  delays cleanup, both rollback/install errors survive and Runtime refuses detach/
+  replacement. Actual Node was 24.7.0; compiled browser/core identity is static
+  evidence, not live execution. Overall pilot acceptance remains false pending
+  supported Node24.18 and browser/full-app qualification. Regression owner resumes
+  qualified-Node checks with isolated verified tooling; intended report
+  `2026-09-30-effect-loader-qualified-node-qa.md`.
