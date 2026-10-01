@@ -835,3 +835,32 @@ test("a history refresh during a streamed answer never shrinks the text or reloa
   expect(cursorCalls()).toBe(drained);
   expect(c.getSnapshot().execution).toBe("running");
 });
+
+test("a finished run reads idle only once its final history is in the transcript", async () => {
+  const { f, c } = start();
+  await c.ready;
+  f.active = { ses1: { type: "running" } };
+  f.emit("session.execution.started", { sessionID: "ses1" });
+  await tick();
+  const slow = deferred<Response>();
+  f.override = url => url.pathname.endsWith("/message") ? slow.promise : undefined;
+  f.active = {};
+  f.emit("session.execution.succeeded", { sessionID: "ses1" });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(c.getSnapshot().execution).toBe("running");
+  expect(canSend(c.getSnapshot())).toBe(false);
+  const idleWith: number[] = [];
+  c.subscribe(() => { if (c.getSnapshot().execution === "idle") idleWith.push(c.getSnapshot().messages.length); });
+  slow.resolve(json({ data: [user("msg_answer", "final", 2), user("msg_u", "question", 1)], cursor: {} }));
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(c.getSnapshot().execution).toBe("idle");
+  expect(idleWith[0]).toBe(2);
+  // The event is authoritative: a failed refresh reports its error and still ends the run.
+  f.emit("session.execution.started", { sessionID: "ses1" });
+  await tick();
+  f.override = url => url.pathname.endsWith("/message") ? json({}, 503) : undefined;
+  f.emit("session.execution.interrupted", { sessionID: "ses1", reason: "user" });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(c.getSnapshot().execution).toBe("idle");
+  expect(c.getSnapshot().error).toContain("503");
+});

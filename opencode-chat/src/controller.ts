@@ -86,6 +86,7 @@ export function createChatController(options: ChatOptions): ChatController {
   const answered = new Set<string>();
   const dismissing = new Set<string>();
   let recovery: Fiber.Fiber<void, never> | undefined;
+  let settling: symbol | undefined;
   let mutation: symbol | undefined;
   let draftSequence = 0;
   const draftKeys = new Map<string, string>();
@@ -147,6 +148,31 @@ export function createChatController(options: ChatOptions): ChatController {
         Effect.forkIn(scope),
       );
     }));
+  }
+  // A finished run's last content and its idle row only arrive with a history
+  // refresh. Idle is published after that refresh, so the chat never reads Ready
+  // before the answer is in the transcript. The event stays authoritative: idle
+  // follows even when the refresh fails, unless a newer run started meanwhile.
+  function settle() {
+    if (disposed) return;
+    const g = generation,
+      s = selection,
+      token = (settling = Symbol());
+    runtime.runFork(Effect.gen(function*() {
+      // A request already in flight may predate the end of the run.
+      if (hydration) yield* Fiber.await(hydration);
+      yield* hydrate();
+    }).pipe(
+      Effect.catchCause(cause => Effect.sync(() => {
+        if (valid(g, s) && !Cause.hasInterrupts(cause)) publish({ error: Cause.pretty(cause) });
+      })),
+      Effect.ensuring(Effect.sync(() => {
+        if (!valid(g, s) || settling !== token) return;
+        settling = undefined;
+        publish({ execution: "idle", interruptRequested: false });
+      })),
+      Effect.forkIn(selectionScope),
+    ));
   }
   const hydrate = Effect.fn("Chat.hydrate")(function*(): Effect.fn.Return<void, ChatAPIError | ChatError, OpenCodeAPI> {
     if (hydration) return yield* Fiber.join(hydration);
@@ -283,30 +309,25 @@ export function createChatController(options: ChatOptions): ChatController {
     requestEvent(e);
     if (hydration && /^(permission|form)\./.test(e.type))
       requestEvents.push(e);
-    if (e.type === "session.execution.started")
+    if (e.type === "session.execution.started") {
+      settling = undefined;
       publish({ execution: "running" });
-    if (e.type === "session.retry.scheduled")
+    }
+    if (e.type === "session.retry.scheduled") {
+      settling = undefined;
       publish({ execution: "retrying" });
-    if (e.type === "session.status")
-      publish({
-        execution:
-          e.data.status.type === "idle"
-            ? "idle"
-            : e.data.status.type === "retry"
-              ? "retrying"
-              : "running",
-        ...(e.data.status.type === "idle" ? { interruptRequested: false } : {}),
-      });
+    }
+    if (e.type === "session.status") {
+      if (e.data.status.type === "idle") settle();
+      else {
+        settling = undefined;
+        publish({ execution: e.data.status.type === "retry" ? "retrying" : "running" });
+      }
+    }
     if (e.type === "session.model.selected") publish({ model: e.data.model });
     if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(e.type)) {
-      publish({
-        execution: "idle",
-        interruptRequested: false,
-        ...("error" in e.data
-          ? { error: errorText(JSON.stringify(e.data.error)) }
-          : {}),
-      });
-      recover();
+      if ("error" in e.data) publish({ error: errorText(JSON.stringify(e.data.error)) });
+      settle();
     }
     const before = state.messages;
     const reduced = reducer.reduce(before, e);
