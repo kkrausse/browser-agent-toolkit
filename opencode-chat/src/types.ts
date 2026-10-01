@@ -49,8 +49,11 @@ export interface ChatOptions {
   startNewSession?: boolean;
   pageSize?: number;
   handshakeTimeoutMs?: number;
-  /** Optional observer of connection milestones (`chat.connect` with a `stage`). Counts
-   * only: never session titles, messages or prompts. It must not throw. */
+  /** Optional observer of timing: connection milestones (`chat.connect` with a `stage`),
+   * every finished Effect span (`span`: name, durationMs, ok, parent) and one send's
+   * timeline (`chat.send.clicked|accepted|rejected`, `chat.reply.first-event|first-text`,
+   * joined by `send`). Ids, counts and lengths only: never session titles, messages or
+   * prompts. Spans are collected only when this is set. It must not throw. */
   onDiagnostic?(event: string, data?: Record<string, unknown>): void;
 }
 export type RequestState<T> = {

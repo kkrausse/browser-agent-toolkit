@@ -1,5 +1,6 @@
 import { createChatController } from "./controller";
 import { Effect } from "effect";
+import { spanTracer } from "./span-diagnostics";
 import type { ChatController } from "./types";
 import type { Service, WorkspaceController } from "@kev-browser-agent-kit/workspace/react";
 
@@ -43,8 +44,12 @@ const attachChatEffect = Effect.fn("Workspace.attachChat")(function*(owner: Work
   return current;
 });
 
+// These effects run outside the chat runtime; their spans go to the same workspace sink.
+const traced = <A, E>(effect: Effect.Effect<A, E>, owner: WorkspaceController) =>
+  Effect.withTracer(effect, spanTracer((event, data) => owner.diagnostic?.(event, data)));
+
 export function attachChat(owner: WorkspaceController, service: Service, options: WorkspaceChatOptions = {}) {
-  return Effect.runPromise(attachChatEffect(owner, service, options), { signal: owner.signal });
+  return Effect.runPromise(traced(attachChatEffect(owner, service, options), owner), { signal: owner.signal });
 }
 
 /** StrictMode-safe admission and serialized close/start on a reusable controller. */
@@ -68,7 +73,7 @@ export function editorLifecycle(controller: WorkspaceController, start: (control
   queueMicrotask(() => {
     if (mount.signal.aborted) return;
     admitted = true;
-    void Effect.runPromise(startWorkspace(controller, start), { signal: mount.signal }).catch(error => {
+    void Effect.runPromise(traced(startWorkspace(controller, start), controller), { signal: mount.signal }).catch(error => {
       if (!mount.signal.aborted) controller.reportError(error);
     });
   });
@@ -79,7 +84,7 @@ export function editorLifecycle(controller: WorkspaceController, start: (control
       // Cleanup has its own lifetime: a remount must await it even after the
       // previous startup fiber has been interrupted. The controller cancels the
       // underlying workspace operations through cancelAndClose.
-      const task = Effect.runPromise(closeWorkspace(controller, beforeClose));
+      const task = Effect.runPromise(traced(closeWorkspace(controller, beforeClose), controller));
       closing.set(controller, task);
       void task.catch(error => controller.reportError(error));
     }

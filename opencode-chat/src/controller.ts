@@ -1,9 +1,10 @@
-import { Cause, Deferred, Effect, Exit, Fiber, ManagedRuntime, Scope, Stream } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, ManagedRuntime, Scope, Stream, Tracer } from "effect";
 import { ChatError, OpenCodeAPI, type ChatAPIError, type NativeEvent } from "./api";
 import { createV2SessionReducer } from "./vendor/reducer";
 import { questionFromForm, formAnswer } from "./forms";
 import { createReaderFence } from "./reader-fence";
 import { canSend, holdBlocker } from "./admission";
+import { spanTracer } from "./span-diagnostics";
 import type {
   ChatController,
   ChatExport,
@@ -48,7 +49,15 @@ export function createChatController(options: ChatOptions): ChatController {
   if (!options.directory?.trim())
     throw new Error("Caller directory is required");
   const readers = createReaderFence(options.endpoint);
-  const runtime = ManagedRuntime.make(OpenCodeAPI.layer(readers.endpoint, options.directory));
+  // Observation only: an observer must never break chat.
+  const diagnostic = (event: string, data?: Record<string, unknown>) => {
+    try { options.onDiagnostic?.(event, data); } catch { /* observer failure */ }
+  };
+  const layer = OpenCodeAPI.layer(readers.endpoint, options.directory);
+  // Without an observer the spans stay on the default tracer, uncollected.
+  const runtime = ManagedRuntime.make(options.onDiagnostic
+    ? Layer.provideMerge(layer, Layer.succeed(Tracer.Tracer, spanTracer(diagnostic)))
+    : layer);
   const lifetime = Scope.makeUnsafe();
   const reducer = createV2SessionReducer();
   let state: ChatSnapshot = freeze({
@@ -93,6 +102,14 @@ export function createChatController(options: ChatOptions): ChatController {
   // Untitled sessions this controller created that nothing has been sent to.
   const unsent = new Set<string>();
   let disposal: Promise<void> | undefined;
+  // The latest send's timeline, joined by `send`. Ids, lengths and timings only.
+  let sent: { send: string; sessionID: string; at: number; event?: true; text?: true } | undefined;
+  let sendSequence = 0;
+  const sendStage = (timeline: NonNullable<typeof sent>, event: string, data?: Record<string, unknown>) =>
+    diagnostic(event, {
+      sessionID: timeline.sessionID, send: timeline.send,
+      elapsedMs: Math.round(performance.now() - timeline.at), ...data,
+    });
   // `mutation` is the only record of a pending session operation. The snapshot
   // flag is stamped on every publish so the two cannot drift.
   const publish = (patch: Partial<Omit<ChatSnapshot, "sessionOperationPending">>) => {
@@ -334,6 +351,15 @@ export function createChatController(options: ChatOptions): ChatController {
     const before = state.messages;
     const reduced = reducer.reduce(before, e);
     if (reduced?.touched.length) publish({ messages: reduced.messages });
+    const timeline = sent?.sessionID === sessionID ? sent : undefined;
+    if (timeline && !timeline.event && "assistantMessageID" in e.data) {
+      timeline.event = true;
+      sendStage(timeline, "chat.reply.first-event", { type: e.type });
+    }
+    if (timeline && !timeline.text && e.type === "session.text.delta" && reduced?.touched.length) {
+      timeline.text = true;
+      sendStage(timeline, "chat.reply.first-text");
+    }
     // Events are never held back for a history request: a long answer keeps
     // streaming. What an event changed outlives the page in flight; an event that
     // changed nothing here is covered by a refresh after it.
@@ -426,9 +452,7 @@ export function createChatController(options: ChatOptions): ChatController {
       scope = connection,
       selectionAtStart = selection;
     // Milestones for stage timing; observation only.
-    const milestone = (stage: string, data?: Record<string, unknown>) => {
-      try { options.onDiagnostic?.("chat.connect", { stage, ...data }); } catch { /* observer failure */ }
-    };
+    const milestone = (stage: string, data?: Record<string, unknown>) => diagnostic("chat.connect", { stage, ...data });
     milestone("requested");
     if (state.sessionID) reducer.clear(state.sessionID);
     publish({
@@ -633,12 +657,16 @@ export function createChatController(options: ChatOptions): ChatController {
     // public call was admitted but before this runs.
     if (!canSend(state)) return yield* new ChatError({ message: "Chat is not ready to send" });
     const g = generation, s = selection, id = yield* sessionID();
+    const timeline = (sent = { send: `${Date.now().toString(36)}-${++sendSequence}`, sessionID: id, at: performance.now() });
+    sendStage(timeline, "chat.send.clicked", { length: draft.text.length });
     publish({ sending: true, error: undefined });
     yield* Effect.gen(function*() {
       const api = yield* OpenCodeAPI;
       // Before the request: a prompt whose response is lost may still be accepted.
       unsent.delete(id);
-      yield* api.prompt(id, draft.text);
+      yield* api.prompt(id, draft.text).pipe(Effect.tapCause(cause => Effect.sync(() =>
+        sendStage(timeline, "chat.send.rejected", { interrupted: Cause.hasInterrupts(cause) }))));
+      sendStage(timeline, "chat.send.accepted");
       if (valid(g, s)) {
         yield* hydrate().pipe(Effect.catchCause(cause => Effect.sync(() => {
           // Prompt acceptance is known. A refresh failure must not invite a

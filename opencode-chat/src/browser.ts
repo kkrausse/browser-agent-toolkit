@@ -3,6 +3,7 @@ import type { Connection, ServiceReadiness, WorkspaceController } from '@kev-bro
 import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
 import { Effect } from 'effect';
 import { modelHeaderPluginSource } from './model-headers';
+import { spanTracer } from './span-diagnostics';
 import { javascriptPluginSource } from './javascript-plugin-source' with { type: 'macro' };
 import { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, modelCatalogPluginSource, openCodeCandidateLaunch, type OpenCodeCandidateModel } from './opencode-launch';
 import { validatePreparedOpenCode, type PreparedManifest } from './prepared';
@@ -86,7 +87,8 @@ const verifyReadyEffect = Effect.fn('OpenCode.verifyReady')(function*(endpoint: 
 });
 
 export function verifyOpenCodeReady(endpoint: Pick<Endpoint, 'fetch'>, authorization: string, signal: AbortSignal, diagnostics = createDiagnosticScope()) {
-  return Effect.runPromise(verifyReadyEffect(endpoint, authorization, diagnostics), { signal });
+  return Effect.runPromise(Effect.withTracer(verifyReadyEffect(endpoint, authorization, diagnostics),
+    spanTracer((event, data) => diagnostics.record(event, data))), { signal });
 }
 
 function connection(endpoint: Endpoint, authorization: string): Connection {
