@@ -286,3 +286,13 @@ not evidence that pilot success means the whole kernel is migrated.
   matching full app (report `2026-09-30-effect-loader-url-repaired-full-app-preparation.md`).
   Neither task has live authorization yet. New receipts replace no historical bytes;
   browser execution and phase2 remain gated by matching qualified handoffs.
+- Independent repaired-delivery report `bf791e0`:
+  [new delivery qualification](2026-09-30-effect-loader-url-repaired-independent-qa.md).
+  Actual verified Node24.18 arm64 (absolute executable in every Node child) passed
+  10 expanded/4 loader/6 PID-fetch/8 endpoint/3 close cases and targeted emitted-URL
+  gate, zero failed/unrun. All 107 candidate/1,020 freeze hashes match; compiled
+  core unchanged and only four declared runtime source changes. Actual Host.open/
+  worker public roots, subpath/CDN/separate-worker placement qualify offline; native
+  adapter reads exact real pack. Unmounted subpath correctly returns404, not a
+  fabricated supported host route. Browser/full-app remains pending; no phase2
+  authorization or full guest API acceptance follows from these targeted checks.
