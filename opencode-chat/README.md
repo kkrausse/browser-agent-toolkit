@@ -285,8 +285,8 @@ guest. Fixture evidence is not a claim of real-server/browser QA.
 # Mounted browser editor
 
 `@kev-browser-agent-kit/opencode-chat/editor` exports `BrowserEditor`,
-`BrowserEditorProps`, `attachChat`, `chatFor`, `WorkspaceChatOptions`, and
-`sourcePaths`. Install the optional `@kev-browser-agent-kit/workspace` peer when
+`BrowserEditorProps`, `attachChat`, `chatFor`, `detachChat`, `WorkspaceChatOptions`,
+and `sourcePaths`. Install the optional `@kev-browser-agent-kit/workspace` peer when
 using this integration. The root and `/react` standalone chat entries have no
 workspace imports; the editor uses workspace types and the supplied controller.
 
@@ -313,7 +313,9 @@ service names `vite` and `chat`; override with `previewService` and `chatService
 The package attaches the preview iframe and a real `ChatView` to these services.
 After launching chat, a recipe can `await attachChat(controller, service)` or
 `await controller.waitForClient("chat")`. `attachChat` is idempotent for a service
-and uses its existing `connection.fetch`, including authentication. For custom
+and uses its existing `connection.fetch`, including authentication.
+`await detachChat(service)` disposes that client while the service keeps running;
+the next `attachChat` mounts a fresh controller on it. For custom
 names/directories pass `{ serviceName, directory }` to both the recipe adapter
 and matching editor props. Default OpenCode directory is `/workspace`.
 
