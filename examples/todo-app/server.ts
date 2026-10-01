@@ -2,7 +2,7 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { appRouter } from '@/server/trpcRouter'
 import type { Todo } from '@/schema/todo'
 import { createStaticHandler } from '@/server/staticFiles'
-import { createBrowserEditorHandler, browserEditorHeaders } from '@kev-browser-agent-kit/opencode-chat/server'
+import { createBrowserEditorHandler, browserEditorHeaders, readModelCatalog } from '@kev-browser-agent-kit/opencode-chat/server'
 import { authorizeEditing } from '@/server/editing'
 
 const isProduction = process.env.NODE_ENV === 'production'
@@ -12,6 +12,9 @@ const editor = createBrowserEditorHandler({
   preparedDirectory: '.editor/prepared',
   runtimeDirectory: process.env.RUNTIME_DIR ?? '../../workspace-api/dist/runtime',
   clientDirectory: useBuild ? 'build/client' : undefined,
+  // Optional public catalog file ({models, defaultModel}); never a key. An
+  // unreadable or invalid file stops the server here instead of at first use.
+  modelCatalog: process.env.MODEL_CATALOG ? await readModelCatalog(process.env.MODEL_CATALOG) : undefined,
   providers: { opencode: { baseURL: 'https://opencode.ai/zen/v1', headers: {
     authorization: `Bearer ${process.env.VIVARI_MODEL_API_KEY || 'public'}`,
     // Chromium replaces the guest's User-Agent. Restore the real app identity

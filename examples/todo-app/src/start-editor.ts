@@ -3,7 +3,7 @@ import { installSource } from '@kev-browser-agent-kit/workspace/delivery'
 import { createDiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics'
 import type { Connection, Service, WorkspaceController } from '@kev-browser-agent-kit/workspace/react'
 import { openedElsewhere, openedElsewhereMessage, errorText } from './workspace-exit'
-import { installOpenCodeConfig, loadPrepared, preparedApps, startOpenCode, type OpenCodeCandidateModel } from '@kev-browser-agent-kit/opencode-chat/browser'
+import { installOpenCodeConfig, loadPrepared, preparedApps, startOpenCode } from '@kev-browser-agent-kit/opencode-chat/browser'
 
 const base = '/editor/'
 
@@ -27,10 +27,7 @@ export async function startBrowserEditor(controller: WorkspaceController, option
     (event) => controller.diagnostic(event.event, event.data),
     controller.diagnosticRunId,
   )
-  let manifest!: Awaited<ReturnType<typeof loadPrepared>> & {
-    modelCatalog?: Record<string, OpenCodeCandidateModel>
-    editorDefaultModel?: string
-  }
+  let manifest!: Awaited<ReturnType<typeof loadPrepared>>
   let distribution!: Distribution
 
   await controller.steps([

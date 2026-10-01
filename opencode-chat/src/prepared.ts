@@ -1,7 +1,7 @@
 import type { ToolDescriptor, NodeLaunchOptions } from '@kev-browser-agent-kit/workspace';
 import { treeRoots, validateTree, type PreparedEntry } from './package-tree';
 import type { DependencyProvenance } from './prepare-dependencies';
-import { openCodeCandidateLaunch } from './opencode-launch';
+import { openCodeCandidateLaunch, type OpenCodeCandidateModel } from './opencode-launch';
 import type { ProjectFile } from './project-file';
 import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
 import { managedDeliveryTool } from '@kev-browser-agent-kit/workspace/delivery';
@@ -52,6 +52,9 @@ export interface PreparedManifest {
   project: Record<string, ProjectFile>;
   /** App-selected editable paths, separate from generated dependency inputs. */
   sourcePaths?: string[];
+  /** Added at delivery by the server adapter's `modelCatalog` option; never written by preparation. */
+  modelCatalog?: Record<string, OpenCodeCandidateModel>;
+  editorDefaultModel?: string;
 }
 
 /** Derived locks reference these binary inputs relative to the project root. */

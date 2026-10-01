@@ -4,7 +4,7 @@ import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-
 import { Effect } from 'effect';
 import { modelHeaderPluginSource } from './model-headers';
 import { javascriptPluginSource } from './javascript-plugin-source' with { type: 'macro' };
-import { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, openCodeCandidateLaunch, type OpenCodeCandidateModel } from './opencode-launch';
+import { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, modelCatalogPluginSource, openCodeCandidateLaunch, type OpenCodeCandidateModel } from './opencode-launch';
 import { validatePreparedOpenCode, type PreparedManifest } from './prepared';
 
 const javascriptPlugin = javascriptPluginSource();
@@ -103,6 +103,11 @@ export async function installOpenCodeConfig(workspace: Workspace, options: { mod
   await workspace.fs.mkdir('/.server/config/opencode/plugins');
   await workspace.fs.writeFile('/.server/config/opencode/plugins/editor-model-headers.js', modelHeaderPluginSource(options.modelBaseURL));
   await workspace.fs.writeFile('/.server/config/opencode/plugins/editor-javascript.js', await javascriptPlugin);
+  // An explicit default means the host owns the whole catalog. The workspace is
+  // retained between visits, so a previous visit's catalog plugin must not survive.
+  const catalogPlugin = '/.server/config/opencode/plugins/editor-model-catalog.js';
+  if (options.defaultModel !== undefined) await workspace.fs.writeFile(catalogPlugin, modelCatalogPluginSource(Object.keys(options.models ?? {})));
+  else if (await workspace.fs.stat(catalogPlugin).then(() => true, () => false)) await workspace.fs.remove(catalogPlugin);
   await workspace.fs.writeFile(openCodeCandidateLaunch.workspaceConfigPath, JSON.stringify(createOpenCodeCandidateConfig(options.modelBaseURL, options.additionalToolActions, options.models, options.defaultModel)));
 }
 
@@ -126,5 +131,5 @@ export async function startOpenCode(controller: WorkspaceController, options: {
   return service;
 }
 
-export { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, openCodeCandidateLaunch, type OpenCodeCandidateModel } from './opencode-launch';
+export { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, openCodeCandidateLaunch, type OpenCodeCandidateModel, type OpenCodeModelCatalog } from './opencode-launch';
 export { loadPrepared, preparedApps, type PreparedManifest } from './prepared';

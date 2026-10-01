@@ -398,6 +398,12 @@ owns preparation and browser startup:
   JS/CSS, and the model proxy. The app checks its own authorization before calling
   `fetch(request)`; an `undefined` fetch result delegates to the app. There is no
   authorization callback or policy adapter in the toolkit.
+  Optional `modelCatalog: {models, defaultModel}` (public, never a credential; load a
+  file with `readModelCatalog(path)`) is validated at construction and delivered with
+  the prepared manifest as `modelCatalog`/`editorDefaultModel`, without rewriting
+  preparation output. Pass both to `installOpenCodeConfig`, which then also installs
+  `editor.model-catalog` to remove every other model of the provider from the guest
+  catalog, so the picker lists only the supplied models.
   When server diagnostics are enabled, model proxy events include a generated request
   correlation ID, method, fixed route paths, safe provider/model/client identifiers,
   OpenCode identity-header presence, elapsed time, upstream/downstream status, and a
