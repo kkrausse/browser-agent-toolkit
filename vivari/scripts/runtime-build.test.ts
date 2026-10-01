@@ -8,11 +8,11 @@ import { integrationRoot, resolveRuntimeSource, runtimeSourcePath, runtimeSource
 const scratch = mkdtempSync(join(tmpdir(), 'vivari-build-test-'));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
-test('resolver defaults to sibling fork, supports cwd-relative overrides and file URLs', () => {
+test('resolver defaults to the vendored fork, supports cwd-relative overrides and file URLs', () => {
   const previous = process.env.VIVARI_SOURCE;
   try {
     delete process.env.VIVARI_SOURCE;
-    expect(resolveRuntimeSource()).toBe(resolve(integrationRoot, '../../vivari'));
+    expect(resolveRuntimeSource()).toBe(resolve(integrationRoot, '../vendor/vivari'));
     process.env.VIVARI_SOURCE = 'a fork/#source';
     expect(runtimeSourcePath('packages', 'core')).toBe(resolve('a fork/#source/packages/core'));
     expect(runtimeSourceUrl('packages', 'core').href).toContain('a%20fork/%23source/packages/core');
