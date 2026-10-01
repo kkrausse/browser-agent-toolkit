@@ -466,3 +466,15 @@ not evidence that pilot success means the whole kernel is migrated.
   browser reproduction or production fix assigned yet; distinguish actual shutdown
   from retained target identity, and propose only a minimal isolated followup if
   needed. Phase2B/3 remain gated, not automatically expanded into persistence.
+- SQLite review `d2d3dd5`:
+  [close-path review](2026-09-30-effect-process-sqlite-close-review.md).
+  Public Workspace close returned;34censuses retained same outerkernel target,
+  PIDworkers absent/laterlocks empty. Native terminate invocation and continued
+  execution were not recorded; missedtermination vsretirement/transportlag unknown.
+  Bounded2Aownershipreview consistent, no demonstrated causal production defect.
+- Parent authorizes one isolated unchangedcase9 observercohort, originaltwo steps
+  in order/15sclose assertions, passive nativeWorker.terminate identity/timing trace.
+  Same owner takes exclusive slot, intended report
+  `2026-09-30-effect-process-sqlite-close-trace-qa.md`. No full-suite rerun or timeout
+  change. First assertion failure stops; any isolated pass remains separate evidence
+  beside failedcombinedcohort. No production fix or phase2B/3 authorization yet.
