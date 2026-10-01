@@ -31,8 +31,10 @@ export function validateWorkspace(value: unknown): SavedWorkspace {
   return saved
 }
 
+/** Advisory, for enabling controls. Admission itself is ChatController.hold(),
+ * which fails on the same conditions and then keeps the chat idle. */
 export function idleChat(chat: ChatSnapshot | undefined): boolean {
-  return !!chat && chat.connection === 'connected' && chat.execution === 'idle' && !chat.sending && !chat.loading && !chat.loadingOlder && !chat.interruptRequested && !chat.permissions.length && !chat.questions.length && !chat.unsupportedForms.length
+  return !!chat && chat.connection === 'connected' && chat.execution === 'idle' && !chat.held && !chat.sessionOperationPending && !chat.sending && !chat.loading && !chat.loadingOlder && !chat.interruptRequested && !chat.permissions.length && !chat.questions.length && !chat.unsupportedForms.length
 }
 
 /** One atomic browser-local catalog write includes outgoing snapshot and pending

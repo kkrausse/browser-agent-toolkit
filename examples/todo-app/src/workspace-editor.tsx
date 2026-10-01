@@ -40,21 +40,27 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
     await store.write(next)
     catalog.current = next; setList(next.workspaces); setPending(next.pending); setActiveId(next.activeId ?? '')
   }
-  function assertIdle(retry = false): void {
-    if (retry) return
+  // Chat idleness is acquired once and held, never re-sampled between awaits.
+  // Throws unless chat is idle; the caller releases, and disposal also ends it.
+  function holdChat(reason: string): { release(): void } {
     const service = controller.getSnapshot().services.chat
     const current = service && chatFor(service)
-    if (!idleChat(current?.getSnapshot())) throw Error('Wait for chat execution, loading and requests to finish before saving or switching')
+    if (!current) throw Error('Workspace chat must be ready before saving or switching')
+    return current.hold(reason)
   }
+  /** Caller holds chat admission. */
   async function capture(): Promise<SavedWorkspace> {
     const workspace = controller.workspace, service = controller.getSnapshot().services.chat
     if (!workspace || !service) throw Error('Workspace and chat must be ready before saving')
-    const currentChat = chatFor(service)
-    if (!idleChat(currentChat?.getSnapshot())) throw Error('Chat is not idle')
     await workspace.flush()
-    const selectedSessionId = currentChat?.getSnapshot().sessionID
-    const saved = validateWorkspace({ format: 1, id: catalog.current.activeId ?? crypto.randomUUID(), name: nameRef.current.trim() || 'Untitled workspace', savedAt: Date.now(), source: await captureSource(workspace), sessions: await captureSessions(service), selectedSessionId })
-    if (!idleChat(currentChat?.getSnapshot())) throw Error('Chat became busy; workspace was not replaced')
+    const selectedSessionId = chatFor(service)?.getSnapshot().sessionID
+    return validateWorkspace({ format: 1, id: catalog.current.activeId ?? crypto.randomUUID(), name: nameRef.current.trim() || 'Untitled workspace', savedAt: Date.now(), source: await captureSource(workspace), sessions: await captureSessions(service), selectedSessionId })
+  }
+  /** Caller holds chat admission. */
+  async function saveCurrent(): Promise<SavedWorkspace> {
+    const saved = await capture()
+    await persist({ ...upsert(catalog.current, saved), activeId: saved.id })
+    await writeIdentity(controller.workspace!, saved)
     return saved
   }
   async function boot(incoming?: SavedWorkspace): Promise<void> {
@@ -88,9 +94,8 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
         // First activation adopts the existing durable working copy. It never
         // restores a catalog image over unsaved browser source/native sessions.
         if (!catalog.current.activeId) {
-          const saved = await capture()
-          await persist({ ...upsert(catalog.current, saved), activeId: saved.id })
-          await writeIdentity(controller.workspace!, saved)
+          const hold = holdChat('Saving workspace')
+          try { await saveCurrent() } finally { hold.release() }
         } else {
           const saved = catalog.current.workspaces.find(item => item.id === catalog.current.activeId)
           let title = saved?.name ?? 'Current workspace'
@@ -117,10 +122,10 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
       async writeSource(path, text) {
         if (!safeSourcePath(path) || !controller.workspace || text.length > 1_000_000) throw Error('Invalid source fixture write')
         if (locked.current || controller.getSnapshot().busy || catalog.current.pending) throw Error('Workspace action in progress')
-        assertIdle()
+        const hold = holdChat('Writing source fixture')
         locked.current = true; setActionBusy(true)
         try { await controller.workspace.fs.writeFile(path, text); await controller.workspace.flush() }
-        finally { locked.current = false; setActionBusy(false) }
+        finally { hold.release(); locked.current = false; setActionBusy(false) }
       },
     }
     return () => { delete target.__todoWorkspaceFixture }
@@ -132,15 +137,24 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
     void controller.run(label, task).finally(() => { setPending(catalog.current.pending); locked.current = false; setActionBusy(false) })
   }
   async function save(): Promise<void> {
-    assertIdle()
-    const saved = await capture()
-    await persist({ ...upsert(catalog.current, saved), activeId: saved.id })
-    await writeIdentity(controller.workspace!, saved)
-    setNote(`Saved ${saved.name} locally, including resumable native sessions.`)
+    const hold = holdChat('Saving workspace')
+    try {
+      const saved = await saveCurrent()
+      setNote(`Saved ${saved.name} locally, including resumable native sessions.`)
+    } finally { hold.release() }
   }
-  async function replace(incoming: SavedWorkspace, retry = false): Promise<void> {
+  // Exit saves and closes under one hold, so nothing can start after the save.
+  async function exit(): Promise<void> {
+    const hold = !pending && controller.runtime ? holdChat('Closing editor') : undefined
+    try {
+      if (hold) await saveCurrent()
+      await controller.close()
+    } finally { hold?.release() }
+    onExit()
+  }
+  async function replace(incoming: SavedWorkspace, retry = false, held?: { release(): void }): Promise<void> {
     await switchWorkspace({ incoming, catalog: catalog.current, retry,
-      assertIdle: () => assertIdle(retry), capture, persist,
+      hold: () => held ?? holdChat('Switching workspace'), capture, persist,
       disposeChat: async () => {
         setRestoring(true)
         const service = controller.getSnapshot().services.chat
@@ -154,12 +168,14 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
     setNote(`Opened ${incoming.name}. Outgoing source and native sessions were saved before replacement.`)
   }
   async function create(): Promise<void> {
-    assertIdle()
-    const title = window.prompt('New workspace name', 'New workspace')?.trim()
-    if (!title) return
-    const manifest = await loadPrepared('/editor/prepared/', controller.signal)
-    const source = Object.fromEntries(Object.entries(manifest.project).map(([path, file]) => [path, typeof file === 'string' ? new TextEncoder().encode(file) : Uint8Array.from(atob(file.data), character => character.charCodeAt(0))]))
-    await replace(validateWorkspace({ format: 1, id: crypto.randomUUID(), name: title, savedAt: Date.now(), source, sessions: [] }))
+    const hold = holdChat('Creating workspace')
+    try {
+      const title = window.prompt('New workspace name', 'New workspace')?.trim()
+      if (!title) return
+      const manifest = await loadPrepared('/editor/prepared/', controller.signal)
+      const source = Object.fromEntries(Object.entries(manifest.project).map(([path, file]) => [path, typeof file === 'string' ? new TextEncoder().encode(file) : Uint8Array.from(atob(file.data), character => character.charCodeAt(0))]))
+      await replace(validateWorkspace({ format: 1, id: crypto.randomUUID(), name: title, savedAt: Date.now(), source, sessions: [] }), false, hold)
+    } finally { hold.release() }
   }
   const controls = <div className="todo-workspace-controls">
     <label>Workspace<select aria-label="Workspace" disabled={blocked} value={activeId} onChange={event => {
@@ -167,7 +183,7 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
       if (incoming) action('Switch workspace', () => replace(incoming))
     }}>{!activeId && <option value="">Current workspace</option>}{list.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
     <label>Name<input aria-label="Workspace name" value={name} maxLength={120} disabled={actionBusy || state.busy || !!pending} onChange={event => setName(event.target.value)} /></label>
-    <div className="todo-workspace-buttons"><button disabled={blocked} onClick={() => action('New workspace', create)}>New workspace</button><button disabled={blocked} onClick={() => action('Save workspace', save)}>Save workspace</button><button disabled={actionBusy || state.busy || (!pending && !!state.runtime && !idleChat(chat?.getSnapshot()))} onClick={() => action('Close editor', async () => { if (!pending && controller.runtime) await save(); await controller.close(); onExit() })}>Exit</button></div>
+    <div className="todo-workspace-buttons"><button disabled={blocked} onClick={() => action('New workspace', create)}>New workspace</button><button disabled={blocked} onClick={() => action('Save workspace', save)}>Save workspace</button><button disabled={actionBusy || state.busy || (!pending && !!state.runtime && !idleChat(chat?.getSnapshot()))} onClick={() => action('Close editor', exit)}>Exit</button></div>
   </div>
   return <div className="todo-workspace-editor">
     <div className="todo-workspace-preview"><EditorPreview controller={controller} service={state.services.vite} name="vite" hostPaths={hostPaths} isReady={isPreviewReady} />{!state.services.vite && <p>Opening workspace preview…</p>}</div>
