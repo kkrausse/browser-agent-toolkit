@@ -9,9 +9,9 @@ const { Host } = await import(join(stage, 'sdk/host.js'));
 const { createBrowserEditorHandler } = await import(join(stage, 'qa/live-backend.js'));
 const sha = (bytes: Uint8Array | string) => new Bun.CryptoHasher('sha256').update(bytes).digest('hex');
 const manifest = await Bun.file(join(stage, 'runtime/distribution.json')).json();
-assert.equal(manifest.version, 'bd39000ff5bbc334f836ad65a4433e627525070413f810d7169132102f49b9f9');
+assert.equal(manifest.version, '446021ba611932b0c531570ecc5739255e8d97f608dcc8c53ad1ca07eeceb6a6');
 const workerText = await Bun.file(join(stage, 'runtime', manifest.kernelWorker)).text();
-assert.equal(sha(workerText), 'c4193ae0cba8419149738ed2b3a74d79d5f59f5e447eff129106ca2f3532fecb');
+assert.equal(sha(workerText), '7d21c5bfe263b047c1113d219623dcba50c47001624939448ae0d3d191926cea');
 const declaration = parse(workerText, { ecmaVersion: 'latest', sourceType: 'module' }).body.find((node: any) => node.type === 'FunctionDeclaration' && node.id.name === 'vendorUrl');
 assert.ok(declaration);
 const emitted = workerText.slice(declaration.start, declaration.end);
@@ -31,7 +31,7 @@ const hostProbe = "fetchedBodyProbe(location.origin.replace(location.hostname,'h
 assert.equal(adaptedClient.replace(hostProbe, 'fetchedBodyProbe(location.origin)').replace('distribution.runtimeBuild.source.revision', 'distribution.runtimeBuild.source.commit'), originalClient);
 const originalDriver = await Bun.file(join(tests, 'single-kernel-driver.ts')).text();
 const adaptedDriver = await Bun.file(join(tests, 'effect-loader-full-app-driver-qa.ts')).text();
-assert.equal(adaptedDriver.replace('const root=' + JSON.stringify(source), "const root=resolve(import.meta.dir,'../../..')").replace('receipt.revision!==' + JSON.stringify('3ee918522c1233a1f8e10a9b798c09b6c3e30c81'), "receipt.revision!=='e35eab4af7a53ff08eb70c09df59c40b78bfdd67'"), originalDriver);
+assert.equal(adaptedDriver.replace('const root=' + JSON.stringify(source), "const root=resolve(import.meta.dir,'../../..')").replace('receipt.revision!==' + JSON.stringify('cc5a932bf4f9a1da4bf8b5d16f6c6c7e4aec573d'), "receipt.revision!=='e35eab4af7a53ff08eb70c09df59c40b78bfdd67'"), originalDriver);
 const reverseProof = { originalClientSha256: sha(originalClient), adaptedClientSha256: sha(adaptedClient), originalDriverSha256: sha(originalDriver), adaptedDriverSha256: sha(adaptedDriver), reverseToOriginalBytes: true, assertionsChanged: false, deadlinesChanged: false, focusedSourceSha256: sha(await Bun.file(join(tests, 'single-kernel-cases-client.ts')).text()) };
 await Bun.write(join(stage, 'qa/reverse-adaptation-verification.json'), JSON.stringify(reverseProof, null, 2));
 async function extractHandler(file: string, bindings: Record<string, unknown>) {

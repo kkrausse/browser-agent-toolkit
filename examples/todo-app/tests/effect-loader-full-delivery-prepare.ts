@@ -4,17 +4,18 @@ import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dir, '../../..');
 const temp = '/private/var/folders/t_/x48jtnps7n5_0g_pt9xpvbg00000gn/T/opencode';
-const inputName = 'effect-loader-vendor-url-repair-l9k65fzh';
+const inputName = 'effect-process-subtree-candidate-atw4whjs';
 const input = join(temp, inputName);
 const donor = join(temp, 'conservative-full-app-Yb8T8p');
-const runtimeRevision = '3ee918522c1233a1f8e10a9b798c09b6c3e30c81';
+const runtimeRevision = 'cc5a932bf4f9a1da4bf8b5d16f6c6c7e4aec573d';
 const toolkitRevision = '9814c715cfca42309c581440577976833f4326e6';
-const version = 'bd39000ff5bbc334f836ad65a4433e627525070413f810d7169132102f49b9f9';
+const version = '446021ba611932b0c531570ecc5739255e8d97f608dcc8c53ad1ca07eeceb6a6';
 const hash = async (file: string) => new Bun.CryptoHasher('sha256').update(await Bun.file(file).arrayBuffer()).digest('hex');
-if (await hash(join(input, 'candidate-receipt.json')) !== 'e242092e6a920b88a6a2ae7eb76654f1f61773a3bcf99ee4bcbe61f6b85ee6e6') throw Error('Wrong frozen Effect receipt');
+if (await hash(join(input, 'candidate-receipt.json')) !== '838195f4fed09e75ce83e9991f57d89e3001dd7990b5225e12466ea64f49a1f3') throw Error('Wrong frozen Effect receipt');
+if (await hash(join(input, 'freeze-manifest.json')) !== '59b394fab8d6773863f54435e2489b282f10429ad2603f9aebd86d1f3efa9fc8') throw Error('Wrong phase2A freeze');
 const inputReceipt = await Bun.file(join(input, 'candidate-receipt.json')).json();
 const inputFreeze = await Bun.file(join(input, 'freeze-manifest.json')).json();
-if (Object.keys(inputReceipt.hashes).length !== 107 || Object.keys(inputFreeze).length !== 1020) throw Error('Wrong input cohort size');
+if (Object.keys(inputReceipt.hashes).length !== 103 || Object.keys(inputFreeze).length !== 1475) throw Error('Wrong input cohort size');
 for (const [file, expected] of Object.entries(inputFreeze)) {
   if (file.startsWith('/') || file.split('/').includes('..') || await hash(join(input, file)) !== expected) throw Error('Frozen repair input mismatch: ' + file);
 }
@@ -40,7 +41,7 @@ change('33fa1359a003ca9c50cb3bc49699b99bc1a063f1', runtimeRevision);
 change('d0eec346dbc749db1c0cd82dd8aad0b27c1da363', toolkitRevision);
 change('3debc8095c310192bac6062bb963e0ee09a431246cc8bafb7be2f5a1f2655a62', version);
 change('candidateReceipt.version !== version', 'JSON.parse(await Bun.file(join(input,"candidate/runtime/distribution.json")).text()).version !== version');
-change('conservative-full-app-', 'effect-loader-full-app-');
+change('conservative-full-app-', 'effect-process-subtree-full-app-');
 change("const runtimeSource = await archive('/Users/kkrausse/Documents/repos/kkrausse/vivari-single-kernel'", "const runtimeSource = await archive(" + JSON.stringify(join(temp, 'vivari-effect-loader-pilot')));
 change("['runtime', 'sdk', 'workspace', 'chat']", "['runtime', 'sdk']");
 change("await cp(join(input, 'toolkit-source/vivari/.runtime/patched-build.json'), join(stage, 'native-build-provenance.json'));", "await cp(join(input,'native-reuse.json'),join(stage,'native-build-provenance.json'));\nawait cp(join(input,'candidate/runtime/distribution.json'),join(stage,'runtime-build-provenance.json'));");
@@ -74,7 +75,7 @@ change("originalClientSha256:", "singleWorkspaceGraph: true, originalClientSha25
 change("fullClient.replace('fetchedBodyProbe(location.origin)', 'fetchedBodyProbe(' + clientHostOrigin + ')')", "fullClient.replace('fetchedBodyProbe(location.origin)', 'fetchedBodyProbe(' + clientHostOrigin + ')').replace('distribution.runtimeBuild.source.commit','distribution.runtimeBuild.source.revision')");
 // Preserve original actions/assertions/deadlines; names describe the fresh pilot.
 script = script.replaceAll('conservative-full-client-qa', 'effect-loader-full-client-qa').replaceAll('conservative-full-app-driver-qa', 'effect-loader-full-app-driver-qa');
-script = script.replaceAll('exact repaired 33fa135', 'exact URL-repaired Effect pilot 3ee9185');
+script = script.replaceAll('exact repaired 33fa135', 'exact phase2A Effect process/subtree cc5a932');
 change('preparationOnly: true', 'preparationOnly: true, effectVersion: "4.0.0-rc.118", fullMigrationAccepted: false');
 change("const manifest = await Bun.file(join(stage, 'prepared/manifest.json')).json();", `
 // Only the normal committed vendor producer fetches/builds the real tsgo pack.
@@ -98,6 +99,15 @@ await cp(applicationInput,join(stage,'qualified-application'),{recursive:true});
 await command(['bun',join(out,'qa-source/examples/todo-app/tests/effect-loader-full-delivery-offline-verify.ts'),stage,input],source);
 const manifest = await Bun.file(join(stage, 'prepared/manifest.json')).json();`);
 change("const hashes: Record<string, string> = {};", `
+// Check the exact source path embedded in the compiled driver before freezing.
+const driverText=await Bun.file(join(stage,'qa/effect-loader-full-app-driver-qa.js')).text();
+if(!driverText.includes(source))throw Error('Driver archive path absent from emitted driver');
+for(const file of ['single-kernel-driver.ts','matched-pair-driver.ts','matched-readiness.ts'])if(!await Bun.file(join(source,'examples/todo-app/tests',file)).exists())throw Error('Driver source preflight missing '+file);
+await Bun.write(join(stage,'qa/source-preflight.json'),JSON.stringify({source,sourceRevision:toolkitRevision,runtimeRevision,driverPathExists:true,originalSourceHashesChecked:true},null,2));
+await Bun.write(join(stage,'runtime/assets/LICENSE.vivari.txt'),Bun.file(join(runtimeSource,'LICENSE')));
+const oldLicenseInput=join(${JSON.stringify(join(temp, 'effect-loader-vendor-url-repair-l9k65fzh'))},'candidate/runtime/assets/LICENSE.sqlite-wasm.txt');
+if(await hash(oldLicenseInput)!=='cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30')throw Error('SQLite license mismatch');
+await cp(oldLicenseInput,join(stage,'runtime/assets/LICENSE.sqlite-wasm.txt'));
 const workspaceGraphs:Record<string,number>={};
 for(const file of await walk(join(stage,'client')))if(file.endsWith('.js')) {
   const text=await Bun.file(join(stage,'client',file)).text();
@@ -108,7 +118,13 @@ for(const file of await walk(join(stage,'client')))if(file.endsWith('.js')) {
 await Bun.write(join(stage,'consumer-graph-verification.json'),JSON.stringify({workspaceGraphs,focusedObserver:'workspace/test-library.js reexports the same built workspace/index.js',kernelWorker:JSON.parse(await Bun.file(join(stage,'runtime/distribution.json')).text()).kernelWorker,coreSha256:await hash(join(input,'runtime-source/packages/kernel-lifecycle/dist/index.js'))},null,2));
 const hashes: Record<string, string> = {};`);
 script += `
-await cp(join(input,'runtime-runnable-source.tar.gz'),join(out,'runtime-runnable-source.tar.gz'));
+const runnable=join(out,'runtime-runnable-source');
+await mkdir(runnable);
+await command(['tar','-xf',runtimeSource+'.tar','-C',runnable],out);
+for(const file of native.outputs){await mkdir(dirname(join(runnable,file.path)),{recursive:true});await cp(join(input,'runtime-source',file.path),join(runnable,file.path));}
+await cp(join(input,'runtime-source/packages/kernel-lifecycle/dist'),join(runnable,'packages/kernel-lifecycle/dist'),{recursive:true});
+await cp(join(stage,'sdk'),join(runnable,'packages/core/dist'),{recursive:true});
+await command(['tar','-czf',join(out,'runtime-runnable-source.tar.gz'),'-C',runnable,'.'],out);
 await cp(join(${JSON.stringify(staging)},'adaptation.json'),join(out,'preparer-adaptation.json'));
 const sourceDigests:Record<string,string>={};
 for(const [directory,label] of [[source,'toolkit'],[runtimeSource,'runtime']])for(const file of await walk(directory))if(!file.startsWith('packages/studio/public/vendor/'))sourceDigests[label+'/'+file]=await hash(join(directory,file));
