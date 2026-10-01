@@ -388,3 +388,15 @@ not evidence that pilot success means the whole kernel is migrated.
   intended report `2026-09-30-effect-loader-phase1-review-and-phase2-cutover.md`.
   Parent decides phase2 implementation after this review; no all-writer or editor
   race fix is inferred from successful app/focused workloads.
+- Technical review `8473869` approves bounded phase1, no blocking loader contract
+  defect identified. [Review and cutover](2026-09-30-effect-loader-phase1-review-and-phase2-cutover.md)
+  specifies phase2A process/launch/subtree authority first, phase2B remaining
+  installer adapters afterward. Parent accepts phase1 for its stated scope and
+  authorizes2A; full migration, performance, editor/cache and all-writer limits remain.
+- Production owner `ses_f0ad09b55ffeAuVDaD2pB3O01u` transfers pending launch/PID/
+  descendant receipts and partial worker acquisition to the core, preserving fetch
+  as composed leaf and synchronous routing/SAB. Intended report
+  `2026-09-30-effect-process-subtree-implementation.md`. Independent fixture owner
+  `ses_f0ad0420dffeEfcgg956Cc1JZh` prepares concrete race/failure/partial-acquisition
+  gates (`2026-09-30-effect-process-subtree-regression-gates.md`). Both offline;
+  no browser runs or phase2B/3 expansion until matching implementation review.
