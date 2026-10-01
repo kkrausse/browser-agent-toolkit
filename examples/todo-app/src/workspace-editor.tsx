@@ -10,6 +10,7 @@ import { captureSource, createWorkspaceStore, identityPath, idleChat, restoreSou
 import { captureSessions, restoreSessions } from './workspace-sessions'
 import { switchWorkspace } from './workspace-switch'
 import { workspaceSwitchPresentation } from './workspace-switch-presentation'
+import { closeEditor, errorText, exitRecovery } from './workspace-exit'
 import '@kev-browser-agent-kit/opencode-chat/editor.css'
 import './workspace-editor.css'
 
@@ -19,7 +20,7 @@ const emptyChat: ChatSnapshot = { connection: 'disconnected', execution: 'unknow
 const noopSubscribe = () => () => {}
 const defaultName = 'Current workspace'
 
-export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceController; onExit(): void }): ReactNode {
+export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceController; onExit(warning?: string): void }): ReactNode {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot)
   const [store] = useState(createWorkspaceStore)
   const catalog = useRef<Catalog>({ workspaces: [] })
@@ -31,10 +32,13 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
   const [restoring, setRestoring] = useState(false)
   const locked = useRef(false)
   const [actionBusy, setActionBusy] = useState(false)
+  // Set when an exit, or the stop inside a switch, failed with the workspace still attached.
+  const [closeFailure, setCloseFailure] = useState<string>()
   const [note, setNote] = useState('Source and native chats are local to this browser. TODO items remain shared in host memory.')
   const switchPresentation = workspaceSwitchPresentation(pending, actionBusy)
   const { chat, error: chatError } = useWorkspaceChat(controller, restoring || switchPresentation?.phase === 'recovery' ? undefined : state.services.chat)
   const chatState = useSyncExternalStore(chat?.subscribe ?? noopSubscribe, chat?.getSnapshot ?? (() => emptyChat), chat?.getSnapshot ?? (() => emptyChat))
+  const exitFailure = exitRecovery(closeFailure, !!state.workspace)
   const blocked = actionBusy || state.busy || !!pending || !state.runtime || !idleChat(chat?.getSnapshot())
 
   async function persist(next: Catalog): Promise<void> {
@@ -83,6 +87,8 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
     }
     if (mappedSelection && service) await chatFor(service)?.selectSession(mappedSelection)
     if (incoming) await writeIdentity(controller.workspace!, { ...incoming, selectedSessionId: mappedSelection })
+    // Services run again, so an earlier unproven stop no longer needs a way out.
+    setCloseFailure(undefined)
   }
   // First mount and Retry editing share this: a first open that failed (for
   // example while another tab owned the store) must still load the catalog,
@@ -150,13 +156,23 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
     } finally { hold.release() }
   }
   // Exit saves and closes under one hold, so nothing can start after the save.
-  async function exit(): Promise<void> {
-    const hold = !pending && controller.runtime ? holdChat('Closing editor') : undefined
+  // Only an attached chat is held and captured. With none (startup failed, or an
+  // earlier unproven stop already detached the services) there is nothing to
+  // protect or capture, and the working copy is durable on its own. Force skips
+  // the save: it is the way out when saving or stopping cannot complete.
+  async function exit(force = false): Promise<void> {
+    const service = controller.getSnapshot().services.chat
+    let hold: { release(): void } | undefined, warning: string | undefined
     try {
+      if (!force && !pending && service && chatFor(service)) hold = holdChat('Closing editor')
       if (hold) await saveCurrent()
-      await controller.close()
+      warning = (await closeEditor({ force, close: options => controller.close(options), attached: () => !!controller.workspace })).warning
+    } catch (error) {
+      setCloseFailure(errorText(error))
+      throw error
     } finally { hold?.release() }
-    onExit()
+    setCloseFailure(undefined)
+    onExit(warning)
   }
   async function replace(incoming: SavedWorkspace, retry = false, held?: { release(): void }): Promise<void> {
     await switchWorkspace({ incoming, catalog: catalog.current, retry,
@@ -166,7 +182,7 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
         const service = controller.getSnapshot().services.chat
         if (service) await chatFor(service)?.dispose()
       },
-      stop: () => controller.stopRuntime(),
+      stop: () => controller.stopRuntime().catch(error => { setCloseFailure(errorText(error)); throw error }),
       replace: async saved => { await clearWorkspace(controller.workspace!); await restoreSource(controller.workspace!, saved) },
       start: saved => boot(saved),
     })
@@ -189,17 +205,20 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
       if (incoming) action('Switch workspace', () => replace(incoming))
     }}>{!activeId && <option value="">Current workspace</option>}{list.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
     <label>Name<input aria-label="Workspace name" value={name} maxLength={120} disabled={actionBusy || state.busy || !!pending} onChange={event => setName(event.target.value)} /></label>
-    <div className="todo-workspace-buttons"><button disabled={blocked} onClick={() => action('New workspace', create)}>New workspace</button><button disabled={blocked} onClick={() => action('Save workspace', save)}>Save workspace</button><button disabled={actionBusy || state.busy || (!pending && !!state.runtime && !idleChat(chat?.getSnapshot()))} onClick={() => action('Close editor', exit)}>Exit</button></div>
+    <div className="todo-workspace-buttons"><button disabled={blocked} onClick={() => action('New workspace', create)}>New workspace</button><button disabled={blocked} onClick={() => action('Save workspace', save)}>Save workspace</button><button disabled={actionBusy || state.busy || (!pending && !!chat && !idleChat(chat.getSnapshot()))} onClick={() => action('Close editor', () => exit())}>Exit</button></div>
   </div>
   return <div className="todo-workspace-editor">
     <div className="todo-workspace-preview"><EditorPreview controller={controller} service={state.services.vite} name="vite" hostPaths={hostPaths} isReady={isPreviewReady} />{!state.services.vite && <p>Opening workspace preview…</p>}</div>
     <aside className="todo-workspace-panel" aria-label="Browser workspace controls">
       <header><strong>TODO browser editor</strong>{controls}<p role="status">{note}</p></header>
       {pending && switchPresentation && <div role={switchPresentation.role} className={switchPresentation.phase === 'recovery' ? 'todo-workspace-recovery' : undefined}><p>{switchPresentation.message}</p>{switchPresentation.phase === 'recovery' && <><button disabled={state.busy || actionBusy} onClick={() => action('Retry interrupted switch', () => replace(pending, true))}>Retry interrupted switch</button>{catalog.current.workspaces.find(item => item.id === catalog.current.activeId) && <button disabled={state.busy || actionBusy} onClick={() => action('Recover outgoing workspace', () => replace(catalog.current.workspaces.find(item => item.id === catalog.current.activeId)!, true))}>Recover outgoing workspace</button>}</>}</div>}
+      {exitFailure && <div role={exitFailure.role} className="todo-workspace-recovery"><p>{exitFailure.message}</p><button disabled={state.busy || actionBusy} onClick={() => action('Close editor', () => exit())}>Retry exit</button><button disabled={state.busy || actionBusy} onClick={() => {
+        if (window.confirm('Force exit closes the editor without confirming that preview and OpenCode stopped, and without saving again. Files already saved in this browser are kept. Force exit?')) action('Force close editor', () => exit(true))
+      }}>Force exit without confirmed cleanup</button></div>}
       <div className="todo-workspace-chat" inert={actionBusy || state.busy || !!pending || restoring}>
         {chat && !pending && !restoring ? <ChatView controller={chat} showModels showSessions /> : <p>{switchPresentation?.phase === 'switching' ? 'Connecting workspace chat…' : switchPresentation?.phase === 'recovery' ? 'Recover the interrupted switch to reconnect chat.' : chatError || 'Starting OpenCode…'}</p>}
       </div>
-      <footer><p role="status">{switchPresentation ? switchPresentation.phase === 'switching' ? 'Workspace switch in progress…' : 'Workspace recovery required.' : state.status}</p>{state.error && <p role="alert">{state.error}</p>}{state.error && !pending && <button disabled={state.busy || actionBusy} onClick={() => action('Retry editor startup', open)}>Retry editing</button>}<small>{blocked && !state.busy && !pending ? `Workspace actions wait for connected, idle chat (${chatState.execution}).` : 'Switching fully stops and restarts preview and OpenCode.'}</small><details><summary>Debug · Activity</summary><pre>{state.logs.join('\n')}</pre></details></footer>
+      <footer><p role="status">{switchPresentation ? switchPresentation.phase === 'switching' ? 'Workspace switch in progress…' : 'Workspace recovery required.' : state.status}</p>{state.error && <p role="alert">{state.error}</p>}{state.error && !pending && <button disabled={state.busy || actionBusy} onClick={() => action('Retry editor startup', open)}>Retry editing</button>}<small>{blocked && !state.busy && !pending ? chat ? `Workspace actions wait for connected, idle chat (${chatState.execution}).` : 'Preview and OpenCode are not running. Retry editing to continue working, or exit.' : 'Switching fully stops and restarts preview and OpenCode.'}</small><details><summary>Debug · Activity</summary><pre>{state.logs.join('\n')}</pre></details></footer>
     </aside>
   </div>
 }
