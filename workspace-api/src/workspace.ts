@@ -168,7 +168,11 @@ export namespace Workspace {
           // asynchronous flush, so a concurrent start cannot lose live workers.
           state.closed = true;
           closing = (async () => {
-            try { await h.flush(); }
+            // A normal close has the kernel finalize its processes, flush and release
+            // storage ownership before it is terminated, and rejects if that went
+            // unacknowledged. A forced close cannot wait on a runtime that failed to
+            // stop, so it only flushes before the hard kill below.
+            try { if (abandoned) await h.flush(); else await h.close(); }
             // Destroying the host ends every guest process and endpoint it owned.
             finally { off(); watches.clear(); h.destroy(); state.attached = false; opening = false; }
           })();

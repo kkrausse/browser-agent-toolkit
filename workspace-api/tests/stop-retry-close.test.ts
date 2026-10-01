@@ -19,7 +19,8 @@ async function withKernel(run: (kernel: { flushes: number; terminated: number; c
       if (message.type === "init") return this.emit({ type: "ready" });
       if (message.type === "proc-spawn") return this.emit({ type: "proc-started", execId: message.execId });
       if (message.type === "proc-kill") return this.emit({ type: "proc-exit", execId: message.execId, code: 143, signal: "SIGTERM", ...(kernel.cleanupError ? { cleanupError: kernel.cleanupError } : {}) });
-      if (message.type === "workspace-flush") kernel.flushes++;
+      // A graceful close flushes kernel-side as part of `shutdown`; a forced one asks first.
+      if (message.type === "workspace-flush" || message.type === "shutdown") kernel.flushes++;
       if (message.reqId !== undefined) this.emit({ type: "vv-reply", reqId: message.reqId, ok: true, persistence: { status: "durable" }, exists: true, isDir: false });
     }
     terminate() { kernel.terminated++; }
