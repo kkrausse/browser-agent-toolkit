@@ -296,3 +296,17 @@ not evidence that pilot success means the whole kernel is migrated.
   adapter reads exact real pack. Unmounted subpath correctly returns404, not a
   fabricated supported host route. Browser/full-app remains pending; no phase2
   authorization or full guest API acceptance follows from these targeted checks.
+- Matching app delivery `ff3a65e` (preparation `515d0e9`/`56828b2`) ready:
+  [repaired full-app preparation](2026-09-30-effect-loader-url-repaired-full-app-preparation.md).
+  Frozen `effect-loader-full-app-UMORaL/frozen` in approved temporary root,
+  receipt `42d8ba68c2f0c972c7c5bdabe82e5fc112c75af3005d39fcf77693219563ae2a`;
+  9,721 hashes/fresh run-copy verified, 12,303 prepared assets. New library/chat/
+  styles/clients and single-WeakMap graphs; qualified application reuse verified.
+  Actual root/editor vendor handlers deliver exact pack via new SDK/emitted resolver.
+- Independent browser owner `ses_f0b18cc82ffeJH6h13O17C0sxW` now assigned real
+  loader normal/held-stop cohorts on fresh run copies, followed by original combined
+  app/focused acceptance only after the pilot passes. Intended report
+  `2026-09-30-effect-loader-browser-full-app-qa.md`. No inference or retention flags;
+  one visible owner, first failure stops, old origin/frozen bytes never replayed.
+  Qualified Node results are already delivered, despite preparation's historical
+  pending statement. Phase2 remains gated by this implementation review/qualification.
