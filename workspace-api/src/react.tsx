@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, useSyncExternal
 import { Workspace, Runtime, WorkspaceError, opfsStore, type Distribution, type Endpoint, type Execution, type NodeLaunchOptions, type ToolSet } from "@kev-browser-agent-kit/workspace";
 import { createControllerDiagnostics, createDiagnosticScope, safeText, type ControllerDiagnosticOptions } from "./react-diagnostics.js";
 import { shutdownAtEOF } from "./service-shutdown.js";
-import { timeoutMs as validTimeout, within } from "./deadline.js";
+import { budget, timeoutMs as validTimeout, within, type Budget } from "./deadline.js";
 import { createProcessOutput } from "./process-output.js";
 import { readinessBudget, type ServiceReadiness } from "./service-readiness.js";
 export type { ServiceReadiness } from "./service-readiness.js";
@@ -23,22 +23,31 @@ export type WorkspaceControllerOptions = ControllerDiagnosticOptions & {
   /** Bound on waiting for cancelled or stopping work that never settles: a cancelled
    * operation, service stops (after any stdin-EOF budget) and the runtime. Default 10000. */
   stopTimeoutMs?: number;
+  /** One budget for a whole close (close, cancelAndClose, dispose): every stage waits
+   * only what is left of it, and a slice is kept back for the kernel's own shutdown
+   * and flush. Inside a close, stopTimeoutMs and service EOF budgets are clipped to it.
+   * Default 15000. */
+  closeTimeoutMs?: number;
 };
+/** Kept back from a close budget for the kernel's shutdown/flush (or the forced flush). */
+const closeReserve = (totalMs: number) => Math.min(5_000, totalMs / 3);
 const message = (error: unknown) => safeText(error instanceof Error ? error.message : String(error));
 
 export class WorkspaceController {
   private readonly diagnostics;
   private readonly captureProcessOutput;
   private readonly stopTimeoutMs: number;
+  private readonly closeTimeoutMs: number;
   constructor(options: WorkspaceControllerOptions = {}) {
     this.diagnostics = createControllerDiagnostics(options);
     this.captureProcessOutput = options.captureProcessOutput ?? false;
     this.stopTimeoutMs = validTimeout(options.stopTimeoutMs, 10_000, "stopTimeoutMs");
+    this.closeTimeoutMs = validTimeout(options.closeTimeoutMs, 15_000, "closeTimeoutMs");
   }
   private snapshot = initial();
   private listeners = new Set<() => void>();
   private attachments = new Map<string, () => void>();
-  private shutdowns = new Map<string, { run: () => Promise<void>; budgetMs: number }>();
+  private shutdowns = new Map<string, { run: (limitMs: number) => Promise<void>; budgetMs: number }>();
   private pendingLaunches = new Set<Promise<unknown>>();
   private serviceSettlements = new Set<Promise<unknown>>();
   /** Service stops still running, including ones a deadline stopped waiting for. */
@@ -50,7 +59,12 @@ export class WorkspaceController {
   private distribution?: Distribution;
   private lifetime = new AbortController();
   private operation?: Promise<void>;
-  private closing?: Promise<void>;
+  /** The close in flight. `forced` is set once it is on the forced path, whether it
+   * started there or a later force call pre-empted its waits. */
+  private closeState?: { promise: Promise<void>; work: Promise<void>; preempt: AbortController; forced?: Promise<void> };
+  private get closing() { return this.closeState?.promise; }
+  /** Budget of the latest close; a forced fallback spends what is left of it. */
+  private closeBudget?: Budget;
   private disposal?: Promise<void>;
   private disposed = false;
   private stage = -1;
@@ -241,7 +255,7 @@ export class WorkspaceController {
       this.serviceSettlements.add(settlement);
       // A settled join is no longer outstanding; its failure survives as a receipt.
       void settlement.then(() => { this.serviceSettlements.delete(settlement); }, error => { this.serviceSettlements.delete(settlement); this.cleanupReceipts.push(error); });
-      if (lifecycle) this.shutdowns.set(name, { run: () => shutdownAtEOF(execution, drained, timeoutMs), budgetMs: timeoutMs });
+      if (lifecycle) this.shutdowns.set(name, { run: limitMs => shutdownAtEOF(execution, drained, Math.max(1, Math.min(timeoutMs, limitMs))), budgetMs: timeoutMs });
       this.publish({ services: { ...this.snapshot.services, [name]: service }, clients: { ...this.snapshot.clients, [name]: "connecting" } });
       const exited = (result: unknown) => {
         this.log(`${name} exited: ${JSON.stringify(result)}`);
@@ -300,12 +314,12 @@ export class WorkspaceController {
     delete services[name]; delete clients[name]; this.publish({ services, clients });
   }
   /** Detach now; the returned stop rejects with whatever its join could not prove. */
-  private beginServiceStop(name: string) {
+  private beginServiceStop(name: string, graceLimitMs = Infinity) {
     const service = this.snapshot.services[name], shutdown = this.shutdowns.get(name); this.detach(name);
     if (!service) return;
     service.endpoint.dispose();
     const stop = Promise.allSettled([
-      shutdown ? shutdown.run() : service.execution.stop(), service.drained, service.endpoint.settled,
+      shutdown ? shutdown.run(graceLimitMs) : service.execution.stop(), service.drained, service.endpoint.settled,
     ]).then(results => {
       const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
       if (failures.length) throw new AggregateError(failures.map(result => result.reason), 'Service cleanup failed; quiescence unproven');
@@ -330,9 +344,12 @@ export class WorkspaceController {
   }
   async stopRuntime() {
     await this.stopServices();
+    await this.stopAttachedRuntime(this.stopTimeoutMs);
+  }
+  private async stopAttachedRuntime(limitMs: number, signal?: AbortSignal) {
+    const runtime = this.runtime, waitMs = Math.min(this.stopTimeoutMs, limitMs);
     // Runtime.stop carries this deadline itself; a foreign runtime may not.
-    const runtime = this.runtime;
-    if (runtime && (await within(runtime.stop(), this.stopTimeoutMs)).timedOut) throw new WorkspaceError("CLEANUP_FAILED", `Runtime did not stop within ${this.stopTimeoutMs}ms; workspace remains attached`);
+    if (runtime && (await within(runtime.stop({ timeoutMs: waitMs }), waitMs, signal)).timedOut) throw new WorkspaceError("CLEANUP_FAILED", `Runtime did not stop within ${Math.round(waitMs)}ms; workspace remains attached`);
     this.publish({ runtime: undefined, progress: [] });
     this.status("Runtime stopped. Files remain open and editable.");
   }
@@ -340,40 +357,62 @@ export class WorkspaceController {
    * A rejection is never sticky: launches, stops and settlements leave their
    * registries as they settle, so calling again joins only what is still outstanding.
    * One deadline covers the whole join: the longest stdin-EOF budget among the
-   * services stopped here (graceful shutdown is not a hang) plus stopTimeoutMs. */
+   * published services (graceful shutdown is not a hang) plus stopTimeoutMs. */
   async stopServices() {
+    const graceMs = Math.max(0, ...[...this.shutdowns.values()].map(shutdown => shutdown.budgetMs));
+    await this.joinServices(budget(graceMs + this.stopTimeoutMs));
+  }
+  private async joinServices(deadline: Budget, graceLimitMs = Infinity, operation?: Promise<void>) {
     const started = performance.now();
-    const launches = await within(Promise.allSettled([...this.pendingLaunches]), this.stopTimeoutMs);
-    let graceMs = 0;
-    for (const name of Object.keys(this.snapshot.services)) {
-      const service = this.beginServiceStop(name);
-      if (service) { graceMs = Math.max(graceMs, service.graceMs); this.trackStop(service.stop); }
-    }
-    const remaining = Math.max(0, graceMs + this.stopTimeoutMs - (performance.now() - started));
-    const joined = launches.timedOut ? launches : await within(Promise.allSettled([...this.serviceStops, ...this.serviceSettlements]), remaining);
-    if (joined.timedOut) {
-      const outstanding = `${this.pendingLaunches.size} launch(es), ${this.serviceStops.size} service stop(s), ${this.serviceSettlements.size} service join(s)`;
-      this.diagnostics.record('service.cleanup.timeout', { waitedMs: Math.round(performance.now() - started), launches: this.pendingLaunches.size, stops: this.serviceStops.size, joins: this.serviceSettlements.size });
-      throw new WorkspaceError("CLEANUP_FAILED", `Service cleanup timed out with ${outstanding} outstanding; quiescence unproven`);
+    const sweep = () => {
+      for (const name of Object.keys(this.snapshot.services)) {
+        const service = this.beginServiceStop(name, graceLimitMs);
+        if (service) this.trackStop(service.stop);
+      }
+    };
+    // Every published service is signalled now (stdin EOF or kill), all at once and
+    // without waiting for launches or a cancelled operation. Those are joined
+    // alongside; only a service one of them still publishes needs the second sweep.
+    sweep();
+    const join = Promise.allSettled([...this.pendingLaunches, operation]).then(() => { sweep(); return Promise.allSettled([...this.serviceStops, ...this.serviceSettlements]); });
+    if ((await within(join, deadline.remaining(), deadline.signal)).timedOut) {
+      const waiting = { operation: operation && this.operation ? 1 : 0, launches: this.pendingLaunches.size, stops: this.serviceStops.size, joins: this.serviceSettlements.size };
+      this.diagnostics.record('service.cleanup.timeout', { waitedMs: Math.round(performance.now() - started), ...waiting });
+      throw new WorkspaceError("CLEANUP_FAILED", `Service cleanup timed out with ${waiting.operation} cancelled operation(s), ${waiting.launches} launch(es), ${waiting.stops} service stop(s), ${waiting.joins} service join(s) outstanding; quiescence unproven`);
     }
     const failures = this.cleanupReceipts.splice(0);
     if (failures.length) throw new AggregateError([...new Set(failures)], 'Service cleanup failed; quiescence unproven');
   }
   /** Rejects, leaving runtime and workspace in place, while cleanup is unproven; call
    * again to retry. `force` closes regardless: the workspace is flushed and its host
-   * destroyed, and the unproven cleanup is still thrown, never reported as success. */
+   * destroyed, and the unproven cleanup is still thrown, never reported as success.
+   * The whole close spends one closeTimeoutMs budget. */
   async close(options: { force?: boolean } = {}) {
-    try { await this.stopRuntime(); }
-    catch (error) { if (!options.force) throw error; return this.forceClose([error]); }
-    try { await this.workspace?.close(); }
+    await this.closeWithin(this.closeBudget = budget(this.closeTimeoutMs), options);
+  }
+  private async closeWithin(total: Budget, options: { force?: boolean }, operation?: Promise<void>) {
+    // Phase 1: everything that can still write stops, under the budget minus the slice
+    // reserved for phase 2, so slow stops cannot starve the flush.
+    const stops = budget(Math.max(0, total.remaining() - closeReserve(total.totalMs)), total.signal);
+    try {
+      // Graceful EOF may use half of it; the rest is for the fallback kill and joins.
+      await this.joinServices(stops, stops.remaining() / 2, operation);
+      // The one ordering kept: Runtime.stop kills every execution, so it starts only
+      // after the services' graceful windows and the launches have been joined.
+      await this.stopAttachedRuntime(stops.remaining(), stops.signal);
+    } catch (error) { if (!options.force) throw error; return this.forceClose([error]); }
+    // Phase 2: the kernel finalizes, flushes and releases storage with all that is left.
+    try { await this.workspace?.close({ timeoutMs: Math.max(1, Math.ceil(total.remaining())) }); }
     finally { this.distribution = undefined; this.publish({ workspace: undefined, persistence: "closed" }); }
     this.status("Workspace flushed and closed. Start workspace restores it.");
   }
   /** Close without waiting on what could not be proven stopped. Always throws: the
-   * reasons it was needed, plus anything the forced close itself could not do. */
+   * reasons it was needed, plus anything the forced close itself could not do. The
+   * flush gets what is left of the close budget, at most its reserve, at least 1s. */
   private async forceClose(unproven: unknown[]): Promise<never> {
     for (const name of Object.keys(this.snapshot.services)) this.detach(name);
-    try { await this.workspace?.close({ force: true, timeoutMs: this.stopTimeoutMs }); }
+    const flushMs = Math.ceil(Math.min(closeReserve(this.closeTimeoutMs), Math.max(1_000, this.closeBudget?.remaining() ?? 0)));
+    try { await this.workspace?.close({ force: true, timeoutMs: flushMs }); }
     catch (error) { unproven.push(error); }
     // Host destruction ended whatever the abandoned runtime still owned.
     unproven.push(...this.cleanupReceipts.splice(0));
@@ -382,26 +421,36 @@ export class WorkspaceController {
     this.status("Workspace force-closed; cleanup was not proven.");
     throw new AggregateError(unproven, `Workspace force-closed; cleanup unproven (${unproven.map(message).join('; ')})`);
   }
-  /** Cancel current work immediately, then close serially. A failed close leaves the
-   * controller cancelled; calling again retries the outstanding cleanup, and `force`
-   * closes without that proof (see close). Either way a closed controller is reusable.
-   * Recipes must observe signal and await all work they start: an operation still
-   * running stopTimeoutMs after cancellation fails the close. Do not call inside run(). */
+  /** Cancel current work immediately and close under one closeTimeoutMs budget. A
+   * failed close leaves the controller cancelled; calling again retries the outstanding
+   * cleanup, and `force` closes without that proof (see close) - also when a close is
+   * already waiting: force ends those waits instead of queueing behind them. Either way
+   * a closed controller is reusable. Recipes must observe signal and await all work
+   * they start: an operation that outlives the budget fails the close. Do not call
+   * inside run(). */
   cancelAndClose(options: { force?: boolean } = {}): Promise<void> {
-    if (this.closing) return this.closing;
+    const current = this.closeState;
+    if (current) {
+      if (!options.force || current.forced) return current.forced ?? current.promise;
+      current.forced = current.work.then(() => {}, error => this.forceClose([error]));
+      current.preempt.abort(new WorkspaceError("CLEANUP_FAILED", "Close was still waiting on cleanup when it was forced; cleanup unproven"));
+      return current.forced;
+    }
     this.lifetime.abort(new Error("Editing stopped"));
-    this.closing = (async () => {
-      const operation = await within(this.operation ?? Promise.resolve(), this.stopTimeoutMs);
+    const preempt = new AbortController(), operation = this.operation;
+    const total = this.closeBudget = budget(this.closeTimeoutMs, preempt.signal);
+    const work = (async () => {
       for (const dispose of this.attachments.values()) dispose();
-      try {
-        if (!operation.timedOut) return await this.close(options);
-        const error = new WorkspaceError("CLEANUP_FAILED", `Cancelled operation still running after ${this.stopTimeoutMs}ms; cleanup unproven`);
-        if (!options.force) throw error;
-        await this.forceClose([error]);
-      }
-      finally { if (!this.snapshot.workspace && !this.snapshot.runtime && !this.disposed) this.lifetime = new AbortController(); }
-    })().finally(() => { this.closing = undefined; });
-    return this.closing;
+      await this.closeWithin(total, options, operation);
+    })();
+    const state: NonNullable<WorkspaceController["closeState"]> = { work, preempt, forced: options.force ? work : undefined,
+      // Every caller of a pre-empted close gets the forced outcome, not the interruption.
+      promise: work.catch(error => state.forced ?? Promise.reject(error)).finally(() => {
+        this.closeState = undefined;
+        if (!this.snapshot.workspace && !this.snapshot.runtime && !this.disposed) this.lifetime = new AbortController();
+      }) };
+    this.closeState = state;
+    return state.promise;
   }
   /** Final: nobody can retry a disposed controller, and a store left open would block
    * every later workspace in the document. So a close that fails or misses a deadline
@@ -421,8 +470,8 @@ export class WorkspaceController {
 const Context = createContext<{ controller: WorkspaceController; state: WorkspaceSnapshot } | null>(null);
 export type WorkspaceProviderProps = WorkspaceControllerOptions & { children: ReactNode };
 /** Options are captured on mount. This provider starts no workers or services. */
-export function WorkspaceProvider({ children, onDiagnostic, captureProcessOutput, stopTimeoutMs }: WorkspaceProviderProps) {
-  const [controller] = useState(() => new WorkspaceController({ onDiagnostic, captureProcessOutput, stopTimeoutMs }));
+export function WorkspaceProvider({ children, onDiagnostic, captureProcessOutput, stopTimeoutMs, closeTimeoutMs }: WorkspaceProviderProps) {
+  const [controller] = useState(() => new WorkspaceController({ onDiagnostic, captureProcessOutput, stopTimeoutMs, closeTimeoutMs }));
   const mounts = useRef(0);
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   useEffect(() => {
@@ -457,8 +506,8 @@ export type WorkspaceEditingProps = WorkspaceProviderProps & {
 };
 /** Optional controlled boundary. Children retain identity in normal, boot and editing modes.
  * The recipe/editor decide preview readiness and presentation; no runtime or recipe is implicit. */
-export function WorkspaceEditing({ onDiagnostic, captureProcessOutput, stopTimeoutMs, ...props }: WorkspaceEditingProps) {
-  return <WorkspaceProvider onDiagnostic={onDiagnostic} captureProcessOutput={captureProcessOutput} stopTimeoutMs={stopTimeoutMs}><EditingLifecycle {...props} /></WorkspaceProvider>;
+export function WorkspaceEditing({ onDiagnostic, captureProcessOutput, stopTimeoutMs, closeTimeoutMs, ...props }: WorkspaceEditingProps) {
+  return <WorkspaceProvider onDiagnostic={onDiagnostic} captureProcessOutput={captureProcessOutput} stopTimeoutMs={stopTimeoutMs} closeTimeoutMs={closeTimeoutMs}><EditingLifecycle {...props} /></WorkspaceProvider>;
 }
 function EditingLifecycle({ allowed, enabled, start, retryKey, children, renderEditor, isPreviewReady }: Omit<WorkspaceEditingProps, keyof WorkspaceControllerOptions>) {
   const { controller, state } = useWorkspace();

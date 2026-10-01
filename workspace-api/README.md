@@ -85,7 +85,7 @@ may be absent after reopen because empty runtime-root directories are not mirror
   `storageLockTimeoutMs` bounds the wait for a previous holder of the store
   (runtime default 10000); a timeout rejects with `STORAGE_BUSY`.
 - `Runtime.stop()` waits at most `stopTimeoutMs` (`Runtime.start` option, default
-  10000), then rejects with `CLEANUP_FAILED` and stays attached: retry it, or
+  10000; `stop({ timeoutMs })` can shorten one call), then rejects with `CLEANUP_FAILED` and stays attached: retry it, or
   leave with `workspace.close({ force: true })`, which always terminates and
   always rejects with the unproven cleanup.
 - Runtime starts no project applications. Runtime stop kills its executions and
