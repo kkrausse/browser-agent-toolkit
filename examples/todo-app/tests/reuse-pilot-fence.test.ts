@@ -1,4 +1,6 @@
 import {test, expect} from 'bun:test';
+import {existsSync} from 'node:fs';
+import {resolve} from 'node:path';
 import {createPilotFence, resetPilot, pilotReuseAllowed, pilotRequestURL, type ReuseIdentity} from './reuse-pilot-fence';
 const url = 'http://pilot/api/config';
 const deferred = <T>() => { let resolve!: (value: T) => void; const promise = new Promise<T>(r => resolve = r); return {promise,resolve}; };
@@ -50,9 +52,16 @@ test('endpoint routing retains preview prefix/listener and rejects host-root/oth
   await expect(fence.fetch(pilotRequestURL(endpoint,'/api/session/example/move'),{method:'POST'})).rejects.toThrow('forbidden');
   expect(calls).toBe(1);
 });
-test('corrected caller URL reaches the pinned SDK as the exact guest route', async () => {
-  const source = '../../../.diagnostics/reviewed-client-prep-2026-09-30T02-30-20-204Z/runtime-source/packages/core/src/host-sdk/browser/endpoint.ts';
-  const {createEndpoint} = await import(source);
+// This test imports the SDK endpoint from a frozen runtime snapshot that exists only
+// in the ignored, machine-local .diagnostics/ directory of the checkout that
+// prepared it. Point REUSE_PILOT_PINNED_ENDPOINT at an equivalent endpoint.ts to run
+// it elsewhere; without the file the test is skipped (and says so) instead of failing.
+const pinnedEndpoint = resolve(import.meta.dir, process.env.REUSE_PILOT_PINNED_ENDPOINT
+  ?? '../../../.diagnostics/reviewed-client-prep-2026-09-30T02-30-20-204Z/runtime-source/packages/core/src/host-sdk/browser/endpoint.ts');
+const pinnedEndpointAvailable = existsSync(pinnedEndpoint);
+(pinnedEndpointAvailable ? test : test.skip)('corrected caller URL reaches the pinned SDK as the exact guest route'
+  + (pinnedEndpointAvailable ? '' : ` [SKIPPED: pinned SDK snapshot not found at ${pinnedEndpoint}; set REUSE_PILOT_PINNED_ENDPOINT]`), async () => {
+  const {createEndpoint} = await import(pinnedEndpoint);
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'location');
   Object.defineProperty(globalThis, 'location', {configurable:true,value:{href:'http://127.0.0.1:43225/'}});
   const sent: any[] = [];

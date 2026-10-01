@@ -1,6 +1,6 @@
 import {expect,test} from 'bun:test';
 import {runInNewContext} from 'node:vm';
-import {acceptanceRequestCode,runFoundation,validateOwnedOrigins,inventoryCode} from './single-kernel-driver';
+import {acceptanceRequestCode,runFoundation,validateOwnedOrigins,inventoryCode,closeGateCode} from './single-kernel-driver';
 
 test('foundation starts serially and never starts after first failure',async()=>{
   const seen:string[]=[];let active=0;
@@ -40,5 +40,25 @@ test('close census observes target propagation without replaying stop or hiding 
   const observe=()=>runInNewContext(`(async()=>{${inventoryCode(false,true)}})()`,{page,URL,Set,Error,JSON});
   expect((await observe()).closed).toBe(false);
   targets=[];expect((await observe()).closed).toBe(true);
+  targets=[{targetId:'extra',type:'worker',url:'blob:'+origin+'/opaque'}];await expect(observe()).rejects.toThrow('Chrome worker topology mismatch');
+});
+test('close gate follows the kernel owner Web Lock, not a stale debugger target listing',async()=>{
+  const origin='http://127.0.0.1:54321';
+  const kernel={targetId:'kernel',type:'worker',url:origin+'/runtime/assets/kernel-worker-fresh.js?opfs-disable='};
+  let targets:any[]=[kernel],locks:any={held:[],pending:[]};
+  const navigator={locks:{query:async()=>locks}};
+  const page={url:()=>origin+'/',context:()=>({newCDPSession:async()=>({send:async()=>({targetInfos:targets}),detach:async()=>{}})}),
+    evaluate:(fn:any,arg:any)=>runInNewContext('('+fn+')(arg)',{navigator,arg})};
+  const observe=()=>runInNewContext(`(async()=>{${closeGateCode()}})()`,{page,URL,Set,Error,JSON});
+  // The failure this protects against: lock released while CDP still lists the worker.
+  const stale=await observe();
+  expect(stale.closed).toBe(true);expect(stale.informationalTargetCensus.workerTargetsStillListed).toBe(true);expect(stale.informationalTargetCensus.targets).toHaveLength(1);
+  targets=[];
+  locks={held:[{name:'vivari-vfs-owner',mode:'exclusive',clientId:'worker'}],pending:[]};expect((await observe()).closed).toBe(false);
+  locks={held:[{name:'vivari-vfs-owner:custom-root',mode:'exclusive',clientId:'worker'}],pending:[]};expect((await observe()).closed).toBe(false);
+  locks={held:[],pending:[{name:'vivari-vfs-owner',mode:'exclusive',clientId:'worker'}]};expect((await observe()).closed).toBe(false);
+  locks={held:[{name:'unrelated',mode:'exclusive',clientId:'page'}],pending:[]};
+  const released=await observe();expect(released.closed).toBe(true);expect(released.ownerLocks).toEqual({held:[],pending:[]});
+  // Topology assertions of the census are unchanged and still fail the observation.
   targets=[{targetId:'extra',type:'worker',url:'blob:'+origin+'/opaque'}];await expect(observe()).rejects.toThrow('Chrome worker topology mismatch');
 });

@@ -1,0 +1,158 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# What this runs, and what it deliberately does not.
+#
+# Everything here works from a plain checkout plus `bun install`; nothing builds
+# the native Rust/Wasm runtime. That limits the job more than the package list
+# suggests, because the packages are chained through locally built output:
+#
+#   workspace-api   -> @vivari/core            (file:../vendor/vivari/packages/core)
+#   opencode-chat   -> workspace-api/dist/lib  (file: dependency)
+#   examples/todo-app -> workspace-api/dist/lib and opencode-chat/dist
+#
+# `@vivari/core/host` resolves to packages/core/dist in the runtime fork, which is
+# ignored build output of `vite build && tsc`; the Vite build bundles the wasm-pack
+# crates. `bun vivari/scripts/setup-runtime.ts` is only a `git clone` of the pinned
+# fork, so it would let `bun install` succeed but would provide neither the types
+# nor host.js. It is therefore not run here. Consequences:
+#
+# - TYPECHECK: no package's `typecheck` script can pass without the runtime build
+#   (workspace-api cannot resolve @vivari/core/host; opencode-chat and todo-app
+#   cannot resolve @kev-browser-agent-kit/workspace*; todo-app's react-router
+#   typegen cannot even load vite.config.ts). None is run. Running them needs the
+#   toolchain steps from publish.yml (Rust 1.93.0, wasm-pack 0.13.1,
+#   setup-runtime, build-runtime, then `bun run build`).
+# - TESTS: every test file runs except the ones listed below under
+#   "needs the built runtime". Those lists are explicit so that a new test is
+#   included by default and a listed file that disappears fails the job.
+#   Tests that fail for any other reason are NOT listed and will fail CI.
+# - `bun install --frozen-lockfile` exits non-zero when a file: dependency folder
+#   is missing. The install helper tolerates exactly those named local packages
+#   and fails on any other install error.
+#
+# Known red at the time this workflow was added (2026-09-30), left failing on
+# purpose rather than excluded:
+# - vivari/scripts/runtime-build.test.ts "resolver defaults to sibling fork":
+#   expects ../../vivari while runtime-source.json says ../vendor/vivari.
+# - opencode-chat/test-ui/readiness-lab-bundle.test.ts: mkdtemp() under a
+#   hard-coded macOS /private/var/folders/... path that exists on one machine.
+jobs:
+  test:
+    name: Tests that need no runtime build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.0
+      - name: Write helpers
+        run: |
+          cat > "$RUNNER_TEMP/helpers.sh" <<'EOF'
+          set -euo pipefail
+          # install_deps <regex of local file: packages that may be missing>
+          install_deps() {
+            local allowed="$1" output status=0
+            output=$(bun install --frozen-lockfile 2>&1) || status=$?
+            printf '%s\n' "$output"
+            [ "$status" -eq 0 ] && return 0
+            if printf '%s\n' "$output" | grep -i '^error' | grep -Ev "$allowed"; then
+              echo "::error::bun install failed for something other than the unbuilt local packages ($allowed)"
+              return 1
+            fi
+            [ -d node_modules ] || { echo "::error::bun install produced no node_modules"; return 1; }
+            echo "Install finished without the unbuilt local packages: $allowed"
+          }
+          # run_tests_except <glob of test files> <files that need the built runtime...>
+          run_tests_except() {
+            local pattern="$1"; shift
+            local file
+            for file in "$@"; do
+              [ -f "$file" ] || { echo "::error::$file is listed in ci.yml as needing the built runtime but no longer exists"; return 1; }
+            done
+            local selected
+            selected=$(git ls-files -- "$pattern" | grep -E '\.test\.tsx?$' | grep -vxF -f <(printf '%s\n' "$@") | sed 's|^|./|')
+            echo "Running $(printf '%s\n' "$selected" | wc -l | tr -d ' ') test files; not running $# that need the built runtime:"
+            printf '  %s\n' "$@"
+            # shellcheck disable=SC2086
+            bun test $selected
+          }
+          EOF
+
+      - name: vivari integration scripts - install
+        working-directory: vivari
+        run: bun install --frozen-lockfile
+      - name: vivari integration scripts - test
+        if: ${{ !cancelled() }}
+        working-directory: vivari
+        run: bun run test
+
+      - name: workspace-api - install
+        if: ${{ !cancelled() }}
+        working-directory: workspace-api
+        run: |
+          source "$RUNNER_TEMP/helpers.sh"
+          install_deps '@vivari/core'
+      - name: workspace-api - test
+        if: ${{ !cancelled() }}
+        working-directory: workspace-api
+        run: |
+          source "$RUNNER_TEMP/helpers.sh"
+          # Needs the built runtime: each of these imports src/ modules that
+          # re-export from @vivari/core/host.
+          run_tests_except 'tests/*.test.ts' \
+            tests/endpoint-cleanup.test.ts \
+            tests/execution-egress-cleanup.test.ts \
+            tests/open-diagnostics.test.ts \
+            tests/queue.test.ts \
+            tests/service-lifecycle.test.ts \
+            tests/service-readiness.test.ts \
+            tests/workspace-diagnostics.test.ts
+
+      - name: opencode-chat - install
+        if: ${{ !cancelled() }}
+        working-directory: opencode-chat
+        run: |
+          source "$RUNNER_TEMP/helpers.sh"
+          install_deps '@kev-browser-agent-kit/'
+      - name: opencode-chat - test
+        if: ${{ !cancelled() }}
+        working-directory: opencode-chat
+        run: |
+          source "$RUNNER_TEMP/helpers.sh"
+          # Needs the built runtime: each of these imports
+          # @kev-browser-agent-kit/workspace/{react,diagnostics,assets}, which is
+          # workspace-api/dist/lib.
+          run_tests_except '*.test.ts*' \
+            test-ui/controls.test.tsx \
+            test/backend-delivery.test.ts \
+            test/diagnostics.test.ts \
+            test/editor-markup.test.tsx \
+            test/model-headers.test.ts \
+            test/opencode-integration.test.ts \
+            test/prepare-dependencies.test.ts \
+            test/prepared.test.ts \
+            test/server.test.ts \
+            test/source-preparation.test.ts
+
+      # todo-app tests import opencode-chat and workspace-api *sources* by relative
+      # path, so they need opencode-chat's node_modules from the step above but
+      # neither dist. The whole package runs; nothing is excluded.
+      - name: examples/todo-app - install
+        if: ${{ !cancelled() }}
+        working-directory: examples/todo-app
+        run: |
+          source "$RUNNER_TEMP/helpers.sh"
+          install_deps '@kev-browser-agent-kit/'
+      - name: examples/todo-app - test
+        if: ${{ !cancelled() }}
+        working-directory: examples/todo-app
+        run: bun run test

@@ -1,8 +1,8 @@
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {createHash} from 'node:crypto';
-import {acquirePairLock,createDriverCommands} from './matched-pair-driver';
-import {acceptanceRequestCode,inventoryCode,validateOwnedOrigins} from './single-kernel-driver';
+import {acquirePairLock,createDriverCommands} from '../tests/matched-pair-driver';
+import {acceptanceRequestCode,inventoryCode,validateOwnedOrigins} from '../tests/single-kernel-driver';
 if(process.env.SINGLE_KERNEL_AUTHORIZE_REMAINING!=='yes'||process.argv.length!==4)throw Error('Require explicit remaining-only authorization and <new-output> <new-evidence>');
 const root=resolve(import.meta.dir,'../../..'),output=resolve(process.argv[2]!),evidence=resolve(process.argv[3]!);
 const receipt=await Bun.file(join(output,'receipt.json')).json(),app=await Bun.file(join(output,'owned-origin.json')).json(),contracts=await Bun.file(join(output,'owned-contract-origin.json')).json();

@@ -1,5 +1,5 @@
 import {Workspace,opfsStore,diagnoseWorkspace} from '@kev-browser-agent-kit/workspace';
-import {assertSingleKernelDiagnostics,assertZeroWork} from './single-kernel-contract';
+import {assertSingleKernelDiagnostics,assertZeroWork} from '../tests/single-kernel-contract';
 const manifest=await fetch('/runtime/distribution.json').then(r=>r.json());
 const distribution={name:'vivari',version:manifest.version,assetBaseUrl:'/runtime/'};
 const evidence:any={version:manifest.version,revision:manifest.runtimeBuild.source.commit,steps:[],status:'idle'};

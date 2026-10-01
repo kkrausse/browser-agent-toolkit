@@ -1,4 +1,4 @@
-// Bun-backed browser-control execute --session ID --file .../tests/editor-acceptance.js
+// Bun-backed browser-control execute --session ID --file .../experiments/editor-acceptance.js
 // Execute body, not a standalone Node/Bun program. See README.md before running.
 const cfg = state.editorAcceptanceConfig;
 if (!cfg?.url || !cfg?.evidenceDir || !cfg?.phase) throw Error('Set state.editorAcceptanceConfig: {url, evidenceDir (absolute), phase}');

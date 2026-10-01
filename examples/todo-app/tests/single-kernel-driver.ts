@@ -43,6 +43,30 @@ export function inventoryCode(expectKernel:boolean,observeClose=false){
     }finally{await cdp.detach();}`;
 }
 
+// Close-liveness oracle. The kernel worker holds the Web Lock `vivari-vfs-owner`
+// (or `vivari-vfs-owner:<rootName>`; see packages/kernel-host/opfs-persistence.js
+// in the Vivari fork) for its whole life, and the browser releases it only when
+// that worker's execution context is destroyed. Chrome's Target.getTargets, read
+// through a debugger-attached session, has repeatedly kept listing the kernel
+// worker target after that lock was already released, so "target still listed"
+// is the debugger's stale view, not evidence of a live kernel. Close is therefore
+// accepted when navigator.locks.query() in the page shows no held or pending
+// owner lock. The target census is still taken (its topology assertions are
+// unchanged) and retained in the evidence, labelled as an observation only.
+export const kernelOwnerLockPrefix='vivari-vfs-owner';
+export function closeGateCode(){
+  return `const census=await (async()=>{${inventoryCode(false,true)}})();
+    const ownerLocks=await page.evaluate(async prefix=>{
+      const snapshot=await navigator.locks.query(),pick=lock=>({name:lock.name,mode:lock.mode,clientId:lock.clientId});
+      const owned=list=>(list??[]).filter(lock=>typeof lock.name==='string'&&lock.name.startsWith(prefix)).map(pick);
+      return {held:owned(snapshot.held),pending:owned(snapshot.pending)};
+    },${JSON.stringify(kernelOwnerLockPrefix)});
+    return {closed:ownerLocks.held.length===0&&ownerLocks.pending.length===0,
+      criterion:'No held or pending Web Lock named ${kernelOwnerLockPrefix}*',ownerLocks,
+      informationalTargetCensus:{note:'Observation only; not the close acceptance criterion. Debugger-attached CDP may list a stale worker target.',
+        origin:census.origin,targets:census.targets,workerTargetsStillListed:!census.closed}};`;
+}
+
 if(import.meta.main){
   if(process.env.SINGLE_KERNEL_AUTHORIZE_RUN!=='yes')throw Error('Requires parent checkpoint authorization: SINGLE_KERNEL_AUTHORIZE_RUN=yes');
   if(!process.argv[2]||!process.argv[3])throw Error('Usage: bun single-kernel-driver.ts <prepared-output> <new-evidence-directory>');
@@ -146,9 +170,11 @@ if(import.meta.main){
   async function retainDiagnostics(){
     await read('app',`return await page.evaluate(async()=>{window.singleKernelAcceptance.evidence.failureDiagnostics=await Promise.race([window.singleKernelAcceptance.diagnostics().catch(error=>({unavailable:String(error)})),new Promise(resolve=>setTimeout(()=>resolve({unavailable:'5000ms read deadline'}),5000))]);return {captured:true};});`);
   }
-  // Worker.terminate is synchronous, but Chrome Target removal propagates later.
-  // Observe only after joined stop/close. Never replay a lifecycle action here.
-  async function closedTargets(condition:string){await poll(condition,inventoryCode(false,true),15000,value=>value.closed);}
+  // Worker.terminate is synchronous, but the worker context (and its owner lock)
+  // is released later. Observe only after joined stop/close; never replay a
+  // lifecycle action here. Pass/fail is the owner Web Lock (see closeGateCode);
+  // the Chrome target census in the same observation is informational.
+  async function closedTargets(condition:string){await poll(condition,closeGateCode(),15000,value=>value.closed);}
   try{
     for(const id of Object.values(sessions))await session(['new',id]);
     await fresh('app',app.url,'singleKernelAcceptance');

@@ -1,6 +1,6 @@
 import {mkdir} from 'node:fs/promises'
 import {resolve, join, relative, dirname} from 'node:path'
-import {matchedReadinessBudgets,prospectivePolicy} from './matched-readiness'
+import {matchedReadinessBudgets,prospectivePolicy} from '../tests/matched-readiness'
 
 // Offline only. Never installs, serves, modifies dist, or rebuilds runtime assets.
 const root = resolve(import.meta.dir, '../../..')
