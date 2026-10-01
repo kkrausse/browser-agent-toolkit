@@ -1,5 +1,6 @@
 import { Host } from "./host.js";
 import { diagnosticReporter } from "./diagnostics.js";
+import { timeoutMs, within } from "./deadline.js";
 import { WorkspaceError, type Distribution, type PersistenceState, type WorkspaceCloseOptions, type WorkspaceDiagnostics, type WorkspaceFs, type WorkspaceOpenOptions, type WorkspaceStorage } from "./types.js";
 
 export function opfsStore(distribution: Distribution): WorkspaceStorage { return { kind: "opfs", distribution }; }
@@ -17,7 +18,9 @@ export interface Workspace {
    * `{ force: true }` closes anyway and rejects with CLEANUP_FAILED once it has. */
   close(options?: WorkspaceCloseOptions): Promise<void>;
 }
-type WorkspaceInternalState = { host: Host; distribution: Distribution; attached: boolean; clearing: boolean; closed: boolean };
+type WorkspaceInternalState = { host: Host; distribution: Distribution; attached: boolean; clearing: boolean; closed: boolean;
+  /** Retries the stop of a runtime whose failed start left the caller without a handle. */
+  unstopped?: () => Promise<void> };
 export const workspaceInternals = new WeakMap<Workspace, WorkspaceInternalState>();
 
 /** Return a read-only snapshot of the live guest processes and kernel activity. */
@@ -126,7 +129,7 @@ export namespace Workspace {
       if (persistence.status !== "durable") throw new WorkspaceError("STORAGE_BUSY", persistence.status === "failed" ? persistence.error : "Persistent storage unavailable");
       diagnostics.emit("workspace.directory");
       await h.mkdir("/workspace");
-      const state = { host: h, distribution: options.storage.distribution, attached: false, clearing: false, closed: false };
+      const state: WorkspaceInternalState = { host: h, distribution: options.storage.distribution, attached: false, clearing: false, closed: false };
       let closing: Promise<void> | undefined;
       const check = () => {
         if (state.closed) throw new WorkspaceError("CLOSED", "Workspace closed");
@@ -161,6 +164,9 @@ export namespace Workspace {
         async flush() { check(); await h.flush(); },
         close(closeOptions = {}) {
           if (closing) return closing;
+          let flushMs: number;
+          try { flushMs = timeoutMs(closeOptions.timeoutMs, 10_000, "timeoutMs"); }
+          catch (error) { return Promise.reject(error); }
           const abandoned = state.attached;
           if (abandoned && !closeOptions.force) return Promise.reject(new WorkspaceError("ATTACHED", "Stop the attached runtime before closing Workspace, or close({ force: true })"));
           if (state.clearing) return Promise.reject(new WorkspaceError("STORAGE_BUSY", "Wait for Workspace clear before closing"));
@@ -171,8 +177,12 @@ export namespace Workspace {
             // A normal close has the kernel finalize its processes, flush and release
             // storage ownership before it is terminated, and rejects if that went
             // unacknowledged. A forced close cannot wait on a runtime that failed to
-            // stop, so it only flushes before the hard kill below.
-            try { if (abandoned) await h.flush(); else await h.close(); }
+            // stop, so it only flushes before the hard kill below - and a kernel too
+            // stuck to acknowledge even that must not hold the force path open.
+            try {
+              if (!abandoned) await h.close(closeOptions.timeoutMs === undefined ? {} : { timeoutMs: flushMs });
+              else if ((await within(h.flush(), flushMs)).timedOut) throw new WorkspaceError("CLEANUP_FAILED", `Final flush was not acknowledged within ${flushMs}ms; recent writes may not be persisted`);
+            }
             // Destroying the host ends every guest process and endpoint it owned.
             finally { off(); watches.clear(); h.destroy(); state.attached = false; opening = false; }
           })();
