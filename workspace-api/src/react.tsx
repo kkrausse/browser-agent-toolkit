@@ -16,6 +16,8 @@ export type Progress = { label: string; state: "waiting" | "running" | "done" | 
 export type WorkspaceSnapshot = {
   workspace?: Workspace; runtime?: Runtime; services: Readonly<Record<string, Service>>;
   clients: Readonly<Record<string, string>>; busy: boolean; status: string; error: string;
+  /** WorkspaceError code behind `error`, when it has one (e.g. STORAGE_BUSY, CLEANUP_FAILED). */
+  errorCode?: ErrorCode;
   progress: Progress[]; logs: string[]; persistence: string;
 };
 const initial = (): WorkspaceSnapshot => ({ services: {}, clients: {}, busy: false, status: "Ready", error: "", progress: [], logs: [], persistence: "closed" });
@@ -54,6 +56,17 @@ function workspaceErrorCode(error: unknown): ErrorCode | undefined {
   if (error instanceof WorkspaceError) return error.code;
   const value = error as { name?: unknown; code?: unknown } | null;
   return value?.name === "WorkspaceError" && typeof value.code === "string" ? value.code as ErrorCode : undefined;
+}
+/** First coded error behind `error`: context wrappers and aggregates must not hide it. */
+function causeCode(error: unknown, depth = 0): ErrorCode | undefined {
+  if (error == null || depth > 6) return;
+  const code = workspaceErrorCode(error);
+  if (code) return code;
+  const { cause, errors } = error as { cause?: unknown; errors?: unknown };
+  for (const inner of [cause, ...(Array.isArray(errors) ? errors : [])]) {
+    const found = causeCode(inner, depth + 1);
+    if (found) return found;
+  }
 }
 const message = (error: unknown) => safeText(error instanceof Error ? error.message : String(error));
 
@@ -98,7 +111,7 @@ export class WorkspaceController {
   private appendLog(line: string) { this.publish({ logs: [...this.snapshot.logs, `${new Date().toLocaleTimeString()} ${safeText(line)}`].slice(-2000) }); }
   log = (line: string) => { this.diagnostics.record("activity", { message: line }); this.appendLog(line); };
   status = (status: string) => { this.publish({ status }); this.log(status); };
-  reportError = (error: unknown) => { this.publish({ error: message(error) }); this.log(message(error)); };
+  reportError = (error: unknown) => { this.publish({ error: message(error), errorCode: causeCode(error) }); this.log(message(error)); };
   notifyPersistence = () => this.publish({ persistence: this.workspace?.persistence.status ?? "closed" });
 
   /** A synchronous lock excludes double clicks and competing lifecycle actions. */
@@ -109,14 +122,14 @@ export class WorkspaceController {
     const started = performance.now();
     diagnostics.record("operation.start", { label });
     this.stage = -1;
-    this.publish({ busy: true, error: "", status: label });
+    this.publish({ busy: true, error: "", errorCode: undefined, status: label });
     this.operation = Promise.resolve().then(task).catch(error => {
       const progress = this.snapshot.progress.map((step, index) => index === this.stage ? { ...step, state: "failed" as const } : step);
       const reason = message(error);
       diagnostics.record("operation.failed", { label, stage: this.snapshot.progress[this.stage]?.label, elapsedMs: Math.round(performance.now() - started), error });
       const hint = /timed out|timeout/i.test(reason) ? " Keep this tab visible and retry; existing files are retained. Download diagnostics for the timed stage and last observed milestone." : "";
       const detail = `${this.stage >= 0 ? this.snapshot.progress[this.stage]?.label + ": " : ""}${reason}${hint}`;
-      this.publish({ error: detail, progress }); this.status("Startup/action failed. Fix the reported issue, then retry; completed stages and files are retained.");
+      this.publish({ error: detail, errorCode: causeCode(error), progress }); this.status("Startup/action failed. Fix the reported issue, then retry; completed stages and files are retained.");
     }).finally(() => { diagnostics.record("operation.end", { label, elapsedMs: Math.round(performance.now() - started), failed: !!this.snapshot.error }); void diagnostics.flush(); this.operation = undefined; this.publish({ busy: false }); });
     return this.operation;
   }
@@ -145,9 +158,11 @@ export class WorkspaceController {
       onPersistenceChange: state => { this.publish({ persistence: state.status }); diagnostics.record("persistence", state); },
       onDiagnostic: event => { if (event.stage !== "open.failed") lastStage = event.stage; diagnostics.record("workspace.open", event); },
     }).catch(error => { this.publish({ persistence: "closed" }); 
-      const detail = `Workspace.open: ${message(error)}; last stage ${lastStage}, elapsed ${Math.round(performance.now() - started)}ms`;
-      // Keep the code (e.g. STORAGE_BUSY from a lock timeout) through the added context.
-      throw error instanceof WorkspaceError ? Object.assign(new WorkspaceError(error.code, detail), { cause: error }) : new Error(detail, { cause: error });
+      // Keep the code (e.g. STORAGE_BUSY from a lock timeout) through the added context,
+      // on the error and in its text: most applications only ever show the message.
+      const code = workspaceErrorCode(error), stage = { lastStage, elapsedMs: Math.round(performance.now() - started) };
+      const detail = `Workspace.open${code ? ` (${code})` : ""}: ${message(error)}; last stage ${stage.lastStage}, elapsed ${stage.elapsedMs}ms`;
+      throw Object.assign(code ? new WorkspaceError(code, detail) : new Error(detail), { cause: error, ...stage });
     }).finally(() => clearInterval(heartbeat));
     if (this.signal.aborted) { await workspace.close(); this.signal.throwIfAborted(); }
     this.distribution = distribution;
@@ -280,7 +295,7 @@ export class WorkspaceController {
         this.log(`${name} exited: ${JSON.stringify(result)}`);
         if (this.snapshot.services[name]?.execution !== execution) return;
         this.detach(name); endpoint?.dispose();
-        this.publish({ error: `${name} exited. Retry Start workspace to relaunch; see Activity.` });
+        this.publish({ error: `${name} exited. Retry Start workspace to relaunch; see Activity.`, errorCode: undefined });
       };
       void execution.exited.then(exited, error => exited(message(error)));
       void outputFailure.catch(error => {
@@ -571,7 +586,7 @@ function EditingLifecycle({ allowed, enabled, start, retryKey, children, renderE
       if (cancelled) return;
       if (!desired) {
         setActive(false);
-        void controller.cancelAndClose().catch(error => controller.reportError(`Cleanup failed; retry Exit: ${message(error)}`));
+        void controller.cancelAndClose().catch(error => controller.reportError(new Error(`Cleanup failed; retry Exit: ${message(error)}`, { cause: error })));
         return;
       }
       void (async () => {
@@ -579,7 +594,7 @@ function EditingLifecycle({ allowed, enabled, start, retryKey, children, renderE
         if (cancelled || current !== generation.current) return;
         setActive(true);
         await controller.run("Enable editing", () => recipe.current(controller));
-      })().catch(error => controller.reportError(`Editing lifecycle failed: ${message(error)}`));
+      })().catch(error => controller.reportError(new Error(`Editing lifecycle failed: ${message(error)}`, { cause: error })));
     });
     return () => { cancelled = true; };
   }, [controller, desired, retryKey]);

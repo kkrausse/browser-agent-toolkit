@@ -168,7 +168,9 @@ is still waiting, it ends those waits instead of queueing behind them, and calle
 after a close already ran out its deadline it only re-checks the hung work for
 250ms before forcing. A close ends that workspace's lifetime: failures its services
 report afterwards are `service.cleanup.late` diagnostics, never failures of the
-next workspace.
+next workspace. A failure reported through `run()`/`reportError` also sets
+`state.errorCode` (e.g. `STORAGE_BUSY`, `CLEANUP_FAILED`) when a `WorkspaceError`
+is behind it, so the UI need not parse the message.
 
 A whole close spends one budget, `closeTimeoutMs` (controller/provider option,
 default 15000), not a timer per stage. Phase 1 runs concurrently: the cancelled
