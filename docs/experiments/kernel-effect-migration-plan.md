@@ -451,3 +451,18 @@ not evidence that pilot success means the whole kernel is migrated.
   no retries/inference; first live assertion failure stops. Routine offline QA path
   correction does not require another authorization cycle. Phase2A browser/review
   acceptance and phase2B/3 expansion remain pending its actual outcome.
+- Phase2A browser `c3672ee`:
+  [app/focused qualification](2026-09-30-effect-process-subtree-browser-full-app-qa.md).
+  Full19/19stages,fivegenerations,reload/shutdown pass; actualcensus1kernel+3process
+  per generation and zero workers after normal closes. Focused9cases/12steps fully
+  qualify; SQLitecase9step0action passes but one storage-supervisor kernel target
+  persists through unchanged15s close check, one furtherstep unrun. Combined result
+  remains failed, no retry. All hashes/528receipts preserved, cleanup complete,
+  exclusive slot released. No safe image checkpoint; original interactive assertions
+  establish app coverage. Offline17+31 results do not erase this platform boundary.
+- Targeted source/evidence/code-review owner `ses_f0a7c88ecffeuFH9JAmeh17lYa`
+  compares actual SQLite storage close and2Aauthority against approvedphase1, intended
+  report `2026-09-30-effect-process-sqlite-close-review.md`. No full-suite rerun,
+  browser reproduction or production fix assigned yet; distinguish actual shutdown
+  from retained target identity, and propose only a minimal isolated followup if
+  needed. Phase2B/3 remain gated, not automatically expanded into persistence.
