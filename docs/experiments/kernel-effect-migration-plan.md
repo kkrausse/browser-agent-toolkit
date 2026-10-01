@@ -252,3 +252,16 @@ not evidence that pilot success means the whole kernel is migrated.
   supported Node24.18 and browser/full-app qualification. Regression owner resumes
   qualified-Node checks with isolated verified tooling; intended report
   `2026-09-30-effect-loader-qualified-node-qa.md`.
+- Full-app preparation report `efee448` (scripts `fba397e`/`90e6c3f`/`d64ed23`)
+  built matching workspace/chat libraries, styles, six single-WeakMap clients and
+  prepared dependency image; 9,720 hashes verified, 12,303 prepared entries.
+  [Delivery preparation](2026-09-30-effect-loader-full-app-delivery-preparation.md)
+  recovered the exact qualified OpenCode receipt through the committed verifier;
+  independent application outputs reused with matching four recipe inputs, not
+  rebuilt or relabelled. Normal registry downloads recorded; no live execution.
+- Live loader gate blocked by actual compiled worker vendor URL: origin + `"./"`
+  yields an invalid host/port string before `/vendor/tsgo-pack.bin`. Original frozen
+  assets preserved. Implementation owner resumes source/build URL repair and actual
+  bundled regression, then supplies new matching SDK/worker receipts; intended report
+  `2026-09-30-effect-loader-vendor-url-repair.md`. Full-app preparation will be paired
+  with that new candidate before any browser qualification. Phase2 remains gated.
