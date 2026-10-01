@@ -411,3 +411,20 @@ not evidence that pilot success means the whole kernel is migrated.
   Migrated positive denominator17 remains pending matching2A production handoff and
   explicit new-receipt admission; implementation agent remains assigned. No phase2B
   or fetch-authority expansion follows from baseline negatives.
+- Phase2A implementation report `848d321`, runtime final `cc5a932`:
+  [process/subtree cutover](2026-09-30-effect-process-subtree-implementation.md).
+  Core owns launch/PID/subtree receipts and failure aggregation; partial worker
+  acquisitions unwind, Node termination Promise joins. Resource captures reclaimed,
+  compact receipt identities/failures retained for root lifetime (O(total PIDs), not
+  count-bounded). Root loader close now includes registered process owners, still
+  not all-writer/storage quiescence. SDK/public semantics preserved; fetch composed
+  as unchanged leaves. New worker adds8,592raw/1,899gzip bytes versus phase1.
+- Implementation-owner new checks16/17 pass; stale-loader test final stop rejects
+  retained loader failure despite its success expectation. Independent fixture
+  owner reviews contract before any explicit versioned oracle correction; old result
+  remains failed. New candidate103files/1475freeze/native12/37, distribution
+  `446021ba611932b0c531570ecc5739255e8d97f608dcc8c53ad1ca07eeceb6a6`.
+  Independent QA intended report `2026-09-30-effect-process-subtree-independent-qa.md`;
+  matching delivery preparation `2026-09-30-effect-process-subtree-full-app-preparation.md`.
+  Same respective owners resume offline. No browser, phase2B or phase3 authorization
+  until matching handoffs/review; previous app passes are not new-cutover acceptance.
