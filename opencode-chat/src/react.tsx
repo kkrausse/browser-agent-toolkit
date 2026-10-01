@@ -1,6 +1,7 @@
 import {
   type ReactNode,
   memo,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -13,7 +14,7 @@ import type {
   RequestState,
   SessionMessageInfo,
 } from "./types";
-import { canSend } from "./admission";
+import { canSend, isPreparing } from "./admission";
 import { Markdown } from "./markdown";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -436,15 +437,34 @@ function SessionComposer({ controller }: { controller: ChatController }) {
     [drafts, setDrafts] = useState<Record<string, string>>({});
   const key = state.draftKey ?? state.sessionID ?? "none";
   const text = drafts[key] ?? "";
-  const disabled = !canSend(state);
-  const send = () => {
-    if (disabled || !text.trim()) return;
-    const draft = text;
+  const ready = canSend(state), preparing = isPreparing(state);
+  // A send asked for while the chat is still preparing. The controller never queues
+  // (it rejects until ready), so the intent is parked here, visibly, and delivered
+  // once. It names the draft it was made for: other text or another chat is not it.
+  const [queued, setQueued] = useState<{ key: string; text: string }>();
+  const delivered = useRef<object>(undefined);
+  const waiting = !!queued && queued.key === key && queued.text === text;
+  const deliver = (draft: string) => {
     void controller.send({ text: draft }).then(
       () => setDrafts(current => current[key] === draft ? { ...current, [key]: "" } : current),
       () => {},
     );
   };
+  const send = () => {
+    // While a send is queued the effect below owns its delivery: a repeated Enter
+    // must neither queue again nor race it with a second send.
+    if (!text.trim() || waiting) return;
+    if (preparing) setQueued({ key, text });
+    else if (ready) deliver(text);
+  };
+  useEffect(() => {
+    if (!queued || (waiting && preparing)) return;
+    // Preparation is over, or the queued draft is no longer the one on screen. Send
+    // only into a ready chat; anything else (failed creation, a session that turned
+    // out to be running) leaves the text in the composer beside the state shown.
+    setQueued(undefined);
+    if (waiting && ready && delivered.current !== queued) { delivered.current = queued; deliver(queued.text); }
+  });
   return (
     <form
       className="oc-composer"
@@ -457,7 +477,11 @@ function SessionComposer({ controller }: { controller: ChatController }) {
         aria-label="Message OpenCode"
         placeholder="Message OpenCode…"
         value={text}
-        onChange={(e) => setDrafts(current => ({ ...current, [key]: e.target.value }))}
+        onChange={(e) => {
+          // Editing withdraws a queued send: text still being changed is never sent.
+          setQueued(undefined);
+          setDrafts(current => ({ ...current, [key]: e.target.value }));
+        }}
         onKeyDown={(e) => {
           if (
             e.key === "Enter" &&
@@ -471,7 +495,9 @@ function SessionComposer({ controller }: { controller: ChatController }) {
         }}
       />
       <div className="oc-actions">
-        <small>Enter to send · Shift+Enter for a new line</small>
+        {waiting
+          ? <small role="status">Sends when the chat is ready · edit or cancel to keep it as a draft</small>
+          : <small>Enter to send · Shift+Enter for a new line</small>}
         {(state.execution === "running" || state.execution === "retrying") && state.sessionID ? (
           <Button
             type="button"
@@ -480,8 +506,12 @@ function SessionComposer({ controller }: { controller: ChatController }) {
           >
             {state.interruptRequested ? "Stop requested · Retry" : "Stop"}
           </Button>
+        ) : waiting ? (
+          <Button type="button" onClick={() => setQueued(undefined)}>
+            Cancel send
+          </Button>
         ) : (
-          <Button variant="default" type="submit" disabled={disabled || !text.trim()}>
+          <Button variant="default" type="submit" disabled={!ready || !text.trim()}>
             {state.sending ? "Sending…" : "Send ↑"}
           </Button>
         )}
@@ -551,7 +581,7 @@ export function ChatView({
             {state.connection === "connected"
               ? state.held
                 ? `Paused: ${state.held}`
-                : state.loading || state.sessionOperationPending
+                : isPreparing(state)
                 ? "Preparing chat…"
                 : state.execution === "idle"
                 ? "Ready"

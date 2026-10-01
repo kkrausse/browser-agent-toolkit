@@ -211,7 +211,10 @@ Snapshot fields: connection, sessionID, sessions, models, model, native messages
 execution (`idle/running/retrying/unknown`), interruptRequested, sending, loading,
 loadingOlder, hasOlder, permissions/questions with per-request submitting/error, unsupportedForms,
 held (the active hold's reason) and operation error. `canSend(snapshot)` is the single
-send-admission predicate used by both the controller and the UI. Disconnection becomes **unknown execution**, not success.
+send-admission predicate used by both the controller and the UI. The controller never queues a send: it rejects until ready.
+The `Composer` instead keeps an Enter pressed while the chat is preparing (new chat, session load, model change) as a visible
+queued send ("Sends when the chat is ready", `Cancel send`), delivers it once when ready, and drops it, keeping the text, if the
+user edits or cancels or preparation fails. Disconnection becomes **unknown execution**, not success.
 Step completion and prompt HTTP acceptance are not execution completion.
 
 No default session creation, attachment uploads, endpoint lifecycle calls,
