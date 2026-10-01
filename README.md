@@ -3,7 +3,7 @@
 **Run agent harnesses in the browser.**
 
 Experimental workspace and OpenCode integration built on
-[Vivari](https://github.com/kkrausse/vivari/tree/integration/upstream-runtime). A browser-hosted
+[Vivari](https://github.com/kkrausse/vivari). A browser-hosted
 workspace supplies files, execution, service endpoints, and a live preview.
 OpenCode runs its server and agent loop inside that workspace; model inference
 still happens at a configured provider.

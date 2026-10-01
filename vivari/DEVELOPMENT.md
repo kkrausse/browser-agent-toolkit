@@ -2,7 +2,7 @@
 
 ## Source of truth
 
-Runtime repository: <https://github.com/kkrausse/vivari/tree/integration/upstream-runtime>.
+Runtime repository: <https://github.com/kkrausse/vivari> (`main`).
 Edit normal source files there and commit normally. The fork retains upstream
 history, with `upstream` pointing at `maitrungduc1410/vivari`.
 

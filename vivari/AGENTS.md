@@ -1,6 +1,8 @@
 # Vivari integration workflow
 
-The editable runtime is the standalone `kkrausse/vivari` fork on `integration/upstream-runtime`.
+The editable runtime is the standalone `kkrausse/vivari` fork on `main` (the consolidated
+single-kernel runtime). The fork has diverged from upstream Vivari with no plan to merge back;
+upstream improvements are integrated selectively.
 Default local source: the gitignored `vendor/vivari` checkout in `browser-agent-toolkit`.
 `VIVARI_SOURCE` overrides this. Read `DEVELOPMENT.md` before runtime work.
 

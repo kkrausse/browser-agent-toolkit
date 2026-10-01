@@ -1,7 +1,7 @@
 # Vivari integration tooling
 
 The runtime source is the separate
-[`kkrausse/vivari` fork](https://github.com/kkrausse/vivari/tree/browser-runtime).
+[`kkrausse/vivari` fork](https://github.com/kkrausse/vivari).
 This directory contains source pins, build/preparation tools, upstream notices,
 and qualification helpers. It is not a second copy of the runtime source.
 
