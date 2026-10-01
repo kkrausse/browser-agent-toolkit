@@ -438,3 +438,16 @@ not evidence that pilot success means the whole kernel is migrated.
   driver adaptations reverse exactly; required archive/source hashes exist and match.
   Normal registry downloads recorded, no live activation. Await independent2A gate
   results before assigning one matching visible cohort; preparation is not acceptance.
+- Independent2A report `9567a27`:
+  [process/subtree qualification](2026-09-30-effect-process-subtree-independent-qa.md).
+  New17/17 gates and preserved31/31 plus routing/sync-capture pass on qualified
+  absolute Node24.18; exact103/1475/native12/37 hashes verified pre/postflight.
+  Explicit new fixture version requires original loader failure and repeated rejecting
+  receipt/error identity, retaining stale-SAB checks through stop. Old fixture and
+  baseline2pass/15fail remain. Root-close domain/O(totalPIDs) limitations retained.
+- Parent assigns sole visible owner `ses_f0a87cb71ffesYRNaXYEzYOmgt` to one matching
+  unchanged full19stages/fivegenerations +focused10cases/14steps cohort, intended
+  report `2026-09-30-effect-process-subtree-browser-full-app-qa.md`. Original deadlines,
+  no retries/inference; first live assertion failure stops. Routine offline QA path
+  correction does not require another authorization cycle. Phase2A browser/review
+  acceptance and phase2B/3 expansion remain pending its actual outcome.
