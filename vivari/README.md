@@ -11,7 +11,10 @@ Start with [development setup](DEVELOPMENT.md). The primary runtime commands are
 bun scripts/setup-runtime.ts
 bun scripts/build-runtime.ts
 bun ../workspace-api/scripts/distribution.ts
+bun scripts/setup-tailwind-candidate.ts
 ```
+
+The root `bun run setup` runs all of them.
 
 Setup creates a missing checkout at the recorded revision; it does not reset an
 existing checkout. `VIVARI_SOURCE` selects another runtime source directory.
@@ -22,7 +25,7 @@ Its receipted outputs are generated under `.runtime/`, not committed source.
 The chat package checks exact artifact identities; see the
 [root setup guide](../README.md) before rebuilding that prerequisite.
 
-The standalone ripgrep packager and source-pinned Tailwind backend build require
-additional generated inputs. They are not part of the default package build.
+The standalone ripgrep packager requires additional generated inputs and is not
+part of the default package build.
 Old experiments, results, and chronological documentation remain in the original
 `random/browser-container-poc` history.

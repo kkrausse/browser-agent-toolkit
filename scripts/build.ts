@@ -11,6 +11,8 @@ const install = process.argv.includes('--install');
 const example = process.argv.includes('--example') || process.argv.includes('--dev') || install;
 if (install) await run('workspace-api', 'install', '--frozen-lockfile');
 await run('workspace-api', 'run', 'build');
+// Package the built runtime every time so the served distribution always matches its receipt.
+await run('.', 'workspace-api/scripts/distribution.ts');
 // Bun file dependencies can be copied/cached. Refresh explicitly so each build
 // consumes this checkout's latest output without a version bump.
 await run('opencode-chat', 'install', '--force', '--linker', 'isolated', '--frozen-lockfile');
