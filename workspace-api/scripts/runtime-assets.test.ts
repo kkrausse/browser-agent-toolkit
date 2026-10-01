@@ -18,10 +18,10 @@ test('single kernel ignores retained unreachable FS worker; hashes remain verifi
   f.files['assets/fs-worker-old.js']='tampered';
   await expect(inspectRuntimeAssets(f.assets,f.read,true)).rejects.toThrow('differs');
 });
-test('single kernel rejects reachable FS worker but generic packaging permits it', async () => {
+test('single kernel is the default and rejects a reachable FS worker; explicit unrestricted packaging permits it', async () => {
   const f=fixture(true);
-  await expect(inspectRuntimeAssets(f.assets,f.read,true)).rejects.toThrow('Single-kernel');
-  expect((await inspectRuntimeAssets(f.assets,f.read)).topology.workerAssets).toHaveLength(3);
+  await expect(inspectRuntimeAssets(f.assets,f.read)).rejects.toThrow('Single-kernel');
+  expect((await inspectRuntimeAssets(f.assets,f.read,false)).topology.workerAssets).toHaveLength(3);
 });
 test('unreceipted URLs, retained active assets and unsafe names fail closed', async () => {
   const f=fixture();

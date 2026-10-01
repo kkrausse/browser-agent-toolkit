@@ -5,7 +5,7 @@ export interface ReceiptedAsset { name: string; sha256: string; retained?: boole
 export const assetHash = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
 
 /** Traverse actual emitted JS references, not old retained worker filenames. */
-export async function inspectRuntimeAssets(assets: ReceiptedAsset[], read: (name: string) => Promise<Uint8Array>, singleKernel = false) {
+export async function inspectRuntimeAssets(assets: ReceiptedAsset[], read: (name: string) => Promise<Uint8Array>, singleKernel = true) {
   const names = new Set<string>();
   for (const asset of assets) {
     if (asset.name.startsWith('/') || asset.name.includes('\\') || posix.normalize(asset.name) !== asset.name || asset.name.startsWith('../') || names.has(asset.name)) throw Error('Unsafe/duplicate runtime asset: ' + asset.name);
