@@ -76,6 +76,8 @@ const vendorScratch=join(out,'tsgo-vendor-input');
 await command(['node',join(runtimeSource,'scripts/vendor-tsgo.mjs')],runtimeSource,{...process.env,VV_VENDOR_TSGO_DIR:vendorScratch});
 await cp(join(runtimeSource,'packages/studio/public/vendor/tsgo-pack.bin'),join(stage,'runtime/vendor/tsgo-pack.bin')).catch(async error=>{if(error.code!=='ENOENT')throw error;await mkdir(join(stage,'runtime/vendor'),{recursive:true});await cp(join(runtimeSource,'packages/studio/public/vendor/tsgo-pack.bin'),join(stage,'runtime/vendor/tsgo-pack.bin'));});
 const vendorPackage=await Bun.file(join(vendorScratch,'node_modules/tsgo-wasm/package.json')).json();
+for(const file of ['package.json','LICENSE','tsgo-wasm'])await cp(join(vendorScratch,'node_modules/tsgo-wasm',file),join(stage,'runtime/vendor/tsgo-'+file));
+await cp(join(vendorScratch,'node_modules/.package-lock.json'),join(stage,'runtime/vendor/tsgo-package-lock.json'));
 await Bun.write(join(stage,'tsgo-vendor-provenance.json'),JSON.stringify({producerRevision:runtimeRevision,producerSha256:await hash(join(runtimeSource,'scripts/vendor-tsgo.mjs')),packageVersion:vendorPackage.version,networkAllowed:true,networkOfflineClaim:false,packSha256:await hash(join(stage,'runtime/vendor/tsgo-pack.bin'))},null,2));
 for(const name of ['pilot','host','run-copy']) {
   const file='examples/todo-app/tests/effect-loader-full-delivery-'+name+'.ts';
@@ -87,6 +89,29 @@ await build(join(out,'qa-source/examples/todo-app/tests/effect-loader-full-deliv
 await cp(join(out,'qa-source'),join(stage,'qa-source'),{recursive:true});
 await cp(applicationInput,join(stage,'qualified-application'),{recursive:true});
 const manifest = await Bun.file(join(stage, 'prepared/manifest.json')).json();`);
+change("const hashes: Record<string, string> = {};", `
+const workspaceGraphs:Record<string,number>={};
+for(const file of await walk(join(stage,'client')))if(file.endsWith('.js')) {
+  const text=await Bun.file(join(stage,'client',file)).text();
+  const count=[...text.matchAll(/var workspaceInternals(?:_\\d+)? = new WeakMap/g)].length;
+  workspaceGraphs[file]=count;
+  if(count!==1)throw Error('Consumer must contain one actual workspace WeakMap graph: '+file+' '+count);
+}
+await Bun.write(join(stage,'consumer-graph-verification.json'),JSON.stringify({workspaceGraphs,focusedObserver:'workspace/test-library.js reexports the same built workspace/index.js',kernelWorker:JSON.parse(await Bun.file(join(stage,'runtime/distribution.json')).text()).kernelWorker,coreSha256:await hash(join(input,'runtime-source/packages/kernel-lifecycle/dist/index.js'))},null,2));
+const hashes: Record<string, string> = {};`);
+script += `
+await cp(join(input,'runtime-runnable-source.tar.gz'),join(out,'runtime-runnable-source.tar.gz'));
+await cp(join(${JSON.stringify(staging)},'adaptation.json'),join(out,'preparer-adaptation.json'));
+const sourceDigests:Record<string,string>={};
+for(const [directory,label] of [[source,'toolkit'],[runtimeSource,'runtime']])for(const file of await walk(directory))if(!file.startsWith('packages/studio/public/vendor/'))sourceDigests[label+'/'+file]=await hash(join(directory,file));
+await Bun.write(join(out,'source-digests.json'),JSON.stringify(sourceDigests,null,2));
+const frozenHashes:Record<string,string>={};
+for(const file of [...(await walk(stage)).map(file=>'frozen/'+file),'toolkit-source.tar','runtime-source.tar','runtime-runnable-source.tar.gz','source-digests.json','preparer-adaptation.json','handoff.json'])frozenHashes[file]=await hash(join(out,file));
+await Bun.write(join(out,'freeze-manifest.json'),JSON.stringify({runtimeRevision,toolkitRevision,hashes:frozenHashes,preparationOnly:true},null,2));
+await command(['tar','-czf',join(out,'delivery.tar.gz'),'frozen','toolkit-source.tar','runtime-source.tar','runtime-runnable-source.tar.gz','source-digests.json','preparer-adaptation.json','handoff.json','freeze-manifest.json'],out);
+await Bun.write(join(out,'delivery-handoff.json'),JSON.stringify({stage,receiptSha256:await hash(join(stage,'receipt.json')),deliverySha256:await hash(join(out,'delivery.tar.gz')),freezeManifestSha256:await hash(join(out,'freeze-manifest.json')),sourceDigestsSha256:await hash(join(out,'source-digests.json')),runtimeRevision,toolkitRevision,version,effectVersion:'4.0.0-rc.118',applicationReceiptSha256:verified.provenance.receiptSha256,applicationRebuilt:false,browserStarted:false,hostStarted:false,guestStarted:false,performanceMeasured:false},null,2));
+console.log(await Bun.file(join(out,'delivery-handoff.json')).text());
+`;
 await Bun.write(join(staging, 'adaptation.json'), JSON.stringify({ originalCommit: '1fb7efe', originalSha256, assertionsChanged: false, deadlinesChanged: false, browserStarted: false, hostStarted: false, guestStarted: false, application: application.provenance }, null, 2));
 await Bun.write(join(staging, 'prepare.ts'), script);
 const child = Bun.spawn(['bun', join(staging, 'prepare.ts')], { cwd: root, env: process.env, stdout: 'inherit', stderr: 'inherit' });
