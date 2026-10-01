@@ -54,6 +54,8 @@ function validate(delivery: ManagedDelivery) {
 /** Replace only declared managed roots. Persistent workspace source is untouched. */
 export function managedDeliveryTool(delivery: ManagedDelivery, options: {
   baseUrl: string; signal: AbortSignal; report?(message: string): void;
+  /** Optional timing sink for the acquire/decode/install phases; sizes and durations only. */
+  diagnostic?(event: string, data?: Record<string, unknown>): void;
   /** Experimental: verify the complete installed tree before skipping download/decode/install. */
   experimentalReuseInstalled?: { runtimeVersion: string; disposablePaths?: string[]; preserveCaches?: { servicesStopped: true; policy: InstalledCachePolicy }; onResult?(result: EnvironmentExperimentResult): void };
 }): ToolDescriptor<void, void> {
@@ -62,7 +64,14 @@ export function managedDeliveryTool(delivery: ManagedDelivery, options: {
     const selected = context.installTreeImage && delivery.image ? delivery.image : delivery.bundle;
     const url = options.baseUrl + selected.file;
     const valid = async (bytes: Uint8Array) => bytes.length === selected.bytes && await sha256(bytes) === selected.sha256;
+    // Phase timings are observation only; a failing sink must not fail delivery.
+    let phaseStarted = performance.now();
+    const emit = (event: string, data?: Record<string, unknown>) => { try { options.diagnostic?.(event, data); } catch {} };
+    const begin = (phase: string) => { phaseStarted = performance.now(); emit(`delivery.${phase}.start`); };
+    const done = (phase: string, data?: Record<string, unknown>) => emit(`delivery.${phase}.ready`, { ...data, elapsedMs: Math.round(performance.now() - phaseStarted) });
+    const installed = (result?: { files?: number; verifyMs?: number; installMs?: number; readbackMs?: number }) => done("install", { files: result?.files, verifyMs: result?.verifyMs, installMs: result?.installMs, readbackMs: result?.readbackMs });
     let cache: Cache | undefined, compressed: Uint8Array | undefined;
+    begin("acquire");
     try {
       if (typeof caches !== "undefined") {
         cache = await caches.open("workspace-managed-deliveries-v1");
@@ -74,6 +83,7 @@ export function managedDeliveryTool(delivery: ManagedDelivery, options: {
         }
       }
     } catch { /* CacheStorage is only an optimization. */ }
+    const cached = !!compressed;
     if (compressed) options.report?.(`Using cached managed dependency/tool ${selected === delivery.image ? "image" : "bundle"}`);
     else {
       options.report?.(`Downloading managed dependency/tool ${selected === delivery.image ? "image" : "bundle"}…`);
@@ -83,6 +93,8 @@ export function managedDeliveryTool(delivery: ManagedDelivery, options: {
       if (!await valid(compressed)) throw Error("Managed bundle integrity failure");
       try { await cache?.put(url, new Response(Uint8Array.from(compressed))); } catch { /* verified bytes remain usable */ }
     }
+    done("acquire", { cached, bytes: compressed.length, kind: selected === delivery.image ? "image" : "bundle" });
+    begin("decode");
     const packed = new Uint8Array(await new Response(new Blob([Uint8Array.from(compressed)]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
     if (selected === delivery.image) {
       if (packed.length < 4) throw Error("Managed image header is truncated");
@@ -107,20 +119,22 @@ export function managedDeliveryTool(delivery: ManagedDelivery, options: {
       }
       if (offset !== packed.length) throw Error("Managed image size mismatch");
       options.signal.throwIfAborted();
-      await context.installTreeImage!({ roots: delivery.roots, entries: delivery.entries.map(entry => entry.kind === "file"
+      done("decode", { bytes: packed.length }); begin("install");
+      installed(await context.installTreeImage!({ roots: delivery.roots, entries: delivery.entries.map(entry => entry.kind === "file"
         ? { kind: "file", path: entry.destination, mode: entry.mode, bytes: blobs.get(entry.file)!.bytes, logicalBytes: entry.bytes, encoding: blobs.get(entry.file)!.encoding, sha256: entry.sha256 }
         : entry.kind === "directory" ? { kind: "directory", path: entry.destination, mode: entry.mode }
-          : { kind: "symlink", path: entry.destination, target: entry.target }) });
+          : { kind: "symlink", path: entry.destination, target: entry.target }) }));
       return;
     }
     const blobs = new Map<string, Uint8Array>(); let offset = 0;
     for (const entry of delivery.entries) if (entry.kind === "file" && !blobs.has(entry.file)) { blobs.set(entry.file, packed.subarray(offset, offset + entry.bytes)); offset += entry.bytes; }
     if (offset !== packed.length) throw Error("Managed bundle size mismatch");
     options.signal.throwIfAborted();
-    await context.installTree({ roots: delivery.roots, entries: delivery.entries.map(entry => entry.kind === "file"
+    done("decode", { bytes: packed.length }); begin("install");
+    installed(await context.installTree({ roots: delivery.roots, entries: delivery.entries.map(entry => entry.kind === "file"
       ? { kind: "file", path: entry.destination, mode: entry.mode, bytes: blobs.get(entry.file)!, sha256: entry.sha256 }
       : entry.kind === "directory" ? { kind: "directory", path: entry.destination, mode: entry.mode }
-        : { kind: "symlink", path: entry.destination, target: entry.target }) });
+        : { kind: "symlink", path: entry.destination, target: entry.target }) }));
   }; } };
   const reuse = options.experimentalReuseInstalled;
   if (!reuse) return tool;

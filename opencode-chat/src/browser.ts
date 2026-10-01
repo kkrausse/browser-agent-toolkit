@@ -18,15 +18,16 @@ const verifyReadyEffect = Effect.fn('OpenCode.verifyReady')(function*(endpoint: 
     catch: (cause: unknown) => cause instanceof Error ? cause : new Error(String(cause)),
   });
   const drained = async (response: Response) => { await response.arrayBuffer(); return response; };
-  const deadline = Date.now() + 30000;
-  let lastFailure = new Error('OpenCode health not ready');
+  const deadline = Date.now() + 30000, healthStarted = performance.now();
+  let lastFailure = new Error('OpenCode health not ready'), healthAttempts = 0;
   while (true) {
     const remaining = deadline - Date.now();
     if (remaining <= 0) return yield* Effect.fail(new Error('OpenCode health readiness timed out after 30000ms', { cause: lastFailure }));
+    healthAttempts++;
     const health = yield* request(descriptor.healthPath, drained, 'GET', Math.min(3000, remaining)).pipe(
       Effect.catch(error => { lastFailure = error; return Effect.succeed(undefined); }),
     );
-    if (health?.ok) break;
+    if (health?.ok) { diagnostics.record('opencode.readiness.health', { attempts: healthAttempts, elapsedMs: Math.round(performance.now() - healthStarted) }); break; }
     if (health) lastFailure = new Error(`OpenCode health HTTP ${health.status}`);
     yield* Effect.sleep(Math.max(0, Math.min(100, deadline - Date.now())));
   }

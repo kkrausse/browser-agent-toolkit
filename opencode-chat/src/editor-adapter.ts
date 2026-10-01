@@ -11,11 +11,14 @@ const attachChatEffect = Effect.fn("Workspace.attachChat")(function*(owner: Work
   const name = options.serviceName ?? "chat";
   const signal = owner.signal;
   signal.throwIfAborted();
+  // Timing only. Tolerates an owner from an older workspace build or a failing sink.
+  const diagnostic = (event: string, data?: Record<string, unknown>) => { try { owner.diagnostic?.(event, { name, ...data }); } catch { /* observation only */ } };
   let chat = chats.get(service);
   if (!chat) {
     chat = createChatController({
       endpoint: { url: service.connection.url, fetch: (input, init) => service.connection.fetch(input, init) },
       directory: options.directory ?? "/workspace", autoCreateSession: false, startNewSession: options.startNewSession,
+      onDiagnostic: diagnostic,
     });
     chats.set(service, chat);
     const current = chat;
@@ -27,11 +30,15 @@ const attachChatEffect = Effect.fn("Workspace.attachChat")(function*(owner: Work
     signal.addEventListener("abort", aborted, { once: true });
   }
   const current = chat;
+  const started = performance.now(), elapsedMs = () => Math.round(performance.now() - started);
+  diagnostic("chat.attach.start");
   yield* Effect.tryPromise({ try: () => current.ready, catch: (error: unknown) => error }).pipe(
     Effect.tapError(error => Effect.sync(() => {
+      diagnostic("chat.attach.failed", { elapsedMs: elapsedMs(), error });
       if (chats.get(service) === current) owner.clientFailed(name, error);
     })),
   );
+  diagnostic("chat.attach.ready", { elapsedMs: elapsedMs() });
   if (chats.get(service) === current) owner.clientReady(name);
   return current;
 });

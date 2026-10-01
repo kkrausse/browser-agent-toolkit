@@ -115,6 +115,19 @@ source as the host, and guest API requests are bridged back to this Bun server.
 The browser workspace retains source/chat state independently of the server's
 in-memory TODO list. A local workspace flush is not a server save or Git commit.
 
+### Stage timings
+
+The editor records where each open, reopen, switch, save and exit spends its
+time. Expand **Debug · Timings** under the workspace panel for the recent
+operations and their stages; **Copy JSON** and **Download JSON** export the lot.
+Automation reads the same records from `window.__editorTimings` (`operations`,
+`unattached`, `summary()`, `json()`, `clear()`), available once the editor has
+been opened and kept across Exit and reopen until the page reloads.
+`summary().variance` compares the fastest and slowest run of each kind by stage
+and by context (service-worker control, kernel cold or warm, chat sessions, guest
+process and VFS counts, tab visibility). Records hold durations, counts and sizes
+only, in memory, and are never sent anywhere.
+
 ## Checks
 
 ```sh

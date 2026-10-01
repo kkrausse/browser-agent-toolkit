@@ -49,6 +49,9 @@ export interface ChatOptions {
   startNewSession?: boolean;
   pageSize?: number;
   handshakeTimeoutMs?: number;
+  /** Optional observer of connection milestones (`chat.connect` with a `stage`). Counts
+   * only: never session titles, messages or prompts. It must not throw. */
+  onDiagnostic?(event: string, data?: Record<string, unknown>): void;
 }
 export type RequestState<T> = {
   request: T;

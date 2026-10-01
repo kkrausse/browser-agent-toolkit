@@ -114,6 +114,15 @@ export class WorkspaceController {
   status = (status: string) => { this.publish({ status }); this.log(status); };
   reportError = (error: unknown) => { this.publish({ error: message(error), errorCode: causeCode(error) }); this.log(message(error)); };
   notifyPersistence = () => this.publish({ persistence: this.workspace?.persistence.status ?? "closed" });
+  /** Bracket one lifecycle step with `.start` and `.ready`/`.failed` (elapsedMs) events.
+   * Observation only: the task's result or rejection passes through unchanged. */
+  private async timed<T>(event: string, task: () => Promise<T>, detail?: Record<string, unknown>, outcome?: (result: T) => Record<string, unknown> | undefined): Promise<T> {
+    const diagnostics = this.diagnostics, started = performance.now();
+    const elapsed = () => ({ ...detail, elapsedMs: Math.round(performance.now() - started) });
+    diagnostics.record(event + ".start", detail);
+    try { const result = await task(); diagnostics.record(event + ".ready", { ...elapsed(), ...outcome?.(result) }); return result; }
+    catch (error) { diagnostics.record(event + ".failed", { ...elapsed(), error }); throw error; }
+  }
 
   /** A synchronous lock excludes double clicks and competing lifecycle actions. */
   run(label: string, task: () => Promise<void>): Promise<void> {
@@ -173,7 +182,8 @@ export class WorkspaceController {
   async startRuntime<T extends ToolSet>(tools: T): Promise<Runtime<T>> {
     if (!this.workspace || !this.distribution) throw Error("Open a workspace before starting its runtime");
     if (this.runtime) throw Error("Runtime already started; reuse its existing tools or stop it first");
-    const runtime = await Runtime.start({ workspace: this.workspace, distribution: this.distribution, tools, signal: this.signal, stopTimeoutMs: this.stopTimeoutMs });
+    const workspace = this.workspace, distribution = this.distribution;
+    const runtime = await this.timed("runtime.start", () => Runtime.start({ workspace, distribution, tools, signal: this.signal, stopTimeoutMs: this.stopTimeoutMs }));
     this.publish({ runtime }); return runtime;
   }
   private async drain(stream: AsyncIterable<Uint8Array>, label: string) {
@@ -359,6 +369,10 @@ export class WorkspaceController {
       const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
       if (failures.length) throw new AggregateError(failures.map(result => result.reason), 'Service cleanup failed; quiescence unproven');
     });
+    // Timing only. Every caller already joins `stop`, so observing it here hides nothing.
+    const diagnostics = this.diagnostics, started = performance.now(), elapsed = () => Math.round(performance.now() - started);
+    diagnostics.record("service.stop.start", { name, shutdown: shutdown ? "stdin-eof" : "kill" });
+    void stop.then(() => diagnostics.record("service.stop.ready", { name, elapsedMs: elapsed() }), error => diagnostics.record("service.stop.failed", { name, elapsedMs: elapsed(), error }));
     return { stop, graceMs: shutdown?.budgetMs ?? 0 };
   }
   /** Record a cleanup failure against the lifetime that owned the work. Once that
@@ -405,7 +419,7 @@ export class WorkspaceController {
     const runtime = this.runtime, waitMs = Math.min(this.stopTimeoutMs, limitMs), ledger = this.cleanup;
     // Runtime.stop carries this deadline itself; a foreign runtime may not.
     if (runtime) {
-      const stopped = await within(runtime.stop({ timeoutMs: waitMs }), waitMs, signal).catch(error => {
+      const stopped = await this.timed("runtime.stop", () => within(runtime.stop({ timeoutMs: waitMs }), waitMs, signal), undefined, result => result.timedOut ? { timedOut: true } : undefined).catch(error => {
         // Runtime.stop reports failed cleanup as an AggregateError; this is its deadline.
         if (workspaceErrorCode(error) === "CLEANUP_FAILED") ledger.stalled.runtime = true;
         throw error;
@@ -425,7 +439,10 @@ export class WorkspaceController {
     const graceMs = Math.max(0, ...[...this.shutdowns.values()].map(shutdown => shutdown.budgetMs));
     await this.joinServices(budget(graceMs + this.stopTimeoutMs));
   }
-  private async joinServices(deadline: Budget, graceLimitMs = Infinity, operation?: Promise<void>) {
+  private joinServices(deadline: Budget, graceLimitMs = Infinity, operation?: Promise<void>) {
+    return this.timed("services.stop", () => this.joinOutstanding(deadline, graceLimitMs, operation));
+  }
+  private async joinOutstanding(deadline: Budget, graceLimitMs: number, operation?: Promise<void>) {
     const started = performance.now(), ledger = this.cleanup;
     const sweep = () => {
       for (const name of Object.keys(this.snapshot.services)) {
@@ -465,7 +482,8 @@ export class WorkspaceController {
     try { await this.stopWithin(stops, operation); }
     catch (error) { if (!options.force) throw error; return this.forceClose([error]); }
     // Phase 2: the kernel finalizes, flushes and releases storage with all that is left.
-    try { await this.workspace?.close({ timeoutMs: Math.max(1, Math.ceil(total.remaining())) }); }
+    const workspace = this.workspace;
+    try { if (workspace) await this.timed("workspace.close", () => workspace.close({ timeoutMs: Math.max(1, Math.ceil(total.remaining())) })); }
     finally { this.distribution = undefined; this.retireCleanup(); this.publish({ workspace: undefined, persistence: "closed" }); }
     this.status("Workspace flushed and closed. Start workspace restores it.");
   }
@@ -475,7 +493,8 @@ export class WorkspaceController {
   private async forceClose(unproven: unknown[]): Promise<never> {
     for (const name of Object.keys(this.snapshot.services)) this.detach(name);
     const flushMs = Math.ceil(Math.min(closeReserve(this.closeTimeoutMs), Math.max(1_000, this.closeBudget?.remaining() ?? 0)));
-    try { await this.workspace?.close({ force: true, timeoutMs: flushMs }); }
+    const workspace = this.workspace;
+    try { if (workspace) await this.timed("workspace.close", () => workspace.close({ force: true, timeoutMs: flushMs }), { force: true }); }
     catch (error) { unproven.push(error); }
     // Host destruction ended whatever the abandoned runtime still owned. That lifetime
     // is over: its receipts are reported here, and anything later is a diagnostic.
