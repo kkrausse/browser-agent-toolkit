@@ -56,7 +56,8 @@ function childPath(parent: string, name: string): string {
   return parent === "/" ? `/${name}` : `${parent}/${name}`;
 }
 
-async function removeDescendants(host: Host, root: string): Promise<void> {
+/** `keep` names direct children of `root` that are neither listed into nor removed. */
+async function removeDescendants(host: Host, root: string, keep?: ReadonlySet<string>): Promise<void> {
   const describeFailure = (operation: string, path: string, error: unknown) => {
     const cause = error instanceof Error ? error.message : String(error);
     return new Error(`Workspace clear failed while ${operation} ${path}: ${cause}`, { cause });
@@ -75,6 +76,7 @@ async function removeDescendants(host: Host, root: string): Promise<void> {
   catch (error) { throw describeFailure("listing", root, error); }
   for (const name of names) {
     const path = childPath(root, name);
+    if (keep?.has(name)) continue;
     // The runtime owns recursive deletion and classifies entries with lstat.
     // Walking here with stat would follow directory symlinks outside this root.
     try { await host.remove(path); }
@@ -100,6 +102,34 @@ export async function clearWorkspace(workspace: Workspace): Promise<void> {
       if (stat.exists && (!stat.isDirectory || (await state.host.readdir(root)).length !== 0)) {
         throw new Error(`Workspace clear verification failed for ${root}`);
       }
+    }
+  } finally {
+    state.clearing = false;
+  }
+}
+
+/**
+ * Durably removes the project's own files under /workspace while a runtime may stay
+ * attached. The named top-level entries (managed dependency roots, server state) are
+ * never listed into or removed, and nothing outside /workspace is touched. The caller
+ * owns quiescence: every process that reads or writes the removed files must be
+ * stopped; one confined to the kept entries may keep running.
+ */
+export async function clearWorkspaceSource(workspace: Workspace, options: { keep: readonly string[] }): Promise<void> {
+  const state = workspaceInternals.get(workspace);
+  if (!state || state.closed) throw new WorkspaceError("CLOSED", "Workspace is not open");
+  if (state.clearing) throw new WorkspaceError("STORAGE_BUSY", "Workspace is already being cleared");
+  // Keeping nothing is clearWorkspace, which requires the runtime to be stopped.
+  if (!options.keep.length) throw new Error("clearWorkspaceSource needs the top-level entries to keep");
+  for (const name of options.keep) childPath("/workspace", name);
+  const keep = new Set(options.keep);
+  state.clearing = true;
+  try {
+    await removeDescendants(state.host, "/workspace", keep);
+    await state.host.flush();
+    const stat = await state.host.stat("/workspace");
+    if (stat.exists && (!stat.isDirectory || (await state.host.readdir("/workspace")).some(name => !keep.has(name)))) {
+      throw new Error("Workspace source clear verification failed for /workspace");
     }
   } finally {
     state.clearing = false;

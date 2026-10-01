@@ -77,6 +77,11 @@ delete browser-private OPFS paths. It leaves each root empty when present and
 recursively removes all descendants, including dotfiles; an empty `/.server`
 may be absent after reopen because empty runtime-root directories are not mirrored.
 
+`clearWorkspaceSource(workspace, { keep: ['.server', 'node_modules'] })` is the
+narrower operation for replacing only project source under a running runtime: it
+removes every top-level `/workspace` entry except the named ones, flushes and
+verifies. The caller must have stopped whatever reads or writes the removed files.
+
 ## Contracts
 
 - Only `id: 'default'` and one origin's existing OPFS lease. Opening requires
