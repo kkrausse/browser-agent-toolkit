@@ -1,6 +1,6 @@
 // Concrete emitted URL/actual handler/native adapter verification. No listener or worker boot.
 import assert from 'node:assert/strict';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { readFile } from 'node:fs/promises';
 const stage = resolve(process.argv[2]!), input = resolve(process.argv[3]!);
 const { parse } = await import(join(input, 'runtime-source/packages/runtime/vendor/acorn.mjs'));
@@ -21,6 +21,19 @@ const headers = { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Emb
 const hashes: Record<string, string> = {};
 for await (const file of new Bun.Glob('**/*').scan({ cwd: stage, onlyFiles: true })) hashes[file] = sha(new Uint8Array(await Bun.file(join(stage, file)).arrayBuffer()));
 const receipt = { hashes, version: manifest.version, topology: { policy: 'single-kernel' } };
+// Reverse the allowed QA source substitutions and prove the original workload
+// bytes survive, rather than merely asserting that assertions were not changed.
+const source = join(dirname(stage), 'toolkit-source');
+const tests = join(source, 'examples/todo-app/tests');
+const originalClient = await Bun.file(join(tests, 'single-kernel-client.ts')).text();
+const adaptedClient = await Bun.file(join(tests, 'effect-loader-full-client-qa.ts')).text();
+const hostProbe = "fetchedBodyProbe(location.origin.replace(location.hostname,'host.vivari.internal'))";
+assert.equal(adaptedClient.replace(hostProbe, 'fetchedBodyProbe(location.origin)').replace('distribution.runtimeBuild.source.revision', 'distribution.runtimeBuild.source.commit'), originalClient);
+const originalDriver = await Bun.file(join(tests, 'single-kernel-driver.ts')).text();
+const adaptedDriver = await Bun.file(join(tests, 'effect-loader-full-app-driver-qa.ts')).text();
+assert.equal(adaptedDriver.replace('const root=' + JSON.stringify(source), "const root=resolve(import.meta.dir,'../../..')").replace('receipt.revision!==' + JSON.stringify('3ee918522c1233a1f8e10a9b798c09b6c3e30c81'), "receipt.revision!=='e35eab4af7a53ff08eb70c09df59c40b78bfdd67'"), originalDriver);
+const reverseProof = { originalClientSha256: sha(originalClient), adaptedClientSha256: sha(adaptedClient), originalDriverSha256: sha(originalDriver), adaptedDriverSha256: sha(adaptedDriver), reverseToOriginalBytes: true, assertionsChanged: false, deadlinesChanged: false, focusedSourceSha256: sha(await Bun.file(join(tests, 'single-kernel-cases-client.ts')).text()) };
+await Bun.write(join(stage, 'qa/reverse-adaptation-verification.json'), JSON.stringify(reverseProof, null, 2));
 async function extractHandler(file: string, bindings: Record<string, unknown>) {
   const source = await Bun.file(join(stage, file)).text();
   const ast = parse(source, { ecmaVersion: 'latest', sourceType: 'module' });
@@ -77,6 +90,8 @@ try {
     assert.equal(sha(bytes), 'f318c6ec229471e1f53be8363e90e2ecdc55faf6549a9e696ee825689129c465');
     const workerResponse = await handler(new Request(workerURL));
     assert.ok(workerResponse); assert.equal(workerResponse.status, 200);
+    assert.equal(workerResponse.headers.get('Cross-Origin-Opener-Policy'), 'same-origin');
+    assert.equal(workerResponse.headers.get('Cross-Origin-Embedder-Policy'), 'require-corp');
     assert.equal(sha(new Uint8Array(await workerResponse.arrayBuffer())), sha(workerText));
     results.push({ name, base, workerURL: workerURL.href, vendorURL, calls, bytes: bytes.length, sha256: sha(bytes), fetchBodySha256: bodySha256 });
     host.destroy();
