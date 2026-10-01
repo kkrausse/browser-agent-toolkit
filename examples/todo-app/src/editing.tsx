@@ -12,7 +12,12 @@ export default function Editing() {
   useEffect(() => {
     const abort = new AbortController()
     void fetch('/editing-policy', { signal: abort.signal }).then(response => response.json())
-      .then(policy => setAllowed(policy.allowed === true)).catch(() => {})
+      .then(policy => {
+        setAllowed(policy.allowed === true)
+        // Defines window.__editorTimings. Loaded with the policy rather than with the
+        // editor, so the recorder is there before the first Open editor of a page load.
+        if (policy.allowed === true) void import('./editor-timings').catch(() => {})
+      }).catch(() => {})
     return () => abort.abort()
   }, [])
   if (!allowed) return null
