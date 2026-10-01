@@ -163,13 +163,24 @@ operation and close/release resources serially. Repeated calls share cleanup.
 A rejected close leaves the runtime and workspace in place; calling again re-joins
 only what is still outstanding, so a failure whose resource is already gone is
 reported once. `cancelAndClose({ force: true })` closes regardless (flush, destroy
-the host, detach) and still rejects with the unproven cleanup. No stop waits forever:
-`stopTimeoutMs` (controller/provider option, default 10000) bounds a cancelled
-operation, the service join (after the longest stdin-EOF budget) and the runtime
-stop; a missed deadline rejects with `CLEANUP_FAILED` and is retryable like any
-other failure. `dispose()` and the provider's unmount/`pagehide` cleanup cannot be
-retried by anyone, so there a failed or timed-out close falls back to the forced
-close and the unproven cleanup is still rejected/logged. Recipes must observe
+the host, detach) and still rejects with the unproven cleanup; called while a close
+is still waiting, it ends those waits instead of queueing behind them.
+
+A whole close spends one budget, `closeTimeoutMs` (controller/provider option,
+default 15000), not a timer per stage. Phase 1 runs concurrently: the cancelled
+operation, pending launches and every service's stop (stdin EOF or kill, all
+signalled at once) are joined together, then the runtime is stopped - the one
+ordering kept, because `Runtime.stop` kills every execution and would cut the
+graceful EOF windows short. Phase 1 may use the budget minus a reserve of
+min(5000, budget/3); a service's EOF `timeoutMs` is clipped to half of phase 1.
+Phase 2, the kernel's shutdown and flush, gets everything left (at least the
+reserve). Running out rejects with `CLEANUP_FAILED` naming what was outstanding and
+is retryable like any other failure. Outside a close, `stopTimeoutMs` (default
+10000) still bounds a direct `stopService`/`stopServices`/`stopRuntime`.
+`dispose()` and the provider's unmount/`pagehide` cleanup cannot be retried by
+anyone, so there a failed or timed-out close falls back to the forced close, whose
+flush is paid from the same budget's reserve, and the unproven cleanup is still
+rejected/logged. Recipes must observe
 `controller.signal` and await all launched work. The controller's signal renews once
 it is closed. StrictMode
 effect replay defers admission/disposal. DOM acceptance remains with fresh QA.

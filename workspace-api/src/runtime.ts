@@ -15,8 +15,10 @@ export interface Runtime<T extends ToolSet = {}> {
    * again re-joins the still-live executions/endpoints; failures of resources that
    * are already gone are reported by one rejection and thereby acknowledged.
    * Never waits past `stopTimeoutMs`: a join that has not settled by then rejects
-   * with CLEANUP_FAILED, equally retryable (or leave via Workspace.close({ force })). */
-  stop(): Promise<void>;
+   * with CLEANUP_FAILED, equally retryable (or leave via Workspace.close({ force })).
+   * `timeoutMs` can only shorten that wait, for a caller spending a larger shared
+   * budget; it does not apply to an attempt that is already in flight. */
+  stop(options?: { timeoutMs?: number }): Promise<void>;
 }
 /** `stop-failed` is a state the caller can leave: the next stop() is a new attempt
  * over what is still outstanding, never a replay of the first rejection. */
@@ -106,8 +108,9 @@ export namespace Runtime {
         });
         return endpoint;
       },
-      stop() {
+      stop(stopOptions = {}) {
         if (phase.status === "stopping") return phase.attempt;
+        const waitMs = stopOptions.timeoutMs === undefined ? stopTimeoutMs : Math.min(stopTimeoutMs, Math.max(0, stopOptions.timeoutMs));
         if (phase.status === "stopped") return Promise.resolve();
         const attempt = (async () => {
           lifetime.abort(new WorkspaceError("CLOSED", "Runtime stopped"));
@@ -116,12 +119,12 @@ export namespace Runtime {
           const joined = await within(Promise.allSettled([...pendingLaunches]).then(() => Promise.allSettled([
             ...[...executions].map(e => e.stop()),
             ...[...endpoints].map(endpoint => endpoint.settled),
-          ])), stopTimeoutMs);
+          ])), waitMs);
           if (joined.timedOut) {
             // Whatever has not settled is still registered, and receipts stay for the
             // attempt that completes its join; only the waiting ends here.
             phase = { status: "stop-failed" };
-            throw new WorkspaceError("CLEANUP_FAILED", `Runtime stop timed out after ${stopTimeoutMs}ms with ${pendingLaunches.size} pending launch(es), ${executions.size} execution(s), ${endpoints.size} endpoint(s) outstanding; workspace remains attached`);
+            throw new WorkspaceError("CLEANUP_FAILED", `Runtime stop timed out after ${Math.round(waitMs)}ms with ${pendingLaunches.size} pending launch(es), ${executions.size} execution(s), ${endpoints.size} endpoint(s) outstanding; workspace remains attached`);
           }
           const failures = receipts.splice(0);
           for (const result of joined.value) if (result.status === "rejected") failures.push(result.reason);
