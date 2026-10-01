@@ -93,7 +93,7 @@ change("const hashes: Record<string, string> = {};", `
 const workspaceGraphs:Record<string,number>={};
 for(const file of await walk(join(stage,'client')))if(file.endsWith('.js')) {
   const text=await Bun.file(join(stage,'client',file)).text();
-  const count=[...text.matchAll(/var workspaceInternals(?:_\\d+)? = new WeakMap/g)].length;
+  const count=[...text.matchAll(/workspaceInternals(?:_\\d+)? = new WeakMap/g)].length;
   workspaceGraphs[file]=count;
   if(count!==1)throw Error('Consumer must contain one actual workspace WeakMap graph: '+file+' '+count);
 }
