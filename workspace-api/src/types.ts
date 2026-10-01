@@ -15,6 +15,11 @@ export interface WorkspaceOpenOptions {
   /** Best-effort structured startup milestones; contains no filesystem or guest output. */
   onDiagnostic?: (event: DiagnosticEvent) => void;
 }
+export interface WorkspaceCloseOptions {
+  /** Close even while a runtime is attached: flush, destroy the host, detach. The close
+   * still rejects with CLEANUP_FAILED, because runtime cleanup was never proven. */
+  force?: boolean;
+}
 export interface WorkspaceFs {
   readFile(path: string): Promise<Uint8Array>;
   writeFile(path: string, data: string | Uint8Array): Promise<void>;
@@ -124,6 +129,6 @@ export type WorkspaceDiagnostics = {
   pendingHttp: number;
 };
 export type ErrorCode = "ENTRY_NOT_FOUND" | "LAUNCH_REJECTED" | "BACKEND_UNAVAILABLE"
-  | "CLOSED" | "ATTACHED" | "STORAGE_BUSY" | "UNSUPPORTED_WORKSPACE"
+  | "CLOSED" | "ATTACHED" | "STORAGE_BUSY" | "UNSUPPORTED_WORKSPACE" | "CLEANUP_FAILED"
   | "DISTRIBUTION_MISMATCH" | "OUTPUT_OVERFLOW" | "TOOL_FAILED";
 export { WorkspaceError } from "@vivari/core/host";

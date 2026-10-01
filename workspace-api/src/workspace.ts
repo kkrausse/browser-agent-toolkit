@@ -1,6 +1,6 @@
 import { Host } from "./host.js";
 import { diagnosticReporter } from "./diagnostics.js";
-import { WorkspaceError, type Distribution, type PersistenceState, type WorkspaceDiagnostics, type WorkspaceFs, type WorkspaceOpenOptions, type WorkspaceStorage } from "./types.js";
+import { WorkspaceError, type Distribution, type PersistenceState, type WorkspaceCloseOptions, type WorkspaceDiagnostics, type WorkspaceFs, type WorkspaceOpenOptions, type WorkspaceStorage } from "./types.js";
 
 export function opfsStore(distribution: Distribution): WorkspaceStorage { return { kind: "opfs", distribution }; }
 export function workspacePath(path: string): string {
@@ -13,7 +13,9 @@ export interface Workspace {
   readonly fs: WorkspaceFs;
   readonly persistence: PersistenceState;
   flush(): Promise<void>;
-  close(): Promise<void>;
+  /** Rejects with ATTACHED while a runtime is attached; stop (or retry stopping) it first.
+   * `{ force: true }` closes anyway and rejects with CLEANUP_FAILED once it has. */
+  close(options?: WorkspaceCloseOptions): Promise<void>;
 }
 type WorkspaceInternalState = { host: Host; distribution: Distribution; attached: boolean; clearing: boolean; closed: boolean };
 export const workspaceInternals = new WeakMap<Workspace, WorkspaceInternalState>();
@@ -157,17 +159,24 @@ export namespace Workspace {
           watch(listener) { check(); watches.add(listener); return () => { watches.delete(listener); }; },
         },
         async flush() { check(); await h.flush(); },
-        close() {
+        close(closeOptions = {}) {
           if (closing) return closing;
-          if (state.attached) return Promise.reject(new WorkspaceError("ATTACHED", "Stop the attached runtime before closing Workspace"));
+          const abandoned = state.attached;
+          if (abandoned && !closeOptions.force) return Promise.reject(new WorkspaceError("ATTACHED", "Stop the attached runtime before closing Workspace, or close({ force: true })"));
           if (state.clearing) return Promise.reject(new WorkspaceError("STORAGE_BUSY", "Wait for Workspace clear before closing"));
           // Close excludes new runtime attachments and file operations before its
           // asynchronous flush, so a concurrent start cannot lose live workers.
           state.closed = true;
-          return closing = (async () => {
+          closing = (async () => {
             try { await h.flush(); }
-            finally { off(); watches.clear(); h.destroy(); opening = false; }
+            // Destroying the host ends every guest process and endpoint it owned.
+            finally { off(); watches.clear(); h.destroy(); state.attached = false; opening = false; }
           })();
+          if (!abandoned) return closing;
+          // Forced: the store is flushed and released, but nothing proved the runtime
+          // quiesced first. This caller is told once; later close() calls see closed.
+          const unproven = new WorkspaceError("CLEANUP_FAILED", "Workspace force-closed while a runtime was attached; runtime cleanup unproven");
+          return closing.then(() => { throw unproven; }, error => { throw new AggregateError([unproven, error], unproven.message); });
         },
       };
       workspaceInternals.set(workspace, state);
