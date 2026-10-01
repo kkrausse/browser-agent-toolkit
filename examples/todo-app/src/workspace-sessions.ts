@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import type { Service } from '@kev-browser-agent-kit/workspace/react'
+import { timedStage } from './editor-timings'
 
 // Native OpenCode bundles, not ChatController.exportChats() transcript archives.
 export const sessionBundleSchema = v.strictObject({
@@ -39,7 +40,14 @@ async function request(service: Service, path: string, init?: RequestInit): Prom
 // absent fields as exhaustion; malformed non-string cursors must still fail.
 const pageSchema = v.object({ data: v.array(v.object({ id: v.string() })), cursor: v.nullish(v.object({ next: v.nullish(v.string()) })) })
 
-export async function captureSessions(service: Service): Promise<SessionBundle[]> {
+const sessionCounts = (sessions: SessionBundle[]) => ({ sessions: sessions.length, messages: sessions.reduce((sum, session) => sum + session.messages.length, 0) })
+
+export function captureSessions(service: Service): Promise<SessionBundle[]> {
+  // Per-session export durations (ms, in export order) show whether one session dominates.
+  const exportMs: number[] = []
+  return timedStage('capture.sessions', () => exportSessions(service, exportMs), sessions => ({ ...sessionCounts(sessions), slowestExportMs: Math.max(0, ...exportMs), exportMs: exportMs.slice(0, 12) }))
+}
+async function exportSessions(service: Service, exportMs: number[]): Promise<SessionBundle[]> {
   const sessions: SessionBundle[] = [], ids = new Set<string>()
   let cursor: string | undefined
   do {
@@ -47,7 +55,9 @@ export async function captureSessions(service: Service): Promise<SessionBundle[]
     for (const { id } of page.data) {
       if (ids.has(id)) throw Error('Repeated session in native export pagination')
       ids.add(id)
+      const started = performance.now()
       const transfer = v.parse(v.object({ data: sessionBundleSchema }), await request(service, `/api/session/${encodeURIComponent(id)}/export`))
+      exportMs.push(Math.round(performance.now() - started))
       sessions.push(transfer.data)
     }
     cursor = page.cursor?.next ?? undefined
@@ -58,7 +68,10 @@ export async function captureSessions(service: Service): Promise<SessionBundle[]
 
 /** Run before attaching a chat client to the replacement server. Its SQLite
  * mount can outlive clearWorkspace, so explicitly remove old native rows. */
-export async function restoreSessions(service: Service, sessions: SessionBundle[]): Promise<Map<string, string>> {
+export function restoreSessions(service: Service, sessions: SessionBundle[]): Promise<Map<string, string>> {
+  return timedStage('restore.sessions', () => importSessions(service, sessions), () => sessionCounts(sessions))
+}
+async function importSessions(service: Service, sessions: SessionBundle[]): Promise<Map<string, string>> {
   const ordered = orderSessions(sessions)
   for (let attempt = 0; ; attempt++) {
     const page = v.parse(pageSchema, await request(service, '/api/session?directory=%2Fworkspace&limit=100'))

@@ -64,6 +64,8 @@ export async function startBrowserEditor(controller: WorkspaceController, option
         // not resurrect files that the agent removed on a previous visit.
         let initialized = false
         try { await workspace.fs.stat('/.todo-workspace.json'); initialized = true } catch { /* legacy first open */ }
+        // Timing context: whether this open restored a stored working copy.
+        controller.diagnostic('editor.source', { initialized })
         if (!initialized) await installSource(workspace, manifest.project, { existing: 'preserve' })
         const modelBaseURL = `http://host.vivari.internal:${location.port || (location.protocol === 'https:' ? '443' : '80')}${base}model/opencode/`
         await installOpenCodeConfig(workspace, {

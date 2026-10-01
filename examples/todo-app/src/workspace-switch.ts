@@ -1,4 +1,5 @@
 import { validateWorkspace, upsert, type Catalog, type SavedWorkspace } from './local-workspaces'
+import { timedStage } from './editor-timings'
 
 /** App orchestration only. Stop/clear/start remain owned library operations.
  * The pending validated image is durable before the first destructive action. */
@@ -23,15 +24,18 @@ export async function switchWorkspace(options: {
   const hold = options.retry ? undefined : options.hold()
   try {
     let catalog = options.catalog
-    if (!options.retry) catalog = upsert(catalog, validateWorkspace(await options.capture()))
+    // Each step is a timing stage; timedStage passes results and rejections through.
+    if (!options.retry) catalog = upsert(catalog, validateWorkspace(await timedStage('switch.capture', () => options.capture())))
     catalog = { ...upsert(catalog, incoming), pending: incoming }
-    await options.persist(catalog)
-    await options.disposeChat()
-    await options.stop()
-    await options.replace(incoming)
-    await options.start(incoming)
+    const journal = catalog
+    await timedStage('switch.journal', () => options.persist(journal))
+    await timedStage('switch.dispose-chat', () => options.disposeChat())
+    await timedStage('switch.stop', () => options.stop())
+    await timedStage('switch.replace', () => options.replace(incoming))
+    await timedStage('switch.start', () => options.start(incoming))
     catalog = { ...upsert(catalog, incoming), activeId: incoming.id, pending: undefined }
-    await options.persist(catalog)
+    const committed = catalog
+    await timedStage('switch.commit', () => options.persist(committed))
     return catalog
   } finally {
     hold?.release()

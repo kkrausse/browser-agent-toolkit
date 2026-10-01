@@ -2,6 +2,7 @@ import * as v from 'valibot'
 import type { Workspace } from '@kev-browser-agent-kit/workspace'
 import type { ChatSnapshot } from '@kev-browser-agent-kit/opencode-chat'
 import { orderSessions, sessionBundleSchema } from './workspace-sessions'
+import { timedStage } from './editor-timings'
 
 export const identityPath = '/.todo-workspace.json'
 // Prepared backend archives and experiment receipts/scripts belong to managed
@@ -47,7 +48,7 @@ export function createWorkspaceStore() {
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)
   })
-  return {
+  const store = {
     async read(): Promise<Catalog> {
       const db = await open()
       return new Promise((resolve, reject) => {
@@ -66,6 +67,19 @@ export function createWorkspaceStore() {
       })
     },
   }
+  // The catalog holds every saved workspace image, so its size is timing context.
+  return {
+    read: () => timedStage('catalog.read', store.read, catalogSize),
+    write: (catalog: Catalog) => timedStage('catalog.write', () => store.write(catalog), () => catalogSize(catalog)),
+  }
+}
+function catalogSize(catalog: Catalog) {
+  let sourceBytes = 0, sessions = 0
+  for (const saved of catalog.workspaces) {
+    sessions += saved.sessions.length
+    for (const file of Object.values(saved.source)) sourceBytes += file.byteLength
+  }
+  return { workspaces: catalog.workspaces.length, sourceBytes, sessions }
 }
 
 export async function captureSource(workspace: Workspace, inspect = async (path: string) => (await import('@kev-browser-agent-kit/workspace')).diagnoseWorkspaceEntry(workspace, path)): Promise<Record<string, Uint8Array>> {
@@ -90,21 +104,25 @@ export async function captureSource(workspace: Workspace, inspect = async (path:
       }
     }
   }
-  await walk('/')
+  await timedStage('capture.source', () => walk('/'), () => ({ files: Object.keys(source).length, bytes }))
   return source
 }
 
 export async function writeIdentity(workspace: Workspace, saved: Pick<SavedWorkspace, 'id' | 'name' | 'selectedSessionId'>): Promise<void> {
-  await workspace.fs.writeFile(identityPath, JSON.stringify({ id: saved.id, name: saved.name, selectedSessionId: saved.selectedSessionId }))
-  await workspace.flush()
+  await timedStage('identity.write', async () => {
+    await workspace.fs.writeFile(identityPath, JSON.stringify({ id: saved.id, name: saved.name, selectedSessionId: saved.selectedSessionId }))
+    await timedStage('identity.flush', () => workspace.flush())
+  })
 }
 
 export async function restoreSource(workspace: Workspace, saved: SavedWorkspace): Promise<void> {
   validateWorkspace(saved)
-  for (const [path, bytes] of Object.entries(saved.source).sort(([a], [b]) => a.localeCompare(b))) {
-    await workspace.fs.mkdir(path.slice(0, path.lastIndexOf('/')) || '/')
-    await workspace.fs.writeFile(path, bytes)
-  }
+  await timedStage('restore.source', async () => {
+    for (const [path, bytes] of Object.entries(saved.source).sort(([a], [b]) => a.localeCompare(b))) {
+      await workspace.fs.mkdir(path.slice(0, path.lastIndexOf('/')) || '/')
+      await workspace.fs.writeFile(path, bytes)
+    }
+  }, () => ({ files: Object.keys(saved.source).length }))
   await writeIdentity(workspace, saved)
 }
 

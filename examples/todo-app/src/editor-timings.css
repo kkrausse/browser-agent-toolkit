@@ -1,0 +1,14 @@
+/* The Timings disclosure sits under the workspace panel, as a second row of its column. */
+.todo-workspace-editor:has(>.todo-timings){grid-template-rows:minmax(0,1fr) auto}
+.todo-workspace-editor:has(>.todo-timings)>.todo-workspace-preview{grid-row:1/3}
+.todo-timings{grid-column:2;grid-row:2;min-width:0;max-height:40vh;overflow:auto;padding:8px 12px;background:white;border-left:1px solid #ddd;border-top:1px solid #ddd;font-size:12px}
+.todo-timings summary{cursor:pointer}
+.todo-timings details{margin-top:6px}
+.todo-timings p{font-size:12px;margin:8px 0 0}
+.todo-timings-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.todo-timings-actions button{border:1px solid #cbd5e1;border-radius:6px;padding:4px 8px;background:white;font:inherit;cursor:pointer}
+.todo-timings table{width:100%;border-collapse:collapse;margin-top:4px;font-size:11px}
+.todo-timings td{padding:1px 4px 1px 0;vertical-align:top;overflow-wrap:anywhere}
+.todo-timings td+td{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.todo-timings-failed{color:#b42318}
+@media(max-width:720px){.todo-workspace-editor:has(>.todo-timings){grid-template-rows:35vh minmax(0,1fr) auto}.todo-workspace-editor:has(>.todo-timings)>.todo-workspace-preview{grid-row:auto}.todo-timings{grid-column:auto;grid-row:auto;border-left:0}}

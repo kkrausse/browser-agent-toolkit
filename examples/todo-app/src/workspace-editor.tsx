@@ -6,6 +6,8 @@ import { ChatView } from '@kev-browser-agent-kit/opencode-chat/react'
 import type { ChatSnapshot } from '@kev-browser-agent-kit/opencode-chat'
 import { loadPrepared } from '@kev-browser-agent-kit/opencode-chat/browser'
 import { startBrowserEditor } from './start-editor'
+import { timedStage } from './editor-timings'
+import { EditorTimings } from './editor-timings-panel'
 import { captureSource, createWorkspaceStore, identityPath, idleChat, restoreSource, safeSourcePath, upsert, validateWorkspace, writeIdentity, type Catalog, type SavedWorkspace } from './local-workspaces'
 import { captureSessions, restoreSessions } from './workspace-sessions'
 import { switchWorkspace } from './workspace-switch'
@@ -57,7 +59,7 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
   async function capture(): Promise<SavedWorkspace> {
     const workspace = controller.workspace, service = controller.getSnapshot().services.chat
     if (!workspace || !service) throw Error('Workspace and chat must be ready before saving')
-    await workspace.flush()
+    await timedStage('workspace.flush', () => workspace.flush())
     const selectedSessionId = chatFor(service)?.getSnapshot().sessionID
     return validateWorkspace({ format: 1, id: catalog.current.activeId ?? crypto.randomUUID(), name: nameRef.current.trim() || 'Untitled workspace', savedAt: Date.now(), source: await captureSource(workspace), sessions: await captureSessions(service), selectedSessionId })
   }
@@ -85,7 +87,7 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
     if (!incoming) {
       try { mappedSelection = JSON.parse(new TextDecoder().decode(await controller.workspace!.fs.readFile(identityPath))).selectedSessionId } catch { /* legacy identity */ }
     }
-    if (mappedSelection && service) await chatFor(service)?.selectSession(mappedSelection)
+    if (mappedSelection && service) await timedStage('chat.select-session', async () => { await chatFor(service)?.selectSession(mappedSelection!) })
     if (incoming) await writeIdentity(controller.workspace!, { ...incoming, selectedSessionId: mappedSelection })
     // Services run again, so an earlier unproven stop no longer needs a way out.
     setCloseFailure(undefined)
@@ -220,5 +222,6 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
       </div>
       <footer><p role="status">{switchPresentation ? switchPresentation.phase === 'switching' ? 'Workspace switch in progress…' : 'Workspace recovery required.' : state.status}</p>{state.error && <p role="alert">{state.error}</p>}{state.error && !pending && <button disabled={state.busy || actionBusy} onClick={() => action('Retry editor startup', open)}>Retry editing</button>}<small>{blocked && !state.busy && !pending ? chat ? `Workspace actions wait for connected, idle chat (${chatState.execution}).` : 'Preview and OpenCode are not running. Retry editing to continue working, or exit.' : 'Switching fully stops and restarts preview and OpenCode.'}</small><details><summary>Debug · Activity</summary><pre>{state.logs.join('\n')}</pre></details></footer>
     </aside>
+    <EditorTimings controller={controller} />
   </div>
 }
