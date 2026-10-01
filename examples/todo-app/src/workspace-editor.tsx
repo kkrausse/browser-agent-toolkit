@@ -10,7 +10,7 @@ import { captureSource, createWorkspaceStore, identityPath, idleChat, restoreSou
 import { captureSessions, restoreSessions } from './workspace-sessions'
 import { switchWorkspace } from './workspace-switch'
 import { workspaceSwitchPresentation } from './workspace-switch-presentation'
-import { closeEditor, errorText, exitRecovery } from './workspace-exit'
+import { closeEditor, errorText, exitRecovery, snapshotErrorCode } from './workspace-exit'
 import '@kev-browser-agent-kit/opencode-chat/editor.css'
 import './workspace-editor.css'
 
@@ -38,7 +38,7 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
   const switchPresentation = workspaceSwitchPresentation(pending, actionBusy)
   const { chat, error: chatError } = useWorkspaceChat(controller, restoring || switchPresentation?.phase === 'recovery' ? undefined : state.services.chat)
   const chatState = useSyncExternalStore(chat?.subscribe ?? noopSubscribe, chat?.getSnapshot ?? (() => emptyChat), chat?.getSnapshot ?? (() => emptyChat))
-  const exitFailure = exitRecovery(closeFailure, !!state.workspace)
+  const exitFailure = exitRecovery({ errorCode: snapshotErrorCode(state), failure: closeFailure, attached: !!state.workspace })
   const blocked = actionBusy || state.busy || !!pending || !state.runtime || !idleChat(chat?.getSnapshot())
 
   async function persist(next: Catalog): Promise<void> {

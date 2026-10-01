@@ -4,14 +4,25 @@ export const errorText = (error: unknown) => error instanceof Error ? error.mess
 
 function hasCode(error: unknown, code: string, depth = 0): boolean {
   if (!error || typeof error !== 'object' || depth > 5) return false
-  const value = error as { code?: unknown; cause?: unknown }
-  return value.code === code || hasCode(value.cause, code, depth + 1)
+  const value = error as { code?: unknown; cause?: unknown; errors?: unknown }
+  return value.code === code || hasCode(value.cause, code, depth + 1) ||
+    (Array.isArray(value.errors) && value.errors.some(item => hasCode(item, code, depth + 1)))
+}
+
+/** The controller snapshot's error code. Read through this accessor because the
+ * field is newer than some workspace package builds this app compiles against. */
+export function snapshotErrorCode(snapshot: object): string | undefined {
+  const code = (snapshot as { errorCode?: unknown }).errorCode
+  return typeof code === 'string' ? code : undefined
 }
 
 export const openedElsewhereMessage = 'This workspace is already open in another tab or window. Close the editor there, then choose Retry editing.'
 /** An open rejected because this origin's workspace store is owned elsewhere.
- * Detected by code. The message match is a stopgap for kernel lock timeouts
- * that do not yet carry STORAGE_BUSY; delete it once they do. */
+ * Detected by code on the open step's own rejection, through cause chains and
+ * aggregates. The snapshot's errorCode is not used here: STORAGE_BUSY there can
+ * also come from a later step (for example a clear in progress). The message
+ * match is a stopgap for kernel lock timeouts without the code; delete it once
+ * every one carries STORAGE_BUSY. */
 export function openedElsewhere(error: unknown): boolean {
   return hasCode(error, 'STORAGE_BUSY') || /still owned by another Vivari kernel/.test(errorText(error))
 }
@@ -33,13 +44,16 @@ export async function closeEditor(options: {
   return {}
 }
 
-/** After a failed exit, or a failed stop inside a switch, the workspace is still
- * attached: offer both ways out. */
-export function exitRecovery(failure: string | undefined, attached: boolean) {
-  if (!failure || !attached) return undefined
+/** The workspace is still attached after cleanup could not be proven: offer both
+ * ways out. The controller's CLEANUP_FAILED code is the primary signal. `failure`
+ * is this app's own record of an exit, or the stop inside a switch, that rejected;
+ * it outlives the controller's error (cleared by the next action) and also covers
+ * an exit that failed before closing, such as a save that could not complete. */
+export function exitRecovery(state: { errorCode?: string; failure?: string; attached: boolean }) {
+  if (!state.attached || (state.errorCode !== 'CLEANUP_FAILED' && !state.failure)) return undefined
   return {
     role: 'alert' as const,
-    message: `The editor is still open: exit or stop did not complete. Files saved in this browser are kept. (${failure})`,
+    message: 'The editor is still open: exit or stop did not complete. Files saved in this browser are kept.' + (state.failure ? ` (${state.failure})` : ''),
     actions: ['retry', 'force'] as const,
   }
 }
