@@ -164,7 +164,11 @@ A rejected close leaves the runtime and workspace in place; calling again re-joi
 only what is still outstanding, so a failure whose resource is already gone is
 reported once. `cancelAndClose({ force: true })` closes regardless (flush, destroy
 the host, detach) and still rejects with the unproven cleanup; called while a close
-is still waiting, it ends those waits instead of queueing behind them.
+is still waiting, it ends those waits instead of queueing behind them, and called
+after a close already ran out its deadline it only re-checks the hung work for
+250ms before forcing. A close ends that workspace's lifetime: failures its services
+report afterwards are `service.cleanup.late` diagnostics, never failures of the
+next workspace.
 
 A whole close spends one budget, `closeTimeoutMs` (controller/provider option,
 default 15000), not a timer per stage. Phase 1 runs concurrently: the cancelled

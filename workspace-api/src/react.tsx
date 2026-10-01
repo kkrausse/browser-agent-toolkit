@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { Workspace, Runtime, WorkspaceError, opfsStore, type Distribution, type Endpoint, type Execution, type NodeLaunchOptions, type ToolSet } from "@kev-browser-agent-kit/workspace";
+import { Workspace, Runtime, WorkspaceError, opfsStore, type Distribution, type Endpoint, type ErrorCode, type Execution, type NodeLaunchOptions, type ToolSet } from "@kev-browser-agent-kit/workspace";
 import { createControllerDiagnostics, createDiagnosticScope, safeText, type ControllerDiagnosticOptions } from "./react-diagnostics.js";
 import { shutdownAtEOF } from "./service-shutdown.js";
 import { budget, timeoutMs as validTimeout, within, type Budget } from "./deadline.js";
@@ -29,8 +29,32 @@ export type WorkspaceControllerOptions = ControllerDiagnosticOptions & {
    * Default 15000. */
   closeTimeoutMs?: number;
 };
+/** Cleanup bookkeeping of one workspace lifetime (open to close). Each registry empties
+ * itself as its work settles, so a retry joins only what is still outstanding;
+ * `receipts` are failures of work that is already gone, taken by the next join. A close
+ * retires the ledger: whatever the dead lifetime's work does afterwards is a
+ * diagnostic, never a failure of the next workspace. */
+interface CleanupLedger {
+  retired: boolean;
+  launches: Set<Promise<unknown>>;
+  /** Service stops still running, including ones a deadline stopped waiting for. */
+  stops: Set<Promise<void>>;
+  settlements: Set<Promise<unknown>>;
+  receipts: unknown[];
+  /** A join here already ran out its deadline and has not completed since. */
+  stalled: { services: boolean; runtime: boolean };
+}
+const cleanupLedger = (): CleanupLedger => ({ retired: false, launches: new Set(), stops: new Set(), settlements: new Set(), receipts: [], stalled: { services: false, runtime: false } });
+/** With work already known to be hung, force only re-checks it this long before forcing. */
+const FORCE_RECHECK_MS = 250;
 /** Kept back from a close budget for the kernel's shutdown/flush (or the forced flush). */
 const closeReserve = (totalMs: number) => Math.min(5_000, totalMs / 3);
+/** The code of a WorkspaceError, also one thrown by another copy of the host SDK. */
+function workspaceErrorCode(error: unknown): ErrorCode | undefined {
+  if (error instanceof WorkspaceError) return error.code;
+  const value = error as { name?: unknown; code?: unknown } | null;
+  return value?.name === "WorkspaceError" && typeof value.code === "string" ? value.code as ErrorCode : undefined;
+}
 const message = (error: unknown) => safeText(error instanceof Error ? error.message : String(error));
 
 export class WorkspaceController {
@@ -48,13 +72,7 @@ export class WorkspaceController {
   private listeners = new Set<() => void>();
   private attachments = new Map<string, () => void>();
   private shutdowns = new Map<string, { run: (limitMs: number) => Promise<void>; budgetMs: number }>();
-  private pendingLaunches = new Set<Promise<unknown>>();
-  private serviceSettlements = new Set<Promise<unknown>>();
-  /** Service stops still running, including ones a deadline stopped waiting for. */
-  private serviceStops = new Set<Promise<void>>();
-  /** Cleanup failures of resources that are already gone (nothing is left to retry).
-   * The next stopServices takes them: reported by one rejection, then acknowledged. */
-  private cleanupReceipts: unknown[] = [];
+  private cleanup = cleanupLedger();
   private clients = new Map<string, { resolve(): void; reject(error: Error): void; promise: Promise<void> }>();
   private distribution?: Distribution;
   private lifetime = new AbortController();
@@ -166,12 +184,13 @@ export class WorkspaceController {
   }
   launch(name: string, options: NodeLaunchOptions, port: number, connect: (endpoint: Endpoint, signal: AbortSignal) => Promise<Connection>, lifecycle?: ServiceLifecycle, readiness?: ServiceReadiness) {
     const task = this.launchOwned(name, options, port, connect, lifecycle, readiness);
-    this.pendingLaunches.add(task);
-    void task.finally(() => this.pendingLaunches.delete(task)).catch(() => {});
+    const { launches } = this.cleanup;
+    launches.add(task);
+    void task.finally(() => launches.delete(task)).catch(() => {});
     return task;
   }
   private async launchOwned(name: string, options: NodeLaunchOptions, port: number, connect: (endpoint: Endpoint, signal: AbortSignal) => Promise<Connection>, lifecycle?: ServiceLifecycle, readiness?: ServiceReadiness) {
-    const diagnostics = this.diagnostics;
+    const diagnostics = this.diagnostics, ledger = this.cleanup;
     const scope = createDiagnosticScope(event => diagnostics.record(event.event, event.data), diagnostics.runId);
     if (this.snapshot.services[name]) return this.snapshot.services[name]!;
     if (!this.runtime) throw Error("Start the runtime before launching services");
@@ -193,7 +212,7 @@ export class WorkspaceController {
         const {drained} = this.drainExecution(execution, name);
         const results = await Promise.allSettled([execution.stop(), drained]);
         for (const result of results) if (result.status === 'rejected') {
-          this.cleanupReceipts.push(result.reason);
+          this.receipt(ledger, result.reason, name);
           diagnostics.record('service.cleanup.failed', { name, error: result.reason });
         }
         budget.signal.throwIfAborted();
@@ -209,7 +228,7 @@ export class WorkspaceController {
       await spawn.then(async execution => {
         const {drained} = this.drainExecution(execution, name);
         const cleanup = await Promise.allSettled([execution.stop(), drained]);
-        for (const result of cleanup) if (result.status === 'rejected') { failed = true; this.cleanupReceipts.push(result.reason); }
+        for (const result of cleanup) if (result.status === 'rejected') { failed = true; this.receipt(ledger, result.reason, name); }
       }, cleanupError => diagnostics.record('service.spawn.settled', { name, error: cleanupError }));
       diagnostics.record('service.cleanup.join.settled', { name, phase: 'spawn', failed });
       budget.signal.removeEventListener('abort', abortStartup); budget.dispose(); throw error;
@@ -252,9 +271,9 @@ export class WorkspaceController {
         const errors = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
         if (errors.length) throw new AggregateError(errors.map(result => result.reason), `${name} settlement failed`);
       });
-      this.serviceSettlements.add(settlement);
+      ledger.settlements.add(settlement);
       // A settled join is no longer outstanding; its failure survives as a receipt.
-      void settlement.then(() => { this.serviceSettlements.delete(settlement); }, error => { this.serviceSettlements.delete(settlement); this.cleanupReceipts.push(error); });
+      void settlement.then(() => { ledger.settlements.delete(settlement); }, error => { ledger.settlements.delete(settlement); this.receipt(ledger, error, name); });
       if (lifecycle) this.shutdowns.set(name, { run: limitMs => shutdownAtEOF(execution, drained, Math.max(1, Math.min(timeoutMs, limitMs))), budgetMs: timeoutMs });
       this.publish({ services: { ...this.snapshot.services, [name]: service }, clients: { ...this.snapshot.clients, [name]: "connecting" } });
       const exited = (result: unknown) => {
@@ -279,9 +298,9 @@ export class WorkspaceController {
       disposeEndpoint();
       const endpointCleanup = await Promise.allSettled(endpoint ? [endpoint.settled] : []);
       let failed = false;
-      for (const result of endpointCleanup) if (result.status === 'rejected') { failed = true; this.cleanupReceipts.push(result.reason); }
+      for (const result of endpointCleanup) if (result.status === 'rejected') { failed = true; this.receipt(ledger, result.reason, name); }
       for (const [index, result] of cleanup.entries()) if (result.status === 'rejected') {
-        if (index < 2) { failed = true; this.cleanupReceipts.push(result.reason); }
+        if (index < 2) { failed = true; this.receipt(ledger, result.reason, name); }
         diagnostics.record('service.cleanup.settled', { name, error: result.reason });
       }
       diagnostics.record('service.cleanup.join.settled', { name, phase: 'readiness', failed });
@@ -326,10 +345,21 @@ export class WorkspaceController {
     });
     return { stop, graceMs: shutdown?.budgetMs ?? 0 };
   }
+  /** Record a cleanup failure against the lifetime that owned the work. Once that
+   * lifetime is closed nothing can act on it, so it is only made observable. */
+  private receipt(ledger: CleanupLedger, error: unknown, source: string) {
+    if (ledger.retired) this.diagnostics.record('service.cleanup.late', { source, error });
+    else ledger.receipts.push(error);
+  }
   /** Keep a stop joined by stopServices, its failure surviving as a receipt. */
-  private trackStop(stop: Promise<void>) {
-    const tracked: Promise<void> = stop.catch(error => { this.cleanupReceipts.push(error); }).finally(() => { this.serviceStops.delete(tracked); });
-    this.serviceStops.add(tracked);
+  private trackStop(stop: Promise<void>, name: string) {
+    const ledger = this.cleanup;
+    const tracked: Promise<void> = stop.catch(error => { this.receipt(ledger, error, name); }).finally(() => { ledger.stops.delete(tracked); });
+    ledger.stops.add(tracked);
+  }
+  /** The workspace of this lifetime is gone; later settlements of its work are late. */
+  private retireCleanup() {
+    this.cleanup.retired = true; this.cleanup = cleanupLedger();
   }
   /** Waits the service's stdin-EOF budget, if any, plus stopTimeoutMs at most. */
   async stopService(name: string) {
@@ -337,9 +367,9 @@ export class WorkspaceController {
     if (!started) return;
     const deadline = started.graceMs + this.stopTimeoutMs;
     // The rejection is the report; nothing is retained to fail a later attempt. Work
-    // still running stays joined through serviceSettlements and the runtime itself.
+    // still running stays joined through its settlement and the runtime itself.
     if (!(await within(started.stop, deadline)).timedOut) return;
-    this.trackStop(started.stop);
+    this.trackStop(started.stop, name);
     throw new WorkspaceError("CLEANUP_FAILED", `Service ${name} did not stop within ${deadline}ms; quiescence unproven`);
   }
   async stopRuntime() {
@@ -347,9 +377,17 @@ export class WorkspaceController {
     await this.stopAttachedRuntime(this.stopTimeoutMs);
   }
   private async stopAttachedRuntime(limitMs: number, signal?: AbortSignal) {
-    const runtime = this.runtime, waitMs = Math.min(this.stopTimeoutMs, limitMs);
+    const runtime = this.runtime, waitMs = Math.min(this.stopTimeoutMs, limitMs), ledger = this.cleanup;
     // Runtime.stop carries this deadline itself; a foreign runtime may not.
-    if (runtime && (await within(runtime.stop({ timeoutMs: waitMs }), waitMs, signal)).timedOut) throw new WorkspaceError("CLEANUP_FAILED", `Runtime did not stop within ${Math.round(waitMs)}ms; workspace remains attached`);
+    if (runtime) {
+      const stopped = await within(runtime.stop({ timeoutMs: waitMs }), waitMs, signal).catch(error => {
+        // Runtime.stop reports failed cleanup as an AggregateError; this is its deadline.
+        if (workspaceErrorCode(error) === "CLEANUP_FAILED") ledger.stalled.runtime = true;
+        throw error;
+      });
+      if (stopped.timedOut) { ledger.stalled.runtime = true; throw new WorkspaceError("CLEANUP_FAILED", `Runtime did not stop within ${Math.round(waitMs)}ms; workspace remains attached`); }
+    }
+    ledger.stalled.runtime = false;
     this.publish({ runtime: undefined, progress: [] });
     this.status("Runtime stopped. Files remain open and editable.");
   }
@@ -363,24 +401,26 @@ export class WorkspaceController {
     await this.joinServices(budget(graceMs + this.stopTimeoutMs));
   }
   private async joinServices(deadline: Budget, graceLimitMs = Infinity, operation?: Promise<void>) {
-    const started = performance.now();
+    const started = performance.now(), ledger = this.cleanup;
     const sweep = () => {
       for (const name of Object.keys(this.snapshot.services)) {
         const service = this.beginServiceStop(name, graceLimitMs);
-        if (service) this.trackStop(service.stop);
+        if (service) this.trackStop(service.stop, name);
       }
     };
     // Every published service is signalled now (stdin EOF or kill), all at once and
     // without waiting for launches or a cancelled operation. Those are joined
     // alongside; only a service one of them still publishes needs the second sweep.
     sweep();
-    const join = Promise.allSettled([...this.pendingLaunches, operation]).then(() => { sweep(); return Promise.allSettled([...this.serviceStops, ...this.serviceSettlements]); });
+    const join = Promise.allSettled([...ledger.launches, operation]).then(() => { sweep(); return Promise.allSettled([...ledger.stops, ...ledger.settlements]); });
     if ((await within(join, deadline.remaining(), deadline.signal)).timedOut) {
-      const waiting = { operation: operation && this.operation ? 1 : 0, launches: this.pendingLaunches.size, stops: this.serviceStops.size, joins: this.serviceSettlements.size };
+      ledger.stalled.services = true;
+      const waiting = { operation: operation && this.operation ? 1 : 0, launches: ledger.launches.size, stops: ledger.stops.size, joins: ledger.settlements.size };
       this.diagnostics.record('service.cleanup.timeout', { waitedMs: Math.round(performance.now() - started), ...waiting });
       throw new WorkspaceError("CLEANUP_FAILED", `Service cleanup timed out with ${waiting.operation} cancelled operation(s), ${waiting.launches} launch(es), ${waiting.stops} service stop(s), ${waiting.joins} service join(s) outstanding; quiescence unproven`);
     }
-    const failures = this.cleanupReceipts.splice(0);
+    ledger.stalled.services = false;
+    const failures = ledger.receipts.splice(0);
     if (failures.length) throw new AggregateError([...new Set(failures)], 'Service cleanup failed; quiescence unproven');
   }
   /** Rejects, leaving runtime and workspace in place, while cleanup is unproven; call
@@ -393,7 +433,10 @@ export class WorkspaceController {
   private async closeWithin(total: Budget, options: { force?: boolean }, operation?: Promise<void>) {
     // Phase 1: everything that can still write stops, under the budget minus the slice
     // reserved for phase 2, so slow stops cannot starve the flush.
-    const stops = budget(Math.max(0, total.remaining() - closeReserve(total.totalMs)), total.signal);
+    // A force that follows a join which already ran out its deadline does not pay that
+    // wait again: it only re-checks, briefly, whether the hung work has since finished.
+    const { stalled } = this.cleanup, recheck = options.force && (stalled.services || stalled.runtime);
+    const stops = budget(Math.min(recheck ? FORCE_RECHECK_MS : Infinity, Math.max(0, total.remaining() - closeReserve(total.totalMs))), total.signal);
     try {
       // Graceful EOF may use half of it; the rest is for the fallback kill and joins.
       await this.joinServices(stops, stops.remaining() / 2, operation);
@@ -403,7 +446,7 @@ export class WorkspaceController {
     } catch (error) { if (!options.force) throw error; return this.forceClose([error]); }
     // Phase 2: the kernel finalizes, flushes and releases storage with all that is left.
     try { await this.workspace?.close({ timeoutMs: Math.max(1, Math.ceil(total.remaining())) }); }
-    finally { this.distribution = undefined; this.publish({ workspace: undefined, persistence: "closed" }); }
+    finally { this.distribution = undefined; this.retireCleanup(); this.publish({ workspace: undefined, persistence: "closed" }); }
     this.status("Workspace flushed and closed. Start workspace restores it.");
   }
   /** Close without waiting on what could not be proven stopped. Always throws: the
@@ -414,9 +457,10 @@ export class WorkspaceController {
     const flushMs = Math.ceil(Math.min(closeReserve(this.closeTimeoutMs), Math.max(1_000, this.closeBudget?.remaining() ?? 0)));
     try { await this.workspace?.close({ force: true, timeoutMs: flushMs }); }
     catch (error) { unproven.push(error); }
-    // Host destruction ended whatever the abandoned runtime still owned.
-    unproven.push(...this.cleanupReceipts.splice(0));
-    this.serviceStops.clear(); this.serviceSettlements.clear(); this.distribution = undefined;
+    // Host destruction ended whatever the abandoned runtime still owned. That lifetime
+    // is over: its receipts are reported here, and anything later is a diagnostic.
+    unproven.push(...this.cleanup.receipts);
+    this.retireCleanup(); this.distribution = undefined;
     this.publish({ workspace: undefined, runtime: undefined, progress: [], persistence: "closed" });
     this.status("Workspace force-closed; cleanup was not proven.");
     throw new AggregateError(unproven, `Workspace force-closed; cleanup unproven (${unproven.map(message).join('; ')})`);
@@ -459,8 +503,12 @@ export class WorkspaceController {
     if (this.disposal) return this.disposal;
     this.diagnostics.record("provider.dispose");
     this.disposed = true;
-    this.disposal = this.cancelAndClose().catch(error => {
+    // Work already known to be hung is not waited on again (see closeWithin).
+    const { stalled } = this.cleanup;
+    this.disposal = this.cancelAndClose({ force: stalled.services || stalled.runtime }).catch(error => {
       this.diagnostics.record("provider.dispose.forced", { error });
+      // Already closed (by that force, or by a kernel shutdown that failed): just report.
+      if (!this.snapshot.workspace && !this.snapshot.runtime) throw error;
       return this.forceClose([error]);
     }).then(() => { this.listeners.clear(); }, error => { this.disposal = undefined; throw error; });
     return this.disposal;

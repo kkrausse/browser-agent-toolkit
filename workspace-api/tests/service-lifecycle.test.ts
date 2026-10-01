@@ -204,3 +204,58 @@ test('force pre-empts a close that is still waiting, and both callers get the fo
   expect(f.calls).toEqual(['eof:a', 'workspace.close(force)']);
   expect(f.controller.workspace).toBeUndefined(); expect(f.controller.signal.aborted).toBe(false);
 });
+
+// Observed live: after a hung service forced the close, the reopened workspace's next
+// ordinary Exit failed once with "Service cleanup failed; quiescence unproven" - a
+// failure of the dead lifetime's service, recorded after the forced close had ended it.
+function hungThenLate(options: ConstructorParameters<typeof WorkspaceController>[0]) {
+  const calls: string[] = [];
+  let failStop!: (error: Error) => void, failOutput!: (error: Error) => void;
+  const stopped = new Promise<void>((_, reject) => { failStop = reject; });
+  const output = new Promise<never>((_, reject) => { failOutput = reject; });
+  void stopped.catch(() => {}); void output.catch(() => {});
+  const stream = { async *[Symbol.asyncIterator]() { await output; } };
+  const execution: Execution = { stdout: stream, stderr: stream, exited: new Promise(() => {}), writeStdin() {}, closeStdin() {}, stop: () => stopped };
+  const endpoint = { url: 'http://service.invalid', settled: Promise.resolve(), dispose() {} };
+  const lifetime = () => ({
+    runtime: { async node() { return execution; }, async expose() { return endpoint; }, async stop() { calls.push('runtime.stop'); } },
+    workspace: { async close(close?: { force?: boolean }) { calls.push(close?.force ? 'workspace.close(force)' : 'workspace.close'); } },
+  });
+  const controller = new WorkspaceController(options);
+  const open = () => (controller as unknown as { publish(patch: object): void }).publish(lifetime());
+  const launch = () => controller.launch('chat', { entry: '/chat.js' }, 4096,
+    async () => ({ url: endpoint.url, fetch: async () => new Response('ok') }), { shutdown: 'stdin-eof', timeoutMs: 10 });
+  return { calls, controller, open, launch, failStop, failOutput };
+}
+
+test('late failures of a force-closed lifetime are not reported against the reopened workspace', async () => {
+  const events: string[] = [];
+  const f = hungThenLate({ closeTimeoutMs: 60, onDiagnostic: event => { events.push(event.event); } });
+  f.open(); await f.launch();
+  await expect(f.controller.cancelAndClose()).rejects.toMatchObject({ code: 'CLEANUP_FAILED' });
+  await expect(f.controller.cancelAndClose({ force: true })).rejects.toThrow('force-closed; cleanup unproven');
+  f.open();
+  // Only now does the dead lifetime's service finish failing: its stop and its output.
+  f.failStop(Error('old stop failed late')); f.failOutput(Error('old transport died'));
+  await Bun.sleep(5);
+  await f.controller.cancelAndClose();
+  expect(f.calls).toEqual(['workspace.close(force)', 'runtime.stop', 'workspace.close']);
+  // Still observable, just not as a failure of the new lifetime.
+  expect(events).toContain('service.cleanup.late');
+});
+
+// Observed live: with a close already failed at its deadline, a fresh force call still
+// spent the whole of phase 1 (10s) waiting on the same hung service before forcing.
+test('force after a recorded deadline failure only re-checks the hung work before forcing', async () => {
+  const f = hungClose({ closeTimeoutMs: 900 });
+  await f.launch('a');
+  let started = performance.now();
+  await expect(f.controller.cancelAndClose()).rejects.toMatchObject({ code: 'CLEANUP_FAILED' });
+  expect(performance.now() - started).toBeGreaterThanOrEqual(590);
+  started = performance.now();
+  await expect(f.controller.cancelAndClose({ force: true })).rejects.toThrow(/force-closed; cleanup unproven .*1 service stop\(s\)/);
+  // The 250ms re-check, not the 600ms the stops are otherwise given.
+  expect(performance.now() - started).toBeLessThan(450);
+  expect(f.calls).toEqual(['eof:a', 'workspace.close(force)']);
+  expect(f.controller.workspace).toBeUndefined(); expect(f.controller.signal.aborted).toBe(false);
+});
