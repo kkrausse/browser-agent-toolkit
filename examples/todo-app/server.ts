@@ -2,7 +2,7 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { appRouter } from '@/server/trpcRouter'
 import type { Todo } from '@/schema/todo'
 import { createStaticHandler } from '@/server/staticFiles'
-import { createBrowserEditorHandler, browserEditorHeaders, readModelCatalog } from '@kev-browser-agent-kit/opencode-chat/server'
+import { createBrowserEditorHandler, createFileDiagnosticSink, browserEditorHeaders, readModelCatalog } from '@kev-browser-agent-kit/opencode-chat/server'
 import { authorizeEditing } from '@/server/editing'
 import { resolve } from 'node:path'
 
@@ -14,7 +14,11 @@ const modelKey = process.env.VIVARI_MODEL_API_KEY
 const needsKey = 'Chat needs a model key: put VIVARI_MODEL_API_KEY=<key> in examples/todo-app/.env.local and restart the server. The editor, files and preview work without it.'
 // The checked-in catalog applies once a key exists; the provider refuses its models without one.
 const modelCatalogPath = process.env.MODEL_CATALOG ?? (modelKey ? resolve(import.meta.dirname, 'model-catalog.json') : undefined)
+// Opt-in local capture (`bun run editor:debug`): browser, guest and model events land in
+// the gitignored .diagnostics/editor/events.jsonl; read them with `bun run editor:logs`.
+const diagnostics = createFileDiagnosticSink({ directory: '.diagnostics/editor', enabled: process.env.EDITOR_DIAGNOSTICS === '1' })
 const editor = createBrowserEditorHandler({
+  diagnostics,
   preparedDirectory: '.editor/prepared',
   runtimeDirectory: process.env.RUNTIME_DIR ?? '../../workspace-api/dist/runtime',
   clientDirectory: useBuild ? 'build/client' : undefined,
@@ -66,3 +70,4 @@ const server = Bun.serve({
 
 console.log(`Server running at ${server.url}`)
 if (!modelKey) console.log(needsKey)
+if (diagnostics.enabled) console.log(`Editor diagnostics: ${resolve('.diagnostics/editor/events.jsonl')} (bun run editor:logs --follow)`)
