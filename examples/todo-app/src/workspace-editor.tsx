@@ -33,6 +33,9 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
   const [pending, setPending] = useState<SavedWorkspace>()
   const [restoring, setRestoring] = useState(false)
   const locked = useRef(false)
+  // The selection last written to the identity file, and the write in flight.
+  const identitySelection = useRef<string | undefined>(undefined)
+  const identityWrite = useRef(Promise.resolve())
   const [actionBusy, setActionBusy] = useState(false)
   // Set when an exit, or the stop inside a switch, failed with the workspace still attached.
   const [closeFailure, setCloseFailure] = useState<string>()
@@ -61,6 +64,7 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
   async function capture(): Promise<SavedWorkspace> {
     const workspace = controller.workspace, service = controller.getSnapshot().services.chat
     if (!workspace || !service) throw Error('Workspace and chat must be ready before saving')
+    await identityWrite.current
     await timedStage('workspace.flush', () => workspace.flush())
     const selectedSessionId = chatFor(service)?.getSnapshot().sessionID
     return validateWorkspace({ format: 1, id: catalog.current.activeId ?? crypto.randomUUID(), name: nameRef.current.trim() || 'Untitled workspace', savedAt: Date.now(), source: await captureSource(workspace), sessions: await captureSessions(service), selectedSessionId })
@@ -70,6 +74,7 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
     const saved = await capture()
     await persist({ ...upsert(catalog.current, saved), activeId: saved.id })
     await writeIdentity(controller.workspace!, saved)
+    identitySelection.current = saved.selectedSessionId
     return saved
   }
   /** Caller holds chat admission. Exit writes only what a reopen reads: the
@@ -84,7 +89,10 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
     const saved = catalog.current.workspaces.find(item => item.id === catalog.current.activeId)
     const title = nameRef.current.trim() || 'Untitled workspace'
     if (!workspace || !service || !saved || saved.name !== title || workspace.persistence.status !== 'durable') { await saveCurrent(); return }
-    await writeIdentity(workspace, { id: saved.id, name: title, selectedSessionId: chatFor(service)?.getSnapshot().sessionID })
+    await identityWrite.current
+    const selectedSessionId = chatFor(service)?.getSnapshot().sessionID
+    await writeIdentity(workspace, { id: saved.id, name: title, selectedSessionId })
+    identitySelection.current = selectedSessionId
   }
   async function boot(incoming?: SavedWorkspace): Promise<void> {
     let mappedSelection: string | undefined
@@ -105,6 +113,7 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
     }
     if (mappedSelection && service) await timedStage('chat.select-session', async () => { await chatFor(service)?.selectSession(mappedSelection!) })
     if (incoming) await writeIdentity(controller.workspace!, { ...incoming, selectedSessionId: mappedSelection })
+    identitySelection.current = mappedSelection
     // Services run again, so an earlier unproven stop no longer needs a way out.
     setCloseFailure(undefined)
   }
@@ -138,6 +147,22 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
     window.addEventListener('pagehide', close)
     return () => { cancelled = true; window.removeEventListener('pagehide', close) }
   }, [controller, store])
+
+  // Exit, Save and a switch write the identity file; a reload or a closed tab runs
+  // none of them, so a session selected since was lost. Write that one small file
+  // once the selected chat is idle: no capture and no catalog write. Never during a
+  // workspace action or a chat hold, which write it themselves and first wait for a
+  // write started here (capture and saveForExit), so the two cannot interleave.
+  useEffect(() => {
+    const selected = chatState.sessionID, workspace = controller.workspace
+    const saved = catalog.current.workspaces.find(item => item.id === catalog.current.activeId)
+    if (!chat || !selected || selected === identitySelection.current || !workspace || !saved) return
+    if (locked.current || actionBusy || state.busy || pending || restoring || !idleChat(chatState)) return
+    identitySelection.current = selected
+    identityWrite.current = identityWrite.current
+      .then(() => writeIdentity(workspace, { id: saved.id, name: saved.name, selectedSessionId: selected }))
+      .catch(() => { if (identitySelection.current === selected) identitySelection.current = undefined })
+  }, [chat, chatState, controller, actionBusy, state.busy, pending, restoring])
 
   useEffect(() => {
     if (new URLSearchParams(location.search).get('workspaceFixture') !== '1') return
