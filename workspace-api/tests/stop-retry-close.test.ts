@@ -8,16 +8,19 @@ import { Workspace, opfsStore } from "../src/workspace";
 const distribution = { name: "qa", version: "qa", assetBaseUrl: "/runtime/" };
 const opened: Workspace[] = [];
 const open = async () => { const workspace = await Workspace.open({ id: "default", storage: opfsStore(distribution) }); opened.push(workspace); return workspace; };
-async function withKernel(run: (kernel: { flushes: number; terminated: number; cleanupError?: string }) => Promise<void>) {
+type Kernel = { flushes: number; terminated: number; cleanupError?: string; holdKills?: boolean; release(): void };
+async function withKernel(run: (kernel: Kernel) => Promise<void>) {
   const keys = ["Worker", "fetch", "location", "crossOriginIsolated"] as const;
   const originals = keys.map(key => Object.getOwnPropertyDescriptor(globalThis, key));
-  const kernel: { flushes: number; terminated: number; cleanupError?: string } = { flushes: 0, terminated: 0 };
+  const held: (() => void)[] = [];
+  const kernel: Kernel = { flushes: 0, terminated: 0, release() { for (const exit of held.splice(0)) exit(); } };
   class TestWorker {
     onmessage?: (event: { data: unknown }) => void;
     private emit(data: unknown) { queueMicrotask(() => this.onmessage?.({ data })); }
     postMessage(message: { type: string; reqId?: number; execId?: number }) {
       if (message.type === "init") return this.emit({ type: "ready" });
       if (message.type === "proc-spawn") return this.emit({ type: "proc-started", execId: message.execId });
+      if (message.type === "proc-kill" && kernel.holdKills) return void held.push(() => this.emit({ type: "proc-exit", execId: message.execId, code: 143, signal: "SIGTERM" }));
       if (message.type === "proc-kill") return this.emit({ type: "proc-exit", execId: message.execId, code: 143, signal: "SIGTERM", ...(kernel.cleanupError ? { cleanupError: kernel.cleanupError } : {}) });
       // A graceful close flushes kernel-side as part of `shutdown`; a forced one asks first.
       if (message.type === "workspace-flush" || message.type === "shutdown") kernel.flushes++;
@@ -70,5 +73,30 @@ test("force close flushes, detaches and releases the store, and still reports un
   await workspace.close();
   const reopened = await open();
   await Runtime.start({ workspace: reopened, distribution }).then(next => next.stop());
+  await reopened.close();
+}));
+
+// Observed gap: force covered a stop that rejects, not one that never settles, so a
+// process the kernel never reaped held stop() - and everything awaiting it - forever.
+test("a stop that never settles rejects at its deadline, stays retryable, and force then closes", () => withKernel(async kernel => {
+  kernel.holdKills = true;
+  const workspace = await open();
+  const runtime = await Runtime.start({ workspace, distribution, stopTimeoutMs: 20 });
+  await runtime.node({ entry: "/fixture.js" });
+  const timedOut = { code: "CLEANUP_FAILED", message: expect.stringContaining("1 execution(s)") };
+  await expect(runtime.stop()).rejects.toMatchObject(timedOut);
+  await expect(workspace.close()).rejects.toMatchObject({ code: "ATTACHED" });
+  // Not memoized: the retry joins the same still-registered execution again.
+  await expect(runtime.stop()).rejects.toMatchObject(timedOut);
+  await expect(workspace.close({ force: true })).rejects.toMatchObject({ code: "CLEANUP_FAILED" });
+  expect(kernel).toMatchObject({ flushes: 1, terminated: 1 });
+
+  const reopened = await open();
+  const next = await Runtime.start({ workspace: reopened, distribution, stopTimeoutMs: 20 });
+  await next.node({ entry: "/fixture.js" });
+  await expect(next.stop()).rejects.toMatchObject(timedOut);
+  // Once the outstanding process does exit, the retry proves cleanup and detaches.
+  kernel.release();
+  await next.stop();
   await reopened.close();
 }));

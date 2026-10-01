@@ -1,6 +1,7 @@
 import { launch } from "./execution.js";
 import { createEndpoint } from "./browser/endpoint.js";
 import { workspaceInternals, type Workspace } from "./workspace.js";
+import { timeoutMs, within } from "./deadline.js";
 import { WorkspaceError, type Distribution, type Endpoint, type Execution, type NodeLaunchOptions, type ToolDescriptor, type ToolContext } from "./types.js";
 
 // Function variance permits heterogeneous descriptors without any or untyped calls.
@@ -12,7 +13,9 @@ export interface Runtime<T extends ToolSet = {}> {
   expose(port: number, options?: { signal?: AbortSignal }): Promise<Endpoint>;
   /** Rejects while cleanup is unproven and leaves the workspace attached. Calling it
    * again re-joins the still-live executions/endpoints; failures of resources that
-   * are already gone are reported by one rejection and thereby acknowledged. */
+   * are already gone are reported by one rejection and thereby acknowledged.
+   * Never waits past `stopTimeoutMs`: a join that has not settled by then rejects
+   * with CLEANUP_FAILED, equally retryable (or leave via Workspace.close({ force })). */
   stop(): Promise<void>;
 }
 /** `stop-failed` is a state the caller can leave: the next stop() is a new attempt
@@ -27,12 +30,19 @@ export interface RuntimeStartOptions<T extends ToolSet = {}> {
   workspace: Workspace;
   tools?: T;
   signal?: AbortSignal;
+  /** Bound on each stop() attempt's join of executions and endpoints. Default 10000. */
+  stopTimeoutMs?: number;
 }
 export namespace Runtime {
   export async function start<T extends ToolSet = {}>(options: RuntimeStartOptions<T>): Promise<Runtime<T>> {
     options.signal?.throwIfAborted();
+    const stopTimeoutMs = timeoutMs(options.stopTimeoutMs, 10_000, "stopTimeoutMs");
     const state = workspaceInternals.get(options.workspace);
     if (!state || state.closed) throw new WorkspaceError("CLOSED", "Workspace is not open");
+    // A start that failed without proving its cleanup returned no runtime to retry
+    // with. Starting again first re-joins that cleanup, and rejects while it is unproven.
+    if (state.unstopped) await state.unstopped();
+    if (state.closed) throw new WorkspaceError("CLOSED", "Workspace is not open");
     if (state.clearing) throw new WorkspaceError("STORAGE_BUSY", "Workspace is being cleared");
     if (state.attached) throw new WorkspaceError("ATTACHED", "Workspace already has an active runtime");
     if (JSON.stringify(state.distribution) !== JSON.stringify(options.distribution)) throw new WorkspaceError("DISTRIBUTION_MISMATCH", "Runtime must use the workspace distribution");
@@ -102,14 +112,19 @@ export namespace Runtime {
         const attempt = (async () => {
           lifetime.abort(new WorkspaceError("CLOSED", "Runtime stopped"));
           for (const endpoint of endpoints) endpoint.dispose();
-          await Promise.allSettled([...pendingLaunches]);
           // Settled resources left these registries, so a retry joins only live work.
-          const results = await Promise.allSettled([
+          const joined = await within(Promise.allSettled([...pendingLaunches]).then(() => Promise.allSettled([
             ...[...executions].map(e => e.stop()),
             ...[...endpoints].map(endpoint => endpoint.settled),
-          ]);
+          ])), stopTimeoutMs);
+          if (joined.timedOut) {
+            // Whatever has not settled is still registered, and receipts stay for the
+            // attempt that completes its join; only the waiting ends here.
+            phase = { status: "stop-failed" };
+            throw new WorkspaceError("CLEANUP_FAILED", `Runtime stop timed out after ${stopTimeoutMs}ms with ${pendingLaunches.size} pending launch(es), ${executions.size} execution(s), ${endpoints.size} endpoint(s) outstanding; workspace remains attached`);
+          }
           const failures = receipts.splice(0);
-          for (const result of results) if (result.status === "rejected") failures.push(result.reason);
+          for (const result of joined.value) if (result.status === "rejected") failures.push(result.reason);
           if (failures.length) {
             phase = { status: "stop-failed" };
             throw new AggregateError([...new Set(failures)], "Runtime cleanup failed; workspace remains attached");
@@ -150,6 +165,13 @@ export namespace Runtime {
       }
       options.signal?.throwIfAborted();
       return runtime;
-    } catch (error) { await runtime.stop(); throw error; }
+    } catch (error) {
+      try { await runtime.stop(); }
+      catch (cleanupError) {
+        state.unstopped = () => runtime.stop().then(() => { state.unstopped = undefined; });
+        throw new AggregateError([error, cleanupError], "Runtime start failed and its cleanup is unproven; workspace remains attached. Retry Runtime.start, or close the workspace with { force: true }");
+      }
+      throw error;
+    }
   }
 }

@@ -11,6 +11,9 @@ export interface WorkspaceOpenOptions {
   id: WorkspaceId;
   storage: WorkspaceStorage;
   signal?: AbortSignal;
+  /** How long to wait for another holder (e.g. a closing tab) to release the origin
+   * store before open rejects with STORAGE_BUSY. Runtime default: 10000. */
+  storageLockTimeoutMs?: number;
   onPersistenceChange?: (state: PersistenceState) => void;
   /** Best-effort structured startup milestones; contains no filesystem or guest output. */
   onDiagnostic?: (event: DiagnosticEvent) => void;
@@ -19,6 +22,10 @@ export interface WorkspaceCloseOptions {
   /** Close even while a runtime is attached: flush, destroy the host, detach. The close
    * still rejects with CLEANUP_FAILED, because runtime cleanup was never proven. */
   force?: boolean;
+  /** Bound on the kernel's acknowledgement: of graceful shutdown (runtime default
+   * 30000 when omitted), or of the final flush of a forced close (default 10000).
+   * The host is destroyed either way. */
+  timeoutMs?: number;
 }
 export interface WorkspaceFs {
   readFile(path: string): Promise<Uint8Array>;

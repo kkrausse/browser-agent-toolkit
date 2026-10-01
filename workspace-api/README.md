@@ -82,6 +82,12 @@ may be absent after reopen because empty runtime-root directories are not mirror
 - Only `id: 'default'` and one origin's existing OPFS lease. Opening requires
   persistent storage; failed initialization/ownership rejects instead of silently
   using a different in-memory tree. Files map to `/workspace` for guest code.
+  `storageLockTimeoutMs` bounds the wait for a previous holder of the store
+  (runtime default 10000); a timeout rejects with `STORAGE_BUSY`.
+- `Runtime.stop()` waits at most `stopTimeoutMs` (`Runtime.start` option, default
+  10000), then rejects with `CLEANUP_FAILED` and stays attached: retry it, or
+  leave with `workspace.close({ force: true })`, which always terminates and
+  always rejects with the unproven cleanup.
 - Runtime starts no project applications. Runtime stop kills its executions and
   descendants; storage remains alive. Workspace close rejects while attached,
   flushes, then releases workers even if flushing fails (and propagates failure).
