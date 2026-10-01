@@ -118,7 +118,8 @@ export namespace Workspace {
     const diagnostics = diagnosticReporter(options.onDiagnostic);
     diagnostics.emit("open.requested", { version: options.storage.distribution.version });
     try {
-      host = await Host.open(options.storage.distribution, options.signal, diagnostics);
+      host = await Host.open(options.storage.distribution, options.signal, diagnostics,
+        ...(options.storageLockTimeoutMs === undefined ? [] : [{ lockTimeoutMs: options.storageLockTimeoutMs }]));
       options.signal?.addEventListener("abort", aborted, { once: true });
       if (options.signal?.aborted) { aborted(); options.signal.throwIfAborted(); }
       const h = host;

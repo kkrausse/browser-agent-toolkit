@@ -112,7 +112,11 @@ export class WorkspaceController {
     const workspace = await Workspace.open({ id: "default", storage: opfsStore(distribution), signal: AbortSignal.any([this.signal, AbortSignal.timeout(120000)]),
       onPersistenceChange: state => { this.publish({ persistence: state.status }); diagnostics.record("persistence", state); },
       onDiagnostic: event => { if (event.stage !== "open.failed") lastStage = event.stage; diagnostics.record("workspace.open", event); },
-    }).catch(error => { this.publish({ persistence: "closed" }); throw new Error(`Workspace.open: ${message(error)}; last stage ${lastStage}, elapsed ${Math.round(performance.now() - started)}ms`, { cause: error }); }).finally(() => clearInterval(heartbeat));
+    }).catch(error => { this.publish({ persistence: "closed" }); 
+      const detail = `Workspace.open: ${message(error)}; last stage ${lastStage}, elapsed ${Math.round(performance.now() - started)}ms`;
+      // Keep the code (e.g. STORAGE_BUSY from a lock timeout) through the added context.
+      throw error instanceof WorkspaceError ? Object.assign(new WorkspaceError(error.code, detail), { cause: error }) : new Error(detail, { cause: error });
+    }).finally(() => clearInterval(heartbeat));
     if (this.signal.aborted) { await workspace.close(); this.signal.throwIfAborted(); }
     this.distribution = distribution;
     this.publish({ workspace, persistence: workspace.persistence.status });

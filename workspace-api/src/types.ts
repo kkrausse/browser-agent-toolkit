@@ -11,6 +11,9 @@ export interface WorkspaceOpenOptions {
   id: WorkspaceId;
   storage: WorkspaceStorage;
   signal?: AbortSignal;
+  /** How long to wait for another holder (e.g. a closing tab) to release the origin
+   * store before open rejects with STORAGE_BUSY. Runtime default: 10000. */
+  storageLockTimeoutMs?: number;
   onPersistenceChange?: (state: PersistenceState) => void;
   /** Best-effort structured startup milestones; contains no filesystem or guest output. */
   onDiagnostic?: (event: DiagnosticEvent) => void;
