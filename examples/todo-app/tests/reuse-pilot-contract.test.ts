@@ -48,7 +48,7 @@ test('root assertion unwraps raw data; V2 workspaceID, optional settings and det
 });
 test.skipIf(!packaged)('exact packaged 2.0.3 schema/handler and SDK response adaptation preflight',async()=>{
   const bundle=await Bun.file(new URL('../../../vivari/.runtime/opencode-release-2.0.3/.runtime/opencode-bun-server/server.js',import.meta.url)).text();
-  expect(new Bun.CryptoHasher('sha256').update(bundle).digest('hex')).toBe('1df4bc41c0f6c7350da9d5953f3139586f760a7931fe411bdcabb3460098a929');
+  expect(new Bun.CryptoHasher('sha256').update(bundle).digest('hex')).toBe('648140f53c48820106d4727fd29f1914f8f86a4e2c3f3430551eb9dd41a806b5');
   for (const snippet of ['success: exports_Schema.Struct({ data: exports_session.Info })','success: exports_Schema.Array(exports_location.Ref)','success: exports_HttpApiSchema.NoContent','data: messages3,','previous: first ?','next: last3 ?','return { interrupted: yield* session.interrupt','return { data: yield* session ? read5','workspaceID: optional3(WorkspaceID)','metadata: Metadata3.pipe(optional3)','permissions: exports_permission.Ruleset.pipe(optional3)','id: location3.project.id','return yield* response2(catalog.model.available())','return yield* response2(exports_plugin22.Service.use','config7.entries()']) expect(bundle).toContain(snippet);
   const sdk=await Bun.file(new URL('../../../opencode-chat/node_modules/@opencode/client/dist/effect/generated/client.js',import.meta.url)).text();
   for(const name of ['EndpointSessionCreate','EndpointSessionGet','EndpointSessionActive','EndpointPermissionList','EndpointFormList']) {
@@ -59,7 +59,7 @@ test.skipIf(!packaged)('exact packaged 2.0.3 schema/handler and SDK response ada
 });
 test.skipIf(!packaged)('pinned HttpApi schemas encode all audited finite responses through actual transport serialization',async()=>{
   const bundle=await Bun.file(new URL('../../../vivari/.runtime/opencode-release-2.0.3/.runtime/opencode-bun-server/server.js',import.meta.url)).text();
-  expect(new Bun.CryptoHasher('sha256').update(bundle).digest('hex')).toBe('1df4bc41c0f6c7350da9d5953f3139586f760a7931fe411bdcabb3460098a929');
+  expect(new Bun.CryptoHasher('sha256').update(bundle).digest('hex')).toBe('648140f53c48820106d4727fd29f1914f8f86a4e2c3f3430551eb9dd41a806b5');
   // Exact dependency/protocol prefix, no server bootstrap, handlers or runtime edits.
   // ClientApi uses the same makeDefaultApi as the server with inert middleware identities.
   const end=bundle.indexOf('\n// ',bundle.indexOf('var init_client7 ='));

@@ -54,8 +54,9 @@ Setup reuses whatever already exists and never resets a checkout. In order it:
    `workspace-api/dist/runtime`, then installs and builds the example
    (`scripts/build.ts --install`).
 
-A first run takes about three minutes, mostly the two Rust builds; a repeat run
-takes about ten seconds. Then start the example with its browser editor:
+A first run took about two minutes on an Apple-silicon laptop with warm Cargo and
+Bun download caches, mostly the two Rust builds; a repeat run takes about ten
+seconds. Then start the example with its browser editor:
 
 ```sh
 cd examples/todo-app
