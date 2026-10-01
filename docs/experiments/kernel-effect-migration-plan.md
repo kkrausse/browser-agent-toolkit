@@ -265,3 +265,12 @@ not evidence that pilot success means the whole kernel is migrated.
   bundled regression, then supplies new matching SDK/worker receipts; intended report
   `2026-09-30-effect-loader-vendor-url-repair.md`. Full-app preparation will be paired
   with that new candidate before any browser qualification. Phase2 remains gated.
+- Qualified Node report `71ddbe3`:
+  [Node24.18 qualification](2026-09-30-effect-loader-qualified-node-qa.md).
+  Official darwin-arm64 archive checksum and actual executable verified. Same
+  10 expanded + 4 loader + 6 PID-egress + 8 endpoint gates pass unchanged, plus
+  routing, three close cases and native markAsUncloneable fixture. Guest missing
+  markAsUncloneable export still fails byte-identically to baseline; cohort stopped,
+  VM-import/postflight unrun. Frozen5c4/9814 assets (106 + 997 hashes) unchanged.
+  This does not qualify forthcoming URL-repaired artifacts, browser/full-app or
+  the whole runtime contract suite. Baseline compatibility exclusion remains explicit.
