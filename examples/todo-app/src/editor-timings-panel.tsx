@@ -77,12 +77,12 @@ export function EditorTimings({ controller }: { controller: WorkspaceController 
     setNotice('Downloaded.')
   }
   return <details className="todo-timings" onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary>Debug · Timings{latest ? ` · ${latest.kind} ${seconds(latest.durationMs)}${latest.status === 'failed' ? ' (failed)' : ''}` : ''}</summary>
+    <summary>Debug · Timings{latest ? ` · ${latest.kind} ${seconds(latest.durationMs)}${latest.status === 'failed' ? ' (failed)' : latest.status === 'unproven' ? ' (cleanup unproven)' : ''}` : ''}</summary>
     {open && <>
       <div className="todo-timings-actions"><button onClick={() => void copy()}>Copy JSON</button><button onClick={download}>Download JSON</button><button onClick={() => { editorTimings.clear(); setNotice('') }}>Clear</button><small role="status">{notice}</small></div>
       {!recent.length && <p>No operations recorded yet.</p>}
       {recent.map(operation => <details key={operation.seq}>
-        <summary>{new Date(operation.startedAt).toLocaleTimeString()} · {operation.kind} · {seconds(operation.durationMs)}{operation.status === 'failed' ? ` · failed${operation.failedStage ? ` in ${operation.failedStage}` : ''}` : ''}</summary>
+        <summary>{new Date(operation.startedAt).toLocaleTimeString()} · {operation.kind} · {seconds(operation.durationMs)}{operation.status === 'failed' ? ` · failed${operation.failedStage ? ` in ${operation.failedStage}` : ''}` : operation.status === 'unproven' ? ` · cleanup unproven${operation.failedStage ? ` in ${operation.failedStage}` : ''}` : ''}</summary>
         <small>{contextLine(operation)}</small>
         <table><tbody>
           {rows(operation).filter(row => row.ms >= 5 || row.failed).map(row => <tr key={row.name} className={row.failed ? 'todo-timings-failed' : undefined}>
