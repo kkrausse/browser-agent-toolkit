@@ -11,7 +11,7 @@ function fixture() {
   const outgoing = image('A'), incoming = image('B'), events: string[] = []
   let persisted: Catalog = { activeId: outgoing.id, workspaces: [outgoing] }
   const options = {
-    incoming, catalog: persisted, assertIdle: () => { events.push('idle') },
+    incoming, catalog: persisted, hold: () => { events.push('hold'); return { release: () => { events.push('release') } } },
     capture: async () => { events.push('capture'); return outgoing },
     persist: async (next: Catalog) => { events.push(next.pending ? 'persist-pending' : 'commit'); persisted = next },
     disposeChat: async () => { events.push('dispose-chat') }, stop: async () => { events.push('stop') },
@@ -23,7 +23,7 @@ describe('local workspace switching', () => {
   test('validates, saves outgoing and durably journals incoming before disposal/stop/replace/start', async () => {
     const f = fixture()
     const result = await switchWorkspace(f.options)
-    expect(f.events).toEqual(['idle', 'capture', 'idle', 'persist-pending', 'dispose-chat', 'stop', 'replace', 'start', 'commit'])
+    expect(f.events).toEqual(['hold', 'capture', 'persist-pending', 'dispose-chat', 'stop', 'replace', 'start', 'commit', 'release'])
     expect(result.activeId).toBe(f.incoming.id)
     expect(result.pending).toBeUndefined()
     expect(result.workspaces.map(item => item.name)).toEqual(['A', 'B'])
@@ -35,13 +35,31 @@ describe('local workspace switching', () => {
   })
   test('busy chat blocks before saving', async () => {
     const f = fixture()
-    await expect(switchWorkspace({ ...f.options, assertIdle: () => { throw Error('busy') } })).rejects.toThrow('busy')
+    await expect(switchWorkspace({ ...f.options, hold: () => { throw Error('busy') } })).rejects.toThrow('busy')
     expect(f.events).toEqual([])
   })
   test('failed outgoing save never stops or clears', async () => {
     const f = fixture()
     await expect(switchWorkspace({ ...f.options, persist: async () => { throw Error('quota') } })).rejects.toThrow('quota')
-    expect(f.events).toEqual(['idle', 'capture', 'idle'])
+    expect(f.events).toEqual(['hold', 'capture', 'release'])
+  })
+  test('chat admission is acquired once, still held at the journal write and at disposal, and released by a failed capture', async () => {
+    const f = fixture()
+    let held = 0
+    const hold = () => { held++; return { release: () => { held-- } } }
+    const seen: number[] = []
+    await switchWorkspace({ ...f.options, hold,
+      persist: async next => { if (next.pending) seen.push(held); await f.options.persist(next) },
+      disposeChat: async () => { seen.push(held) } })
+    expect(seen).toEqual([1, 1])
+    await expect(switchWorkspace({ ...f.options, hold, capture: async () => { throw Error('capture failed') } })).rejects.toThrow('capture failed')
+    expect(held).toBe(0)
+    expect(f.events).not.toContain('dispose-chat')
+  })
+  test('retry of an interrupted switch takes no hold: the outgoing chat is already gone', async () => {
+    const f = fixture()
+    await switchWorkspace({ ...f.options, retry: true, hold: () => { throw Error('no chat') } })
+    expect(f.events).toEqual(['persist-pending', 'dispose-chat', 'stop', 'replace', 'start', 'commit'])
   })
   test('unproven service shutdown leaves both recovery snapshots durable and never clears', async () => {
     const f = fixture()
@@ -104,7 +122,7 @@ describe('local workspace switching', () => {
     const idle = { connection: 'connected', execution: 'idle', sending: false, loading: false, loadingOlder: false, interruptRequested: false, permissions: [], questions: [], unsupportedForms: [] } as unknown as ChatSnapshot
     expect(idleChat(idle)).toBe(true)
     expect(idleChat(undefined)).toBe(false)
-    for (const patch of [{ execution: 'running' }, { execution: 'unknown' }, { loading: true }, { loadingOlder: true }, { sending: true }, { connection: 'disconnected' }, { interruptRequested: true }, { permissions: [{}] }, { questions: [{}] }]) expect(idleChat({ ...idle, ...patch } as ChatSnapshot)).toBe(false)
+    for (const patch of [{ execution: 'running' }, { execution: 'unknown' }, { loading: true }, { loadingOlder: true }, { sending: true }, { connection: 'disconnected' }, { interruptRequested: true }, { permissions: [{}] }, { questions: [{}] }, { unsupportedForms: [{}] }, { held: 'Saving workspace' }, { sessionOperationPending: true }]) expect(idleChat({ ...idle, ...patch } as ChatSnapshot)).toBe(false)
   })
   test('source capture includes agent-added files, excludes managed/server/secrets and refuses source symlinks', async () => {
     const fs = { readdir: async (path: string) => path === '/' ? ['src', 'package.json', '.server', 'node_modules'] : ['home.tsx', 'added.ts'], stat: async (path: string) => ({ isDirectory: path === '/src', isFile: path !== '/src', size: 1 }), readFile: async (path: string) => new TextEncoder().encode(path) }

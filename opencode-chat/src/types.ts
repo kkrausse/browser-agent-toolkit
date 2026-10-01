@@ -63,6 +63,8 @@ export interface ChatSnapshot {
   draftKey?: string;
   /** Session creation or model mutation has not completed. */
   sessionOperationPending?: boolean;
+  /** Reason given to an active hold(). New sends, session and model changes are rejected. */
+  held?: string;
   models: readonly ModelInfo[];
   model?: ModelRef;
   /** Resolved location default; does not mutate the session's model selection. */
@@ -79,6 +81,10 @@ export interface ChatSnapshot {
   unsupportedForms: readonly FormInfo[];
   error?: string;
 }
+/** Exclusive admission lease. release() is idempotent and a no-op after dispose(). */
+export interface ChatHold {
+  release(): void;
+}
 export interface ChatController {
   readonly ready: Promise<void>;
   getSnapshot(): ChatSnapshot;
@@ -94,6 +100,14 @@ export interface ChatController {
   replyPermission(id: string, decision: PermissionDecision): Promise<void>;
   replyQuestion(id: string, answers: QuestionAnswers): Promise<void>;
   rejectQuestion(id: string): Promise<void>;
+  /** Cancel a form this client cannot render, so it stops blocking the session. */
+  dismissForm(id: string): Promise<void>;
+  /** Acquire exclusive admission, or throw synchronously unless the chat is fully idle
+   * (connected, loaded, not executing, no pending operation or request, not already held).
+   * Until released, send, session create/select, model selection and reconnect are
+   * rejected and the snapshot reports `held`. Replies and interrupt remain available.
+   * This fences this controller only; it cannot stop work another client starts. */
+  hold(reason: string): ChatHold;
   clearError(): void;
   /** Freeze admission, join local readers/finalizers and release the client runtime.
    * Does not interrupt or join remote server execution. Repeated calls share completion. */

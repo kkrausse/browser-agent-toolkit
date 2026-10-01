@@ -202,13 +202,16 @@ Actions return promises and reject on failure, also recording visible errors:
 | `reconnect()` | Replace local subscription, hydrate authoritative history/requests/activity |
 | `replyPermission(id, 'once'\|'always'\|'reject')` | Pinned permission response |
 | `replyQuestion(id, string[][])` / `rejectQuestion(id)` | Backward-compatible question view; adapts question-tool forms to keyed form replies / cancellation |
+| `dismissForm(id)` | Cancel an `unsupportedForms` entry this client cannot render, so it stops blocking the session |
+| `hold(reason) → { release() }` | Synchronous exclusive admission lease. Throws unless fully idle (connected, loaded, not executing, no pending operation/request, not held). While held, `send`, `selectSession`, `createSession`, `selectModel` and `reconnect` reject and the snapshot reports `held`; `dispose()` ends it. Fences this controller only |
 | `clearError()` | Dismiss local operation error |
 | `dispose()` | Freeze admission and await controller-owned transport settlement, body cancellation, scopes and runtime disposal; does not interrupt/join remote server work |
 
 Snapshot fields: connection, sessionID, sessions, models, model, native messages,
 execution (`idle/running/retrying/unknown`), interruptRequested, sending, loading,
 loadingOlder, hasOlder, permissions/questions with per-request submitting/error, unsupportedForms,
-and operation error. Disconnection becomes **unknown execution**, not success.
+held (the active hold's reason) and operation error. `canSend(snapshot)` is the single
+send-admission predicate used by both the controller and the UI. Disconnection becomes **unknown execution**, not success.
 Step completion and prompt HTTP acceptance are not execution completion.
 
 No default session creation, attachment uploads, endpoint lifecycle calls,

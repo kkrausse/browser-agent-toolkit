@@ -1,8 +1,9 @@
-import { createChatController } from "./controller";
-export { createChatController };
+import { createChatController, canSend } from "./controller";
+export { createChatController, canSend };
 export type {
   ChatEndpoint,
   ChatController,
+  ChatHold,
   ChatSnapshot,
   ChatOptions,
   ChatExport,
