@@ -584,7 +584,7 @@ export function ChatView({
                 : isPreparing(state)
                 ? "Preparing chat…"
                 : state.execution === "idle"
-                ? "Ready"
+                ? state.sending ? "Sending…" : "Ready"
                 : state.execution === "unknown"
                   ? stalled ? "Execution state unknown" : "Checking execution…"
                   : state.execution === "retrying"

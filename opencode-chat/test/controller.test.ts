@@ -773,3 +773,112 @@ test("an unsupported form can be dismissed, cancelling it so the chat can be hel
   await expect(c.dismissForm("frm_numeric")).rejects.toThrow("no longer pending");
   c.hold("switch").release();
 });
+
+test("a history refresh during a streamed answer never shrinks the text or reloads earlier messages", async () => {
+  const f = fixture();
+  const assistant = (text: string, completed?: number) => ({
+    id: "msg_a", type: "assistant", agent: "build", model: { providerID: "p", id: "m" },
+    content: [{ type: "text", text }], time: { created: 2, ...(completed ? { completed } : {}) },
+  });
+  // Like the server: every non-empty page carries a cursor, and deltas are not
+  // persisted, so a streaming part reads as empty until its text ends.
+  let persisted: unknown[] = [user("msg_u", "essay please")];
+  let page: Promise<Response> | undefined;
+  f.override = url => !url.pathname.endsWith("/message") ? undefined
+    : url.searchParams.has("cursor") ? json({ data: [], cursor: {} })
+    : page ?? json({ data: [...persisted].reverse(), cursor: { next: "older" } });
+  const { c } = start(f);
+  await c.ready;
+  const lengths: number[] = [];
+  let reloads = 0;
+  c.subscribe(() => {
+    const state = c.getSnapshot(), message = state.messages.find(m => m.id === "msg_a");
+    if (message?.type === "assistant" && message.content[0]?.type === "text") lengths.push(message.content[0].text.length);
+    if (state.loadingOlder) reloads++;
+  });
+  const cursorCalls = () => f.calls.filter(call => call.url.pathname.endsWith("/message") && call.url.searchParams.has("cursor")).length;
+  const drained = cursorCalls();
+  const ids = { sessionID: "ses1", assistantMessageID: "msg_a" };
+  const text = () => (c.getSnapshot().messages.find(m => m.id === "msg_a") as any)?.content[0]?.text;
+  f.active = { ses1: { type: "running" } };
+  f.emit("session.execution.started", { sessionID: "ses1" });
+  f.emit("session.step.started", { ...ids, agent: "build", model: { providerID: "p", id: "m" } });
+  f.emit("session.text.started", { ...ids, ordinal: 0 });
+  f.emit("session.text.delta", { ...ids, ordinal: 0, delta: "The sky " });
+  await tick();
+  expect(text()).toBe("The sky ");
+  // A refresh starts mid-stream and is slow, as in the browser kernel.
+  persisted = [user("msg_u", "essay please"), assistant("")];
+  const slow = deferred<Response>();
+  page = slow.promise;
+  f.emit("session.inbox.delivered", { sessionID: "ses1", inboxID: "msg_inbox" });
+  await new Promise(resolve => setTimeout(resolve, 160));
+  f.emit("session.text.delta", { ...ids, ordinal: 0, delta: "is blue " });
+  await tick();
+  expect(text()).toBe("The sky is blue ");
+  page = undefined;
+  slow.resolve(json({ data: [...persisted].reverse(), cursor: { next: "older" } }));
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(c.getSnapshot().messages.map(m => m.id)).toEqual(["msg_u", "msg_a"]);
+  expect(text()).toBe("The sky is blue ");
+  f.emit("session.text.delta", { ...ids, ordinal: 0, delta: "because" });
+  await tick();
+  // A fast refresh between two deltas reads the same empty persisted part.
+  f.emit("session.inbox.delivered", { sessionID: "ses1", inboxID: "msg_inbox_2" });
+  await new Promise(resolve => setTimeout(resolve, 160));
+  expect(text()).toBe("The sky is blue because");
+  f.emit("session.text.delta", { ...ids, ordinal: 0, delta: " of scattering." });
+  await tick();
+  expect(text()).toBe("The sky is blue because of scattering.");
+  expect(lengths.every((length, i) => i === 0 || length >= lengths[i - 1]!)).toBe(true);
+  expect(reloads).toBe(0);
+  expect(cursorCalls()).toBe(drained);
+  expect(c.getSnapshot().execution).toBe("running");
+});
+
+test("a finished run reads idle only once its final history is in the transcript", async () => {
+  const { f, c } = start();
+  await c.ready;
+  f.active = { ses1: { type: "running" } };
+  f.emit("session.execution.started", { sessionID: "ses1" });
+  await tick();
+  const slow = deferred<Response>();
+  f.override = url => url.pathname.endsWith("/message") ? slow.promise : undefined;
+  f.active = {};
+  f.emit("session.execution.succeeded", { sessionID: "ses1" });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(c.getSnapshot().execution).toBe("running");
+  expect(canSend(c.getSnapshot())).toBe(false);
+  const idleWith: number[] = [];
+  c.subscribe(() => { if (c.getSnapshot().execution === "idle") idleWith.push(c.getSnapshot().messages.length); });
+  slow.resolve(json({ data: [user("msg_answer", "final", 2), user("msg_u", "question", 1)], cursor: {} }));
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(c.getSnapshot().execution).toBe("idle");
+  expect(idleWith[0]).toBe(2);
+  // The event is authoritative: a failed refresh reports its error and still ends the run.
+  f.emit("session.execution.started", { sessionID: "ses1" });
+  await tick();
+  f.override = url => url.pathname.endsWith("/message") ? json({}, 503) : undefined;
+  f.emit("session.execution.interrupted", { sessionID: "ses1", reason: "user" });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(c.getSnapshot().execution).toBe("idle");
+  expect(c.getSnapshot().error).toContain("503");
+});
+
+test("New chat returns to the unsent session it already created instead of creating another", async () => {
+  const { f, c } = start();
+  await c.ready;
+  const created = () => posted(f, "/session").length;
+  expect(await c.createSession()).toBe("ses_new");
+  expect(await c.createSession()).toBe("ses_new");
+  await c.selectSession("ses1");
+  expect(await c.createSession()).toBe("ses_new");
+  expect(c.getSnapshot().sessionID).toBe("ses_new");
+  expect(canSend(c.getSnapshot())).toBe(true);
+  expect(created()).toBe(1);
+  expect(c.getSnapshot().sessions.filter(item => item.id === "ses_new")).toHaveLength(1);
+  // Once something was sent to it, New chat creates again.
+  await c.send({ text: "hello" });
+  await c.createSession();
+  expect(created()).toBe(2);
+});

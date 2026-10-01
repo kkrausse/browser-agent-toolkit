@@ -58,7 +58,9 @@ export interface TimingOperation {
   sinceLoadMs: number
   endedAt?: string
   durationMs?: number
-  status: 'running' | 'ok' | 'failed'
+  /** unproven: a force exit that closed the editor although its stop or close stage
+   * failed, so nothing proved that preview and OpenCode stopped. */
+  status: 'running' | 'ok' | 'failed' | 'unproven'
   failedStage?: string
   error?: string
   /** Duration outside every top-level stage. */
@@ -220,6 +222,10 @@ export function createEditorTimings() {
     operation.status = data.failed ? 'failed' : 'ok'
     // A step that threw has no closing event; whatever is still open ran until the end.
     for (const { stage } of run.open) { stage.durationMs = round(operation.durationMs - stage.startMs); if (data.failed) stage.status = 'failed' }
+    // A force exit resolves by design even when cleanup could not be proven. Its
+    // failed stages are the record of that; do not report the operation as ok.
+    const unproven = operation.kind === 'force-exit' && !data.failed ? operation.stages.find(stage => stage.status === 'failed') : undefined
+    if (unproven) { operation.status = 'unproven'; operation.failedStage ??= unproven.name }
     operation.unaccountedMs = round(Math.max(0, operation.durationMs - operation.stages.reduce((sum, stage) => sum + (stage.depth === 0 ? stage.durationMs ?? 0 : 0), 0)))
     operation.context.kernelBootsInPage = kernelBoots; operation.context.runtimeStartsInKernel = runtimeStarts
     operation.context.end = facts()

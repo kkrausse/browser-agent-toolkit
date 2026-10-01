@@ -377,8 +377,9 @@ export class WorkspaceController {
   }
   /** Record a cleanup failure against the lifetime that owned the work. Once that
    * lifetime is closed nothing can act on it, so it is only made observable. */
-  private receipt(ledger: CleanupLedger, error: unknown, source: string) {
-    if (ledger.retired) this.diagnostics.record('service.cleanup.late', { source, error });
+  private receipt(ledger: CleanupLedger, error: unknown, name: string) {
+    // `name`, as on every other service event: the sanitizer redacts a `source` key.
+    if (ledger.retired) this.diagnostics.record('service.cleanup.late', { name, error });
     else ledger.receipts.push(error);
   }
   /** Keep a stop joined by stopServices, its failure surviving as a receipt. */

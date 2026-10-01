@@ -256,8 +256,8 @@ function hungThenLate(options: ConstructorParameters<typeof WorkspaceController>
 }
 
 test('late failures of a force-closed lifetime are not reported against the reopened workspace', async () => {
-  const events: string[] = [];
-  const f = hungThenLate({ closeTimeoutMs: 60, onDiagnostic: event => { events.push(event.event); } });
+  const events: string[] = [], late: unknown[] = [];
+  const f = hungThenLate({ closeTimeoutMs: 60, onDiagnostic: event => { events.push(event.event); if (event.event === 'service.cleanup.late') late.push(event.data); } });
   f.open(); await f.launch();
   await expect(f.controller.cancelAndClose()).rejects.toMatchObject({ code: 'CLEANUP_FAILED' });
   await expect(f.controller.cancelAndClose({ force: true })).rejects.toThrow('force-closed; cleanup unproven');
@@ -269,6 +269,8 @@ test('late failures of a force-closed lifetime are not reported against the reop
   expect(f.calls).toEqual(['workspace.close(force)', 'runtime.stop', 'workspace.close']);
   // Still observable, just not as a failure of the new lifetime.
   expect(events).toContain('service.cleanup.late');
+  // The service is named: a `source` key would be redacted by the sanitizer.
+  expect(late.every(data => (data as { name?: unknown }).name === 'chat')).toBe(true);
 });
 
 // Observed live: with a close already failed at its deadline, a fresh force call still

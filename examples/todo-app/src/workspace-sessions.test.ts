@@ -19,27 +19,33 @@ test('native export paginates and validates resumable bundles without inference 
   expect(exported[1]?.messages[0]?.parts).toEqual([{ type: 'text', text: 'child' }])
   expect(paths).toEqual(['/api/session', '/api/session/parent/export', '/api/session', '/api/session/child/export'])
 })
-test('native import clears persisted old rows, remaps child/parent IDs and verifies history hydration', async () => {
-  const calls: string[] = [], imported: Record<string, unknown>[] = []
+test('native import clears persisted old rows, keeps session IDs and list order, and verifies history hydration', async () => {
+  const calls: string[] = [], imported: { info: { id: string; parentID?: string }; location: unknown }[] = []
   let oldExists = true
   const endpoint = service(async (url, init) => {
     calls.push((init?.method ?? 'GET') + ' ' + url.pathname)
     if (url.pathname === '/api/session') return Response.json({ data: oldExists ? [{ id: 'outgoing' }] : [], cursor: {} })
     if (init?.method === 'DELETE') { oldExists = false; return Response.json({}) }
     if (url.pathname === '/api/session/import') {
-      const bundle = JSON.parse(String(init?.body)); imported.push(bundle)
+      const bundle = JSON.parse(String(init?.body))
+      // One ID is still taken where the emptied list cannot see it.
+      if (bundle.info.id === 'taken') return Response.json({ _tag: 'ConflictError' }, { status: 409 })
+      imported.push(bundle)
       return Response.json({ data: { id: bundle.info.id } })
     }
     return Response.json({ data: [] })
   })
-  const ids = await restoreSessions(endpoint, [{ info: { id: 'child', parentID: 'parent' }, messages: [] }, { info: { id: 'parent' }, messages: [] }])
-  expect(ids.size).toBe(2)
-  expect((imported[1]?.info as { parentID: string }).parentID).toBe(ids.get('parent')!)
-  expect((imported[1]?.info as { id: string }).id).toBe(ids.get('child')!)
+  // Saved in list order, most recently updated first; the server lists the latest import first.
+  const ids = await restoreSessions(endpoint, [{ info: { id: 'newest' }, messages: [] }, { info: { id: 'parent' }, messages: [] }, { info: { id: 'child', parentID: 'parent' }, messages: [] }, { info: { id: 'taken' }, messages: [] }])
+  expect([...ids]).toContainEqual(['newest', 'newest'])
+  expect(ids.get('child')).toBe('child')
+  expect(ids.get('taken')).toMatch(/^ses_[0-9a-f]{32}$/)
+  expect(imported.map(bundle => bundle.info.id)).toEqual([ids.get('taken')!, 'parent', 'child', 'newest'])
+  expect(imported[2]?.info.parentID).toBe('parent')
   expect(imported[0]?.location).toEqual({ directory: '/workspace' })
   expect(calls[0]).toBe('GET /api/session')
   expect(calls[1]).toBe('DELETE /api/session/outgoing')
-  expect(calls.filter(call => call.includes('/message'))).toHaveLength(2)
+  expect(calls.filter(call => call.includes('/message'))).toHaveLength(4)
 })
 test('malformed native transfer fails instead of silently dropping chat sessions', async () => {
   await expect(captureSessions(service(async url => Response.json(url.pathname === '/api/session' ? { data: [{ id: 'bad' }] } : { data: { info: { id: 'bad' } } })))).rejects.toThrow()

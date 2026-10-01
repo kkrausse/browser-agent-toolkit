@@ -19,6 +19,22 @@ export { canSend };
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const compareID = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
+type Message = ChatSnapshot["messages"][number];
+/** Text deltas are not persisted: a history snapshot taken mid-stream carries a
+ * streaming part with less text than the events already delivered. A refresh keeps
+ * the delivered text there, so what is on screen never shrinks. */
+function keepStreamed(snapshot: Message, shown: Message | undefined): Message {
+  if (snapshot.type !== "assistant" || shown?.type !== "assistant" || snapshot.time.completed) return snapshot;
+  return {
+    ...snapshot,
+    content: snapshot.content.map((part, i) => {
+      const live = shown.content[i];
+      return (part.type === "text" || part.type === "reasoning") && live?.type === part.type &&
+        live.text.length > part.text.length && live.text.startsWith(part.text)
+        ? { ...part, text: live.text } : part;
+    }),
+  };
+}
 function freeze<T>(value: T): T {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
     Object.freeze(value);
@@ -60,13 +76,22 @@ export function createChatController(options: ChatOptions): ChatController {
   let connection = Scope.forkUnsafe(lifetime),
     selectionScope = Scope.forkUnsafe(connection);
   let older: string | undefined | null, hydration: Fiber.Fiber<void, ChatAPIError | ChatError> | undefined;
+  // The first page of this selection has been walked back to the start of history.
+  let reachedStart = false;
   let requestEvents: NativeEvent[] = [];
+  // While a history request is in flight: messages changed by live events, and
+  // whether a refresh was asked for that this request may be too old to satisfy.
+  const live = new Set<string>();
+  let stale = false;
   const answered = new Set<string>();
   const dismissing = new Set<string>();
   let recovery: Fiber.Fiber<void, never> | undefined;
+  let settling: symbol | undefined;
   let mutation: symbol | undefined;
   let draftSequence = 0;
   const draftKeys = new Map<string, string>();
+  // Untitled sessions this controller created that nothing has been sent to.
+  const unsent = new Set<string>();
   let disposal: Promise<void> | undefined;
   // `mutation` is the only record of a pending session operation. The snapshot
   // flag is stamped on every publish so the two cannot drift.
@@ -108,6 +133,7 @@ export function createChatController(options: ChatOptions): ChatController {
     ));
   };
   function recover() {
+    if (hydration) stale = true;
     if (disposed || recovery || state.connection !== "connected") return;
     const g = generation,
       s = selection;
@@ -125,6 +151,31 @@ export function createChatController(options: ChatOptions): ChatController {
       );
     }));
   }
+  // A finished run's last content and its idle row only arrive with a history
+  // refresh. Idle is published after that refresh, so the chat never reads Ready
+  // before the answer is in the transcript. The event stays authoritative: idle
+  // follows even when the refresh fails, unless a newer run started meanwhile.
+  function settle() {
+    if (disposed) return;
+    const g = generation,
+      s = selection,
+      token = (settling = Symbol());
+    runtime.runFork(Effect.gen(function*() {
+      // A request already in flight may predate the end of the run.
+      if (hydration) yield* Fiber.await(hydration);
+      yield* hydrate();
+    }).pipe(
+      Effect.catchCause(cause => Effect.sync(() => {
+        if (valid(g, s) && !Cause.hasInterrupts(cause)) publish({ error: Cause.pretty(cause) });
+      })),
+      Effect.ensuring(Effect.sync(() => {
+        if (!valid(g, s) || settling !== token) return;
+        settling = undefined;
+        publish({ execution: "idle", interruptRequested: false });
+      })),
+      Effect.forkIn(selectionScope),
+    ));
+  }
   const hydrate = Effect.fn("Chat.hydrate")(function*(): Effect.fn.Return<void, ChatAPIError | ChatError, OpenCodeAPI> {
     if (hydration) return yield* Fiber.join(hydration);
     if (!state.sessionID) return;
@@ -133,6 +184,8 @@ export function createChatController(options: ChatOptions): ChatController {
       rev = revision,
       id = yield* sessionID();
     requestEvents = [];
+    live.clear();
+    stale = false;
     const task = yield* Effect.gen(function*() {
       const api = yield* OpenCodeAPI;
       const [page, permissions, forms, active] = yield* Effect.all([
@@ -147,9 +200,18 @@ export function createChatController(options: ChatOptions): ChatController {
       const prefix = state.messages.filter((m) => !ids.has(m.id));
       const first = messages[0]?.time.created ?? 0;
       const previous = prefix.filter((m) => m.time.created < first);
-      if (!previous.length) older = page.cursor.next;
+      // The server returns a cursor for every non-empty page. Once the start of
+      // history is known, a refresh has nothing older to look for.
+      if (!previous.length && !reachedStart) older = page.cursor.next;
+      // Events kept arriving while this page was in flight and it may predate them:
+      // a message they changed, or created, stays as the events left it.
+      const shown = new Map(state.messages.map((m) => [m.id, m]));
       publish({
-        messages: [...previous, ...messages],
+        messages: [
+          ...previous,
+          ...messages.map((m) => (live.has(m.id) && shown.get(m.id)) || keepStreamed(m, shown.get(m.id))),
+          ...prefix.filter((m) => live.has(m.id) && !previous.includes(m)),
+        ],
         hasOlder: !!older,
         permissions: permissions
           .filter((r) => !answered.has(`permission:${r.id}`))
@@ -166,7 +228,8 @@ export function createChatController(options: ChatOptions): ChatController {
             ...state.questions.find((p) => p.request.id === request.id),
             request,
           })),
-        ...(revision === rev
+        // Events own a known execution state; an unknown one has nothing to protect.
+        ...(revision === rev || state.execution === "unknown"
           ? {
               execution: active[id]
                 ? ("running" as const)
@@ -184,8 +247,9 @@ export function createChatController(options: ChatOptions): ChatController {
           if (valid(g, s)) publish({ loadingOlder: false });
         })));
       }
+      reachedStart = !older;
       for (const e of requestEvents) requestEvent(e);
-      if (revision !== rev) recover();
+      if (stale) recover();
     }).pipe(Effect.forkIn(selectionScope));
     hydration = task;
     yield* Fiber.join(task).pipe(Effect.ensuring(Effect.sync(() => {
@@ -247,38 +311,36 @@ export function createChatController(options: ChatOptions): ChatController {
     requestEvent(e);
     if (hydration && /^(permission|form)\./.test(e.type))
       requestEvents.push(e);
-    if (e.type === "session.execution.started")
+    if (e.type === "session.execution.started") {
+      settling = undefined;
       publish({ execution: "running" });
-    if (e.type === "session.retry.scheduled")
+    }
+    if (e.type === "session.retry.scheduled") {
+      settling = undefined;
       publish({ execution: "retrying" });
-    if (e.type === "session.status")
-      publish({
-        execution:
-          e.data.status.type === "idle"
-            ? "idle"
-            : e.data.status.type === "retry"
-              ? "retrying"
-              : "running",
-        ...(e.data.status.type === "idle" ? { interruptRequested: false } : {}),
-      });
+    }
+    if (e.type === "session.status") {
+      if (e.data.status.type === "idle") settle();
+      else {
+        settling = undefined;
+        publish({ execution: e.data.status.type === "retry" ? "retrying" : "running" });
+      }
+    }
     if (e.type === "session.model.selected") publish({ model: e.data.model });
     if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(e.type)) {
-      publish({
-        execution: "idle",
-        interruptRequested: false,
-        ...("error" in e.data
-          ? { error: errorText(JSON.stringify(e.data.error)) }
-          : {}),
-      });
-      recover();
-    }
-    if (hydration) {
-      recover();
-      return;
+      if ("error" in e.data) publish({ error: errorText(JSON.stringify(e.data.error)) });
+      settle();
     }
     const before = state.messages;
     const reduced = reducer.reduce(before, e);
     if (reduced?.touched.length) publish({ messages: reduced.messages });
+    // Events are never held back for a history request: a long answer keeps
+    // streaming. What an event changed outlives the page in flight; an event that
+    // changed nothing here is covered by a refresh after it.
+    if (hydration) {
+      if (reduced?.touched.length) for (const id of reduced.touched) live.add(id);
+      else recover();
+    }
     if (
       reduced &&
       "assistantMessageID" in e.data &&
@@ -325,6 +387,7 @@ export function createChatController(options: ChatOptions): ChatController {
     if (state.sessionID) reducer.clear(state.sessionID);
     answered.clear();
     older = undefined;
+    reachedStart = false;
     publish({
       sessionID: id,
       draftKey: draftKey ?? (id ? draftKeys.get(id) ?? `session:${id}` : undefined),
@@ -462,6 +525,10 @@ export function createChatController(options: ChatOptions): ChatController {
   const createSession = (title?: string) => {
     check();
     if (mutation) return Effect.fail(new ChatError({ message: "A session operation is pending" }));
+    // New chat must not leave a trail of empty sessions: go back to the one already
+    // created and never written to, with its draft, instead of creating another.
+    const empty = title === undefined ? state.sessions.find(session => unsent.has(session.id))?.id : undefined;
+    if (empty) return empty === state.sessionID ? Effect.succeed(empty) : selectSession(empty).pipe(Effect.as(empty));
     const token = (mutation = Symbol());
     // Admission must not be deferred into runPromise/forkIn. Retry retains the
     // uncreated draft; a new intent from a real session allocates a fresh key.
@@ -476,6 +543,7 @@ export function createChatController(options: ChatOptions): ChatController {
       const api = yield* OpenCodeAPI;
       // A custom title suppresses OpenCode's automatic first-prompt naming.
       const session = yield* action(api.create(title));
+      if (title === undefined) unsent.add(session.id);
       if (valid(g, s)) {
         draftKeys.set(session.id, key);
         publish({ sessions: [session, ...state.sessions] });
@@ -568,6 +636,8 @@ export function createChatController(options: ChatOptions): ChatController {
     publish({ sending: true, error: undefined });
     yield* Effect.gen(function*() {
       const api = yield* OpenCodeAPI;
+      // Before the request: a prompt whose response is lost may still be accepted.
+      unsent.delete(id);
       yield* api.prompt(id, draft.text);
       if (valid(g, s)) {
         yield* hydrate().pipe(Effect.catchCause(cause => Effect.sync(() => {

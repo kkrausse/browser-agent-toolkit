@@ -72,7 +72,7 @@ export function restoreSessions(service: Service, sessions: SessionBundle[]): Pr
   return timedStage('restore.sessions', () => importSessions(service, sessions), () => sessionCounts(sessions))
 }
 async function importSessions(service: Service, sessions: SessionBundle[]): Promise<Map<string, string>> {
-  const ordered = orderSessions(sessions)
+  orderSessions(sessions)
   for (let attempt = 0; ; attempt++) {
     const page = v.parse(pageSchema, await request(service, '/api/session?directory=%2Fworkspace&limit=100'))
     if (!page.data.length) break
@@ -82,13 +82,23 @@ async function importSessions(service: Service, sessions: SessionBundle[]): Prom
       if (!response.ok && response.status !== 404) throw Error('Could not delete outgoing native session')
     }
   }
+  // Keep the saved IDs: the store was just emptied, and OpenCode accepts an import
+  // under a deleted session's ID (checked against 2.0.3), so the selected session
+  // and anything else that names a session stay valid across a switch. The session
+  // list is ordered by update time, which an import sets to now: import in reverse
+  // of the saved list order, parents still first, and the list reads as it was saved.
   const ids = new Map<string, string>()
-  for (const session of ordered) {
-    const id = 'ses_' + crypto.randomUUID().replaceAll('-', '')
+  for (const session of orderSessions([...sessions].reverse())) {
     const parentID = session.info.parentID ? ids.get(session.info.parentID) : undefined
-    const result = v.parse(v.object({ data: v.object({ id: v.string() }) }), await request(service, '/api/session/import', {
+    const transfer = (id: string) => request(service, '/api/session/import', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...session, info: { ...session.info, id, ...(parentID ? { parentID } : {}) }, location: { directory: '/workspace' } }),
+    })
+    let id = session.info.id
+    // An ID still taken outside this directory's list cannot be emptied here.
+    const result = v.parse(v.object({ data: v.object({ id: v.string() }) }), await transfer(id).catch(error => {
+      if (!String(error).includes('HTTP 409')) throw error
+      return transfer(id = 'ses_' + crypto.randomUUID().replaceAll('-', ''))
     }))
     if (result.data.id !== id) throw Error('Native session import returned unexpected ID')
     await request(service, `/api/session/${encodeURIComponent(id)}/message?order=desc&limit=50`)
