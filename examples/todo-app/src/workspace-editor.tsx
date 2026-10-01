@@ -9,8 +9,8 @@ import { startBrowserEditor } from './start-editor'
 import { captureSource, createWorkspaceStore, identityPath, idleChat, restoreSource, safeSourcePath, upsert, validateWorkspace, writeIdentity, type Catalog, type SavedWorkspace } from './local-workspaces'
 import { captureSessions, restoreSessions } from './workspace-sessions'
 import { switchWorkspace } from './workspace-switch'
-import { workspaceSwitchPresentation } from './workspace-switch-presentation'
-import { closeEditor, errorText, exitRecovery, snapshotErrorCode } from './workspace-exit'
+import { interruptedSwitchError, workspaceSwitchPresentation } from './workspace-switch-presentation'
+import { closeEditor, errorText, exitRecovery, footerError, snapshotErrorCode } from './workspace-exit'
 import '@kev-browser-agent-kit/opencode-chat/editor.css'
 import './workspace-editor.css'
 
@@ -39,6 +39,8 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
   const { chat, error: chatError } = useWorkspaceChat(controller, restoring || switchPresentation?.phase === 'recovery' ? undefined : state.services.chat)
   const chatState = useSyncExternalStore(chat?.subscribe ?? noopSubscribe, chat?.getSnapshot ?? (() => emptyChat), chat?.getSnapshot ?? (() => emptyChat))
   const exitFailure = exitRecovery({ errorCode: snapshotErrorCode(state), failure: closeFailure, attached: !!state.workspace })
+  // A failure a recovery alert already shows is not repeated in the footer alert.
+  const footerAlert = footerError({ error: state.error, exitFailure: exitFailure ? closeFailure : undefined, switchRecovery: switchPresentation?.phase === 'recovery' })
   const blocked = actionBusy || state.busy || !!pending || !state.runtime || !idleChat(chat?.getSnapshot())
 
   async function persist(next: Catalog): Promise<void> {
@@ -72,7 +74,7 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
     let mappedSelection: string | undefined
     await startBrowserEditor(controller, {
       beforeSource: async () => {
-        if (!incoming && catalog.current.pending) throw Error('Interrupted workspace replacement retained. Choose Retry interrupted switch or Recover outgoing workspace.')
+        if (!incoming && catalog.current.pending) throw Error(interruptedSwitchError)
       },
       beforeChatConnect: incoming ? async service => {
         const ids = await restoreSessions(service, incoming.sessions)
@@ -218,7 +220,7 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
       <div className="todo-workspace-chat" inert={actionBusy || state.busy || !!pending || restoring}>
         {chat && !pending && !restoring ? <ChatView controller={chat} showModels showSessions /> : <p>{switchPresentation?.phase === 'switching' ? 'Connecting workspace chat…' : switchPresentation?.phase === 'recovery' ? 'Recover the interrupted switch to reconnect chat.' : chatError || 'Starting OpenCode…'}</p>}
       </div>
-      <footer><p role="status">{switchPresentation ? switchPresentation.phase === 'switching' ? 'Workspace switch in progress…' : 'Workspace recovery required.' : state.status}</p>{state.error && <p role="alert">{state.error}</p>}{state.error && !pending && <button disabled={state.busy || actionBusy} onClick={() => action('Retry editor startup', open)}>Retry editing</button>}<small>{blocked && !state.busy && !pending ? chat ? `Workspace actions wait for connected, idle chat (${chatState.execution}).` : 'Preview and OpenCode are not running. Retry editing to continue working, or exit.' : 'Switching fully stops and restarts preview and OpenCode.'}</small><details><summary>Debug · Activity</summary><pre>{state.logs.join('\n')}</pre></details></footer>
+      <footer><p role="status">{switchPresentation ? switchPresentation.phase === 'switching' ? 'Workspace switch in progress…' : 'Workspace recovery required.' : state.status}</p>{footerAlert && <p role="alert">{footerAlert}</p>}{state.error && !pending && <button disabled={state.busy || actionBusy} onClick={() => action('Retry editor startup', open)}>Retry editing</button>}<small>{blocked && !state.busy && !pending ? chat ? `Workspace actions wait for connected, idle chat (${chatState.execution}).` : 'Preview and OpenCode are not running. Retry editing to continue working, or exit.' : 'Switching fully stops and restarts preview and OpenCode.'}</small><details><summary>Debug · Activity</summary><pre>{state.logs.join('\n')}</pre></details></footer>
     </aside>
   </div>
 }

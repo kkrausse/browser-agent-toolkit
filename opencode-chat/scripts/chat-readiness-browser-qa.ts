@@ -72,26 +72,24 @@ try {
   assert.ok(await button("Send ↑").isDisabled());
   assert.ok(await button("New chat").isDisabled());
   assert.ok(await page.getByLabel("Model", { exact: true }).isDisabled());
+  // Enter while preparing is queued visibly (not swallowed) and nothing is sent yet.
   await textbox().press("Enter");
   assert.equal((await read()).counters.promptCount, 0);
+  assert.ok(await button("Cancel send").isVisible());
   passed++;
   await button("Release creation").click();
   await settle(v => v.counters.sessionID === "ses_lab_1");
   const hydration = await gate("hydration-pending");
   assert.equal(hydration.counters.draftKey, pending.counters.draftKey);
   assert.equal(hydration.text, pending.text);
-  assert.ok(await button("Send ↑").isDisabled());
+  assert.ok(await button("Cancel send").isVisible());
   await textbox().press("Enter");
   assert.equal((await read()).counters.promptCount, 0);
   passed++;
+  // The repeated Enter added nothing: the queued send goes out once when ready.
   await button("Release hydration").click();
-  await settle(v => !v.counters.pending && !v.counters.loading);
-  const ready = await gate("ready-no-automatic-send");
-  assert.equal(ready.counters.promptCount, 0);
-  assert.equal(ready.text, pending.text);
-  await button("Send ↑").click();
-  await settle(v => v.counters.promptCount === 1 && v.text === "");
-  const sent = await gate("explicit-send");
+  await settle(v => !v.counters.pending && !v.counters.loading && v.counters.promptCount === 1 && v.text === "");
+  const sent = await gate("queued-send-once");
   assert.deepEqual(sent.counters.prompts, [{ path: "/proxy/api/session/ses_lab_1/prompt", text: "qa-new-intended" }]);
   passed++;
   await button("New chat").click();

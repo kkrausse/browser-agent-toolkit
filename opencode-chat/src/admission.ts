@@ -7,6 +7,13 @@ export function canSend(state: ChatSnapshot): boolean {
     !state.sessionOperationPending && !state.held && state.execution === "idle";
 }
 
+/** A session is being created, selected or re-modelled and send admission is expected
+ * to follow by itself. The footer shows "Preparing chat…" and the composer may park a
+ * send for exactly this state, never for one that needs the user (held, disconnected). */
+export function isPreparing(state: ChatSnapshot): boolean {
+  return state.connection === "connected" && !state.held && (state.loading || !!state.sessionOperationPending);
+}
+
 /** Why an exclusive hold cannot be acquired; undefined when the chat is quiescent.
  * Stricter than canSend: pending requests and history drains also block a hold. */
 export function holdBlocker(state: ChatSnapshot): string | undefined {

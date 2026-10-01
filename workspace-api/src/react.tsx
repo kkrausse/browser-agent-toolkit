@@ -23,7 +23,8 @@ export type WorkspaceSnapshot = {
 const initial = (): WorkspaceSnapshot => ({ services: {}, clients: {}, busy: false, status: "Ready", error: "", progress: [], logs: [], persistence: "closed" });
 export type WorkspaceControllerOptions = ControllerDiagnosticOptions & {
   /** Bound on waiting for cancelled or stopping work that never settles: a cancelled
-   * operation, service stops (after any stdin-EOF budget) and the runtime. Default 10000. */
+   * operation, service stops (after any stdin-EOF budget) and the runtime. Default 10000.
+   * stopRuntime, like a close, is bounded by closeTimeoutMs instead. */
   stopTimeoutMs?: number;
   /** One budget for a whole close (close, cancelAndClose, dispose): every stage waits
    * only what is left of it, and a slice is kept back for the kernel's own shutdown
@@ -387,9 +388,18 @@ export class WorkspaceController {
     this.trackStop(started.stop, name);
     throw new WorkspaceError("CLEANUP_FAILED", `Service ${name} did not stop within ${deadline}ms; quiescence unproven`);
   }
+  /** Stop every service and the runtime; the workspace stays open. This is a close's
+   * first phase without the close, under the bound a close gives it (closeTimeoutMs
+   * minus its reserve), so it fails when an Exit would and in the same retryable state. */
   async stopRuntime() {
-    await this.stopServices();
-    await this.stopAttachedRuntime(this.stopTimeoutMs);
+    await this.stopWithin(budget(Math.max(0, this.closeTimeoutMs - closeReserve(this.closeTimeoutMs))));
+  }
+  private async stopWithin(stops: Budget, operation?: Promise<void>) {
+    // Graceful EOF may use half of it; the rest is for the fallback kill and joins.
+    await this.joinServices(stops, stops.remaining() / 2, operation);
+    // The one ordering kept: Runtime.stop kills every execution, so it starts only
+    // after the services' graceful windows and the launches have been joined.
+    await this.stopAttachedRuntime(stops.remaining(), stops.signal);
   }
   private async stopAttachedRuntime(limitMs: number, signal?: AbortSignal) {
     const runtime = this.runtime, waitMs = Math.min(this.stopTimeoutMs, limitMs), ledger = this.cleanup;
@@ -452,13 +462,8 @@ export class WorkspaceController {
     // wait again: it only re-checks, briefly, whether the hung work has since finished.
     const { stalled } = this.cleanup, recheck = options.force && (stalled.services || stalled.runtime);
     const stops = budget(Math.min(recheck ? FORCE_RECHECK_MS : Infinity, Math.max(0, total.remaining() - closeReserve(total.totalMs))), total.signal);
-    try {
-      // Graceful EOF may use half of it; the rest is for the fallback kill and joins.
-      await this.joinServices(stops, stops.remaining() / 2, operation);
-      // The one ordering kept: Runtime.stop kills every execution, so it starts only
-      // after the services' graceful windows and the launches have been joined.
-      await this.stopAttachedRuntime(stops.remaining(), stops.signal);
-    } catch (error) { if (!options.force) throw error; return this.forceClose([error]); }
+    try { await this.stopWithin(stops, operation); }
+    catch (error) { if (!options.force) throw error; return this.forceClose([error]); }
     // Phase 2: the kernel finalizes, flushes and releases storage with all that is left.
     try { await this.workspace?.close({ timeoutMs: Math.max(1, Math.ceil(total.remaining())) }); }
     finally { this.distribution = undefined; this.retireCleanup(); this.publish({ workspace: undefined, persistence: "closed" }); }

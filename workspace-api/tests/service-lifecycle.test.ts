@@ -176,6 +176,33 @@ test('a close whose operation, services and runtime all hang rejects within the 
   f.finish();
 });
 
+// Observed live (run 3): with a hung chat service Exit failed after 10.0s, but the stop
+// inside a workspace switch waited 20.0s: stopRuntime added the service's EOF budget to
+// stopTimeoutMs instead of spending the bound a close gives the same stops.
+test('stopRuntime fails at the bound a close gives its stops, in the same retryable state', async () => {
+  // Before: EOF 100 + stopTimeoutMs 300 = 400ms. A close stops under 300 - 100 reserve.
+  const f = hungClose({ closeTimeoutMs: 300, stopTimeoutMs: 300 });
+  await f.launch('a');
+  let started = performance.now();
+  const stopped = await f.controller.stopRuntime().then(() => null, error => error);
+  const stopMs = performance.now() - started;
+  expect(stopped).toMatchObject({ code: 'CLEANUP_FAILED' });
+  expect(stopped.message).toMatch(/1 service stop\(s\)/);
+  expect(stopMs).toBeGreaterThanOrEqual(190); expect(stopMs).toBeLessThan(350);
+  expect(f.controller.runtime).toBeDefined(); expect(f.controller.workspace).toBeDefined();
+  expect(f.controller.getSnapshot().services).toEqual({});
+  // Retrying through Exit reports the same failure at the same bound, and force closes.
+  started = performance.now();
+  const closed = await f.controller.close().then(() => null, error => error);
+  const closeMs = performance.now() - started;
+  expect(closed).toMatchObject({ code: 'CLEANUP_FAILED' });
+  expect(closed.message).toBe(stopped.message);
+  expect(closeMs).toBeGreaterThanOrEqual(190); expect(closeMs).toBeLessThan(350);
+  await expect(f.controller.close({ force: true })).rejects.toThrow('force-closed; cleanup unproven');
+  expect(f.calls).toEqual(['eof:a', 'workspace.close(force)']);
+  expect(f.controller.workspace).toBeUndefined();
+});
+
 test('a close signals every service at once, without waiting on the operation or each other', async () => {
   const f = hungClose({ closeTimeoutMs: 3000 });
   await f.launch('a'); await f.launch('b'); await f.operation();

@@ -44,6 +44,8 @@ const submit = async (container: Element, enter = false) => {
 };
 const text = (container: Element) => container.querySelector("textarea")!.value;
 const sendButton = (container: Element) => container.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+const cancelSend = (container: Element) => [...container.querySelectorAll("button")].find(b => b.textContent === "Cancel send");
+const prompts = (f: ReturnType<typeof fixture>) => f.calls.filter(call => call.url.pathname.endsWith("/prompt"));
 afterEach(async () => {
   await act(async () => { root?.unmount(); });
   root = undefined;
@@ -53,7 +55,10 @@ afterEach(async () => {
   document.body.innerHTML = "";
 });
 
-test("New chat click admits a new logical draft synchronously before immediate input, without a pending wait", async () => {
+// Observed live (run 3): Enter 98 ms after New chat, during "Preparing chat…", did
+// nothing and said nothing; the text stayed until a second Enter. The keystroke is
+// now a visible queued send, delivered exactly once when the chat becomes ready.
+test("New chat click admits a new logical draft synchronously; an immediate Enter is queued visibly and sent exactly once when ready", async () => {
   const { f, c } = await start();
   const container = await mount(c);
   await type(container, "old draft");
@@ -75,14 +80,28 @@ test("New chat click admits a new logical draft synchronously before immediate i
   expect({ sessionID: admitted.sessionID, pending: admitted.sessionOperationPending ?? false, beforeInput, text: text(container) })
     .toEqual({ sessionID: undefined, pending: true, beforeInput: "", text: "immediate new draft" });
   expect(text(container)).toBe("immediate new draft");
-  expect(sendButton(container).disabled).toBe(true);
-  expect(f.calls.filter(call => call.url.pathname.endsWith("/prompt"))).toHaveLength(0);
+  expect(container.querySelector(".oc-composer [role=status]")!.textContent).toContain("Sends when the chat is ready");
+  expect(cancelSend(container)).toBeDefined();
+  // Impatient repeats while it waits must not add sends.
+  await submit(container, true);
+  await submit(container);
+  expect(prompts(f)).toHaveLength(0);
   await act(async () => { creation.resolve(json({ data: session("ses_immediate") })); });
+  await act(async () => { await Bun.sleep(5); });
   expect(c.getSnapshot().sessionID).toBe("ses_immediate");
   expect(c.getSnapshot().draftKey).toBe(admitted.draftKey);
-  expect(text(container)).toBe("immediate new draft");
+  expect(prompts(f)).toHaveLength(1);
+  expect(prompts(f)[0]!.url.pathname).toContain("/ses_immediate/prompt");
+  expect(JSON.parse(String(prompts(f)[0]!.init.body)).text).toBe("immediate new draft");
+  expect(text(container)).toBe("");
+  expect(cancelSend(container)).toBeUndefined();
+  expect(c.getSnapshot().error).toBeUndefined();
+  // Nothing is left queued: another Enter, or going away and back, sends nothing more.
+  await submit(container, true);
   await act(async () => { await c.selectSession("ses1"); });
   expect(text(container)).toBe("old draft");
+  await act(async () => { await c.selectSession("ses_immediate"); });
+  expect(prompts(f)).toHaveLength(1);
 });
 
 test("send control is disabled while creation is pending rather than advertising a send the controller rejects", async () => {
@@ -135,7 +154,7 @@ test("a send admitted in an old selection cannot target a newly selected session
   expect(f.calls.filter(call => call.url.pathname.endsWith("/prompt"))).toHaveLength(0);
 });
 
-test("New chat blocks immediate sends, preserves early draft through ID assignment and hydration, and never queues", async () => {
+test("a queued send survives ID assignment and hydration unsent, and cancelling it keeps the draft without ever sending", async () => {
   const { f, c } = await start();
   const container = await mount(c);
   await type(container, "old session draft");
@@ -161,14 +180,20 @@ test("New chat blocks immediate sends, preserves early draft through ID assignme
   expect(container.querySelector("footer")!.textContent).toContain("Preparing chat");
   await submit(container);
   await submit(container, true);
+  expect(cancelSend(container)).toBeDefined();
   expect(f.calls.filter(call => call.url.pathname.endsWith("/prompt"))).toHaveLength(0);
   await act(async () => { creation.resolve(json({ data: session("ses_new") })); await historyStarted.promise; });
   expect(c.getSnapshot().sessionID).toBe("ses_new");
   expect(c.getSnapshot().draftKey).toBe(key);
   expect(text(container)).toBe("new chat prompt");
-  expect(sendButton(container).disabled).toBe(true);
+  // Still preparing (history), still queued, still nothing sent.
   await submit(container, true);
+  expect(cancelSend(container)).toBeDefined();
+  expect(f.calls.filter(call => call.url.pathname.endsWith("/prompt"))).toHaveLength(0);
+  await act(async () => { cancelSend(container)!.click(); });
+  expect(cancelSend(container)).toBeUndefined();
   await act(async () => { history.resolve(json({ data: [], cursor: {} })); await creating; });
+  await act(async () => { await Bun.sleep(5); });
   expect(sendButton(container).disabled).toBe(false);
   expect(text(container)).toBe("new chat prompt");
   expect(f.calls.filter(call => call.url.pathname.endsWith("/prompt"))).toHaveLength(0);
@@ -215,7 +240,12 @@ test("failed creation retains the pending draft for explicit retry, not a send i
   let creating!: Promise<string>;
   await act(async () => { creating = c.createSession(); void creating.catch(() => {}); await started.promise; });
   await type(container, "retry me");
+  // A send queued while preparing must not outlive the failed preparation.
+  await submit(container, true);
+  expect(cancelSend(container)).toBeDefined();
   await act(async () => { creation.resolve(json({ error: "creation rejected" }, 503)); await creating.catch(() => {}); });
+  expect(cancelSend(container)).toBeUndefined();
+  expect(container.querySelector(".oc-error")!.textContent).toContain("503");
   expect(text(container)).toBe("retry me");
   expect(c.getSnapshot().sessionID).toBeUndefined();
   expect(c.getSnapshot().sessionOperationPending).toBe(false);
@@ -224,6 +254,7 @@ test("failed creation retains the pending draft for explicit retry, not a send i
   await submit(container, true);
   f.override = undefined;
   await act(async () => { await c.createSession(); });
+  await act(async () => { await Bun.sleep(5); });
   expect(text(container)).toBe("retry me");
   expect(sendButton(container).disabled).toBe(false);
   expect(f.calls.filter(call => call.url.pathname.endsWith("/prompt"))).toHaveLength(0);
@@ -250,7 +281,7 @@ test("selecting another session abandons pending creation without migrating its 
   expect(f.calls.filter(call => call.url.pathname.endsWith("/prompt"))).toHaveLength(0);
 });
 
-test("model mutation publishes send readiness and leaves drafts intact without queuing", async () => {
+test("model mutation publishes send readiness; a send queued during it is withdrawn by editing and nothing is sent", async () => {
   const { f, c } = await start();
   const container = await mount(c);
   await type(container, "after model selection");
@@ -265,9 +296,13 @@ test("model mutation publishes send readiness and leaves drafts intact without q
   expect(c.getSnapshot().sessionOperationPending).toBe(true);
   expect(sendButton(container).disabled).toBe(true);
   await submit(container, true);
+  expect(cancelSend(container)).toBeDefined();
+  await type(container, "after model selection, edited");
+  expect(cancelSend(container)).toBeUndefined();
   await act(async () => { response.resolve(new Response(null, { status: 204 })); await selecting; });
+  await act(async () => { await Bun.sleep(5); });
   expect(sendButton(container).disabled).toBe(false);
-  expect(text(container)).toBe("after model selection");
+  expect(text(container)).toBe("after model selection, edited");
   expect(f.calls.filter(call => call.url.pathname.endsWith("/prompt"))).toHaveLength(0);
 });
 
