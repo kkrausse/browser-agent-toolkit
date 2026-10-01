@@ -373,3 +373,18 @@ not evidence that pilot success means the whole kernel is migrated.
   Same owner/sole slot; intended new report
   `2026-09-30-effect-loader-integrated-acceptance-followup.md`. No deadline/assertion/
   candidate change, extra blind live retry or phase2 authorization.
+- Integrated follow-up `8593093` **passes one unchanged combined attempt**:
+  [integrated acceptance](2026-09-30-effect-loader-integrated-acceptance-followup.md).
+  Full19/19 stages,5/5 generations, hydration/TODO/PDF/HMR/SSE, durable reload and
+  final close; focused10/10 cases,14/14 steps. Original deadlines, zero retries/model
+  calls, all hashes/native reuse verified before/after. Worker census/topology and
+  close-to-zero/empty locks pass; exact owned resources released. Four inspected
+  images do not capture rendered TODO UI; original interactive assertions remain
+  its evidence. Historical447 failure stays failed,735 stays zero attempts.
+- Phase1 execution gates are complete as bounded evidence, not statistical reliability
+  or full migration/cache acceptance. No further phase1 browser reruns assigned.
+  Independent technical reviewer `ses_f0ad6256affeILMl1eDluyTyCh` now reviews actual
+  ownership/receipt implementation and defines bounded next process/subtree cutover;
+  intended report `2026-09-30-effect-loader-phase1-review-and-phase2-cutover.md`.
+  Parent decides phase2 implementation after this review; no all-writer or editor
+  race fix is inferred from successful app/focused workloads.
