@@ -90,6 +90,8 @@ export function createChatController(options: ChatOptions): ChatController {
   let mutation: symbol | undefined;
   let draftSequence = 0;
   const draftKeys = new Map<string, string>();
+  // Untitled sessions this controller created that nothing has been sent to.
+  const unsent = new Set<string>();
   let disposal: Promise<void> | undefined;
   // `mutation` is the only record of a pending session operation. The snapshot
   // flag is stamped on every publish so the two cannot drift.
@@ -523,6 +525,10 @@ export function createChatController(options: ChatOptions): ChatController {
   const createSession = (title?: string) => {
     check();
     if (mutation) return Effect.fail(new ChatError({ message: "A session operation is pending" }));
+    // New chat must not leave a trail of empty sessions: go back to the one already
+    // created and never written to, with its draft, instead of creating another.
+    const empty = title === undefined ? state.sessions.find(session => unsent.has(session.id))?.id : undefined;
+    if (empty) return empty === state.sessionID ? Effect.succeed(empty) : selectSession(empty).pipe(Effect.as(empty));
     const token = (mutation = Symbol());
     // Admission must not be deferred into runPromise/forkIn. Retry retains the
     // uncreated draft; a new intent from a real session allocates a fresh key.
@@ -537,6 +543,7 @@ export function createChatController(options: ChatOptions): ChatController {
       const api = yield* OpenCodeAPI;
       // A custom title suppresses OpenCode's automatic first-prompt naming.
       const session = yield* action(api.create(title));
+      if (title === undefined) unsent.add(session.id);
       if (valid(g, s)) {
         draftKeys.set(session.id, key);
         publish({ sessions: [session, ...state.sessions] });
@@ -629,6 +636,8 @@ export function createChatController(options: ChatOptions): ChatController {
     publish({ sending: true, error: undefined });
     yield* Effect.gen(function*() {
       const api = yield* OpenCodeAPI;
+      // Before the request: a prompt whose response is lost may still be accepted.
+      unsent.delete(id);
       yield* api.prompt(id, draft.text);
       if (valid(g, s)) {
         yield* hydrate().pipe(Effect.catchCause(cause => Effect.sync(() => {

@@ -864,3 +864,21 @@ test("a finished run reads idle only once its final history is in the transcript
   expect(c.getSnapshot().execution).toBe("idle");
   expect(c.getSnapshot().error).toContain("503");
 });
+
+test("New chat returns to the unsent session it already created instead of creating another", async () => {
+  const { f, c } = start();
+  await c.ready;
+  const created = () => posted(f, "/session").length;
+  expect(await c.createSession()).toBe("ses_new");
+  expect(await c.createSession()).toBe("ses_new");
+  await c.selectSession("ses1");
+  expect(await c.createSession()).toBe("ses_new");
+  expect(c.getSnapshot().sessionID).toBe("ses_new");
+  expect(canSend(c.getSnapshot())).toBe(true);
+  expect(created()).toBe(1);
+  expect(c.getSnapshot().sessions.filter(item => item.id === "ses_new")).toHaveLength(1);
+  // Once something was sent to it, New chat creates again.
+  await c.send({ text: "hello" });
+  await c.createSession();
+  expect(created()).toBe(2);
+});
