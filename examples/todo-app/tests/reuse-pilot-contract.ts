@@ -33,6 +33,7 @@ export function validatePilotResponse(path: string, method: string, status: numb
   else if ((route === '/api/session' && method === 'GET') || /\/message$/.test(route)) check(Array.isArray(body.data) && object(body.cursor) && ['next','previous'].every(key=>body.cursor[key] === undefined || body.cursor[key] === null || typeof body.cursor[key] === 'string'), 'paged data/cursor');
   else if (/\/(permission|form)$/.test(route)) check(Array.isArray(body.data), 'request data array');
   else if (route === '/api/plugin' || route === '/api/model') check(Array.isArray(body.data) && object(body.location) && typeof body.location.directory === 'string', 'location/data envelope');
+  else if (route === '/api/model/default') check(object(body.location) && typeof body.location.directory === 'string' && (body.data == null || (object(body.data) && typeof body.data.id === 'string' && typeof body.data.providerID === 'string')), 'location/default model envelope');
   else throw Error('Pilot contract: unreviewed route '+method+' '+route);
   return body;
 }

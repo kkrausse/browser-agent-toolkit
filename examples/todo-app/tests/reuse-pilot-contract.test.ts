@@ -103,6 +103,7 @@ test('actual controller + SDK offline cold, joined disposal, DELETE and fresh re
     if(path==='/api/session'&&init.method==='POST') {const data=root('ses_'+(sessions.length+1));sessions.push(data);return json({data});}
     if(path==='/api/session') return json({data:sessions,cursor:{previous:null,next:null}});
     if(path==='/api/model') return json({location,data:[model]});
+    if(path==='/api/model/default') return json({location,data:model});
     if(path==='/api/plugin/await-activation') return new Response(null,{status:204});
     if(path==='/api/session/active') return json({data:{}});
     if(path.endsWith('/message')) return json({data:[],cursor:{previous:null,next:null}});
