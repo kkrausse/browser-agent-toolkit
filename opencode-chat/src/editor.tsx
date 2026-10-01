@@ -5,7 +5,7 @@ import { ChatView } from "./react";
 import { attachChat, editorLifecycle } from "./editor-adapter";
 import { Button } from "./components/ui/button";
 import { createBrowserEditorDiagnostics } from './diagnostics';
-export { attachChat, chatFor, type WorkspaceChatOptions } from "./editor-adapter";
+export { attachChat, chatFor, detachChat, type WorkspaceChatOptions } from "./editor-adapter";
 export { sourcePaths } from "./editor-source";
 
 export interface BrowserEditorProps {

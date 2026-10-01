@@ -7,7 +7,17 @@ import type { Service, WorkspaceController } from "@kev-browser-agent-kit/worksp
 export interface WorkspaceChatOptions { serviceName?: string; directory?: string; startNewSession?: boolean }
 const chats = new WeakMap<Service, ChatController>();
 export function chatFor(service: Service) { return chats.get(service); }
-/** Attach once per service lifetime. The workspace stops clients before servers. */
+/** Dispose the service's chat client and forget it while the service keeps running;
+ * the next attachChat mounts a fresh controller on the same service. Resolves once
+ * the client's streams and requests have been joined. */
+export async function detachChat(service: Service): Promise<void> {
+  const chat = chats.get(service);
+  if (!chat) return;
+  chats.delete(service);
+  await chat.dispose();
+}
+/** Attach once per service lifetime, or once per detachChat. The workspace stops
+ * clients before servers. */
 const attachChatEffect = Effect.fn("Workspace.attachChat")(function*(owner: WorkspaceController, service: Service, options: WorkspaceChatOptions) {
   const name = options.serviceName ?? "chat";
   const signal = owner.signal;
@@ -25,7 +35,9 @@ const attachChatEffect = Effect.fn("Workspace.attachChat")(function*(owner: Work
     const current = chat;
     const release = owner.registerAttachment(name, () => {
       signal.removeEventListener("abort", aborted);
-      chats.delete(service); current.dispose();
+      // A controller attached after detachChat owns the entry by then; leave it.
+      if (chats.get(service) === current) chats.delete(service);
+      current.dispose();
     });
     function aborted() { release(); }
     signal.addEventListener("abort", aborted, { once: true });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { attachChat, chatFor, editorLifecycle } from "../src/editor-adapter";
+import { attachChat, chatFor, detachChat, editorLifecycle } from "../src/editor-adapter";
 import type { Service, WorkspaceController } from "@kev-browser-agent-kit/workspace/react";
 import { fixture as chatFixture } from "./fixture";
 
@@ -71,4 +71,27 @@ test("chat attachment is shared per service, uses its transport, and abort dispo
   lifetime.abort(); release(); await tick();
   expect(chatFor(service)).toBeUndefined();
   expect(f.cancels).toBe(cancels + 1);
+});
+
+test("detachChat joins the client and the same service then mounts a fresh controller", async () => {
+  const f = chatFixture(), lifetime = new AbortController();
+  // As WorkspaceController does: registering replaces, and releases, the previous attachment.
+  let registered: (() => void) | undefined;
+  const owner = {
+    signal: lifetime.signal,
+    registerAttachment: (_name: string, dispose: () => void) => { registered?.(); registered = dispose; return dispose; },
+    clientReady: () => {}, clientFailed: () => {},
+  } as unknown as WorkspaceController;
+  const service = { connection: f.endpoint } as unknown as Service;
+  const first = await attachChat(owner, service);
+  await detachChat(service);
+  expect(chatFor(service)).toBeUndefined();
+  expect(() => first.hold("after detach")).toThrow("disposed");
+  const second = await attachChat(owner, service);
+  expect(second).not.toBe(first);
+  // Re-registration released the first controller's stale attachment, not the new entry.
+  expect(chatFor(service)).toBe(second);
+  expect(second.getSnapshot().connection).toBe("connected");
+  registered?.(); await tick();
+  expect(chatFor(service)).toBeUndefined();
 });
