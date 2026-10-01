@@ -4,13 +4,20 @@ import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dir, '../../..');
 const temp = '/private/var/folders/t_/x48jtnps7n5_0g_pt9xpvbg00000gn/T/opencode';
-const input = join(temp, 'effect-loader-frozen-20260930-v2');
+const inputName = 'effect-loader-vendor-url-repair-l9k65fzh';
+const input = join(temp, inputName);
 const donor = join(temp, 'conservative-full-app-Yb8T8p');
-const runtimeRevision = '5c4b1c5655b54a840370fa6215e51fd661701591';
+const runtimeRevision = '3ee918522c1233a1f8e10a9b798c09b6c3e30c81';
 const toolkitRevision = '9814c715cfca42309c581440577976833f4326e6';
-const version = '15da540e2381261aa4d23b4bb8abbb4e27c66ec8943db535c81d4b62856c9c43';
+const version = 'bd39000ff5bbc334f836ad65a4433e627525070413f810d7169132102f49b9f9';
 const hash = async (file: string) => new Bun.CryptoHasher('sha256').update(await Bun.file(file).arrayBuffer()).digest('hex');
-if (await hash(join(input, 'candidate-receipt.json')) !== '1ef11f7c30b262b211d43a57f2142697ddf87ac3e086d87fb684640b225e75f9') throw Error('Wrong frozen Effect receipt');
+if (await hash(join(input, 'candidate-receipt.json')) !== 'e242092e6a920b88a6a2ae7eb76654f1f61773a3bcf99ee4bcbe61f6b85ee6e6') throw Error('Wrong frozen Effect receipt');
+const inputReceipt = await Bun.file(join(input, 'candidate-receipt.json')).json();
+const inputFreeze = await Bun.file(join(input, 'freeze-manifest.json')).json();
+if (Object.keys(inputReceipt.hashes).length !== 107 || Object.keys(inputFreeze).length !== 1020) throw Error('Wrong input cohort size');
+for (const [file, expected] of Object.entries(inputFreeze)) {
+  if (file.startsWith('/') || file.split('/').includes('..') || await hash(join(input, file)) !== expected) throw Error('Frozen repair input mismatch: ' + file);
+}
 // Import the exact committed verifier, not an altered contract or the old library.
 const verifier = await import(join(input, 'toolkit-source/opencode-chat/src/opencode-application.ts'));
 const application = await verifier.readQualifiedOpenCodeApplication(join(donor, 'qualified-opencode'));
@@ -28,7 +35,7 @@ function change(before: string, after: string) {
   script = script.replace(before, after);
 }
 change("const root = resolve(import.meta.dir, '../../..');", 'const root = ' + JSON.stringify(root) + ';');
-change("kernel-egress-repair-3GsF7d", 'effect-loader-frozen-20260930-v2');
+change("kernel-egress-repair-3GsF7d", inputName);
 change('33fa1359a003ca9c50cb3bc49699b99bc1a063f1', runtimeRevision);
 change('d0eec346dbc749db1c0cd82dd8aad0b27c1da363', toolkitRevision);
 change('3debc8095c310192bac6062bb963e0ee09a431246cc8bafb7be2f5a1f2655a62', version);
@@ -67,7 +74,7 @@ change("originalClientSha256:", "singleWorkspaceGraph: true, originalClientSha25
 change("fullClient.replace('fetchedBodyProbe(location.origin)', 'fetchedBodyProbe(' + clientHostOrigin + ')')", "fullClient.replace('fetchedBodyProbe(location.origin)', 'fetchedBodyProbe(' + clientHostOrigin + ')').replace('distribution.runtimeBuild.source.commit','distribution.runtimeBuild.source.revision')");
 // Preserve original actions/assertions/deadlines; names describe the fresh pilot.
 script = script.replaceAll('conservative-full-client-qa', 'effect-loader-full-client-qa').replaceAll('conservative-full-app-driver-qa', 'effect-loader-full-app-driver-qa');
-script = script.replaceAll('exact repaired 33fa135', 'exact Effect pilot 5c4b1c5');
+script = script.replaceAll('exact repaired 33fa135', 'exact URL-repaired Effect pilot 3ee9185');
 change('preparationOnly: true', 'preparationOnly: true, effectVersion: "4.0.0-rc.118", fullMigrationAccepted: false');
 change("const manifest = await Bun.file(join(stage, 'prepared/manifest.json')).json();", `
 // Only the normal committed vendor producer fetches/builds the real tsgo pack.
@@ -79,7 +86,7 @@ const vendorPackage=await Bun.file(join(vendorScratch,'node_modules/tsgo-wasm/pa
 for(const file of ['package.json','LICENSE','tsgo-wasm'])await cp(join(vendorScratch,'node_modules/tsgo-wasm',file),join(stage,'runtime/vendor/tsgo-'+file));
 await cp(join(vendorScratch,'node_modules/.package-lock.json'),join(stage,'runtime/vendor/tsgo-package-lock.json'));
 await Bun.write(join(stage,'tsgo-vendor-provenance.json'),JSON.stringify({producerRevision:runtimeRevision,producerSha256:await hash(join(runtimeSource,'scripts/vendor-tsgo.mjs')),packageVersion:vendorPackage.version,networkAllowed:true,networkOfflineClaim:false,packSha256:await hash(join(stage,'runtime/vendor/tsgo-pack.bin'))},null,2));
-for(const name of ['pilot','host','run-copy']) {
+for(const name of ['pilot','host','run-copy','offline-verify']) {
   const file='examples/todo-app/tests/effect-loader-full-delivery-'+name+'.ts';
   const bytes=await command(['git','show','HEAD:'+file],root);
   await Bun.write(join(out,'qa-source',file),bytes);
@@ -88,6 +95,7 @@ await build(join(out,'qa-source/examples/todo-app/tests/effect-loader-full-deliv
 await build(join(out,'qa-source/examples/todo-app/tests/effect-loader-full-delivery-host.ts'),'bun','qa');
 await cp(join(out,'qa-source'),join(stage,'qa-source'),{recursive:true});
 await cp(applicationInput,join(stage,'qualified-application'),{recursive:true});
+await command(['bun',join(out,'qa-source/examples/todo-app/tests/effect-loader-full-delivery-offline-verify.ts'),stage,input],source);
 const manifest = await Bun.file(join(stage, 'prepared/manifest.json')).json();`);
 change("const hashes: Record<string, string> = {};", `
 const workspaceGraphs:Record<string,number>={};
