@@ -72,6 +72,20 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
     await writeIdentity(controller.workspace!, saved)
     return saved
   }
+  /** Caller holds chat admission. Exit writes only what a reopen reads: the
+   * identity file. Reopen boots from the durable working copy (source, and
+   * OpenCode's own session database under /.server) and never restores a
+   * catalog image, and a switch re-captures the outgoing workspace first, so the
+   * active image may stay as of the last Save or switch. The full save is kept
+   * where that image is still needed: never captured, renamed (the select
+   * lists catalog names), or a working copy that is not durable. */
+  async function saveForExit(): Promise<void> {
+    const workspace = controller.workspace, service = controller.getSnapshot().services.chat
+    const saved = catalog.current.workspaces.find(item => item.id === catalog.current.activeId)
+    const title = nameRef.current.trim() || 'Untitled workspace'
+    if (!workspace || !service || !saved || saved.name !== title || workspace.persistence.status !== 'durable') { await saveCurrent(); return }
+    await writeIdentity(workspace, { id: saved.id, name: title, selectedSessionId: chatFor(service)?.getSnapshot().sessionID })
+  }
   async function boot(incoming?: SavedWorkspace): Promise<void> {
     let mappedSelection: string | undefined
     await startBrowserEditor(controller, {
@@ -160,16 +174,16 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
     } finally { hold.release() }
   }
   // Exit saves and closes under one hold, so nothing can start after the save.
-  // Only an attached chat is held and captured. With none (startup failed, or an
-  // earlier unproven stop already detached the services) there is nothing to
-  // protect or capture, and the working copy is durable on its own. Force skips
-  // the save: it is the way out when saving or stopping cannot complete.
+  // Only an attached chat is held and saved (see saveForExit). With none (startup
+  // failed, or an earlier unproven stop already detached the services) there is
+  // nothing to protect or save, and the working copy is durable on its own. Force
+  // skips the save: it is the way out when saving or stopping cannot complete.
   async function exit(force = false): Promise<void> {
     const service = controller.getSnapshot().services.chat
     let hold: { release(): void } | undefined, warning: string | undefined
     try {
       if (!force && !pending && service && chatFor(service)) hold = holdChat('Closing editor')
-      if (hold) await saveCurrent()
+      if (hold) await saveForExit()
       warning = (await closeEditor({ force, close: options => controller.close(options), attached: () => !!controller.workspace })).warning
     } catch (error) {
       setCloseFailure(errorText(error))
