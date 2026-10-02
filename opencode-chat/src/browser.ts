@@ -5,10 +5,12 @@ import { Effect } from 'effect';
 import { modelHeaderPluginSource } from './model-headers';
 import { spanTracer } from './span-diagnostics';
 import { javascriptPluginSource } from './javascript-plugin-source' with { type: 'macro' };
-import { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, modelCatalogPluginSource, openCodeCandidateLaunch, type OpenCodeCandidateModel } from './opencode-launch';
+import { openCodeTraceSource } from './opencode-trace-source' with { type: 'macro' };
+import { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, modelCatalogPluginSource, openCodeCandidateLaunch, openCodeTrace, type OpenCodeCandidateModel } from './opencode-launch';
 import { validatePreparedOpenCode, type PreparedManifest } from './prepared';
 
 const javascriptPlugin = javascriptPluginSource();
+const traceEntry = openCodeTraceSource();
 
 const verifyReadyEffect = Effect.fn('OpenCode.verifyReady')(function*(endpoint: Pick<Endpoint, 'fetch'>, authorization: string, diagnostics: DiagnosticScope) {
   const descriptor = openCodeCandidateLaunch;
@@ -100,9 +102,13 @@ function connection(endpoint: Endpoint, authorization: string): Connection {
   } };
 }
 
-/** Write only OpenCode-owned directories, plugin, and global model configuration. */
-export async function installOpenCodeConfig(workspace: Workspace, options: { modelBaseURL: string; additionalToolActions?: string[]; models?: Record<string, OpenCodeCandidateModel>; defaultModel?: string }) {
+/** Write only OpenCode-owned directories, plugin, and global model configuration. `trace` also writes the opt-in tracing entry. */
+export async function installOpenCodeConfig(workspace: Workspace, options: { modelBaseURL: string; additionalToolActions?: string[]; models?: Record<string, OpenCodeCandidateModel>; defaultModel?: string; trace?: boolean }) {
   for (const directory of openCodeCandidateLaunch.workspaceDirectories) await workspace.fs.mkdir(directory);
+  if (options.trace) {
+    await workspace.fs.mkdir(openCodeTrace.workspaceDirectory);
+    await workspace.fs.writeFile(openCodeTrace.workspacePath, await traceEntry);
+  }
   await workspace.fs.mkdir('/.server/config/opencode/plugins');
   await workspace.fs.writeFile('/.server/config/opencode/plugins/editor-model-headers.js', modelHeaderPluginSource(options.modelBaseURL));
   await workspace.fs.writeFile('/.server/config/opencode/plugins/editor-javascript.js', await javascriptPlugin);
@@ -121,12 +127,14 @@ export async function startOpenCode(controller: WorkspaceController, options: {
   waitForClient?: boolean;
   diagnostics?: DiagnosticScope;
   readiness?: ServiceReadiness;
+  /** Launch the tracing entry written by `installOpenCodeConfig({ trace: true })`. Default: the server itself. */
+  trace?: boolean;
 }) {
   await validatePreparedOpenCode(options.prepared);
   const diagnostics = options.diagnostics ?? createDiagnosticScope(event => controller.diagnostic(event.event, event.data), controller.diagnosticRunId);
   const serviceName = options.serviceName ?? 'chat';
   const password = crypto.randomUUID() + crypto.randomUUID(), authorization = 'Basic ' + btoa('opencode:' + password);
-  const service = await controller.launch(serviceName, createOpenCodeCandidateLaunch({ password, ripgrepBinDirectory: options.prepared.opencode.support.binDirectory }), openCodeCandidateLaunch.port, async (endpoint, signal) => {
+  const service = await controller.launch(serviceName, createOpenCodeCandidateLaunch({ password, ripgrepBinDirectory: options.prepared.opencode.support.binDirectory, trace: options.trace }), openCodeCandidateLaunch.port, async (endpoint, signal) => {
     await verifyOpenCodeReady(endpoint, authorization, signal, diagnostics);
     return connection(endpoint, authorization);
   }, { shutdown: 'stdin-eof', timeoutMs: 10000 }, options.readiness);
@@ -134,5 +142,5 @@ export async function startOpenCode(controller: WorkspaceController, options: {
   return service;
 }
 
-export { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, openCodeCandidateLaunch, type OpenCodeCandidateModel, type OpenCodeModelCatalog } from './opencode-launch';
+export { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, openCodeCandidateLaunch, openCodeTrace, type OpenCodeCandidateModel, type OpenCodeModelCatalog } from './opencode-launch';
 export { loadPrepared, preparedApps, type PreparedManifest } from './prepared';

@@ -3,9 +3,13 @@ import { installSource } from '@kev-browser-agent-kit/workspace/delivery'
 import { createDiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics'
 import type { Connection, Service, WorkspaceController } from '@kev-browser-agent-kit/workspace/react'
 import { openedElsewhere, openedElsewhereMessage, errorText } from './workspace-exit'
-import { installOpenCodeConfig, loadPrepared, preparedApps, startOpenCode } from '@kev-browser-agent-kit/opencode-chat/browser'
+import { installOpenCodeConfig, loadPrepared, openCodeTrace, preparedApps, startOpenCode } from '@kev-browser-agent-kit/opencode-chat/browser'
 
 const base = '/editor/'
+// Measurement only: ?opencodeTrace=1 launches OpenCode through its tracing entry, which
+// prints OPENCODE_TRACE lines on guest stdout (captured by `bun run editor:debug`).
+const openCodeTraced = () => new URLSearchParams(location.search).get('opencodeTrace') === '1'
+declare global { interface Window { __openCodeTrace?: { dump(label?: string, detail?: boolean, probe?: { megabytes: number[]; fill?: 'x' | 'random'; shape?: 'rows' | 'one' }): Promise<unknown> } } }
 export const readyStatus = 'Ready. Ask the agent to change the app; changes stay local to this browser.'
 
 function connection(endpoint: Endpoint): Connection {
@@ -82,6 +86,7 @@ export async function startBrowserEditor(controller: WorkspaceController, option
         await installOpenCodeConfig(workspace, {
           modelBaseURL, additionalToolActions: ['shell'],
           models: manifest.modelCatalog, defaultModel: manifest.editorDefaultModel,
+          ...(openCodeTraced() ? { trace: true } : {}),
         })
         await workspace.flush()
       },
@@ -109,7 +114,15 @@ export async function startBrowserEditor(controller: WorkspaceController, option
         // kernel suite: cold Vite must not compete with chat for its listen
         // budget. Keep the same per-service deadlines and failure ownership.
         await startPreview(controller, manifest.preview)
-        const service = await startOpenCode(controller, { prepared: manifest, diagnostics, waitForClient: false })
+        const traced = openCodeTraced()
+        const service = await startOpenCode(controller, { prepared: manifest, diagnostics, waitForClient: false, ...(traced ? { trace: true } : {}) })
+        // The guest's full counters on demand; the call also prints a summary line on its stdout.
+        if (traced) window.__openCodeTrace = {
+          // `probe` also times statements on a scratch database grown to each size (blocks the guest meanwhile).
+          dump: async (label = '', detail = false, probe) => (await service.connection.fetch(new URL(`${openCodeTrace.dumpPath.slice(1)}?${new URLSearchParams({
+            label, detail: detail ? '1' : '0', probe: (probe?.megabytes ?? []).join(','), fill: probe?.fill ?? 'x', shape: probe?.shape ?? 'rows',
+          })}`, service.connection.url).href)).json(),
+        }
         await options.beforeChatConnect?.(service)
         options.chatConnectReady?.()
         await controller.waitForClient('chat')

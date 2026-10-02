@@ -122,12 +122,24 @@ export function modelCatalogPluginSource(modelIDs: string[]): string {
 } };`;
 }
 
-/** Requires normally installed ripgrep@0.3.1 (including its executable link). */
-export function createOpenCodeCandidateLaunch(options: { password: string; ripgrepBinDirectory?: string }): NodeLaunchOptions {
+/**
+ * Opt-in measurement entry (see opencode-trace-guest.cjs). The guest prints
+ * `prefix` + one-line JSON on stdout and serves its full counters at `dumpPath`.
+ */
+export const openCodeTrace = {
+  entry: '/workspace/.server/trace/opencode-trace.cjs',
+  workspacePath: '/.server/trace/opencode-trace.cjs',
+  workspaceDirectory: '/.server/trace',
+  prefix: 'OPENCODE_TRACE ',
+  dumpPath: '/__opencode_trace',
+} as const;
+
+/** Requires normally installed ripgrep@0.3.1 (including its executable link). `trace` launches the tracing entry instead of the server. */
+export function createOpenCodeCandidateLaunch(options: { password: string; ripgrepBinDirectory?: string; trace?: boolean }): NodeLaunchOptions {
   if (!options.password || /[^\x20-\x7e]/.test(options.password)) throw Error('Expected a nonempty ASCII server password');
   const bin = options.ripgrepBinDirectory ?? '/direct/node_modules/.bin';
   if (!/^\/(?:[\w@.-]+\/)*[\w@.-]+$/.test(bin) || bin.split('/').some(p => p === '.' || p === '..')) throw Error('Invalid ripgrep bin directory');
-  return { entry: '/bin/bun.js', args: ['/app/server.js'], cwd: '/app', env: {
+  return { entry: '/bin/bun.js', args: [options.trace ? openCodeTrace.entry : '/app/server.js'], cwd: '/app', env: {
     PATH: bin + ':/bin', RIPGREP_NODE_WASI: '0',
     HOME: '/workspace/.server/home', OPENCODE_TEST_HOME: '/workspace/.server/home',
     XDG_CONFIG_HOME: '/workspace/.server/config', XDG_STATE_HOME: '/workspace/.server/state',
