@@ -16,6 +16,7 @@ const built = await Bun.build({
       export const installSource = async () => {};
       export const installOpenCodeConfig = async (_workspace, options) => {globalThis.installedConfig = options};
       export const startOpenCode = async controller => {globalThis.calls.push('chat.start'); return controller.launch('chat');};
+      export const openCodeTrace = {dumpPath: '/__opencode_trace'};
     `, loader: 'js' }))
   } }],
 })
@@ -26,7 +27,7 @@ function harness(failure?: 'listen' | 'http' | 'client' | 'chat', modelConfig = 
   const calls: string[] = []
   let release!: () => void
   const gate = new Promise<void>(resolve => { release = resolve })
-  const context: any = { calls, modelConfig, AbortSignal, TextEncoder, location: {port:'54770',protocol:'http:'}, fetch: async () => ({ok:true,json:async()=>({version:'pin'})}) }
+  const context: any = { calls, modelConfig, AbortSignal, TextEncoder, URLSearchParams, location: {port:'54770',protocol:'http:',search:''}, fetch: async () => ({ok:true,json:async()=>({version:'pin'})}) }
   runInNewContext(code, context)
   const controller: any = {
     signal: new AbortController().signal, diagnostic() {}, log() {},
