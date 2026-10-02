@@ -1,0 +1,103 @@
+# Move to diesel2: handoff (2026-10-02)
+
+Work on the toolkit and the runtime fork moves from the Mac to `diesel2`
+(Ubuntu 26.04.1, x86_64, headless). This checkout,
+`/home/kkrausse/devfs/repos/kkrausse/browser-agent-toolkit`, is now the working copy.
+
+## State
+
+| Repo | Where | Commit |
+| --- | --- | --- |
+| Runtime | GitHub `kkrausse/vivari` `main`, pushed | `f9893bd` |
+| Runtime | `vendor/vivari` here, cloned by setup | `f9893bd` |
+| Toolkit | this checkout, `main` | `5d2fb22` plus this handoff |
+| Toolkit | Mac `/Users/kkrausse/Documents/repos/kkrausse/browser-agent-toolkit`, `main` | `5d2fb22` |
+| Toolkit | GitHub `origin/main` | 33 commits behind `5d2fb22`, not pushed |
+
+- Both `main` branches were fast-forwarded on 2026-10-02. The pin
+  (`vivari/runtime-source.json`) names `main` at `f9893bd`.
+- Every toolkit branch is contained in `main` except `compare/baseline-matched`,
+  the deliberate comparison branch on the pre-consolidation runtime.
+- The consolidated single-kernel runtime is the adopted line
+  (`2026-10-01-single-kernel-adoption-handoff.md`); the SQLite-persistence and
+  bundle-load fixes (`2026-10-01-runtime-sqlite-and-module-load-fixes.md`) are on it.
+- diesel2 has no GitHub key. `origin` is set to the SSH URL but cannot be used from
+  here until a key or `gh auth login` exists. The fork clones over public HTTPS.
+
+## Machine setup
+
+Bun 1.4.0, Node 24.18.0 (nvm), Rust 1.93.0 and 1.95.0 with the Wasm targets,
+wasm-pack 0.13.1, Chrome 154, Xvfb, browser-control 0.8.2, Claude Code 2.1.287.
+PATH and `BUN_INSTALL_CACHE_DIR` are set in `~/.zshenv`, so non-interactive shells
+get them. Cargo and rustup caches are symlinked into `~/devfs/.cache/`.
+
+Chrome runs headed on a virtual display, with the browser-control extension loaded
+into the profile `~/devfs/browser/chrome-profile`. Neither survives a reboot:
+
+```sh
+tmux new-session -d -s xvfb 'Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp -ac'
+tmux new-session -d -s chrome "DISPLAY=:99 google-chrome --user-data-dir=$HOME/devfs/browser/chrome-profile --no-first-run --no-default-browser-check --password-store=basic --window-position=0,0 --window-size=1920,1080 about:blank"
+browser-control status      # expect "Extension: connected"
+tmux new-session -d -s todo-editor -c ~/devfs/repos/kkrausse/browser-agent-toolkit/examples/todo-app 'bun run editor:debug'
+```
+
+Helper scripts are in `~/devfs/browser/scripts/` (`open.js`, `exit-reload.js`,
+`chat.js`, `extract.py`, `shot.sh <out.png>`). Chrome 154 ignores
+`--load-extension`; the extension was loaded once through `chrome://extensions`.
+
+## First results on Linux
+
+`bun run setup` 3:10, `bun run build` 5 s, both exit 0.
+
+| Suite | diesel2 | Mac |
+| --- | --- | --- |
+| workspace-api | 96 pass | not re-run |
+| vivari | 4 pass | not re-run |
+| opencode-chat | 155 pass, 2 skip, 2 fail, 1 error | not re-run |
+| examples/todo-app | 187 pass, 16 skip, 1 fail | 186 pass, 1 fail |
+
+Failures here:
+
+- `examples/todo-app/tests/matched-switch-strategy.test.ts:217` assumes `readdirSync`
+  returns sorted names; XFS returns `renamed.ts` before `main.ts`.
+- `opencode-chat/test-ui/readiness-lab-bundle.test.ts:7` hard-codes a macOS temp path
+  (`/private/var/folders/...`), ENOENT on Linux.
+- `opencode-chat/test/opencode-launch.test.ts` cannot resolve
+  `@opencode/schema/config/provider`. The Mac checkout has the same layout, so this
+  is probably not Linux-specific; not confirmed.
+- `tests/reuse-pilot-contract.test.ts`, the known Mac failure, passes here.
+- `bun run typecheck` exits 2 with 23 errors under `examples/todo-app/experiments/`
+  and `tests/single-kernel-driver.ts`, as on the Mac.
+
+Native Wasm: the codec, crypto and vfs outputs hash differently from macOS arm64
+(likely embedded absolute cargo paths; a wasm-opt difference is not ruled out). The
+WASI demo is identical. No receipt or packaging check failed.
+
+Live, headed Chrome on Xvfb, tab visible and focused, kernel not
+service-worker-controlled:
+
+| | diesel2 | Mac median |
+| --- | --- | --- |
+| OpenCode start, fresh | 3.2 s (1 sample) | 2.2 s |
+| OpenCode start, reopen | 3.0 s (2.98, 2.96, 3.00) | 1.5 s |
+| One-word chat reply | 2.3 s | not comparable |
+
+The Linux samples used `http://127.0.0.1:3000/` without `?opencodeTrace=1` or
+`?workspaceFixture=1`; the Mac runs used `localhost:3100` with both. Treat the Linux
+numbers as a first baseline for this machine, not a like-for-like comparison.
+Evidence: `.diagnostics/linux-baseline-2026-10-02/`. Mac evidence was copied to
+`.diagnostics/` and `.diagnostics/from-mac-todo-editor-diagnostics*/`.
+
+## Next
+
+1. Service-worker-controlled kernels: still about five times slower (7.5 s reopen on
+   the Mac). Not yet measured on Linux.
+2. Keep Vite running across a workspace switch (4.3 s of a 4.8 s retained switch).
+3. Integrate the editor into IRS tools, the remaining goal of the adoption handoff.
+4. Housekeeping: the three test failures above are portability bugs in the tests.
+
+## Needs the owner
+
+- `claude` login on diesel2.
+- A GitHub key or `gh auth login` here, and a decision on pushing toolkit `main`.
+- Whether Xvfb and Chrome should start at boot.
