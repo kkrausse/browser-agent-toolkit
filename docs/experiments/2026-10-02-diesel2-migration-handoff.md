@@ -21,8 +21,9 @@ Work on the toolkit and the runtime fork moves from the Mac to `diesel2`
 - The consolidated single-kernel runtime is the adopted line
   (`2026-10-01-single-kernel-adoption-handoff.md`); the SQLite-persistence and
   bundle-load fixes (`2026-10-01-runtime-sqlite-and-module-load-fixes.md`) are on it.
-- diesel2 has no GitHub key. `origin` is set to the SSH URL but cannot be used from
-  here until a key or `gh auth login` exists. The fork clones over public HTTPS.
+- diesel2 has a GitHub SSH key (added later on 2026-10-02): toolkit `origin` fetches
+  and can push over SSH. The fork clones over public HTTPS, and `vendor/vivari` here
+  has its push URL set to SSH. The `gh` CLI itself is not logged in.
 
 ## Machine setup
 
@@ -98,6 +99,5 @@ Evidence: `.diagnostics/linux-baseline-2026-10-02/`. Mac evidence was copied to
 
 ## Needs the owner
 
-- `claude` login on diesel2.
-- A GitHub key or `gh auth login` here, and a decision on pushing toolkit `main`.
+- A decision on pushing toolkit `main` to GitHub.
 - Whether Xvfb and Chrome should start at boot.
