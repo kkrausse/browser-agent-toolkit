@@ -1,8 +1,8 @@
 {
   "checkout": "../vendor/vivari",
   "repository": "https://github.com/kkrausse/vivari.git",
-  "branch": "main",
-  "revision": "2367a645e34fa5e0cba935004ccd706442ae9586",
+  "branch": "perf/sqlite-persist-and-module-cache",
+  "revision": "f9893bd79a2d92e6d103c67e902ffa568a34fa73",
   "upstream": "https://github.com/maitrungduc1410/vivari.git",
   "upstreamBase": "9a89ff328b87ad0fb6a180d4401ea418c180cbe7",
   "rustToolchain": "1.93.0",

@@ -6,6 +6,12 @@ Runtime repository: <https://github.com/kkrausse/vivari> (`main`).
 Edit normal source files there and commit normally. The fork retains upstream
 history, with `upstream` pointing at `maitrungduc1410/vivari`.
 
+The pin is `runtime-source.json`: `revision` is the commit, `branch` the fork
+branch that carries it (setup clones the fork and checks that revision out under
+that branch name, so any pushed branch works). It currently names
+`perf/sqlite-persist-and-module-cache`, four commits ahead of `main` and not yet
+merged there; once `main` is fast-forwarded, set `branch` back to `main`.
+
 Default layout:
 
 ```text
