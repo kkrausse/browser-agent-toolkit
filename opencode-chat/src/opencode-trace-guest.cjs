@@ -185,6 +185,8 @@ function probe(sizesMb, fill, shape) {
   if (!OriginalDatabase) return { error: 'node:sqlite is not patched' };
   suspended = true;
   let db;
+  // Index range of this probe's exchanges in the instrumented runtime's log, when there is one.
+  const runtimeStart = process.__vvSqliteTimings ? process.__vvSqliteTimings.length : -1;
   try {
     remove();
     const openMs = time(() => { db = new OriginalDatabase(path); });
@@ -193,7 +195,8 @@ function probe(sizesMb, fill, shape) {
     db.prepare('INSERT INTO small (value) VALUES (?)').run('seed');
     let megabytes = 0;
     const measure = () => {
-      const row = { bytes: fs.statSync(path).size, prepare: [], read: [], write: [], readTx: [], writeTx: [], begin: 0, commit: 0 };
+      const row = { bytes: fs.statSync(path).size, prepare: [], read: [], write: [], readTx: [], writeTx: [], begin: 0, commit: 0,
+        runtimeIndex: process.__vvSqliteTimings ? process.__vvSqliteTimings.length : -1 };
       for (let i = 0; i < 5; i++) {
         let statement;
         row.prepare.push(time(() => { statement = db.prepare('SELECT value FROM small WHERE id = ?'); }));
@@ -229,7 +232,9 @@ function probe(sizesMb, fill, shape) {
       }
       measure();
     }
-    return { path, fill: fill === 'random' ? 'random' : 'x', shape: shape === 'one' ? 'one' : 'rows', openMs, closeMs: time(() => { db.close(); db = null; }), sizes: results };
+    const closeMs = time(() => { db.close(); db = null; });
+    return { path, fill: fill === 'random' ? 'random' : 'x', shape: shape === 'one' ? 'one' : 'rows', openMs, closeMs, sizes: results,
+      runtimeRange: runtimeStart < 0 ? null : [runtimeStart, process.__vvSqliteTimings.length] };
   } catch (error) {
     return { error: String(error && error.message || error).slice(0, 300), sizes: results };
   } finally {
@@ -427,6 +432,10 @@ function report(detail) {
     series,
   };
   if (detail) body.log = { classes: classNames, keys: statementKeys, t: log.t, ms: log.ms, cls: log.cls, db: log.db, key: log.key };
+  // Present only under a locally instrumented runtime build (never in the pinned one):
+  // finer load and SQLite exchange timings it leaves on the process object.
+  if (process.__vvLoadTimings) body.runtimeLoad = process.__vvLoadTimings;
+  if (detail && process.__vvSqliteTimings) body.runtimeSqlite = process.__vvSqliteTimings;
   return body;
 }
 attempt('http.Server', () => {
