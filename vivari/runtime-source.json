@@ -1,7 +1,7 @@
 {
   "checkout": "../vendor/vivari",
   "repository": "https://github.com/kkrausse/vivari.git",
-  "branch": "perf/sqlite-persist-and-module-cache",
+  "branch": "main",
   "revision": "f9893bd79a2d92e6d103c67e902ffa568a34fa73",
   "upstream": "https://github.com/maitrungduc1410/vivari.git",
   "upstreamBase": "9a89ff328b87ad0fb6a180d4401ea418c180cbe7",
