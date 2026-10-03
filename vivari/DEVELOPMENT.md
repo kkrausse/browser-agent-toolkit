@@ -8,7 +8,9 @@ history, with `upstream` pointing at `maitrungduc1410/vivari`.
 
 The pin is `runtime-source.json`: `revision` is the commit, `branch` the fork
 branch that carries it (setup clones the fork and checks that revision out under
-that branch name, so any pushed branch works). It names `main`.
+that branch name, so any pushed branch works). On this toolkit branch it names
+`perf/startup-fixes` (two commits on `main`, see
+`docs/experiments/2026-10-03-startup-fixes.md`); `main` elsewhere.
 
 Default layout:
 

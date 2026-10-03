@@ -63,10 +63,17 @@ export interface ToolContext {
   readFile(path: string): Promise<Uint8Array>;
   installFile(path: string, bytes: Uint8Array): Promise<void>;
   /** Verify then replace disposable roots in one filesystem-owner operation, before
-   * launching readers. Not transactional on write failure. Caller retains bytes. */
-  installTree(tree: { roots: string[]; entries: InstallTreeEntry[] }): Promise<TreeInstallResult>;
-  /** Install checked preparation-built VFS bodies. The runtime consumes their backing buffers. */
-  installTreeImage?(tree: { roots: string[]; entries: InstallTreeImageEntry[] }): Promise<TreeInstallResult>;
+   * launching readers. Not transactional on write failure. Caller retains bytes.
+   * `persist: false`: these roots are installed again on every boot, so the runtime drops
+   * them from its OPFS mirror (existing copies are deleted) instead of writing them back,
+   * restoring them next boot and replacing them again. Omitted: mirrored, as before. A
+   * runtime that predates the flag ignores it and mirrors. */
+  installTree(tree: { roots: string[]; entries: InstallTreeEntry[]; persist?: boolean }): Promise<TreeInstallResult>;
+  /** Install checked preparation-built VFS bodies. The runtime consumes their backing buffers.
+   * `bodiesVerified: true` states that the bodies are slices of one container whose digest
+   * the caller already checked; the runtime then skips its per-file inflate + SHA-256. A
+   * runtime that predates the flag ignores it and checks every file. `persist`: as installTree. */
+  installTreeImage?(tree: { roots: string[]; entries: InstallTreeImageEntry[]; bodiesVerified?: boolean; persist?: boolean }): Promise<TreeInstallResult>;
 }
 export interface ToolDescriptor<TOptions, TResult> {
   readonly name: string;

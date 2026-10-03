@@ -45,6 +45,45 @@ test("managed delivery selects and validates a VFS image when the runtime suppor
     await install();
     expect(fetch.mock.calls[0]?.[0]).toBe("/" + delivery.image.file);
     expect(installed?.entries[1]).toMatchObject({ kind: "file", logicalBytes: bytes.length, encoding: 0, sha256: fileHash });
+    // The image passed its digest check, so the runtime is told not to hash each file again.
+    expect(installed?.bodiesVerified).toBe(true);
+    // Managed roots are rewritten on every open, so they are kept out of the OPFS mirror.
+    expect(installed?.persist).toBe(false);
+    installed = undefined;
+    await (await managedDeliveryTool(delivery, { baseUrl: "/", signal: new AbortController().signal, verifyImageFiles: true }).bind(context))();
+    expect(installed?.bodiesVerified).toBe(false);
+    installed = undefined;
+    await (await managedDeliveryTool(delivery, { baseUrl: "/", signal: new AbortController().signal, persistManagedRoots: true }).bind(context))();
+    expect(installed?.persist).toBe(true);
+  } finally { fetch.mockRestore(); }
+});
+
+test("an image that fails its digest is never installed, and the bundle path keeps per-file verification", async () => {
+  const bytes = new TextEncoder().encode("bundle bytes");
+  const fileHash = createHash("sha256").update(bytes).digest("hex");
+  const compressed = Bun.gzipSync(bytes), bundleHash = createHash("sha256").update(compressed).digest("hex");
+  const entries = [
+    { kind: "directory" as const, destination: "/managed", mode: 0o755 },
+    { kind: "file" as const, destination: "/managed/file", mode: 0o640, file: fileHash + ".bin", bytes: bytes.length, sha256: fileHash },
+  ];
+  const bundle = { file: bundleHash + ".bundle.gz", bytes: compressed.length, sha256: bundleHash };
+  const fetch = spyOn(globalThis, "fetch").mockImplementation(async () => new Response(compressed));
+  try {
+    // Same bytes offered as an image whose manifest digest they do not match.
+    let imageInstalls = 0;
+    const tampered = { format: "managed-tree-v1" as const, roots: ["/managed"], entries, bundle,
+      image: { format: "managed-vfs-image-v1" as const, file: "e".repeat(64) + ".image.gz", bytes: compressed.length, sha256: "e".repeat(64) } };
+    const imageContext = { installTree: async () => { throw Error("legacy path selected"); },
+      installTreeImage: async () => { imageInstalls++; return { files: 0, verifyMs: 0, installMs: 0, readbackMs: 0 }; } } as import("../src/types").ToolContext;
+    await expect((await managedDeliveryTool(tampered, { baseUrl: "/", signal: new AbortController().signal }).bind(imageContext))()).rejects.toThrow("integrity failure");
+    expect(imageInstalls).toBe(0);
+    // No image support: files come from the bundle and go through installTree, which
+    // has no skip and hashes each of them in the runtime.
+    let legacy: Parameters<import("../src/types").ToolContext["installTree"]>[0] | undefined;
+    const bundleContext = { installTree: async tree => { legacy = tree; return { files: 1, verifyMs: 1, installMs: 1, readbackMs: 0 }; } } as import("../src/types").ToolContext;
+    await (await managedDeliveryTool({ format: "managed-tree-v1", roots: ["/managed"], entries, bundle }, { baseUrl: "/", signal: new AbortController().signal }).bind(bundleContext))();
+    expect(legacy?.entries[1]).toMatchObject({ kind: "file", sha256: fileHash });
+    expect(legacy).not.toHaveProperty("bodiesVerified");
   } finally { fetch.mockRestore(); }
 });
 
