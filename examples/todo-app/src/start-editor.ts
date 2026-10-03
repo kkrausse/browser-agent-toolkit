@@ -17,6 +17,16 @@ const viteTraced = () => viteTraceMode() === '1' || viteTraceMode() === 'fs'
 // A/B switch: ?deliveryVerify=files makes the runtime inflate and hash each delivered
 // file again. Default: the image's own digest, checked at acquire, is the verification.
 const deliveryVerifiesFiles = () => new URLSearchParams(location.search).get('deliveryVerify') === 'files'
+// When OpenCode starts relative to the preview (see the last startup step):
+//   overlap  (default) once the preview's server is listening, alongside its first render and frame load
+//   serial   ?startup=serial: once the preview is fully ready, as before 2026-10-03
+//   parallel ?startup=parallel: at the same time as the preview. Measurement only: this is the order that
+//            twice left cold Vite without a listener for its whole 30 s budget on 2026-09-30.
+type StartupOrder = 'overlap' | 'serial' | 'parallel'
+const startupOrder = (): StartupOrder => {
+  const value = new URLSearchParams(location.search).get('startup')
+  return value === 'serial' || value === 'parallel' ? value : 'overlap'
+}
 declare global { interface Window { __viteTrace?: { dump(label?: string, probe?: boolean): Promise<unknown> } } }
 declare global { interface Window { __openCodeTrace?: { dump(label?: string, detail?: boolean, probe?: { megabytes: number[]; fill?: 'x' | 'random'; shape?: 'rows' | 'one' }): Promise<unknown> } } }
 export const readyStatus = 'Ready. Ask the agent to change the app; changes stay local to this browser.'
@@ -31,9 +41,12 @@ function connection(endpoint: Endpoint): Connection {
   }
 }
 
-/** Launch the Vite preview and wait until the mounted frame shows the application. */
-export async function startPreview(controller: WorkspaceController, preview: NodeLaunchOptions): Promise<void> {
+/** Launch the Vite preview and wait until the mounted frame shows the application.
+ * `onListening` runs once the guest server accepts connections, before the first
+ * request; it is not called when an already running preview is reused. */
+export async function startPreview(controller: WorkspaceController, preview: NodeLaunchOptions, onListening?: () => void): Promise<void> {
   const service = await controller.launch('vite', preview, 5173, async (endpoint) => {
+    onListening?.()
     const response = await endpoint.fetch('/', {
       signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60_000)]),
     })
@@ -126,23 +139,57 @@ export async function startBrowserEditor(controller: WorkspaceController, option
     [
       'Start preview and OpenCode',
       async () => {
-        // Both services share one guest kernel. Qualify the preview before
-        // starting OpenCode's module/plugin boot, as in the qualified single-
-        // kernel suite: cold Vite must not compete with chat for its listen
-        // budget. Keep the same per-service deadlines and failure ownership.
-        await startPreview(controller, previewLaunch())
-        const traced = openCodeTraced()
-        const service = await startOpenCode(controller, { prepared: manifest, diagnostics, waitForClient: false, ...(traced ? { trace: true } : {}) })
-        // The guest's full counters on demand; the call also prints a summary line on its stdout.
-        if (traced) window.__openCodeTrace = {
-          // `probe` also times statements on a scratch database grown to each size (blocks the guest meanwhile).
-          dump: async (label = '', detail = false, probe) => (await service.connection.fetch(new URL(`${openCodeTrace.dumpPath.slice(1)}?${new URLSearchParams({
-            label, detail: detail ? '1' : '0', probe: (probe?.megabytes ?? []).join(','), fill: probe?.fill ?? 'x', shape: probe?.shape ?? 'rows',
-          })}`, service.connection.url).href)).json(),
+        // Both services share one guest kernel. Cold Vite must not compete with
+        // OpenCode's module/plugin boot for its listen budget (2026-09-30: started
+        // together, Vite twice never listened), so OpenCode is never started before
+        // the preview's server is listening. From there on the preview is serving
+        // its first render and the frame, in its own process worker, and OpenCode
+        // boots alongside it instead of after it. Per-service deadlines are unchanged
+        // and each launch still owns its own cleanup.
+        const order = startupOrder()
+        controller.diagnostic('editor.startup-order', { order })
+        const chat = async () => {
+          const traced = openCodeTraced()
+          const service = await startOpenCode(controller, { prepared: manifest, diagnostics, waitForClient: false, ...(traced ? { trace: true } : {}) })
+          // The guest's full counters on demand; the call also prints a summary line on its stdout.
+          if (traced) window.__openCodeTrace = {
+            // `probe` also times statements on a scratch database grown to each size (blocks the guest meanwhile).
+            dump: async (label = '', detail = false, probe) => (await service.connection.fetch(new URL(`${openCodeTrace.dumpPath.slice(1)}?${new URLSearchParams({
+              label, detail: detail ? '1' : '0', probe: (probe?.megabytes ?? []).join(','), fill: probe?.fill ?? 'x', shape: probe?.shape ?? 'rows',
+            })}`, service.connection.url).href)).json(),
+          }
+          // Session restore, then the chat client: both only need the chat service.
+          await options.beforeChatConnect?.(service)
+          options.chatConnectReady?.()
+          await controller.waitForClient('chat')
         }
-        await options.beforeChatConnect?.(service)
-        options.chatConnectReady?.()
-        await controller.waitForClient('chat')
+        if (order === 'serial') {
+          await startPreview(controller, previewLaunch())
+          await chat()
+          return
+        }
+        let chatStarted: Promise<void> | undefined
+        const startChat = () => {
+          if (chatStarted) return
+          chatStarted = chat()
+          // Joined below; a rejection must not surface as unhandled meanwhile.
+          void chatStarted.catch(() => {})
+        }
+        if (order === 'parallel') startChat()
+        let previewFailure: { error: unknown } | undefined
+        try { await startPreview(controller, previewLaunch(), startChat) }
+        catch (error) { previewFailure = { error } }
+        // A preview that failed before it listened never started OpenCode, as in the
+        // serial order. A reused preview (retry) has no listening moment: start now.
+        if (!previewFailure) startChat()
+        // Never leave a start in flight behind a failed step: join it, then report
+        // the preview's failure first. A service that did come up stays published,
+        // as the preview does when OpenCode fails; a retry reuses it.
+        if (chatStarted) {
+          try { await chatStarted }
+          catch (error) { if (!previewFailure) throw error }
+        }
+        if (previewFailure) throw previewFailure.error
       },
     ],
   ])
