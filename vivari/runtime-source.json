@@ -1,8 +1,8 @@
 {
   "checkout": "../vendor/vivari",
   "repository": "https://github.com/kkrausse/vivari.git",
-  "branch": "main",
-  "revision": "f9893bd79a2d92e6d103c67e902ffa568a34fa73",
+  "branch": "perf/resolution-cache",
+  "revision": "b1abcc153d6ebcd30ae28fc05fc10a87ae44b5c1",
   "upstream": "https://github.com/maitrungduc1410/vivari.git",
   "upstreamBase": "9a89ff328b87ad0fb6a180d4401ea418c180cbe7",
   "rustToolchain": "1.93.0",
