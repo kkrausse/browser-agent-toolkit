@@ -28,7 +28,10 @@ const attachChatEffect = Effect.fn("Workspace.attachChat")(function*(owner: Work
   if (!chat) {
     chat = createChatController({
       endpoint: { url: service.connection.url, fetch: (input, init) => service.connection.fetch(input, init) },
-      directory: options.directory ?? "/workspace", autoCreateSession: false, startNewSession: options.startNewSession,
+      directory: options.directory ?? "/workspace",
+      // A workspace with no session yet opens on a new one, so the prompt box works
+      // at once instead of waiting for "New session" in the session menu.
+      autoCreateSession: true, startNewSession: options.startNewSession,
       onDiagnostic: diagnostic,
     });
     chats.set(service, chat);
