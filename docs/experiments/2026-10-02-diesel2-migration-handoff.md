@@ -97,6 +97,15 @@ Evidence: `.diagnostics/linux-baseline-2026-10-02/`. Mac evidence was copied to
 3. Integrate the editor into IRS tools, the remaining goal of the adoption handoff.
    irs-tools is on diesel2 too; see "IRS tools" below.
 4. Housekeeping: the three test failures above are portability bugs in the tests.
+5. Keep saved dev workspaces. Saved workspaces live only in the browser's IndexedDB
+   (`todo-browser-workspaces-v1`) for that origin, so they are lost with site data and
+   are not shared between `localhost`, the tailnet URL, browsers or devices. The owner
+   wants a durable set of them for testing workspace switching: an export/import, or
+   saving them to the host. Not started.
+
+The todo app is served for remote viewing with
+`sudo tailscale serve --bg --https=10000 http://127.0.0.1:3000`
+(https://diesel2.guineafowl-truck.ts.net:10000/). Its editor is always on.
 
 ## Needs the owner
 
