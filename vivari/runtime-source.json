@@ -2,7 +2,7 @@
   "checkout": "../vendor/vivari",
   "repository": "https://github.com/kkrausse/vivari.git",
   "branch": "perf/startup-combined",
-  "revision": "31c6a89fb35757a8cf4b8a1d2713ec47c59d8ce8",
+  "revision": "b47e10f47e3754fde594e493e399dbcdbfb86c06",
   "upstream": "https://github.com/maitrungduc1410/vivari.git",
   "upstreamBase": "9a89ff328b87ad0fb6a180d4401ea418c180cbe7",
   "rustToolchain": "1.93.0",
