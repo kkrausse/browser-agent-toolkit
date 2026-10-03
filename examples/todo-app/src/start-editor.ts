@@ -27,6 +27,9 @@ const startupOrder = (): StartupOrder => {
   const value = new URLSearchParams(location.search).get('startup')
   return value === 'serial' || value === 'parallel' ? value : 'overlap'
 }
+// A/B switch: ?managedPersist=1 mirrors the delivered trees (/app, the backend archive) to
+// OPFS again, as before. Default: they are not mirrored, since every open delivers them anew.
+const managedRootsPersisted = () => new URLSearchParams(location.search).get('managedPersist') === '1'
 declare global { interface Window { __viteTrace?: { dump(label?: string, probe?: boolean): Promise<unknown> } } }
 declare global { interface Window { __openCodeTrace?: { dump(label?: string, detail?: boolean, probe?: { megabytes: number[]; fill?: 'x' | 'random'; shape?: 'rows' | 'one' }): Promise<unknown> } } }
 export const readyStatus = 'Ready. Ask the agent to change the app; changes stay local to this browser.'
@@ -126,7 +129,7 @@ export async function startBrowserEditor(controller: WorkspaceController, option
       async () => {
         if (controller.runtime) return
         const runtime = await controller.startRuntime({
-          apps: preparedApps(manifest, base + 'prepared/', controller.signal, controller.log, diagnostics, { verifyImageFiles: deliveryVerifiesFiles() }),
+          apps: preparedApps(manifest, base + 'prepared/', controller.signal, controller.log, diagnostics, { verifyImageFiles: deliveryVerifiesFiles(), persistManagedRoots: managedRootsPersisted() }),
         })
         try {
           await runtime.tools.apps()

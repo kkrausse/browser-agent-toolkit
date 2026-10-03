@@ -60,6 +60,11 @@ export function managedDeliveryTool(delivery: ManagedDelivery, options: {
    * because the whole image was hashed against `delivery.image.sha256` at acquire.
    * True restores the per-file check. The bundle path always checks per file. */
   verifyImageFiles?: boolean;
+  /** Default false: the managed roots stay out of the runtime's OPFS mirror. This tool
+   * replaces them completely each time it runs, and a new kernel has to run it before
+   * anything reads them (node_modules is never mirrored), so a mirrored copy is only
+   * ever restored to be overwritten. True mirrors them as before. */
+  persistManagedRoots?: boolean;
   /** Experimental: verify the complete installed tree before skipping download/decode/install. */
   experimentalReuseInstalled?: { runtimeVersion: string; disposablePaths?: string[]; preserveCaches?: { servicesStopped: true; policy: InstalledCachePolicy }; onResult?(result: EnvironmentExperimentResult): void };
 }): ToolDescriptor<void, void> {
@@ -75,7 +80,8 @@ export function managedDeliveryTool(delivery: ManagedDelivery, options: {
     const done = (phase: string, data?: Record<string, unknown>) => emit(`delivery.${phase}.ready`, { ...data, elapsedMs: Math.round(performance.now() - phaseStarted) });
     // Whether the runtime was asked to inflate and hash every file (always, except a digest-checked image).
     let perFileVerify = true;
-    const installed = (result?: { files?: number; verifyMs?: number; installMs?: number; readbackMs?: number }) => done("install", { files: result?.files, verifyMs: result?.verifyMs, installMs: result?.installMs, readbackMs: result?.readbackMs, perFileVerify });
+    const persist = options.persistManagedRoots === true;
+    const installed = (result?: { files?: number; verifyMs?: number; installMs?: number; readbackMs?: number }) => done("install", { files: result?.files, verifyMs: result?.verifyMs, installMs: result?.installMs, readbackMs: result?.readbackMs, perFileVerify, mirrored: persist });
     let cache: Cache | undefined, compressed: Uint8Array | undefined;
     begin("acquire");
     try {
@@ -134,7 +140,7 @@ export function managedDeliveryTool(delivery: ManagedDelivery, options: {
       // still validated by the runtime.
       const bodiesVerified = !options.verifyImageFiles;
       perFileVerify = !bodiesVerified;
-      installed(await context.installTreeImage!({ roots: delivery.roots, bodiesVerified, entries: delivery.entries.map(entry => entry.kind === "file"
+      installed(await context.installTreeImage!({ roots: delivery.roots, bodiesVerified, persist, entries: delivery.entries.map(entry => entry.kind === "file"
         ? { kind: "file", path: entry.destination, mode: entry.mode, bytes: blobs.get(entry.file)!.bytes, logicalBytes: entry.bytes, encoding: blobs.get(entry.file)!.encoding, sha256: entry.sha256 }
         : entry.kind === "directory" ? { kind: "directory", path: entry.destination, mode: entry.mode }
           : { kind: "symlink", path: entry.destination, target: entry.target }) }));
@@ -145,7 +151,7 @@ export function managedDeliveryTool(delivery: ManagedDelivery, options: {
     if (offset !== packed.length) throw Error("Managed bundle size mismatch");
     options.signal.throwIfAborted();
     done("decode", { bytes: packed.length }); begin("install");
-    installed(await context.installTree({ roots: delivery.roots, entries: delivery.entries.map(entry => entry.kind === "file"
+    installed(await context.installTree({ roots: delivery.roots, persist, entries: delivery.entries.map(entry => entry.kind === "file"
       ? { kind: "file", path: entry.destination, mode: entry.mode, bytes: blobs.get(entry.file)!, sha256: entry.sha256 }
       : entry.kind === "directory" ? { kind: "directory", path: entry.destination, mode: entry.mode }
         : { kind: "symlink", path: entry.destination, target: entry.target }) }));

@@ -47,9 +47,14 @@ test("managed delivery selects and validates a VFS image when the runtime suppor
     expect(installed?.entries[1]).toMatchObject({ kind: "file", logicalBytes: bytes.length, encoding: 0, sha256: fileHash });
     // The image passed its digest check, so the runtime is told not to hash each file again.
     expect(installed?.bodiesVerified).toBe(true);
+    // Managed roots are rewritten on every open, so they are kept out of the OPFS mirror.
+    expect(installed?.persist).toBe(false);
     installed = undefined;
     await (await managedDeliveryTool(delivery, { baseUrl: "/", signal: new AbortController().signal, verifyImageFiles: true }).bind(context))();
     expect(installed?.bodiesVerified).toBe(false);
+    installed = undefined;
+    await (await managedDeliveryTool(delivery, { baseUrl: "/", signal: new AbortController().signal, persistManagedRoots: true }).bind(context))();
+    expect(installed?.persist).toBe(true);
   } finally { fetch.mockRestore(); }
 });
 
