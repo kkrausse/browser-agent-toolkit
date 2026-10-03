@@ -140,9 +140,10 @@ export async function installViteTrace(workspace: Workspace) {
   await workspace.fs.writeFile(viteTrace.workspacePath, await viteTraceEntry);
 }
 
-/** The same preview launch, entered through the tracing entry, which then runs the original entry unchanged. */
-export function tracedPreviewLaunch(preview: NodeLaunchOptions): NodeLaunchOptions {
-  return { ...preview, entry: viteTrace.entry, env: { ...preview.env, VITE_TRACE_ENTRY: preview.entry } };
+/** The same preview launch, entered through the tracing entry, which then runs the original entry unchanged.
+ * `fs` also counts and times every synchronous filesystem call (slower: about a tenth on the start). */
+export function tracedPreviewLaunch(preview: NodeLaunchOptions, options: { fs?: boolean } = {}): NodeLaunchOptions {
+  return { ...preview, entry: viteTrace.entry, env: { ...preview.env, VITE_TRACE_ENTRY: preview.entry, ...(options.fs ? { VITE_TRACE_FS: '1' } : {}) } };
 }
 
 /** Launch, qualify, and connect the pinned OpenCode server. It starts no preview server. */

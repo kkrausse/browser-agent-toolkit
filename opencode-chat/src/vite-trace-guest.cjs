@@ -75,6 +75,38 @@ const lagTimer = setInterval(() => {
 }, LAG_INTERVAL);
 if (lagTimer && typeof lagTimer.unref === 'function') lagTimer.unref();
 
+// ---- synchronous filesystem calls ---------------------------------------------------
+// The guest's module resolver and Vite's own resolver probe the filesystem with these;
+// each is one synchronous exchange with the kernel. Counts and time, no paths.
+// Off unless VITE_TRACE_FS=1: timing tens of thousands of calls adds about a tenth to the start.
+const fsCalls = { n: 0, ms: 0, by: {} };
+const fsOriginal = {};
+if (process.env.VITE_TRACE_FS === '1') attempt('fs', () => {
+  for (const name of ['statSync', 'lstatSync', 'existsSync', 'readFileSync', 'realpathSync', 'readdirSync', 'accessSync', 'readlinkSync']) {
+    const original = fs[name];
+    if (typeof original !== 'function') continue;
+    fsOriginal[name] = original;
+    const stats = fsCalls.by[name] = { n: 0, ms: 0, failed: 0 };
+    const traced = function (...args) {
+      const started = now();
+      try { return original.apply(this, args); }
+      catch (error) { stats.failed++; throw error; }
+      finally { const ms = now() - started; stats.n++; stats.ms += ms; fsCalls.n++; fsCalls.ms += ms; }
+    };
+    Object.assign(traced, original);
+    fs[name] = traced;
+  }
+  if (fs.statSync === fsOriginal.statSync) throw Error('fs is not patchable');
+});
+// On demand (`probe=1` on the dump): what one such call costs right now, unpatched.
+function fsProbe() {
+  const time = (count, task) => { const started = now(); for (let i = 0; i < count; i++) { try { task(i); } catch { /* a missing path is the point */ } } return round((now() - started) / count * 1000) / 1000; };
+  const pkg = ROOT + '/package.json', missing = ROOT + '/node_modules/__vite_trace_missing__/package.json';
+  const call = (name, ...args) => (fsOriginal[name] || fs[name]).call(fs, ...args);
+  return { unit: 'ms per call', statExisting: time(300, () => call('statSync', pkg)), statMissing: time(300, () => call('statSync', missing)), existsMissing: time(300, () => call('existsSync', missing)),
+    realpath: time(300, () => call('realpathSync', ENTRY)), readSmallFile: time(100, () => call('readFileSync', pkg, 'utf8')), readdir: time(50, () => call('readdirSync', ROOT)) };
+}
+
 // ---- module loads ----------------------------------------------------------------
 // Outermost Module._load calls only: a nested require is inside its parent's time.
 // `timeline` keeps every outermost load of 2 ms or more, in order, so config load and
@@ -171,7 +203,7 @@ attempt('stderr', () => {
 // ---- marks -------------------------------------------------------------------------
 const marks = {};
 function counters() {
-  const out = { mod: [modules.n, round(modules.ms), modules.nested], lag: [round(lag.total), round(lag.markMax), lag.over50, lag.over250], req: [served.n, round(served.ms)], dbg: debug.n };
+  const out = { mod: [modules.n, round(modules.ms), modules.nested], fs: [fsCalls.n, round(fsCalls.ms)], lag: [round(lag.total), round(lag.markMax), lag.over50, lag.over250], req: [served.n, round(served.ms)], dbg: debug.n };
   lag.markMax = 0;
   return out;
 }
@@ -217,6 +249,7 @@ function report() {
     cache: { atStart: cacheAtStart, now: cacheState() },
     lag: { intervalMs: LAG_INTERVAL, total: round(lag.total), max: round(lag.max), over50: lag.over50, over250: lag.over250 },
     modules: { n: modules.n, ms: round(modules.ms), nested: modules.nested, timeline: modules.timeline },
+    fs: { n: fsCalls.n, ms: round(fsCalls.ms), by: Object.fromEntries(Object.entries(fsCalls.by).map(([name, stats]) => [name, { n: stats.n, ms: round(stats.ms), failed: stats.failed }])) },
     esbuild: { loads: esbuild.loads, firstCallAt: esbuild.firstCallAt, calls: Object.fromEntries(Object.entries(esbuild.calls).map(([key, stats]) => [key, { n: stats.n, ms: round(stats.ms), max: round(stats.max), first: stats.first }])) },
     debug: { n: debug.n, load: { n: debug.load.n, ms: round(debug.load.ms) }, transform: { n: debug.transform.n, ms: round(debug.transform.ms) }, time: { n: debug.time.n, ms: round(debug.time.ms) }, deps: debug.deps, lines: debug.lines },
     served: { n: served.n, ms: round(served.ms), bytes: served.bytes, active: served.active, maxActive: served.maxActive, recent: served.recent },
@@ -242,9 +275,11 @@ attempt('http.Server', () => {
       const request = args[0], response = args[1];
       const path = String(request.url || '').split('?')[0];
       if (path.endsWith(DUMP_SUFFIX)) {
-        const label = (new URLSearchParams(String(request.url).split('?')[1] || '').get('label') || '').slice(0, 60);
+        const query = new URLSearchParams(String(request.url).split('?')[1] || '');
+        const label = (query.get('label') || '').slice(0, 60);
         const body = report();
         body.label = label;
+        if (query.get('probe') === '1') body.fsProbe = fsProbe();
         emit('dump', { label, c: counters() });
         response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', 'cross-origin-resource-policy': 'cross-origin' });
         response.end(JSON.stringify(body));

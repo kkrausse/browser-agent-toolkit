@@ -10,9 +10,11 @@ const base = '/editor/'
 // prints OPENCODE_TRACE lines on guest stdout (captured by `bun run editor:debug`).
 const openCodeTraced = () => new URLSearchParams(location.search).get('opencodeTrace') === '1'
 // Measurement only: ?viteTrace=1 launches the Vite preview through its tracing entry
-// (VITE_TRACE lines on guest stdout, full counters from window.__viteTrace.dump()).
-const viteTraced = () => new URLSearchParams(location.search).get('viteTrace') === '1'
-declare global { interface Window { __viteTrace?: { dump(label?: string): Promise<unknown> } } }
+// (VITE_TRACE lines on guest stdout, full counters from window.__viteTrace.dump());
+// ?viteTrace=fs also counts its synchronous filesystem calls.
+const viteTraceMode = () => new URLSearchParams(location.search).get('viteTrace')
+const viteTraced = () => viteTraceMode() === '1' || viteTraceMode() === 'fs'
+declare global { interface Window { __viteTrace?: { dump(label?: string, probe?: boolean): Promise<unknown> } } }
 declare global { interface Window { __openCodeTrace?: { dump(label?: string, detail?: boolean, probe?: { megabytes: number[]; fill?: 'x' | 'random'; shape?: 'rows' | 'one' }): Promise<unknown> } } }
 export const readyStatus = 'Ready. Ask the agent to change the app; changes stay local to this browser.'
 
@@ -36,7 +38,8 @@ export async function startPreview(controller: WorkspaceController, preview: Nod
     return connection(endpoint)
   })
   if (preview.entry === viteTrace.entry) window.__viteTrace = {
-    dump: async (label = '') => (await service.connection.fetch(new URL(`${viteTrace.dumpPath.slice(1)}?${new URLSearchParams({ label })}`, service.connection.url).href)).json(),
+    // `probe` also times a few hundred filesystem calls in the guest (a few hundred ms).
+    dump: async (label = '', probe = false) => (await service.connection.fetch(new URL(`${viteTrace.dumpPath.slice(1)}?${new URLSearchParams({ label, probe: probe ? '1' : '0' })}`, service.connection.url).href)).json(),
   }
   await controller.waitForClient('vite')
 }
@@ -55,7 +58,7 @@ export async function startBrowserEditor(controller: WorkspaceController, option
   let manifest!: Awaited<ReturnType<typeof loadPrepared>>
   let distribution!: Distribution
   // The traced launch differs from the prepared one only in its entry (and the variable naming the real one).
-  const previewLaunch = () => viteTraced() ? tracedPreviewLaunch(manifest.preview) : manifest.preview
+  const previewLaunch = () => viteTraced() ? tracedPreviewLaunch(manifest.preview, { fs: viteTraceMode() === 'fs' }) : manifest.preview
 
   await controller.steps([
     [
