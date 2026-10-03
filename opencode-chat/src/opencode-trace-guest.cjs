@@ -419,7 +419,7 @@ function report(detail) {
     classReport[name] = { n: stats.n, ms: round(stats.ms), max: round(stats.max), p50: percentile(sorted, 0.5), p95: percentile(sorted, 0.95), p99: percentile(sorted, 0.99), hist: stats.hist };
   }
   const body = {
-    version: 1, epochStart: epoch0, t: since(), database: { path: DATABASE, bytes: sampleDatabase() }, patches, marks,
+    version: 1, epochStart: epoch0, perfStart: round(t0), t: since(), database: { path: DATABASE, bytes: sampleDatabase() }, patches, marks,
     sqlite: { n: sqlTotalN, ms: round(sqlTotalMs), buckets: BUCKETS, classes: classReport, statementKeys: statements.size, top: topStatements(60, 200) },
     lag: { intervalMs: LAG_INTERVAL, total: round(lag.total), max: round(lag.max), over50: lag.over50, over250: lag.over250 },
     outbound: { n: outbound.n, ms: round(outbound.ms), pending: outbound.pending, loopback: [outbound.loopbackN, round(outbound.loopbackMs)],
@@ -435,6 +435,7 @@ function report(detail) {
   // Present only under a locally instrumented runtime build (never in the pinned one):
   // finer load and SQLite exchange timings it leaves on the process object.
   if (process.__vvLoadTimings) body.runtimeLoad = process.__vvLoadTimings;
+  if (process.__vvModuleTimings) body.runtimeModules = detail ? process.__vvModuleTimings : { total: process.__vvModuleTimings.total, resolve: process.__vvModuleTimings.resolve };
   if (detail && process.__vvSqliteTimings) body.runtimeSqlite = process.__vvSqliteTimings;
   return body;
 }

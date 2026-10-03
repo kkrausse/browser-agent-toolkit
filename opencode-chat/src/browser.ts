@@ -1,4 +1,4 @@
-import type { Endpoint, Workspace } from '@kev-browser-agent-kit/workspace';
+import type { Endpoint, NodeLaunchOptions, Workspace } from '@kev-browser-agent-kit/workspace';
 import type { Connection, ServiceReadiness, WorkspaceController } from '@kev-browser-agent-kit/workspace/react';
 import { createDiagnosticScope, type DiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics';
 import { Effect } from 'effect';
@@ -6,11 +6,13 @@ import { modelHeaderPluginSource } from './model-headers';
 import { spanTracer } from './span-diagnostics';
 import { javascriptPluginSource } from './javascript-plugin-source' with { type: 'macro' };
 import { openCodeTraceSource } from './opencode-trace-source' with { type: 'macro' };
+import { viteTraceSource } from './vite-trace-source' with { type: 'macro' };
 import { createOpenCodeCandidateConfig, createOpenCodeCandidateLaunch, modelCatalogPluginSource, openCodeCandidateLaunch, openCodeTrace, type OpenCodeCandidateModel } from './opencode-launch';
 import { validatePreparedOpenCode, type PreparedManifest } from './prepared';
 
 const javascriptPlugin = javascriptPluginSource();
 const traceEntry = openCodeTraceSource();
+const viteTraceEntry = viteTraceSource();
 
 const verifyReadyEffect = Effect.fn('OpenCode.verifyReady')(function*(endpoint: Pick<Endpoint, 'fetch'>, authorization: string, diagnostics: DiagnosticScope) {
   const descriptor = openCodeCandidateLaunch;
@@ -118,6 +120,29 @@ export async function installOpenCodeConfig(workspace: Workspace, options: { mod
   if (options.defaultModel !== undefined) await workspace.fs.writeFile(catalogPlugin, modelCatalogPluginSource(Object.keys(options.models ?? {})));
   else if (await workspace.fs.stat(catalogPlugin).then(() => true, () => false)) await workspace.fs.remove(catalogPlugin);
   await workspace.fs.writeFile(openCodeCandidateLaunch.workspaceConfigPath, JSON.stringify(createOpenCodeCandidateConfig(options.modelBaseURL, options.additionalToolActions, options.models, options.defaultModel)));
+}
+
+/**
+ * Opt-in measurement entry for the Vite preview (see vite-trace-guest.cjs). The guest
+ * prints `prefix` + one-line JSON on stdout and serves its full counters at `dumpPath`.
+ */
+export const viteTrace = {
+  entry: '/workspace/.server/trace/vite-trace.cjs',
+  workspacePath: '/.server/trace/vite-trace.cjs',
+  workspaceDirectory: '/.server/trace',
+  prefix: 'VITE_TRACE ',
+  dumpPath: '/__vite_trace',
+} as const;
+
+/** Write the Vite tracing entry into the workspace. Nothing reads it unless a traced launch names it. */
+export async function installViteTrace(workspace: Workspace) {
+  await workspace.fs.mkdir(viteTrace.workspaceDirectory);
+  await workspace.fs.writeFile(viteTrace.workspacePath, await viteTraceEntry);
+}
+
+/** The same preview launch, entered through the tracing entry, which then runs the original entry unchanged. */
+export function tracedPreviewLaunch(preview: NodeLaunchOptions): NodeLaunchOptions {
+  return { ...preview, entry: viteTrace.entry, env: { ...preview.env, VITE_TRACE_ENTRY: preview.entry } };
 }
 
 /** Launch, qualify, and connect the pinned OpenCode server. It starts no preview server. */

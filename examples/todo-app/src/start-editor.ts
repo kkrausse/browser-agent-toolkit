@@ -3,12 +3,16 @@ import { installSource } from '@kev-browser-agent-kit/workspace/delivery'
 import { createDiagnosticScope } from '@kev-browser-agent-kit/workspace/diagnostics'
 import type { Connection, Service, WorkspaceController } from '@kev-browser-agent-kit/workspace/react'
 import { openedElsewhere, openedElsewhereMessage, errorText } from './workspace-exit'
-import { installOpenCodeConfig, loadPrepared, openCodeTrace, preparedApps, startOpenCode } from '@kev-browser-agent-kit/opencode-chat/browser'
+import { installOpenCodeConfig, installViteTrace, loadPrepared, openCodeTrace, preparedApps, startOpenCode, tracedPreviewLaunch, viteTrace } from '@kev-browser-agent-kit/opencode-chat/browser'
 
 const base = '/editor/'
 // Measurement only: ?opencodeTrace=1 launches OpenCode through its tracing entry, which
 // prints OPENCODE_TRACE lines on guest stdout (captured by `bun run editor:debug`).
 const openCodeTraced = () => new URLSearchParams(location.search).get('opencodeTrace') === '1'
+// Measurement only: ?viteTrace=1 launches the Vite preview through its tracing entry
+// (VITE_TRACE lines on guest stdout, full counters from window.__viteTrace.dump()).
+const viteTraced = () => new URLSearchParams(location.search).get('viteTrace') === '1'
+declare global { interface Window { __viteTrace?: { dump(label?: string): Promise<unknown> } } }
 declare global { interface Window { __openCodeTrace?: { dump(label?: string, detail?: boolean, probe?: { megabytes: number[]; fill?: 'x' | 'random'; shape?: 'rows' | 'one' }): Promise<unknown> } } }
 export const readyStatus = 'Ready. Ask the agent to change the app; changes stay local to this browser.'
 
@@ -24,13 +28,16 @@ function connection(endpoint: Endpoint): Connection {
 
 /** Launch the Vite preview and wait until the mounted frame shows the application. */
 export async function startPreview(controller: WorkspaceController, preview: NodeLaunchOptions): Promise<void> {
-  await controller.launch('vite', preview, 5173, async (endpoint) => {
+  const service = await controller.launch('vite', preview, 5173, async (endpoint) => {
     const response = await endpoint.fetch('/', {
       signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60_000)]),
     })
     if (!response.ok) throw new Error(`Preview HTTP ${response.status}`)
     return connection(endpoint)
   })
+  if (preview.entry === viteTrace.entry) window.__viteTrace = {
+    dump: async (label = '') => (await service.connection.fetch(new URL(`${viteTrace.dumpPath.slice(1)}?${new URLSearchParams({ label })}`, service.connection.url).href)).json(),
+  }
   await controller.waitForClient('vite')
 }
 
@@ -47,6 +54,8 @@ export async function startBrowserEditor(controller: WorkspaceController, option
   )
   let manifest!: Awaited<ReturnType<typeof loadPrepared>>
   let distribution!: Distribution
+  // The traced launch differs from the prepared one only in its entry (and the variable naming the real one).
+  const previewLaunch = () => viteTraced() ? tracedPreviewLaunch(manifest.preview) : manifest.preview
 
   await controller.steps([
     [
@@ -89,6 +98,7 @@ export async function startBrowserEditor(controller: WorkspaceController, option
           models: manifest.modelCatalog, defaultModel: manifest.editorDefaultModel,
           ...(openCodeTraced() ? { trace: true } : {}),
         })
+        if (viteTraced()) await installViteTrace(workspace)
         await workspace.flush()
       },
     ],
@@ -114,7 +124,7 @@ export async function startBrowserEditor(controller: WorkspaceController, option
         // starting OpenCode's module/plugin boot, as in the qualified single-
         // kernel suite: cold Vite must not compete with chat for its listen
         // budget. Keep the same per-service deadlines and failure ownership.
-        await startPreview(controller, manifest.preview)
+        await startPreview(controller, previewLaunch())
         const traced = openCodeTraced()
         const service = await startOpenCode(controller, { prepared: manifest, diagnostics, waitForClient: false, ...(traced ? { trace: true } : {}) })
         // The guest's full counters on demand; the call also prints a summary line on its stdout.
@@ -131,5 +141,5 @@ export async function startBrowserEditor(controller: WorkspaceController, option
     ],
   ])
   controller.status(readyStatus)
-  return { preview: manifest.preview }
+  return { preview: previewLaunch() }
 }
