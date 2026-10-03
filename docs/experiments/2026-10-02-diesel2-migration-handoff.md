@@ -91,6 +91,9 @@ Evidence: `.diagnostics/linux-baseline-2026-10-02/`. Mac evidence was copied to
 
 ## Next
 
+Later state: `2026-10-03-startup-performance.md` (startup roughly halved; items 1 and 2
+below were measured there) and `2026-10-03-irs-tools-integration-handoff.md` (item 3).
+
 1. Service-worker-controlled kernels: still about five times slower (7.5 s reopen on
    the Mac). Not yet measured on Linux.
 2. Keep Vite running across a workspace switch (4.3 s of a 4.8 s retained switch).
