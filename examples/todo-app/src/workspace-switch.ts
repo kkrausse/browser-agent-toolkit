@@ -84,8 +84,11 @@ export async function switchWorkspace(options: {
 }
 
 const dependencySections = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'overrides', 'resolutions', 'patchedDependencies', 'trustedDependencies', 'workspaces']
-// Lockfiles, and the lock inputs preparation derived for the guest install.
-const dependencyFiles = ['/bun.lock', '/bun.lockb', '/package-lock.json', '/npm-shrinkwrap.json', '/yarn.lock', '/pnpm-lock.yaml', '/.browser-editor/runtime-package.json', '/.browser-editor/runtime-bun.lock']
+// The workspace's own lockfiles. Not /.browser-editor/runtime-package.json and
+// runtime-bun.lock: those are stamped from the editor build that created the
+// workspace (scripts included) and say nothing about what was installed since, while
+// node_modules always comes from the build being served now.
+const dependencyFiles = ['/bun.lock', '/bun.lockb', '/package-lock.json', '/npm-shrinkwrap.json', '/yarn.lock', '/pnpm-lock.yaml']
 const sortedKeys = (_key: string, value: unknown) => value && typeof value === 'object' && !Array.isArray(value)
   ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : value
 

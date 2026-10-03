@@ -164,6 +164,8 @@ describe('local workspace switching', () => {
     expect(dependencyMismatch(unlocked, unlocked)).toBeUndefined()
     expect(dependencyMismatch(base, { ...base, '/package.json': encode('not json') })).toBe('package.json cannot be compared')
     expect(dependencyMismatch(base, { ...base, '/package.json': encode('[]') })).toBe('package.json cannot be compared')
+    // Stamped by the editor build that created the workspace, not by an install in it.
+    expect(dependencyMismatch({ ...base, '/.browser-editor/runtime-package.json': encode('build-1') }, { ...base, '/.browser-editor/runtime-package.json': encode('build-2') })).toBeUndefined()
     // A retained root is never restored into: it must not be a source path.
     for (const root of retainedRoots) expect(safeSourcePath('/' + root + '/file')).toBe(false)
   })

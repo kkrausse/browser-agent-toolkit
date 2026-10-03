@@ -108,7 +108,9 @@ A switch between saved workspaces keeps the runtime, the installed dependencies
 and the OpenCode server running when it can: only the preview is restarted and
 only source files are replaced, then sessions are re-imported and chat reconnects.
 It does so when both workspaces have the same `package.json` dependency sections
-and lockfiles, OpenCode is healthy and no session is running. Otherwise, and
+and lockfiles (they differ only if something was installed inside a workspace; the
+editor build a workspace was created from does not matter), OpenCode is healthy and
+no session is running. Otherwise, and
 whenever that path fails part way, it stops everything, clears the workspace and
 starts again as before. `?workspaceSwitch=full` on the page URL always takes the
 full path, for comparing the two; the `switch.path` diagnostic event records which
