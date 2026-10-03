@@ -142,6 +142,10 @@ Not decisions on an API; the wishes a design has to meet.
 - The TODO example consumes built copies of the packages. After editing `opencode-chat`
   or `workspace-api`, run `bun run build:example` at the toolkit root; `bun run build`
   alone leaves the example on the old copy.
+- `bun run setup` never moves an existing `vendor/vivari` checkout. After the pin
+  changes, check the pinned commit out there yourself, then run setup; the built
+  runtime's revision is in `vivari/.runtime/patched-build.json`. The main checkout was
+  brought to `6c1759a` this way on 2026-10-03.
 - The runtime runs in the visiting browser. Timings in a server's event log from a
   remote device are that device's, not diesel2's.
 - Two tabs cannot both be visible and focused in the one Chrome on Xvfb; hidden tabs are
