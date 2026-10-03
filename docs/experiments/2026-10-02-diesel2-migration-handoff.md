@@ -95,9 +95,64 @@ Evidence: `.diagnostics/linux-baseline-2026-10-02/`. Mac evidence was copied to
    the Mac). Not yet measured on Linux.
 2. Keep Vite running across a workspace switch (4.3 s of a 4.8 s retained switch).
 3. Integrate the editor into IRS tools, the remaining goal of the adoption handoff.
+   irs-tools is on diesel2 too; see "IRS tools" below.
 4. Housekeeping: the three test failures above are portability bugs in the tests.
 
 ## Needs the owner
 
 - A decision on pushing toolkit `main` to GitHub.
 - Whether Xvfb and Chrome should start at boot.
+
+## Audit of what moved (later on 2026-10-02)
+
+Every toolkit branch on the Mac is in `main` except `compare/baseline-matched`. The Mac
+worktrees for the other branches (`bat-sk-track*`, `browser-agent-toolkit-single-kernel`,
+`browser-agent-toolkit-upstream`, `.claude/worktrees/todo-editor-diagnostics`, and the
+removed temp worktree for `perf/managed-vfs-image`) hold no unique commits.
+
+Anything a clone would not carry is in `~/devfs/repos/kkrausse/from-mac/`. Its `README.md`
+indexes it. It contains:
+
+- Uncommitted work from the Mac single-kernel worktree: edits to
+  `kernel-effect-migration-plan.md`, `2026-09-30-endpoint-owner-browser-qa-preparation.md`,
+  and two `effect-remaining-loader-*` fixtures. It also has a patch,
+  `single-kernel-uncommitted.diff`.
+- `.diagnostics/` from `browser-agent-toolkit-single-kernel` (4.1 GB) and `bat-sk-track`
+  (98 MB, the sk-live runs 1 to 4 and `compare-2026-10-01`). Older handoffs cite these
+  paths relative to those worktrees.
+- Untracked docs from the runtime fork:
+  `vivari-upstream-rebase/{INTEGRATION-HANDOFF,UPSTREAM-REBASE,handoff,plan}.md` and
+  `vivari-reset-diagnostic/scripts/probe-kernel-fs-stale-wake.mjs`.
+- Git bundles of all local branches. The runtime bundle has `browser-runtime`
+  (13 commits from 2026-09-15 that are not on GitHub). It is probably superseded by the
+  consolidated `main`; this was not checked.
+
+Not copied:
+
+- `browser-agent-toolkit-upstream/.release/` (201 MB of 0.1.0-alpha.1 release output).
+- The `pkg-node` build output in the Mac runtime worktrees.
+
+The main checkout's ignored files did move: `.diagnostics/`, the
+`docs/runtime-architecture.*` diagram sources and renders, and `examples/todo-app/.env.local`.
+
+Known Mac-only paths: eight scripts under `examples/todo-app/experiments/` hard-code
+`/Users/kkrausse/...`. They are one-off experiment drivers; fix the path before rerunning one.
+
+## IRS tools
+
+- Checkout: `~/devfs/repos/kkrausse/irs-tools`. `main` is 26 ahead of GitHub and not pushed.
+- Worktrees:
+  - `../irs-tools-browser-editor` (`feat/browser-workspace-editor`, 11 ahead of main)
+  - `../irs-tools-editor-draft` (`feat/browser-editor-library-integration`, 2 ahead)
+- It consumes this toolkit as tarballs in `vendor/toolkit/*.tgz`, not through a path link.
+- Status: `bun install` and `typecheck` pass. `bun test` has 114 pass and 5 fail; the same
+  5 `makeEncryptedStorage` tests fail on the Mac.
+- Secrets: `conf.dev.yaml` is encrypted with SOPS. diesel2 decrypts it with the age key
+  `~/.config/sops/age/keys.txt`. `.env.local` was copied over. Prod (KMS) secrets stay off
+  this machine.
+- `bun dev` starts the API on :3001 and Vite on :5173.
+- Clerk dev only accepts localhost origins. Use Chrome on Xvfb here, or tunnel from the Mac
+  with `ssh -N -L 5173:localhost:5173 -L 3001:localhost:3001 diesel2`. The sign-in flow
+  through the tunnel has not been tested yet.
+- IRS handoffs: `docs/browser-editor-handoff.md`, `docs/browser-editor-startup-handoff-2026-09-18.md`,
+  `docs/browser-editor-isolation-plan.md`, `docs/editor-snapshot-restore-plan.md`.
