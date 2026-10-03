@@ -39,6 +39,8 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
   const identitySelection = useRef<string | undefined>(undefined)
   const identityWrite = useRef(Promise.resolve())
   const [actionBusy, setActionBusy] = useState(false)
+  // A Save in progress. It takes no chat hold, so chat stays usable during it.
+  const [saving, setSaving] = useState(false)
   // Set when an exit, or the stop inside a switch, failed with the workspace still attached.
   const [closeFailure, setCloseFailure] = useState<string>()
   // How the running preview was launched; a retained switch relaunches it as it was.
@@ -51,6 +53,8 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
   // A failure a recovery alert already shows is not repeated in the footer alert.
   const footerAlert = footerError({ error: state.error, exitFailure: exitFailure ? closeFailure : undefined, switchRecovery: switchPresentation?.phase === 'recovery' })
   const blocked = actionBusy || state.busy || !!pending || !state.runtime || !idleChat(chat?.getSnapshot())
+  // Save snapshots a running chat as it stands, so it needs only a connected chat.
+  const saveBlocked = actionBusy || state.busy || !!pending || !state.runtime || chatState.connection !== 'connected'
 
   async function persist(next: Catalog): Promise<void> {
     await store.write(next)
@@ -64,7 +68,11 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
     if (!current) throw Error('Workspace chat must be ready before saving or switching')
     return current.hold(reason)
   }
-  /** Caller holds chat admission. */
+  /** Switch and first adoption hold chat admission, so the image is quiescent. Save
+   * does not: during a run it is a point-in-time snapshot, source then sessions, and
+   * the run may edit between the two. OpenCode's native export holds only persisted
+   * messages, so the step in flight (streaming, running a tool, awaiting an answer)
+   * is left out and the image reads as a run stopped after its last finished step. */
   async function capture(): Promise<SavedWorkspace> {
     const workspace = controller.workspace, service = controller.getSnapshot().services.chat
     if (!workspace || !service) throw Error('Workspace and chat must be ready before saving')
@@ -73,7 +81,7 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
     const selectedSessionId = chatFor(service)?.getSnapshot().sessionID
     return validateWorkspace({ format: 1, id: catalog.current.activeId ?? crypto.randomUUID(), name: nameRef.current.trim() || 'Untitled workspace', savedAt: Date.now(), source: await captureSource(workspace), sessions: await captureSessions(service), selectedSessionId })
   }
-  /** Caller holds chat admission. */
+  /** Caller holds chat admission, except Save (see capture). */
   async function saveCurrent(): Promise<SavedWorkspace> {
     const saved = await capture()
     await persist({ ...upsert(catalog.current, saved), activeId: saved.id })
@@ -205,17 +213,18 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
     return () => { delete target.__todoWorkspaceFixture }
   }, [controller])
 
-  function action(label: string, task: () => Promise<void>): void {
+  function action(label: string, task: () => Promise<void>, isSave = false): void {
     if (locked.current || controller.getSnapshot().busy) return
-    locked.current = true; setActionBusy(true)
-    void controller.run(label, task).finally(() => { setPending(catalog.current.pending); locked.current = false; setActionBusy(false) })
+    locked.current = true; setActionBusy(true); setSaving(isSave)
+    void controller.run(label, task).finally(() => { setPending(catalog.current.pending); locked.current = false; setActionBusy(false); setSaving(false) })
   }
+  // No chat hold: a run, a send or a reply may continue through a Save. The action
+  // lock still excludes switch, New workspace, Exit and the fixture write, and the
+  // identity effect waits for it.
   async function save(): Promise<void> {
-    const hold = holdChat('Saving workspace')
-    try {
-      const saved = await saveCurrent()
-      setNote(`Saved ${saved.name} locally, including resumable native sessions.`)
-    } finally { hold.release() }
+    const running = !idleChat(chat?.getSnapshot())
+    const saved = await saveCurrent()
+    setNote(`Saved ${saved.name} locally, including resumable native sessions${running ? '; the run in progress is saved up to its last finished step' : ''}.`)
   }
   // Exit saves and closes under one hold, so nothing can start after the save.
   // Only an attached chat is held and saved (see saveForExit). With none (startup
@@ -300,7 +309,7 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
       if (incoming) action('Switch workspace', () => replace(incoming))
     }}>{!activeId && <option value="">Current workspace</option>}{list.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
     <label>Name<input aria-label="Workspace name" value={name} maxLength={120} disabled={actionBusy || state.busy || !!pending} onChange={event => setName(event.target.value)} /></label>
-    <div className="todo-workspace-buttons"><button disabled={blocked} onClick={() => action('New workspace', create)}>New workspace</button><button disabled={blocked} onClick={() => action('Save workspace', save)}>Save workspace</button><button disabled={actionBusy || state.busy || (!pending && !!chat && !idleChat(chat.getSnapshot()))} onClick={() => action('Close editor', () => exit())}>Exit</button></div>
+    <div className="todo-workspace-buttons"><button disabled={blocked} onClick={() => action('New workspace', create)}>New workspace</button><button disabled={saveBlocked} onClick={() => action('Save workspace', save, true)}>Save workspace</button><button disabled={actionBusy || state.busy || (!pending && !!chat && !idleChat(chat.getSnapshot()))} onClick={() => action('Close editor', () => exit())}>Exit</button></div>
   </div>
   return <div className="todo-workspace-editor">
     <div className="todo-workspace-preview"><EditorPreview controller={controller} service={state.services.vite} name="vite" hostPaths={hostPaths} isReady={isPreviewReady} />{!state.services.vite && <p>Opening workspace preview…</p>}</div>
@@ -310,10 +319,10 @@ export function WorkspaceEditor({ controller, onExit }: { controller: WorkspaceC
       {exitFailure && <div role={exitFailure.role} className="todo-workspace-recovery"><p>{exitFailure.message}</p><button disabled={state.busy || actionBusy} onClick={() => action('Close editor', () => exit())}>Retry exit</button><button disabled={state.busy || actionBusy} onClick={() => {
         if (window.confirm('Force exit closes the editor without confirming that preview and OpenCode stopped, and without saving again. Files already saved in this browser are kept. Force exit?')) action('Force close editor', () => exit(true))
       }}>Force exit without confirmed cleanup</button></div>}
-      <div className="todo-workspace-chat" inert={actionBusy || state.busy || !!pending || restoring}>
+      <div className="todo-workspace-chat" inert={(actionBusy || state.busy) && !saving || !!pending || restoring}>
         {chat && !pending && !restoring ? <ChatView controller={chat} showModels showSessions /> : <p>{switchPresentation?.phase === 'switching' ? 'Connecting workspace chat…' : switchPresentation?.phase === 'recovery' ? 'Recover the interrupted switch to reconnect chat.' : chatError || 'Starting OpenCode…'}</p>}
       </div>
-      <footer><p role="status">{switchPresentation ? switchPresentation.phase === 'switching' ? 'Workspace switch in progress…' : 'Workspace recovery required.' : state.status}</p>{footerAlert && <p role="alert">{footerAlert}</p>}{state.error && !pending && <button disabled={state.busy || actionBusy} onClick={() => action('Retry editor startup', open)}>Retry editing</button>}<small>{blocked && !state.busy && !pending ? chat ? `Workspace actions wait for connected, idle chat (${chatState.execution}).` : 'Preview and OpenCode are not running. Retry editing to continue working, or exit.' : 'Switching restarts the preview; OpenCode restarts too unless it can be kept.'}</small><details><summary>Debug · Activity</summary><pre>{state.logs.join('\n')}</pre></details></footer>
+      <footer><p role="status">{switchPresentation ? switchPresentation.phase === 'switching' ? 'Workspace switch in progress…' : 'Workspace recovery required.' : state.status}</p>{footerAlert && <p role="alert">{footerAlert}</p>}{state.error && !pending && <button disabled={state.busy || actionBusy} onClick={() => action('Retry editor startup', open)}>Retry editing</button>}<small>{blocked && !state.busy && !pending ? chat ? saveBlocked ? `Workspace actions wait for connected chat (${chatState.connection}).` : `Save works now; switching, New workspace and Exit wait for idle chat (${chatState.execution}).` : 'Preview and OpenCode are not running. Retry editing to continue working, or exit.' : 'Switching restarts the preview; OpenCode restarts too unless it can be kept.'}</small><details><summary>Debug · Activity</summary><pre>{state.logs.join('\n')}</pre></details></footer>
     </aside>
     <EditorTimings controller={controller} />
   </div>
