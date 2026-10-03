@@ -14,6 +14,9 @@ const openCodeTraced = () => new URLSearchParams(location.search).get('opencodeT
 // ?viteTrace=fs also counts its synchronous filesystem calls.
 const viteTraceMode = () => new URLSearchParams(location.search).get('viteTrace')
 const viteTraced = () => viteTraceMode() === '1' || viteTraceMode() === 'fs'
+// A/B switch: ?deliveryVerify=files makes the runtime inflate and hash each delivered
+// file again. Default: the image's own digest, checked at acquire, is the verification.
+const deliveryVerifiesFiles = () => new URLSearchParams(location.search).get('deliveryVerify') === 'files'
 declare global { interface Window { __viteTrace?: { dump(label?: string, probe?: boolean): Promise<unknown> } } }
 declare global { interface Window { __openCodeTrace?: { dump(label?: string, detail?: boolean, probe?: { megabytes: number[]; fill?: 'x' | 'random'; shape?: 'rows' | 'one' }): Promise<unknown> } } }
 export const readyStatus = 'Ready. Ask the agent to change the app; changes stay local to this browser.'
@@ -110,7 +113,7 @@ export async function startBrowserEditor(controller: WorkspaceController, option
       async () => {
         if (controller.runtime) return
         const runtime = await controller.startRuntime({
-          apps: preparedApps(manifest, base + 'prepared/', controller.signal, controller.log, diagnostics),
+          apps: preparedApps(manifest, base + 'prepared/', controller.signal, controller.log, diagnostics, { verifyImageFiles: deliveryVerifiesFiles() }),
         })
         try {
           await runtime.tools.apps()

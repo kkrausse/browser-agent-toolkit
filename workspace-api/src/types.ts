@@ -65,8 +65,11 @@ export interface ToolContext {
   /** Verify then replace disposable roots in one filesystem-owner operation, before
    * launching readers. Not transactional on write failure. Caller retains bytes. */
   installTree(tree: { roots: string[]; entries: InstallTreeEntry[] }): Promise<TreeInstallResult>;
-  /** Install checked preparation-built VFS bodies. The runtime consumes their backing buffers. */
-  installTreeImage?(tree: { roots: string[]; entries: InstallTreeImageEntry[] }): Promise<TreeInstallResult>;
+  /** Install checked preparation-built VFS bodies. The runtime consumes their backing buffers.
+   * `bodiesVerified: true` states that the bodies are slices of one container whose digest
+   * the caller already checked; the runtime then skips its per-file inflate + SHA-256. A
+   * runtime that predates the flag ignores it and checks every file. */
+  installTreeImage?(tree: { roots: string[]; entries: InstallTreeImageEntry[]; bodiesVerified?: boolean }): Promise<TreeInstallResult>;
 }
 export interface ToolDescriptor<TOptions, TResult> {
   readonly name: string;

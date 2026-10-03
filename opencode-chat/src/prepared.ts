@@ -84,6 +84,8 @@ export async function loadPrepared(base: string, signal: AbortSignal, diagnostic
 }
 
 export interface PreparedAppsOptions {
+  /** Hash every delivered file again in the runtime although the image digest was checked. Default false. */
+  verifyImageFiles?: boolean;
   experimentalReuseInstalled?: boolean;
   /** Opt-in stopped-tree audit. Caller must join ALL services before each install.
    * Invalid audits still redeliver conservatively; failed ownership proof rejects. */
@@ -95,7 +97,7 @@ export function preparedApps(manifest: PreparedManifest, base: string, signal: A
   validateTree(manifest.assets);
   validatePreparedBackendArchives(manifest);
   if (!manifest.bundle) throw Error('Prepared managed bundle is required; regenerate this editor preparation');
-  const delivery = managedDeliveryTool({ format: 'managed-tree-v1', roots: treeRoots, entries: manifest.assets, bundle: manifest.bundle, image: manifest.image }, { baseUrl: base, signal, report, diagnostic: diagnostics.record,
+  const delivery = managedDeliveryTool({ format: 'managed-tree-v1', roots: treeRoots, entries: manifest.assets, bundle: manifest.bundle, image: manifest.image }, { baseUrl: base, signal, report, diagnostic: diagnostics.record, verifyImageFiles: options.verifyImageFiles,
     experimentalReuseInstalled: options.experimentalReuseInstalled ? { runtimeVersion: manifest.runtimeVersion,
       ...(options.experimentalPreserveInstalledCaches ? { preserveCaches: options.experimentalPreserveInstalledCaches } : { disposablePaths: ['/workspace/node_modules/.vite-temp', '/workspace/node_modules/.vite'] }),
       onResult: result => diagnostics.record('delivery.installed-environment', result) } : undefined });
