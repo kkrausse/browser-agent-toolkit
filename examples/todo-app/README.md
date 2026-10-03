@@ -35,14 +35,16 @@ After `bun run setup` at the repository root, from this directory:
 bun run editor
 ```
 
-This prepares the editor (`.editor/`), builds the app and serves it with the
-local admin fixture on port 3000 (`PORT` overrides it). Open
-`http://127.0.0.1:3000` and choose **Open editor**. The separate steps are
-`bun run prepare:editor`, `bun run build` and `LOCAL_EDITOR_ADMIN=1 bun start`.
+This prepares the editor (`.editor/`), builds the app and serves it on loopback
+port 3000 (`PORT` overrides it). Open `http://127.0.0.1:3000` and choose
+**Open editor**. The separate steps are `bun run prepare:editor`, `bun run build`
+and `bun start`. To reach it from another device, put it behind an HTTPS proxy
+such as `tailscale serve --bg --https=10000 http://127.0.0.1:3000`.
 
-`LOCAL_EDITOR_ADMIN=1` is a loopback-only local fixture, not production
-authentication. The app owns editing authorization in `src/server/editing.ts`;
-model forwarding is wired through `server.ts` and the toolkit server adapter.
+Editing is always on in this demo; `src/server/editing.ts` only refuses
+cross-site requests. A real app (IRS tools) decides who may edit there, from its
+own sign-in. Model forwarding is wired through `server.ts` and the toolkit server
+adapter.
 
 ### Model key and catalog
 
