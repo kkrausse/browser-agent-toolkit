@@ -86,12 +86,17 @@ if (process.env.VITE_TRACE_FS === '1') attempt('fs', () => {
     const original = fs[name];
     if (typeof original !== 'function') continue;
     fsOriginal[name] = original;
-    const stats = fsCalls.by[name] = { n: 0, ms: 0, failed: 0 };
+    // `resolve` and `read`: the share made by the runtime's own module loader (resolving a
+    // name, reading a module's source), known only under a locally instrumented runtime
+    // build that keeps process.__vvSys; everything else is guest JavaScript (Vite's resolver).
+    const stats = fsCalls.by[name] = { n: 0, ms: 0, failed: 0, resolve: { n: 0, ms: 0, failed: 0 }, read: { n: 0, ms: 0, failed: 0 } };
     const traced = function (...args) {
+      const sys = process.__vvSys;
+      const part = sys ? (sys.inResolve > 0 ? stats.resolve : sys.inRead > 0 ? stats.read : null) : null;
       const started = now();
       try { return original.apply(this, args); }
-      catch (error) { stats.failed++; throw error; }
-      finally { const ms = now() - started; stats.n++; stats.ms += ms; fsCalls.n++; fsCalls.ms += ms; }
+      catch (error) { stats.failed++; if (part) part.failed++; throw error; }
+      finally { const ms = now() - started; stats.n++; stats.ms += ms; fsCalls.n++; fsCalls.ms += ms; if (part) { part.n++; part.ms += ms; } }
     };
     Object.assign(traced, original);
     fs[name] = traced;
@@ -249,7 +254,7 @@ function report() {
     cache: { atStart: cacheAtStart, now: cacheState() },
     lag: { intervalMs: LAG_INTERVAL, total: round(lag.total), max: round(lag.max), over50: lag.over50, over250: lag.over250 },
     modules: { n: modules.n, ms: round(modules.ms), nested: modules.nested, timeline: modules.timeline },
-    fs: { n: fsCalls.n, ms: round(fsCalls.ms), by: Object.fromEntries(Object.entries(fsCalls.by).map(([name, stats]) => [name, { n: stats.n, ms: round(stats.ms), failed: stats.failed }])) },
+    fs: { n: fsCalls.n, ms: round(fsCalls.ms), by: Object.fromEntries(Object.entries(fsCalls.by).map(([name, stats]) => [name, { n: stats.n, ms: round(stats.ms), failed: stats.failed, resolve: { ...stats.resolve, ms: round(stats.resolve.ms) }, read: { ...stats.read, ms: round(stats.read.ms) } }])) },
     esbuild: { loads: esbuild.loads, firstCallAt: esbuild.firstCallAt, calls: Object.fromEntries(Object.entries(esbuild.calls).map(([key, stats]) => [key, { n: stats.n, ms: round(stats.ms), max: round(stats.max), first: stats.first }])) },
     debug: { n: debug.n, load: { n: debug.load.n, ms: round(debug.load.ms) }, transform: { n: debug.transform.n, ms: round(debug.transform.ms) }, time: { n: debug.time.n, ms: round(debug.time.ms) }, deps: debug.deps, lines: debug.lines },
     served: { n: served.n, ms: round(served.ms), bytes: served.bytes, active: served.active, maxActive: served.maxActive, recent: served.recent },
@@ -259,6 +264,8 @@ function report() {
   // what the runtime's module loader spent per module (read, transpile, compile, run).
   if (process.__vvModuleTimings) body.runtimeModules = process.__vvModuleTimings;
   if (process.__vvLoadTimings) body.runtimeLoad = process.__vvLoadTimings;
+  // Kernel round trips (one per synchronous syscall) and, when the runtime has one, its resolution cache's counters.
+  if (process.__vvSys) body.sys = process.__vvSys;
   return body;
 }
 attempt('http.Server', () => {

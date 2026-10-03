@@ -437,6 +437,7 @@ function report(detail) {
   if (process.__vvLoadTimings) body.runtimeLoad = process.__vvLoadTimings;
   if (process.__vvModuleTimings) body.runtimeModules = detail ? process.__vvModuleTimings : { total: process.__vvModuleTimings.total, resolve: process.__vvModuleTimings.resolve };
   if (detail && process.__vvSqliteTimings) body.runtimeSqlite = process.__vvSqliteTimings;
+  if (process.__vvSys) body.sys = process.__vvSys;
   return body;
 }
 attempt('http.Server', () => {
