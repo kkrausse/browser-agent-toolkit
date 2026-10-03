@@ -82,7 +82,8 @@ export async function startBrowserEditor(controller: WorkspaceController, option
         // Timing context: whether this open restored a stored working copy.
         controller.diagnostic('editor.source', { initialized })
         if (!initialized) await installSource(workspace, manifest.project, { existing: 'preserve' })
-        const modelBaseURL = `http://host.vivari.internal:${location.port || (location.protocol === 'https:' ? '443' : '80')}${base}model/opencode/`
+        // Match the page's scheme: an https page (e.g. behind `tailscale serve`) blocks http as mixed content.
+        const modelBaseURL = `${location.protocol}//host.vivari.internal:${location.port || (location.protocol === 'https:' ? '443' : '80')}${base}model/opencode/`
         await installOpenCodeConfig(workspace, {
           modelBaseURL, additionalToolActions: ['shell'],
           models: manifest.modelCatalog, defaultModel: manifest.editorDefaultModel,
