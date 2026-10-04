@@ -1,25 +1,17 @@
 # Browser Agent Toolkit
 
-**Put a coding agent inside your web app, with no sandbox servers to run.**
+**Run a coding agent inside your web app. The browser is the sandbox.**
 
-The whole agent harness runs in the user's browser tab: the
-[OpenCode](https://opencode.ai) server and agent loop, a filesystem, a shell, and
-your app's Vite dev server. The agent edits your app's source and the user watches
-a live preview update. Built on [Vivari](https://github.com/kkrausse/vivari).
+OpenCode's server and agent loop, a filesystem, a shell and your app's dev server
+all run in the user's browser tab. Built on
+[Vivari](https://github.com/kkrausse/vivari).
 
-- **No VM hosting costs.** There is no container or sandbox per user. Your backend
-  serves static assets and forwards model requests; inference is the only
-  per-session cost.
-- **The model key stays on your server.** The browser talks to a model proxy you
-  host, which adds the key before forwarding. The key is never sent to the
-  browser.
-- **The real OpenCode, not a reimplementation.** OpenCode 2.0.3's own server, tools
-  and sessions run in the tab; the bundled chat UI is optional.
-- **Live preview of the user's edits.** The app runs from the edited source with
-  hot reload. Source and chats persist in that browser until the user saves them.
-- **Fits an existing app.** Two packages: a workspace API (files, execution,
-  endpoints, previews) and the OpenCode chat/editor, each with optional React
-  helpers.
+- **Zero VM hosting costs.** Inference is the only per-session cost.
+- **No sandbox to secure.** Agent-run code never executes on your servers. The
+  browser tab is the sandbox.
+- **Live preview.** The agent edits your app's source and it hot-reloads.
+- **The real OpenCode, not a reimplementation.**
+- **Fits an existing app.** Two packages, optional React helpers.
 
 ![The TODO example: add todos, open the browser editor, ask OpenCode for a dark theme and a todos-left counter, and the live preview updates](docs/media/todo-editor-demo.gif)
 
