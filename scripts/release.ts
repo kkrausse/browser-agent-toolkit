@@ -101,10 +101,14 @@ for (const [key, source, name] of [ ['workspace', 'workspace-api/dist/lib', name
     }
     // The React entry deliberately externalizes the development self-import.
     // A relative staged import works under both public names and consumer aliases.
+    // Only module specifiers are rewritten: the same string in vite.js is a package
+    // name (optimizeDeps.exclude), and turning that into './index.js' lets Vite
+    // prebundle a second core next to the one react.js imports (two Workspace
+    // registries: clearWorkspace then rejects the controller's workspace as CLOSED).
     for (const path of (await files(directory)).filter(path => /\.(?:js|d\.ts)$/.test(path))) {
       let specifier = relative(dirname(path), join(directory, 'index.js')).split('\\').join('/');
       if (!specifier.startsWith('.')) specifier = './' + specifier;
-      await Bun.write(path, (await readFile(path, 'utf8')).replace(/(['"])@kev-browser-agent-kit\/workspace\1/g, JSON.stringify(specifier)));
+      await Bun.write(path, (await readFile(path, 'utf8')).replace(/(\bfrom\s*|\bimport\s*\(\s*)(['"])@kev-browser-agent-kit\/workspace\2/g, (_, keyword) => keyword + JSON.stringify(specifier)));
     }
     await Bun.write(join(directory, 'LICENSES.md'), '# Inherited notices\n\nThis workspace integration has no new umbrella license grant and is marked UNLICENSED. Bundled Vivari code and vendored vivari-host declarations retain the MIT terms in LICENSE.vivari. SQLite-WASM notices are retained in LICENSE.sqlite-wasm. BUILD-PROVENANCE.json identifies the exact runtime source.\n');
   }
@@ -178,6 +182,9 @@ for (const { key, directory, metadata } of stages) {
       const built = await Bun.build({ entrypoints: [join(extracted, entry)], target: 'browser', external: ['react', 'react/jsx-runtime'] });
       if (!built.success) throw new AggregateError(built.logs, `Packed workspace smoke failed: ${entry}`);
     }
+    // The boundary plugin must keep both packages out of Vite's dep optimizer by name.
+    if (!(await readFile(join(extracted, 'vite.js'), 'utf8')).includes('"@kev-browser-agent-kit/workspace"')) throw Error('Packed vite.js lost its optimizeDeps.exclude package name');
+    if (!/from\s*"\.\/index\.js"/.test(await readFile(join(extracted, 'react.js'), 'utf8'))) throw Error('Packed react.js does not import the staged core entry');
   }
   artifacts.push({ name: metadata.name, filename: packed.filename, size: packed.size, unpackedSize: packed.unpackedSize, integrity: packed.integrity, sha256: sha256(await readFile(archive)) });
 }
