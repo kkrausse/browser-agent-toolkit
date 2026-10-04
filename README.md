@@ -8,6 +8,11 @@ workspace supplies files, execution, service endpoints, and a live preview.
 OpenCode runs its server and agent loop inside that workspace; model inference
 still happens at a configured provider.
 
+![The TODO example: add todos, open the browser editor, ask OpenCode for a dark theme and a todos-left counter, and the live preview updates](docs/media/todo-editor-demo.gif)
+
+The [TODO example](examples/todo-app/README.md), recorded in Chrome. Editor
+startup plays at 3x and the agent's run at 5x; the rest is real time.
+
 ## Repository layout
 
 | Directory | Purpose |
