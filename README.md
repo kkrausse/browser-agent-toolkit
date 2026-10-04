@@ -1,14 +1,15 @@
 # Browser Agent Toolkit
 
-**Run a coding agent inside your web app. The browser is the sandbox.**
+**Coding agent in your web app.**
 
-OpenCode's server and agent loop, a filesystem, a shell and your app's dev server
-all run in the user's browser tab. Built on
-[Vivari](https://github.com/kkrausse/vivari).
+Runs the OpenCode *server* in the browser, along with a filesystem, a shell and
+your app's dev server, all in the user's tab.
 
-- **Zero VM hosting costs.** Inference is the only per-session cost.
+- **Zero VM hosting costs.** Inference is the only per-session cost, and users
+  could cover that themselves by signing in with OpenAI (planned).
 - **No sandbox to secure.** Agent-run code never executes on your servers. The
-  browser tab is the sandbox.
+  browser tab is the sandbox, and a `Connection-Allowlist` header can stop it
+  sending anything to another origin (planned).
 - **Live preview.** The agent edits your app's source and it hot-reloads.
 - **The real OpenCode, not a reimplementation.**
 - **Fits an existing app.** Two packages, optional React helpers.
