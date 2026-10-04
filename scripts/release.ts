@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, stat } from 'node:fs/promises';
 import { resolve, join, relative, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
@@ -12,12 +12,17 @@ const registry = 'https://npm.pkg.github.com';
 const names = { workspace: '@kkrausse/browser-agent-workspace', runtime: '@kkrausse/browser-agent-runtime', chat: '@kkrausse/browser-agent-opencode-chat' };
 const args = process.argv.slice(2);
 if (args.includes('--help')) {
-  console.log('Usage: bun scripts/release.ts <version> [--check-pack]\nBuild clean pinned source, stage and smoke-test all three packages in .release/<version>. Never publishes.\n--check-pack: inspect existing builds without rebuilding; writes non-publishable checks to .release/<version>-check.');
+  console.log('Usage: bun scripts/release.ts <version> [--check-pack] [--vendored]\nBuild clean pinned source, stage and smoke-test all three packages in .release/<version>. Never publishes.\n--check-pack: inspect existing builds without rebuilding; writes non-publishable checks to .release/<version>-check.\n--vendored: tarballs for a consumer that checks them in as file: dependencies; writes non-publishable output to .release/<version>-vendored, archives named <package>-<version>-<toolkit commit>.tgz.');
   process.exit(0);
 }
 const version = args.shift();
-if (!version || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*)?$/.test(version) || args.some(arg => arg !== '--check-pack')) throw Error('Expected an explicit version and optional --check-pack; see --help');
+if (!version || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*)?$/.test(version) || args.some(arg => arg !== '--check-pack' && arg !== '--vendored')) throw Error('Expected an explicit version and optional --check-pack, --vendored; see --help');
 const checkPack = args.includes('--check-pack');
+// A consumer that installs the archives as file: dependencies has no registry to
+// resolve the chat package's exact npm: alias from (Bun fails the install with a 404,
+// and package.json overrides do not redirect it). There the consumer lists the
+// workspace archive itself and chat keeps it as a peer.
+const vendored = args.includes('--vendored');
 async function run(command: string[], cwd = root, capture = false) {
   const child = Bun.spawn(command, { cwd, stdout: capture ? 'pipe' : 'inherit', stderr: 'inherit' });
   const output = capture ? await new Response(child.stdout).text() : '';
@@ -29,7 +34,7 @@ const git = (...args: string[]) => run(['git', ...args], root, true);
 const sourceDirty = !!await git('status', '--porcelain', '--untracked-files=all');
 if (!checkPack && sourceDirty) throw Error('Release requires clean committed toolkit source');
 const commit = await git('rev-parse', 'HEAD');
-const out = resolve(root, '.release', version + (checkPack ? '-check' : ''));
+const out = resolve(root, '.release', version + (checkPack ? '-check' : '') + (vendored ? '-vendored' : ''));
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 if (!checkPack) {
@@ -63,7 +68,7 @@ async function licenses(destination: string) {
   await cp(join(root, 'vivari/LICENSE.vivari'), join(destination, 'LICENSE.vivari'));
   await cp(join(root, 'vivari/LICENSE.sqlite-wasm'), join(destination, 'LICENSE.sqlite-wasm'));
 }
-const provenance = { schema: 1, repository, commit, sourceDirty, publishable: !checkPack, version, runtimeSource: runtimeConfig, runtimeVersion: distribution.version, toolchain: receipt.toolchain,
+const provenance = { schema: 1, repository, commit, sourceDirty, publishable: !checkPack && !vendored, version, runtimeSource: runtimeConfig, runtimeVersion: distribution.version, toolchain: receipt.toolchain,
   openCodeInput: await Bun.file(join(root, 'vivari/opencode-input.json')).json() };
 const stages: { key: string; directory: string; metadata: any }[] = [];
 await licenses(runtime);
@@ -96,17 +101,24 @@ for (const [key, source, name] of [ ['workspace', 'workspace-api/dist/lib', name
     }
     // The React entry deliberately externalizes the development self-import.
     // A relative staged import works under both public names and consumer aliases.
+    // Only module specifiers are rewritten: the same string in vite.js is a package
+    // name (optimizeDeps.exclude), and turning that into './index.js' lets Vite
+    // prebundle a second core next to the one react.js imports (two Workspace
+    // registries: clearWorkspace then rejects the controller's workspace as CLOSED).
     for (const path of (await files(directory)).filter(path => /\.(?:js|d\.ts)$/.test(path))) {
       let specifier = relative(dirname(path), join(directory, 'index.js')).split('\\').join('/');
       if (!specifier.startsWith('.')) specifier = './' + specifier;
-      await Bun.write(path, (await readFile(path, 'utf8')).replace(/(['"])@kev-browser-agent-kit\/workspace\1/g, JSON.stringify(specifier)));
+      await Bun.write(path, (await readFile(path, 'utf8')).replace(/(\bfrom\s*|\bimport\s*\(\s*)(['"])@kev-browser-agent-kit\/workspace\2/g, (_, keyword) => keyword + JSON.stringify(specifier)));
     }
     await Bun.write(join(directory, 'LICENSES.md'), '# Inherited notices\n\nThis workspace integration has no new umbrella license grant and is marked UNLICENSED. Bundled Vivari code and vendored vivari-host declarations retain the MIT terms in LICENSE.vivari. SQLite-WASM notices are retained in LICENSE.sqlite-wasm. BUILD-PROVENANCE.json identifies the exact runtime source.\n');
   }
   if (key === 'chat') {
     delete metadata.peerDependencies?.['@kev-browser-agent-kit/workspace'];
     delete metadata.peerDependenciesMeta?.['@kev-browser-agent-kit/workspace'];
-    metadata.dependencies = { ...metadata.dependencies, '@kev-browser-agent-kit/workspace': `npm:${names.workspace}@${version}` };
+    if (vendored) {
+      metadata.peerDependencies = { ...metadata.peerDependencies, '@kev-browser-agent-kit/workspace': version };
+      metadata.peerDependenciesMeta = { ...metadata.peerDependenciesMeta, '@kev-browser-agent-kit/workspace': { optional: true } };
+    } else metadata.dependencies = { ...metadata.dependencies, '@kev-browser-agent-kit/workspace': `npm:${names.workspace}@${version}` };
   }
   stages.push({ key: key!, directory, metadata });
 }
@@ -132,6 +144,13 @@ for (const { key, directory, metadata } of stages) {
   }
   const packed = JSON.parse(await run(['npm', 'pack', '--json', '--ignore-scripts', '--pack-destination', out], directory, true))[0];
   if (packed.size >= 256 * 1024 * 1024 || packed.unpackedSize >= 256 * 1024 * 1024) throw Error(`${key} exceeds 256 MiB packed/unpacked limit`);
+  if (vendored) {
+    // The file name carries the toolkit commit, so a consumer's package manager never
+    // reuses bytes it cached for an earlier archive of the same version.
+    const named = packed.filename.replace(/\.tgz$/, `-${commit.slice(0, 7)}.tgz`);
+    await rename(join(out, packed.filename), join(out, named));
+    packed.filename = named;
+  }
   const archive = join(out, packed.filename);
   const unpack = join(out, 'smoke', key);
   await mkdir(unpack, { recursive: true });
@@ -163,6 +182,9 @@ for (const { key, directory, metadata } of stages) {
       const built = await Bun.build({ entrypoints: [join(extracted, entry)], target: 'browser', external: ['react', 'react/jsx-runtime'] });
       if (!built.success) throw new AggregateError(built.logs, `Packed workspace smoke failed: ${entry}`);
     }
+    // The boundary plugin must keep both packages out of Vite's dep optimizer by name.
+    if (!(await readFile(join(extracted, 'vite.js'), 'utf8')).includes('"@kev-browser-agent-kit/workspace"')) throw Error('Packed vite.js lost its optimizeDeps.exclude package name');
+    if (!/from\s*"\.\/index\.js"/.test(await readFile(join(extracted, 'react.js'), 'utf8'))) throw Error('Packed react.js does not import the staged core entry');
   }
   artifacts.push({ name: metadata.name, filename: packed.filename, size: packed.size, unpackedSize: packed.unpackedSize, integrity: packed.integrity, sha256: sha256(await readFile(archive)) });
 }

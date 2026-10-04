@@ -92,6 +92,32 @@ runtime release receipt, and writes to `.release/0.1.0-alpha.1-check/` with
 match the current source commit. The workflow rejects check-only receipts.
 Set `RELEASE_SMOKE_TMP` to an existing scratch directory if desired.
 
+### Tarballs checked into a consumer
+
+A consumer that vendors the archives (`"file:vendor/toolkit/<archive>.tgz"`, as irs-tools
+does) cannot install the publishable chat archive: its exact
+`npm:@kkrausse/browser-agent-workspace@<version>` dependency has no registry to resolve
+from, and Bun's `overrides` do not redirect it. Stage those archives with:
+
+```sh
+bun scripts/release.ts 0.1.0-alpha.2 --vendored
+```
+
+Same build and checks, written to `.release/0.1.0-alpha.2-vendored/` with
+`publishable: false`. The chat archive keeps the workspace as an optional peer pinned to
+the exact version, and each file is named `<package>-<version>-<toolkit commit>.tgz`.
+The consumer lists all three under its existing names:
+
+```json
+{
+  "dependencies": {
+    "@kev-browser-agent-kit/opencode-chat": "file:vendor/toolkit/kkrausse-browser-agent-opencode-chat-0.1.0-alpha.2-<commit>.tgz",
+    "@kev-browser-agent-kit/workspace": "file:vendor/toolkit/kkrausse-browser-agent-workspace-0.1.0-alpha.2-<commit>.tgz",
+    "@kkrausse/browser-agent-runtime": "file:vendor/toolkit/kkrausse-browser-agent-runtime-0.1.0-alpha.2-<commit>.tgz"
+  }
+}
+```
+
 ### Prepared OpenCode delivery
 
 The workflow publishes **all three packages** by default. Before building it runs
