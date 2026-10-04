@@ -1,17 +1,54 @@
 # Browser Agent Toolkit
 
-**Run agent harnesses in the browser.**
+**Put a coding agent inside your web app, with no sandbox servers to run.**
 
-Experimental workspace and OpenCode integration built on
-[Vivari](https://github.com/kkrausse/vivari). A browser-hosted
-workspace supplies files, execution, service endpoints, and a live preview.
-OpenCode runs its server and agent loop inside that workspace; model inference
-still happens at a configured provider.
+The whole agent harness runs in the user's browser tab: the
+[OpenCode](https://opencode.ai) server and agent loop, a filesystem, a shell, and
+your app's Vite dev server. The agent edits your app's source and the user watches
+a live preview update. Built on [Vivari](https://github.com/kkrausse/vivari).
+
+- **No VM hosting costs.** There is no container or sandbox per user. Your backend
+  serves static assets and forwards model requests; inference is the only
+  per-session cost.
+- **The model key stays on your server.** The browser talks to a model proxy you
+  host, which adds the key before forwarding. The key is never sent to the
+  browser.
+- **The real OpenCode, not a reimplementation.** OpenCode 2.0.3's own server, tools
+  and sessions run in the tab; the bundled chat UI is optional.
+- **Live preview of the user's edits.** The app runs from the edited source with
+  hot reload. Source and chats persist in that browser until the user saves them.
+- **Fits an existing app.** Two packages: a workspace API (files, execution,
+  endpoints, previews) and the OpenCode chat/editor, each with optional React
+  helpers.
 
 ![The TODO example: add todos, open the browser editor, ask OpenCode for a dark theme and a todos-left counter, and the live preview updates](docs/media/todo-editor-demo.gif)
 
 The [TODO example](examples/todo-app/README.md), recorded in Chrome. Editor
 startup plays at 3x and the agent's run at 5x; the rest is real time.
+
+## Try it
+
+With the [prerequisites](#local-setup) installed:
+
+```sh
+bun run setup
+cd examples/todo-app
+bun run editor
+```
+
+Open `http://127.0.0.1:3000` and choose **Open editor**. Chat needs a provider key
+in `examples/todo-app/.env.local`; see the
+[example's README](examples/todo-app/README.md).
+
+## Status
+
+Experimental (`0.1.0-alpha.1`). This is a compatibility proof of concept, not
+arbitrary native Linux or stock Node/Bun execution: OpenCode and its tools are
+delivered through explicit compatibility packaging. The example needs a host
+server for its API and model proxy, so it is not a static-only site. There is no
+hosted demo, and no bring-your-own-key or provider login yet.
+
+# Development
 
 ## Repository layout
 
@@ -121,11 +158,6 @@ dependencies are separate build inputs. The runtime is the fork's single-kernel
 line: one kernel worker plus guest process workers, and distribution packaging
 rejects any other worker layout. Runtime changes require reloading the browser
 workspace.
-
-This is a compatibility POC, not arbitrary native Linux or stock Node/Bun execution.
-OpenCode and tool delivery retain explicit compatibility packaging. The TODO
-example uses a host Bun API and model proxy; it is not a static-only website.
-There is no hosted demo or BYOK/login implementation in this extraction.
 
 ## History and licensing
 
