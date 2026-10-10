@@ -62,6 +62,31 @@ export function installGlobals(rt: Runtime, loop: LoopInternals, ctl: ProcessCon
   Object.defineProperty(nav, 'storage', { value: realNavigator?.storage, enumerable: false })
   Object.defineProperty(nav, 'locks', { value: realNavigator?.locks, enumerable: false })
   define('navigator', Object.freeze(nav))
+  // Asynchronous Wasm compilation is work the process waits for (libuv's thread pool in
+  // Node): without a loop reference, `await WebAssembly.compile(bytes)` at the top level of
+  // an entry module looked like an unsettled top-level await and the process exited 13
+  // (the npm `ripgrep` launcher does exactly that).
+  const wa: any = g.WebAssembly
+  for (const name of ['compile', 'instantiate', 'compileStreaming', 'instantiateStreaming']) {
+    const native = wa?.[name]
+    if (typeof native !== 'function') continue
+    const wrapped = function (this: unknown, ...args: unknown[]) {
+      loop.ref()
+      // Unref in a later turn: the caller's continuations run first, and the loop looks again.
+      const done = () => loop.defer(() => loop.unref())
+      let promise: Promise<unknown>
+      try {
+        promise = native.apply(wa, args)
+      } catch (e) {
+        done()
+        throw e
+      }
+      promise.then(done, done)
+      return promise
+    }
+    Object.defineProperty(wrapped, 'name', { value: name })
+    Object.defineProperty(wa, name, { value: wrapped, writable: true, configurable: true, enumerable: true })
+  }
   define('console', createConsole(rt, ctl))
   const perf: any = g.performance
   if (perf && !perf.eventLoopUtilization) {
