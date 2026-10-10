@@ -11,6 +11,8 @@ export interface BootOptions {
   /** URLs of the bundled worker scripts (kerneld.ts and process-worker.ts). */
   kerneldUrl: string
   processWorkerUrl: string
+  /** 'classic' for a process worker bundle that uses importScripts (the node runtime). Default 'module'. */
+  processWorkerType?: 'module' | 'classic'
   /** Module exporting `run(ctx)`: what a spawned process executes. */
   runnerUrl?: string
   /** OPFS namespace: images and the persisted overlay live under bat/<namespace>/. */
@@ -75,6 +77,7 @@ export async function bootKernel(opts: BootOptions): Promise<BootedKernel> {
     persist: opts.persist ?? false,
     noPersist: opts.noPersist ?? [],
     processWorkerUrl: new URL(opts.processWorkerUrl, location.href).href,
+    processWorkerType: opts.processWorkerType ?? 'module',
     runnerUrl: opts.runnerUrl ? new URL(opts.runnerUrl, location.href).href : '',
     warmSpare: opts.warmSpare ?? true,
   })

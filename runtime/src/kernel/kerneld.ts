@@ -15,6 +15,7 @@ interface InitArgs {
   persist: boolean
   noPersist: string[]
   processWorkerUrl: string
+  processWorkerType?: 'module' | 'classic'
   runnerUrl: string
   warmSpare: boolean
 }
@@ -46,7 +47,7 @@ const stats = { spawns: 0, kills: 0, faults: 0, journalFrames: 0, journalBytes: 
 
 function createProcessWorker(): Promise<Proc> {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(cfg.processWorkerUrl, { type: 'module', name: 'bat-process' })
+    const worker = new Worker(cfg.processWorkerUrl, { type: cfg.processWorkerType ?? 'module', name: 'bat-process' })
     const proc: Proc = { worker, thread: 0, pid: 0 }
     worker.onmessage = (e) => {
       const m = e.data
