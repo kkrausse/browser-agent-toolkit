@@ -1,0 +1,22 @@
+# The WebAssembly build of bat-sh. Its own workspace (own lock file, own size
+# profile), like crates/bat-node-native/wasm.
+[package]
+name = "bat-sh-wasm"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+bat-sh = { path = ".." }
+
+[profile.release]
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+debug = 0
+strip = true

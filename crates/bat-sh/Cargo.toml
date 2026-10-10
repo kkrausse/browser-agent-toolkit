@@ -1,0 +1,12 @@
+# /bin/sh for the guest: a POSIX-style shell with the coreutils built in, as a
+# library over a small set of host calls (src/sys.rs). The runtime loads the
+# WebAssembly build (wasm/, built by build-wasm.sh) and maps the host calls onto
+# the kernel; the native build backs them with std and exists so the shell can
+# be compared with the machine's own sh (src/bin/bat-sh.rs).
+[package]
+name = "bat-sh"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+regex-lite = "0.1"
