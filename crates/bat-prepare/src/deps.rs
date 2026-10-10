@@ -876,7 +876,13 @@ pub fn prepare(options: DepsOptions) -> Result<Deps> {
     }
     let derived_manifest = serde_json::to_string_pretty(&derived)? + "\n";
     fs::write(stage.join("package.json"), &derived_manifest)?;
-    run_bun(bun, &["install", "--linker", "isolated", "--ignore-scripts", "--cache-dir", &cache], &stage)?;
+    // Bun sometimes fails this pass with "EEXIST: failed to link package" on a `file:`
+    // shim (seen three times in a dozen runs, never twice in a row): try once more.
+    let install = ["install", "--linker", "isolated", "--ignore-scripts", "--cache-dir", &cache];
+    if let Err(first) = run_bun(bun, &install, &stage) {
+        eprintln!("bun install failed, retrying once: {first:#}");
+        run_bun(bun, &install, &stage)?;
+    }
     let install_ms = started.elapsed().as_millis() as u64;
 
     let (node_modules, unreachable_packages) = if project.is_workspace() {
