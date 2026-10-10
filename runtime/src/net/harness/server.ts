@@ -6,6 +6,7 @@ import { join, normalize } from 'node:path'
 const root = normalize(join(import.meta.dir, '../../../..'))
 const port = Number(process.argv[2] ?? 4103)
 const wasm = process.env.BAT_KERNEL_WASM ?? join(root, 'target-net/wasm32-wasip1-threads/release/bat_kernel.wasm')
+const prepared = process.env.BAT_PREPARED ?? join(root, 'target-prepare/out/todo-new')
 const headers = {
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Embedder-Policy': 'require-corp',
@@ -25,6 +26,23 @@ Bun.serve({
     if (path === '/kernel.wasm') return new Response(Bun.file(wasm), { headers: { ...headers, 'Content-Type': 'application/wasm' } })
     if (path.startsWith('/real/')) {
       return Response.json({ real: true, path, method: req.method, cookie: req.headers.get('cookie'), big: req.headers.get('x-big')?.length ?? 0 }, { headers })
+    }
+    // The layout the toolkit's server handler gives a real app: manifest and image under
+    // /editor/, runtime assets under /editor/runtime/.
+    if (path.startsWith('/editor/')) {
+      const rel = path.slice('/editor/'.length)
+      const target = rel.startsWith('runtime/') ? join(root, 'runtime/dist', rel.slice(8)) : join(prepared, rel)
+      const f = Bun.file(target)
+      if (rel.includes('..') || !(await f.exists())) return new Response('not found', { status: 404, headers })
+      const ext = target.slice(target.lastIndexOf('.'))
+      const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.get('range') ?? '')
+      const h = { ...headers, 'Content-Type': types[ext] ?? 'application/octet-stream', 'Cache-Control': /-[0-9a-f]{16}\./.test(rel) ? 'public, max-age=31536000, immutable' : 'no-cache' }
+      if (range) {
+        const start = Number(range[1])
+        const end = range[2] ? Number(range[2]) + 1 : f.size
+        return new Response(f.slice(start, end), { status: 206, headers: { ...h, 'Content-Range': `bytes ${start}-${end - 1}/${f.size}` } })
+      }
+      return new Response(f, { headers: h })
     }
     const file = normalize(join(root, path))
     if (!file.startsWith(root)) return new Response('forbidden', { status: 403, headers })

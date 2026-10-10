@@ -349,6 +349,20 @@ export function createCodec(kernel: Kernel) {
     return out
   }
 
+  /**
+   * Plain read from a socket or pipe into fresh private memory (raw sockets:
+   * `net.Socket`, upgraded connections). Returns the bytes, 0 at end of
+   * stream, or a negative errno (-EAGAIN: wait for readability).
+   */
+  const READ_CAP = 64 * 1024
+  let readP = 0
+  function read(fd: number, alloc?: (n: number) => Uint8Array): Uint8Array | number {
+    if (!readP) readP = x.bat_alloc(READ_CAP) >>> 0
+    const n: number = x.bat_read(fd, readP, READ_CAP)
+    if (n <= 0) return n
+    return copy(readP, n, alloc)
+  }
+
   /** Identity of the listener on `port` (0: nothing listens). */
   const portListener = (port: number): number => x.bat_port_listener(port) >>> 0
 
@@ -376,7 +390,7 @@ export function createCodec(kernel: Kernel) {
     }
   }
 
-  return { httpParser, wsParser, send, sendText, wsSend, wsAcceptKey, portListener, waitForListener }
+  return { httpParser, wsParser, send, sendText, read, wsSend, wsAcceptKey, portListener, waitForListener }
 }
 
 /** Lower-cased lookup in a raw header list; the first match. */
