@@ -70,7 +70,6 @@ Testing never calls a real model: `mock-llm/` serves scripted responses.
 | 4792 | `opencode serve` (container) |
 | 4793 | `codex app-server` (container) |
 | 4796 | browser-facing codex proxy (container); strips `Origin`, which `codex app-server` rejects |
-| 4799 | per-port dev server in `ports/codex` (opencode is served by `web/` on 4790) |
 
 ## Run it
 
@@ -95,11 +94,19 @@ runs one directly.
 | `net`, `events` | network descriptors; raw event dump |
 | `js-demo` | a JavaScript program on the node-style shim (`host/node/demo-guest.ts`) |
 | `opencode` | the real opencode 2.0.26 TUI, attached to a remote `opencode serve` |
+| `codex` | the real codex-cli 0.162.0 TUI (Rust, `wasm32-wasip1`), attached to a remote `codex app-server` |
 
 Page parameters: `&arg=...`, `&env=K=V` (`&env=WASM_TERM_TRACE=1` logs
-syscall rates to the console), `&persist=0` (no saved files), `&reset=1`
-(forget the guest's saved files first). Each guest's home directory is kept in
-IndexedDB across reloads; opencode keeps its config and state directories.
+syscall rates, and stretches in which the program computed without reading
+input, to the console), `&persist=0` (no saved files), `&reset=1` (forget the
+guest's saved files first), `&renderer=canvas|webgl` (the terminal renderer;
+by default WebGL, or the 2D canvas when the browser only emulates WebGL in
+software). Each guest's home directory is kept in IndexedDB across reloads;
+opencode keeps its config and state directories, codex its `CODEX_HOME`.
+
+In the page's console, `await wasmTerm.readFile(path)`, `wasmTerm.listFiles(dir)`
+and `wasmTerm.download(path)` read files out of the program's filesystem (its
+log, the configuration it wrote), also after it has exited.
 
 ### opencode in the browser
 
@@ -134,6 +141,35 @@ them same-origin: no CORS setup, no mixed content, one port to expose.
 (`please use a tool`, `show me markdown`, `long scroll`, ...) are listed in
 `mock-llm/README.md`.
 
+### codex in the browser
+
+```sh
+# once: checkouts, patches and the C toolchain under wasm-term/vendor (see ports/codex/NOTES.md, section 7)
+cd wasm-term/ports/codex
+scripts/setup.sh
+scripts/ship.sh                             # builds and packages dist/site/: the module to serve and a build with names
+
+cd ../.. && mock-llm/up.sh                  # token-free backend in Docker: codex app-server on :4793, its browser proxy on :4796
+cd web && bun run dev
+```
+
+Open <http://127.0.0.1:4790/?guest=codex>, or the launcher to change the
+settings. The parameters and their defaults (the mock backend):
+
+| Parameter | Default | |
+| --- | --- | --- |
+| `remote` | `/proxy/codex` | a path means this page's own origin: the dev server's WebSocket relay (below), as `ws://` or `wss://` to match the page. Or `ws://HOST:PORT[/path]` of a proxy in front of `codex app-server --listen` that the browser can reach. Never the app-server itself: it refuses every request that carries an `Origin` header, and it cannot be given the bearer token a browser cannot send |
+| `dir` | `/tmp/wasm-term-workspace` | project directory, a path on the server: the TUI reports it as its working directory, as the native client does with its own |
+| `sandbox` | `danger-full-access` | passed as `-c sandbox_mode="..."`. The mock backend's container cannot run codex's sandbox, so anything else fails there, except that `workspace-write` with the prompt `run with approval` shows the approval dialog. Empty = the server's own setting |
+| `build` | (the shipped module) | `names`: the build that kept its name section, for `web/verify/profile.ts` and readable traps |
+
+The module is 12 MB compressed (section "Module" of the NOTES has the
+table); the page shows a progress bar while it arrives and compiles, and the
+browser caches it for good: its URL contains its hash, so a rebuild is a new
+URL. `scripts/ship.sh` is `build.sh` for the two profiles plus `wasm-opt` and
+`package.ts`; the server reads `dist/site/manifest.json` on every load, so a
+rebuilt module is picked up without a restart.
+
 ### From other devices: tailnet HTTPS
 
 The page needs cross-origin isolation, which needs a secure context, so from
@@ -155,7 +191,7 @@ What `serve-up.sh` starts, and `serve-down.sh` removes:
 | tailnet HTTPS | one `tailscale serve` entry, HTTPS port 4790 (`WASM_TERM_HTTPS_PORT`) -> `http://127.0.0.1:4790`; tailnet only, never funnel | `tailscale serve status` |
 
 Then, from any device on the tailnet: `https://<machine>.<tailnet>.ts.net:4790/`
-(launcher) or `.../?guest=opencode`. Only that one port faces the tailnet; the
+(launcher), `.../?guest=opencode` or `.../?guest=codex`. Only that one port faces the tailnet; the
 backends stay on loopback behind the proxy paths. `serve-down.sh` removes the
 serve entry only if it still points at the dev server and never touches other
 entries. Changing the serve config needs root unless the user is tailscale's
@@ -174,8 +210,10 @@ On a touch device (or a window narrower than 600px) the page adds what
 `bun-web-terminal` uses on a phone, importing its touch, viewport and wheel
 code (`web/mobile.ts`):
 
-- a row of keys under the terminal: keyboard, Esc, Ctrl, Tab, arrows. Ctrl is
-  sticky for one key: Ctrl then `p` on the on-screen keyboard is ctrl+p;
+- a row of keys under the terminal: keyboard, Esc, Ctrl, Tab, arrows,
+  Shift+Enter (a new line in the prompt of codex and opencode, where the
+  on-screen keyboard's Enter submits). Ctrl is sticky for one key: Ctrl then
+  `p` on the on-screen keyboard is ctrl+p;
 - the keyboard key opens and closes the on-screen keyboard. A tap on the
   terminal is a click for the program and does not open it;
 - the page follows `visualViewport`, so with the keyboard open the terminal
@@ -185,23 +223,36 @@ code (`web/mobile.ts`):
 
 ### Checks
 
-`web/verify/run.sh [terminal-functions|opencode|opencode-perf]` drives the
-page in Chrome through `browser-control` (dev server up; the opencode ones
-also need `mock-llm/up.sh`). `terminal-functions` checks each terminal
+`web/verify/run.sh [terminal-functions|opencode|opencode-perf|codex]` drives the
+page in Chrome through `browser-control` (dev server up; the opencode and
+codex ones also need `mock-llm/up.sh`). `terminal-functions` checks each terminal
 function with the Rust guests and the JavaScript shim with `js-demo`;
 `opencode` runs the TUI through connect, prompts, the permission dialog,
 markdown, scrolling, palette, sessions, clipboard, reload and exit, comparing
 screens with the native client's captures; `opencode-perf` prints load and
-input-latency numbers. Screenshots land in `docs/screenshots/`.
+input-latency numbers; `codex` runs the codex TUI through how its module is
+served, the loading indicator, connect, plain and tool turns against the
+native captures, markdown, a long reply with wheel scrolling, resize, the
+slash popup, `/status`, the warnings viewer, paste, Shift+Enter, the
+filesystem helpers, history across a reload, a line typed in one burst, the
+approval dialog and `/quit`. Screenshots land in `docs/screenshots/`.
+
+`cd web && bun verify/profile.ts '<page URL>&build=names'` profiles a guest's
+Worker in a private headless Chrome (wasm function names from the module) and
+prints the longest stretches in which it did not go idle, and with `--blocked`
+where it waits.
 
 Both run against another base URL with `WASM_TERM_URL`, e.g. the tailnet one:
 `WASM_TERM_URL=https://<machine>.<tailnet>.ts.net:4790 web/verify/run.sh opencode`.
 
 `web/webkit/smoke.sh [base URL]` runs the page headless in Playwright's WebKit
 build, at a desktop viewport and with an iPhone device profile (`PROFILE=desktop`
-or `iphone` for one): isolation, the Worker, the opencode home screen, a
-prompt and its reply; in the iPhone profile also the keys row, focus, swipe
-scrolling and refitting to a keyboard-sized viewport. Once before:
+or `iphone` for one; `GUESTS=opencode` or `codex` for one guest): isolation,
+the Worker, the opencode home screen, a prompt and its reply; in the iPhone
+profile also the keys row, focus, swipe scrolling and refitting to a
+keyboard-sized viewport. Then the codex guest: that the module downloads,
+compiles and starts at all, a prompt and its reply, `/quit`, and in the iPhone
+profile the keys row against codex (arrow up, Shift+Enter, Ctrl, Esc). Once before:
 `web/webkit/install.sh`, which puts the browser under
 `vendor/playwright-browsers` and the system libraries it lacks under
 `vendor/webkit-syslibs` (downloaded Ubuntu packages, unpacked; nothing

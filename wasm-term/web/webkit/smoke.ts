@@ -1,6 +1,7 @@
 // Headless smoke test of the dev page in Playwright's WebKit build (Linux WPE
 // port), at a desktop viewport and with an iPhone device profile.
 //   web/webkit/smoke.sh [base URL]      default http://127.0.0.1:4790
+//   GUESTS=opencode,codex               which guests to run (default both); PROFILE=desktop|iphone
 // Needs webkit/install.sh once, the dev server, and mock-llm/up.sh.
 //
 // This is WebKit's engine on Linux, not Safari: it says whether the page's
@@ -148,6 +149,111 @@ async function run(profile: string, options: BrowserContextOptions, touch: boole
   return checks;
 }
 
+/** The codex guest: a module two orders of magnitude larger than anything else on the page.
+ * Whether WebKit compiles and instantiates it at all is the first question. */
+async function runCodex(profile: string, options: BrowserContextOptions, touch: boolean): Promise<Check[]> {
+  const checks: Check[] = [];
+  const check = (name: string, ok: unknown, detail?: unknown) => {
+    checks.push({ name, ok: !!ok, detail: ok ? undefined : detail });
+  };
+  const browser = await webkit.launch({ headless: true });
+  const context = await browser.newContext(options);
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(String(error)));
+  page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+  page.on("crash", () => errors.push("the page crashed"));
+  const rss = () => {
+    // Resident memory of every process of this browser, as a rough ceiling on what the page costs.
+    try {
+      const out = Bun.spawnSync(["bash", "-c", "ps -eo rss,args | grep -i -E 'WPEWebProcess|WPENetworkProcess|MiniBrowser|pw_run' | grep -v grep | awk '{s+=$1} END {print s}'"]).stdout.toString().trim();
+      return Math.round(Number(out) / 1024);
+    } catch {
+      return 0;
+    }
+  };
+  try {
+    const before = rss();
+    const started = Date.now();
+    await page.goto(`${base}/?guest=codex&persist=0`);
+    let indicator = "";
+    const up = await (async () => {
+      const deadline = Date.now() + 240_000;
+      while (Date.now() < deadline) {
+        const state = await page.evaluate(() => ({ label: document.querySelector("#loading.shown .label")?.textContent ?? "", exit: window.wasmTerm?.exit ?? null, up: !!window.wasmTerm?.screen().join("").trim(), fatal: document.querySelector("#fatal")?.textContent ?? "" })).catch(() => null);
+        if (state?.label) indicator = state.label;
+        if (state?.up || state?.exit || state?.fatal) return state;
+        await page.waitForTimeout(100);
+      }
+      return null;
+    })();
+    const load = await page.evaluate(() => window.wasmTerm?.load).catch(() => undefined);
+    check(`codex: the module downloads, compiles and starts (${JSON.stringify(load)}, first output after ${Date.now() - started} ms)`, up?.up && !up.exit, { up, indicator, errors: errors.slice(0, 3) });
+    check(`codex: loading indicator shown meanwhile (last label: "${indicator}")`, indicator !== "", indicator);
+    const home = await waitFor(page, "Ask Codex", 60_000).then(() => true, () => false);
+    check("codex: start screen renders", home, (await screen(page)).split("\n").filter(Boolean).slice(-6));
+    const connected = await waitFor(page, "mock-model default · /tmp/wasm-term-", 30_000).then(() => true, () => false);
+    check("codex: connected to the app-server through the same-origin WebSocket relay (model and directory shown)", connected, (await screen(page)).split("\n").filter(Boolean).slice(-4));
+    check(`codex: browser processes' resident memory ${before} MB before, ${rss()} MB with codex running`, true);
+    const renderer = await page.evaluate(() => window.wasmTerm?.terminal.renderer?.constructor.name ?? "none");
+    check(`codex: renderer in use: ${renderer}; grid ${await page.evaluate(() => `${window.wasmTerm.terminal.cols}x${window.wasmTerm.terminal.rows}`)}`, true);
+
+    const key = (name: string) => page.locator(`.terminal-keys [data-key="${name}"]`).tap();
+    if (touch) await key("Keyboard");
+    else await page.evaluate(() => window.wasmTerm.terminal.focus());
+    await page.waitForTimeout(300);
+    await page.keyboard.type("hello there", { delay: 15 });
+    const typed = await waitFor(page, "› hello there", 5_000).then(() => true, () => false);
+    check("codex: typed text appears in the composer", typed, await page.evaluate(() => window.wasmTerm.sent.slice(-5)));
+    await page.waitForTimeout(300);
+    await page.keyboard.press("Enter");
+    // The reply wraps differently at every width: its first words and the turn footer are enough.
+    const replied = await waitFor(page, "Hello from mock-llm", 30_000).then(() => waitFor(page, "Worked for", 15_000)).then(() => true, () => false);
+    check("codex: the prompt is answered, streamed over the WebSocket", replied, (await screen(page)).split("\n").filter(Boolean).slice(-8));
+    await page.waitForTimeout(500);
+
+    if (touch) {
+      const composer = async () => (await screen(page)).split("\n").filter(line => line.includes("›")).pop() ?? "";
+      await key("ArrowUp");
+      await page.waitForTimeout(500);
+      check("codex, keys row: arrow up recalls the previous prompt", (await composer()).includes("hello there"), await composer());
+      await key("ShiftEnter");
+      await page.keyboard.type("second line", { delay: 15 });
+      await page.waitForTimeout(400);
+      const lines = (await screen(page)).split("\n");
+      const first = lines.findLastIndex(line => line.includes("› hello there")); // the composer, below the transcript's echo
+      check("codex, keys row: shift+enter starts a new line in the prompt instead of submitting", first >= 0 && lines.slice(first + 1, first + 3).some(line => line.trim() === "second line"), lines.slice(first, first + 3));
+      await key("Control");
+      await page.keyboard.type("c");
+      await page.waitForTimeout(500);
+      check("codex, keys row: Ctrl then c clears the prompt", !(await screen(page)).includes("second line"), await composer());
+      await page.keyboard.type("/", { delay: 15 });
+      const popup = await page.waitForFunction(() => /\/permissions\s{2,}/.test(window.wasmTerm.screen().join("\n")), null, { timeout: 5_000 }).then(() => true, () => false);
+      check("codex: typing / opens the slash-command popup", popup, (await screen(page)).split("\n").filter(Boolean).slice(-8));
+      await key("ArrowDown");
+      await page.waitForTimeout(300);
+      await key("Escape");
+      await page.waitForTimeout(600);
+      check("codex, keys row: Esc closes the popup", !/\/permissions\s{2,}/.test(await screen(page)), (await screen(page)).split("\n").filter(Boolean).slice(-6));
+      await key("Control");
+      await page.keyboard.type("c");
+      await page.waitForTimeout(300);
+    }
+    await page.screenshot({ path: join(shots, `webkit-${profile}-codex.png`) });
+    await page.keyboard.type("/quit", { delay: 15 });
+    await page.waitForTimeout(300);
+    await page.keyboard.press("Enter");
+    const exit = await page.waitForFunction(() => window.wasmTerm.exit, null, { timeout: 15_000 }).then(handle => handle.jsonValue(), () => null);
+    check("codex: /quit ends the program with code 0", exit?.code === 0, exit);
+    check("codex: no page errors", errors.length === 0, errors.slice(0, 5));
+  } catch (error) {
+    check("codex: the script ran to the end", false, { error: String((error as Error).stack ?? error).slice(0, 500), errors: errors.slice(0, 5) });
+    await page.screenshot({ path: join(shots, `webkit-${profile}-codex.png`) }).catch(() => {});
+  }
+  await browser.close();
+  return checks;
+}
+
 const profiles: [string, BrowserContextOptions, boolean][] = [
   ["desktop", { viewport: { width: 1280, height: 800 } }, false],
   ["iphone", devices["iPhone 15"]!, true],
@@ -156,7 +262,9 @@ let failed = 0;
 for (const [profile, options, touch] of profiles) {
   if (process.env.PROFILE && process.env.PROFILE !== profile) continue;
   console.log(`\n== WebKit (Linux, headless), ${profile} profile, ${base}`);
-  for (const item of await run(profile, options, touch)) {
+  const guests = (process.env.GUESTS ?? "opencode,codex").split(",");
+  const results = [...(guests.includes("opencode") ? await run(profile, options, touch) : []), ...(guests.includes("codex") ? await runCodex(profile, options, touch) : [])];
+  for (const item of results) {
     if (!item.ok) failed++;
     console.log(`${item.ok ? "PASS" : "FAIL"} ${item.name}${item.ok ? "" : `: ${JSON.stringify(item.detail)}`}`);
   }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs a browser verification against the dev server (bun web/server.ts).
-#   web/verify/run.sh [terminal-functions|opencode] [--session <browser-control session>]
-# `opencode` also needs the containerised backend: mock-llm/up.sh.
+#   web/verify/run.sh [terminal-functions|opencode|opencode-perf|codex] [--session <browser-control session>]
+# `opencode` and `codex` also need the containerised backend: mock-llm/up.sh.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 name="terminal-functions"

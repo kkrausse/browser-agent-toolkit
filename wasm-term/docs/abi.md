@@ -38,16 +38,30 @@ number (0 = success); these are also the target's native `errno` values, so
 | fd 0, 1, 2 | the pty slave (three separate descriptors on the same terminal) |
 | fd 3 | preopened directory `/` |
 | argv | `[<guest name>, ...]` from the page (`?arg=`) |
-| env | `TERM=xterm-256color COLORTERM=truecolor HOME=/home/user USER=user PWD=/home/user LANG=C.UTF-8`, plus whatever the page passes. The dev page adds `WASM_TERM_ORIGIN=<page origin>` and each `?env=K=V` |
+| env | `TERM=xterm-256color COLORTERM=truecolor HOME=/home/user USER=user PWD=/home/user LANG=C.UTF-8`, the time zone (below), plus whatever the page passes. The dev page adds `WASM_TERM_ORIGIN=<page origin>`, a guest's own settings and each `?env=K=V` |
 | cwd | wasi-libc starts at `/`; call `chdir($HOME)` if you want the home directory |
 | exit | `proc_exit(code)`, returning from `_start` (code 0), a fatal signal (128 + signo), or a trap (134) |
 
 A Rust panic with `panic = "abort"` prints its message to the terminal and
 traps; the page shows the trap as the exit reason.
 
+**Time zone.** WASI preview1 has no time-zone interface and the filesystem has
+no zone database, so local time is whatever the host says in the environment
+(`timeZoneEnv()` in `host/index.ts`, part of the defaults):
+
+| Variable | Value |
+| --- | --- |
+| `TZ` | the browser's IANA zone name (`Intl.DateTimeFormat().resolvedOptions().timeZone`), e.g. `America/Los_Angeles`. Only useful to a guest that carries its own zone data |
+| `WASM_TERM_UTC_OFFSET_MINUTES` | minutes east of UTC at the moment the program starts (`-new Date().getTimezoneOffset()`), e.g. `-420`. A guest adds it to UTC to get local time. It is not updated while the program runs, so a DST change during a session is not followed |
+
+The codex port reads the offset in its chrono fork (`chrono::Local` on WASI);
+that is the whole guest side.
+
 Set `WASM_TERM_TRACE=1` in the environment to have the host log, once a
 second, how many times each import was called. It shows what a program is
-blocked in, or that an event loop is spinning.
+blocked in, or that an event loop is spinning. It also logs every stretch of
+100 ms or more between two host calls: the guest was computing, and on its one
+thread that is time in which it read no input.
 
 ## 2. WASI preview1
 
@@ -373,12 +387,15 @@ const program = startProgram({
   clipboard: { readText, writeText },             // optional; default navigator.clipboard
   onOutput(bytes) { terminal.write(bytes) },   // pty master output
   onExit(status) { ... },                      // { code, signal?, error? }
+  onLoad(progress) { ... },                    // optional; wasm guests: { phase: "download" | "compile" | "start", loaded, total }
 });
 program.write(data);              // pty master input: keys, paste, mouse/focus reports, query replies
 program.resize(cols, rows, xpixel, ypixel);    // winsize, SIGWINCH if changed
 program.signal(signo);            // like kill(1)
-program.kill();                   // terminate the Worker now
+program.kill();                   // terminate the Worker now (after exit: release its files)
 await program.exited;
+await program.readFile(path);     // Uint8Array | null: a file out of the program's filesystem
+await program.listFiles(dir);     // [{ path, size }]: every regular file below a directory
 ```
 
 `workerUrl` selects the kind of guest: the bundled `host/worker.ts` runs a
@@ -389,15 +406,40 @@ The page must be cross-origin isolated (`Cross-Origin-Opener-Policy:
 same-origin`, `Cross-Origin-Embedder-Policy: require-corp`), because the
 Worker blocks in `Atomics.wait` on a `SharedArrayBuffer`.
 
+**Loading.** The Worker compiles a wasm guest with
+`WebAssembly.compileStreaming` on the `Response` that `fetch` returned (so the
+browser compiles while it downloads and may keep the compiled code in its
+cache) and counts the bytes on a clone of it. `onLoad` gets `download` events
+about every 100 ms, `compile` when the last byte has arrived, `start` when the
+module is compiled. `total` is the module's size: `Content-Length`, or, for a
+compressed response, the `X-Wasm-Term-Size` header if the server sends one,
+else 0 (unknown). A large module should be served as `application/wasm`,
+precompressed, under a URL that names its content, with `Cache-Control:
+immutable`; `web/server.ts` does that for packaged guests (`WasmGuest` in
+`web/guests.ts`, `ports/codex/scripts/package.ts`).
+
+**Reading files back** (debugging: a program's log, the configuration it
+wrote). `program.readFile(path)` and `program.listFiles(directory)` ask the
+Worker with a `FRAME_FILE` frame (`u32 id`, `u32 op` (0 read, 1 list), path);
+it answers with `{ t: "file", id, data }` the next time the program makes a
+host call, so a program stuck in computation answers late and one blocked in
+`poll_oneoff` answers at once (the frame wakes it). The data is a copy. A wasm
+guest's Worker is kept after the program exits, idle, holding only the
+filesystem, so the files of a program that crashed can still be read; then the
+request is an ordinary message (`FileRequest`). `program.kill()` lets go of
+it. A JavaScript guest's Worker ends with the program. On the dev page:
+`await wasmTerm.readFile(path)` (text), `await wasmTerm.listFiles(dir)`,
+`await wasmTerm.download(path)` in the console.
+
 ### 4.1 Data paths
 
 - page → Worker: a single-producer/single-consumer frame ring in a
   `SharedArrayBuffer` (`host/ring.ts`, `host/protocol.ts`), because a Worker
   blocked in a syscall never services `postMessage`. Frames: terminal input,
-  resize, signal, network event, clipboard reply. Frames that do not fit wait
-  on the page.
+  resize, signal, network event, clipboard reply, file request. Frames that do
+  not fit wait on the page.
 - Worker → page: `postMessage` (terminal output, exit, network requests,
-  changed persistent files, clipboard requests).
+  changed persistent files, clipboard requests, load progress, file answers).
   Output is flow-controlled: the Worker pauses when 1 MiB is unacknowledged.
   That holds for both kinds of guest (`machine.flushOutput()`).
 

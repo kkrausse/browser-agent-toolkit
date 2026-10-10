@@ -11,7 +11,7 @@
 //   - a swipe scrolls: whole lines as wheel steps, which the emulator turns into
 //     mouse reports, arrow keys (alternate screen) or scrollback;
 //   - a tap is a click for the program; a long press then drag selects;
-//   - a compact row of keys a phone keyboard lacks. A tap on the terminal does
+//   - a compact row of keys a phone keyboard lacks (Esc, Ctrl, Tab, arrows, Shift+Enter). A tap on the terminal does
 //     not open the keyboard (it would on every click in a TUI): the first key does.
 
 import type { Terminal } from "@random/ghostty-web";
@@ -30,6 +30,8 @@ const KEYBOARD_ICON = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" s
 const KEYS: [key: string, label: string][] = [
   ["Keyboard", KEYBOARD_ICON], ["Escape", "Esc"], ["Control", "Ctrl"], ["Tab", "Tab"],
   ["ArrowLeft", "←"], ["ArrowDown", "↓"], ["ArrowUp", "↑"], ["ArrowRight", "→"],
+  // Shift+Enter: a newline in the prompt of codex and opencode, where the on-screen keyboard's Enter submits.
+  ["ShiftEnter", "⇧↵"],
 ];
 
 export function installMobileControls(container: HTMLElement, terminal: Terminal): MobileControls {
@@ -42,7 +44,7 @@ export function installMobileControls(container: HTMLElement, terminal: Terminal
     button.type = "button";
     button.dataset.key = key;
     button.innerHTML = label;
-    button.setAttribute("aria-label", key.replace("Arrow", "Arrow "));
+    button.setAttribute("aria-label", key === "ShiftEnter" ? "Shift Enter (new line)" : key.replace("Arrow", "Arrow "));
     if (key === "Control") button.setAttribute("aria-pressed", "false");
     toolbar.append(button);
   }
@@ -54,8 +56,8 @@ export function installMobileControls(container: HTMLElement, terminal: Terminal
     toolbar.querySelector('[data-key="Control"]')!.setAttribute("aria-pressed", String(value));
   };
   // The emulator encodes it for whatever keyboard protocol the program asked for.
-  const sendKey = (key: string, code: string, ctrlKey: boolean) => {
-    terminal.textarea?.dispatchEvent(new KeyboardEvent("keydown", { key, code, ctrlKey, bubbles: true, cancelable: true }));
+  const sendKey = (key: string, code: string, ctrlKey: boolean, shiftKey = false) => {
+    terminal.textarea?.dispatchEvent(new KeyboardEvent("keydown", { key, code, ctrlKey, shiftKey, bubbles: true, cancelable: true }));
   };
 
   const activate = (key: string) => {
@@ -67,7 +69,8 @@ export function installMobileControls(container: HTMLElement, terminal: Terminal
     if (key === "Control") { setControl(!control); return; }
     const ctrlKey = control;
     setControl(false);
-    sendKey(key, key, ctrlKey);
+    if (key === "ShiftEnter") sendKey("Enter", "Enter", ctrlKey, true);
+    else sendKey(key, key, ctrlKey);
   };
   const keyOf = (event: Event) => (event.target as HTMLElement).closest<HTMLButtonElement>("button")?.dataset.key;
   // Prevent pointer focus from dismissing the keyboard. Engines disagree on whether a
