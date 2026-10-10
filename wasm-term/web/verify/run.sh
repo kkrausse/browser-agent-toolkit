@@ -25,6 +25,8 @@ PY
   # codex-local: only with CODEX_LOCAL_REAL_AUTH=1 does it ask the real auth host for a device code.
   echo "const REAL_AUTH = \"${CODEX_LOCAL_REAL_AUTH:-0}\" === \"1\";"
   echo "const IMPORT_ZIP = \"$import_zip\";"
+  # WASM_TERM_BUILD=names runs a packaged guest's other build (codex, codex-local: the one with wasm names).
+  echo "const BUILD_QUERY = \"${WASM_TERM_BUILD:+&build=$WASM_TERM_BUILD}\";"
   cat "$root/web/verify/$name.js"
 } > "$script"
 mkdir -p "$root/docs/screenshots"

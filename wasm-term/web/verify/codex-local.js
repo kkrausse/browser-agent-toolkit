@@ -40,7 +40,7 @@ const turn = async (value, timeout = 30000) => {
   await page.waitForTimeout(400);
 };
 const open = async (query = "") => {
-  await page.goto(`${BASE}/?guest=codex-local${query}`);
+  await page.goto(`${BASE}/?guest=codex-local${BUILD_QUERY}${query}`);
   await page.waitForFunction(() => window.wasmTerm?.screen().join("").trim() || window.wasmTerm?.exit, null, { timeout: 180000 });
 };
 const start = async (query = "") => {
@@ -157,9 +157,13 @@ await turn("please use a tool");
 const shell = await since("please use a tool");
 let proc = await lastProc();
 check("exec_command: the command ran in the tab's shell, its output and exit status reached the model",
-  /Ran echo mock-llm-tool-ok/.test(shell) && /First line: `mock-llm-tool-ok`/.test(shell) && /\/home\/user\/project/.test(shell) && /MOCK-TOOL-DONE/.test(shell)
+  /Ran echo mock-llm-tool-ok/.test(shell) && /First line: mock-llm-tool-ok/.test(shell) && /\/home\/user\/project/.test(shell) && /MOCK-TOOL-DONE/.test(shell)
     && /^\/bin\/bash -lc echo mock-llm-tool-ok && pwd$/.test(proc.command) && proc.status === 0, { shell, proc });
 await shot("codex-local-shell-tool");
+state = await mock();
+const offered = state.modelRequests.at(-1) ?? {};
+check("the model request offers exec_command, write_stdin and apply_patch, and carries the note about this environment (developer_instructions)",
+  ["exec_command", "write_stdin", "apply_patch"].every(name => offered.tools?.includes(name)) && offered.browserTabNote === true, offered);
 
 // Reading a project the way a model does: rg --files, rg -n, nl -ba | sed -n, sed -n, cat, ls -la.
 let mark = (await procs()).length;
@@ -167,8 +171,8 @@ await turn("shell-read", 90000);
 const read = (await since("shell-read")).replace(/\n\s*/g, " ");
 const readProcs = (await procs()).slice(mark);
 check("read turn: six commands (rg --files, rg -n, nl -ba | sed -n, sed -n, cat, ls -la) all exit 0 with the right first lines",
-  /1\. exit 0: `README\.md`/.test(read) && /2\. exit 0: `src\/inventory\.py:\d+:def load_items\(path: str\)/.test(read) && /3\. exit 0: `\s*1\s+"""Formatting the inventory report\."""`/.test(read)
-    && /4\. exit 0: `# Sample project: pantry`/.test(read) && /5\. exit 0: `name,quantity,unit_price`/.test(read) && /6\. exit 0: `total \d+`/.test(read) && /MOCK-SHELL-READ-DONE/.test(read)
+  /1\. exit 0: README\.md/.test(read) && /2\. exit 0: src\/inventory\.py:\d+:def load_items\(path: str\)/.test(read) && /3\. exit 0: \s*1\s+"""Formatting the inventory report\."""/.test(read)
+    && /4\. exit 0: # Sample project: pantry/.test(read) && /5\. exit 0: name,quantity,unit_price/.test(read) && /6\. exit 0: total \d+/.test(read) && /MOCK-SHELL-READ-DONE/.test(read)
     && readProcs.length === 6 && readProcs.every(entry => entry.status === 0), { read, readProcs });
 await shot("codex-local-shell-read");
 
@@ -177,7 +181,7 @@ await turn("shell-fix", 90000);
 const fix = (await since("shell-fix")).replace(/\n\s*/g, " ");
 const report = await readFile(`${PROJECT}/src/report.py`);
 check("read-edit-verify turn: rg finds the TODO, apply_patch edits the file, the shell sees the edit",
-  /1\. exit 0: `src\/inventory\.py:\d+:\s+# TODO/.test(fix) && /Verification: `edit-verified`/.test(fix) && /MOCK-SHELL-FIX-DONE/.test(fix)
+  /1\. exit 0: src\/inventory\.py:\d+:\s+# TODO/.test(fix) && /Verification: edit-verified/.test(fix) && /MOCK-SHELL-FIX-DONE/.test(fix)
     && /sorted\(items, key=lambda item: item\.name\)/.test(report ?? "") && !/TODO: sort/.test(report ?? ""), { fix, report });
 await shot("codex-local-shell-fix");
 
@@ -187,8 +191,8 @@ await turn("shell-fail", 90000);
 const fail = (await since("shell-fail")).replace(/\n\s*/g, " ");
 const failProcs = (await procs()).slice(mark);
 check("failing commands: a missing file is exit 1 with cat's message; git and python fail at once with a message; the status of a list is its last command's",
-  /1\. exit 1: `cat: does-not-exist\.txt: No such file or directory`/.test(fail) && /2\. exit (12[0-9]|1): `[^`]*git[^`]*`/.test(fail) && /3\. exit 127: `[^`]*python3[^`]*`/.test(fail)
-    && /4\. exit 1: `rg=1`/.test(fail) && /MOCK-SHELL-FAIL-DONE/.test(fail) && failProcs.length === 4 && failProcs.every(entry => entry.runMs < 250), { fail, failProcs });
+  /1\. exit 1: cat: does-not-exist\.txt: No such file or directory/.test(fail) && /2\. exit (12[0-9]|1): [^.]*git/.test(fail) && /3\. exit 127: [^.]*python3/.test(fail)
+    && /4\. exit 1: rg=1/.test(fail) && /MOCK-SHELL-FAIL-DONE/.test(fail) && failProcs.length === 4 && failProcs.every(entry => entry.runMs < 250), { fail, failProcs });
 await shot("codex-local-shell-fail");
 
 // Long output: all of it is produced, codex truncates what the model sees.
@@ -196,27 +200,27 @@ await turn("shell-long", 90000);
 const long = (await since("shell-long")).replace(/\n\s*/g, " ");
 proc = await lastProc();
 check("long output: 60,000 lines are produced and the model gets a bounded view ending in the last line",
-  /Output seen by the model: \d+ chars, \d+ lines, last line `60000`/.test(long) && /MOCK-SHELL-LONG-DONE/.test(long) && /seq 1 60000$/.test(proc.command) && proc.status === 0, { long, proc });
+  /Output seen by the model: \d+ chars, \d+ lines, last line 60000/.test(long) && /MOCK-SHELL-LONG-DONE/.test(long) && /seq 1 60000$/.test(proc.command) && proc.status === 0, { long, proc });
 
 // A command that takes too long, under the shell's own `timeout`.
 const timeoutStarted = Date.now();
 await turn("shell-timeout", 90000);
 const timedOut = (await since("shell-timeout")).replace(/\n\s*/g, " ");
-check("timeout: `timeout 1 sleep 30` ends after a second with status 124", /Last line: `timeout-status=124`/.test(timedOut) && Date.now() - timeoutStarted < 15000, { timedOut, ms: Date.now() - timeoutStarted });
+check("timeout: `timeout 1 sleep 30` ends after a second with status 124", /Last line: timeout-status=124/.test(timedOut) && Date.now() - timeoutStarted < 15000, { timedOut, ms: Date.now() - timeoutStarted });
 
 // A process left running past the yield time, interrupted by the model (write_stdin "\x03"), and the shell after it.
 await turn("shell-ctrlc", 90000);
 const ctrlc = (await since("shell-ctrlc")).replace(/\n\s*/g, " ");
 const interrupted = (await procs()).find(entry => /sleep 300/.test(entry.command)) ?? {};
 check("model interrupt: the command is still running after the yield time, Ctrl-C through write_stdin ends it (SIGINT, 130), the next command runs",
-  /Session \d+ was running after the first call/.test(ctrlc) && /3\. exit 0: `after-interrupt`/.test(ctrlc) && /MOCK-SHELL-CTRLC-DONE/.test(ctrlc) && interrupted.signal === 2 && interrupted.status === 130, { ctrlc, interrupted });
+  /Session \d+ was running after the first call/.test(ctrlc) && /3\. exit 0: after-interrupt/.test(ctrlc) && /MOCK-SHELL-CTRLC-DONE/.test(ctrlc) && interrupted.signal === 2 && interrupted.status === 130, { ctrlc, interrupted });
 
 // An interactive process on the terminal stand-in: lines typed with write_stdin, answers read back.
 await turn("shell-stdin", 90000);
 const stdin = (await since("shell-stdin")).replace(/\n\s*/g, " ");
 const loop = (await procs()).find(entry => /while IFS= read -r line/.test(entry.command)) ?? {};
 check("write_stdin: lines typed into a running `while read` loop are answered, and the loop ends on the last one",
-  /got:hello from stdin/.test(stdin) && /got:quit/.test(stdin) && /bye/.test(stdin) && /MOCK-SHELL-STDIN-DONE/.test(stdin) && loop.status === 0, { stdin, loop });
+  /First write returned: "hello from stdin\\ngot:hello from stdin"/.test(stdin) && /Second write returned: "quit\\ngot:quit\\nbye"/.test(stdin) && /MOCK-SHELL-STDIN-DONE/.test(stdin) && loop.status === 0, { stdin, loop });
 await shot("codex-local-shell-stdin");
 
 // The user interrupts a turn whose command is still running (Esc). As natively, codex keeps the process as a
@@ -281,7 +285,7 @@ await start();
 check("after a reload the edited file and the shell-written file are still there",
   (await readFile("/home/user/project/hello.txt")) === `${SEEDED} (changed by mock-llm)\n` && (await readFile(`${PROJECT}/from-shell.txt`)) === "written-by-the-shell\n");
 await press("ArrowUp", 600);
-check("after a reload arrow-up recalls the last prompt", /› !echo written-by-the-shell/.test(await text()), await text());
+check("after a reload arrow-up recalls the last prompt", /!\s?echo written-by-the-shell/.test(await text()), await text());
 await press("Control+c", 500);
 await prompt("/resume");
 await page.waitForTimeout(2500);
@@ -311,7 +315,7 @@ await start("&shell=inline");
 await turn("shell-read", 90000);
 const inline = (await since("shell-read")).replace(/\n\s*/g, " ");
 check("inline shell (&shell=inline): the read turn gives the same answers with no shell Worker",
-  /1\. exit 0: `README\.md`/.test(inline) && /6\. exit 0: `total \d+`/.test(inline) && /MOCK-SHELL-READ-DONE/.test(inline)
+  /1\. exit 0: README\.md/.test(inline) && /6\. exit 0: total \d+/.test(inline) && /MOCK-SHELL-READ-DONE/.test(inline)
     && (await page.evaluate(() => window.wasmTerm.program.shellWorkers)).length === 0, { inline, workers: await page.evaluate(() => window.wasmTerm.program.shellWorkers) });
 numbers.inlineRgRunMs = stats((await procs()).filter(entry => /-lc rg /.test(entry.command)).map(entry => entry.runMs));
 
@@ -328,8 +332,9 @@ const imported = (await listFiles(PROJECT)).map(file => file.path.slice(PROJECT.
 check("launcher: 'Import .zip' puts an archive's files (deflated, one top folder stripped, .git left out) into the project beside what was there",
   /Imported 3 files/.test(zipStatus ?? "") && (await readFile(`${PROJECT}/imported/notes.txt`)) === "imported by the verify script\n" && (await readFile(`${PROJECT}/top.md`))?.startsWith("# imported")
     && (await readFile(`${PROJECT}/imported/big.txt`))?.length === 60000 && imported.includes("hello.txt") && !imported.some(path => path.includes(".git/")), { zipStatus, imported });
-await turn("!rg -c imported top.md imported/notes.txt", 30000).catch(() => {});
-await page.waitForTimeout(800);
+await prompt("!rg -c imported top.md imported/notes.txt");
+await waitFor("imported/notes.txt:1", 20000).catch(() => {});
+await page.waitForTimeout(500);
 check("the imported files are there for the shell", /top\.md:1/.test(await text()) && /imported\/notes\.txt:1/.test(await text()), await text());
 await page.goto(`${BASE}/`);
 await page.waitForSelector('form input[name="guest"][value="codex-local"]', { state: "attached" });

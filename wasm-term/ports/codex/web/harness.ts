@@ -71,7 +71,7 @@ const program = startProgram({
   args: ["codex", ...guestArgs],
   env: { TERM_PROGRAM: "ghostty", ...env },
   files,
-  shell: shell && { moduleUrl: pathToFileURL(join(root, "host/sh/dist/bat_sh.wasm")).href, workerUrl: join(import.meta.dir, "harness-shell-worker.ts"), mode: shell },
+  shell: shell && { moduleUrl: pathToFileURL(join(root, "host/sh/dist/bat_sh.wasm")).href, workerUrl: process.env.HARNESS_SHELL_WORKER ?? join(import.meta.dir, "harness-shell-worker.ts"), mode: shell },
   cols,
   rows,
   clipboard: { readText: async () => "", writeText: async () => {} },

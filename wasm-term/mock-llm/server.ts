@@ -364,7 +364,7 @@ const SHELL_SCENARIOS: Scenario[] = [
       (t) => ({ say: "starting a loop that reads lines.", tool: execCall(t, STDIN_LOOP, { tty: true, yield_time_ms: 500 }) }),
       (t) => ({ say: "typing a line.", tool: stdinCall(t, sessionOf(t.toolResults[0] ?? ""), "hello from stdin\n") }),
       (t) => ({ say: "typing the last line.", tool: stdinCall(t, sessionOf(t.toolResults[0] ?? ""), "quit\n") }),
-    ], (turn) => `Second write returned: ${JSON.stringify(outputOf(turn.toolResults[2] ?? "").trim())}`),
+    ], (turn) => `First write returned: ${JSON.stringify(outputOf(turn.toolResults[1] ?? "").trim())}\nSecond write returned: ${JSON.stringify(outputOf(turn.toolResults[2] ?? "").trim())}`),
   },
 ];
 
@@ -792,7 +792,7 @@ const auth = {
   refreshes: 0,
   revoked: [] as string[],
   accountChecks: [] as { authorization: string; status: number }[],
-  modelRequests: [] as { path: string; authorization: string; account: string; userAgent: string; originator: string; contentEncoding: string }[],
+  modelRequests: [] as { path: string; authorization: string; account: string; userAgent: string; originator: string; contentEncoding: string; tools: string[]; browserTabNote: boolean }[],
   requests: [] as string[],
 };
 
@@ -933,6 +933,9 @@ async function handleModel(req: Request, path: string, parse: (b: Json, raw: str
     userAgent: req.headers.get("user-agent") ?? "",
     originator: req.headers.get("originator") ?? "",
     contentEncoding: encoding,
+    // What the client offered and told the model: tool names, and whether codex-local's note about its environment is in the request.
+    tools: ((body.tools ?? []) as Json[]).map((tool) => String(tool.name ?? tool.function?.name ?? tool.type)),
+    browserTabNote: raw.includes("running inside a browser tab"),
   });
   if (auth.modelRequests.length > 50) auth.modelRequests.shift();
   const turn = parse(body, raw);
