@@ -9,7 +9,7 @@
 // This function is serialised with `toString()` into the page, so it must not
 // reference anything outside its own body.
 export function previewShim(): void {
-  const w = window as any
+  const w = globalThis as any
   if (w.__batPreviewShim) return
   w.__batPreviewShim = true
   const Native: typeof WebSocket = w.WebSocket

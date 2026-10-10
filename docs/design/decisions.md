@@ -483,3 +483,7 @@ Numbers: `docs/experiments/2026-10-09-net.md`. Code: `crates/bat-kernel/src/{htt
   `/.browser-editor-cache/vite/deps/*.js` request waited (endpoint fetch timed out after
   8 s; nothing on stderr), so the frame stops at the server-rendered HTML. Until either
   point is fixed the preview renders but does not hydrate.
+- **Fixed in the toolkit's Vite plugin** (same day): in guest mode `configResolved` wraps
+  `config.assetsInclude` in a function whose text has no imported binding, so the hash is
+  the same in the prepare run and in the guest (`3988b30b` on both sides for the TODO
+  app). The example then starts without re-optimizing. The second point stands.
