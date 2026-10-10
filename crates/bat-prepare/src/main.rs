@@ -4,6 +4,7 @@ mod modules;
 mod pack;
 mod policy;
 mod program;
+mod startup;
 mod tree;
 
 use anyhow::{bail, Result};
@@ -90,6 +91,20 @@ enum Command {
         /// Guest path the image is mounted at.
         #[arg(long, default_value = "/")]
         root: String,
+    },
+    /// Emit the modules a program loads while starting (a recorded list of guest paths, JSON
+    /// array) as one module script, from finished images. Prints the program record.
+    StartupProgram {
+        /// `<image file>=<guest mount path>` (repeatable; first match under the longest mount wins).
+        #[arg(long = "image", required = true)]
+        images: Vec<String>,
+        #[arg(long)]
+        name: String,
+        /// JSON array of guest absolute module paths.
+        #[arg(long)]
+        modules: PathBuf,
+        #[arg(short, long)]
+        out: PathBuf,
     },
     /// Produce only the pruned guest node_modules tree in `--work` and report sizes.
     Deps {
@@ -207,6 +222,15 @@ fn main() -> Result<()> {
             Ok(())
         }
         Command::Order { image, trace, root } => order(&image, &trace, &root),
+        Command::StartupProgram { images, name, modules, out } => {
+            let images = images
+                .iter()
+                .map(|spec| spec.rsplit_once('=').map(|(file, mount)| (PathBuf::from(file), mount.to_string())).ok_or_else(|| anyhow::anyhow!("--image expects <file>=<guest mount path>: {spec}")))
+                .collect::<Result<Vec<_>>>()?;
+            let list: Vec<String> = serde_json::from_slice(&std::fs::read(&modules)?)?;
+            println!("{}", serde_json::to_string(&startup::emit(&images, &name, &list, &out)?)?);
+            Ok(())
+        }
         Command::App { app, out, work, source, file, policy, opencode, workspace, bun, force, verify, preview, order, zstd_level } => {
             let work = work.unwrap_or_else(|| {
                 let mut name = out.file_name().unwrap_or_default().to_os_string();
