@@ -250,7 +250,7 @@ export function createProcess(rt: Runtime, loop: LoopInternals, finish: (code: n
       const targets = [-pid]
       for (let i = 0; i < targets.length; i++) for (const p of all) if (p.ppid === targets[i] && p.state !== 2) targets.push(p.pid)
       let found = false
-      for (const target of targets.reverse()) {
+      for (const target of targets) {
         try {
           kernel.kill(target, n)
           found = true

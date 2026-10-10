@@ -119,8 +119,17 @@ export function createShell(rt: Runtime): Shell {
   const imports = {
     sh_open: (p: number, n: number, flags: number, mode: number) => call(() => k.open(str(p, n), flags, mode)),
     sh_close: (fd: number) => call(() => k.close(fd)),
-    sh_read: (fd: number, p: number, n: number) => call(() => k.read(fd, new Uint8Array(x!.memory.buffer, p, n))),
-    sh_write: (fd: number, p: number, n: number) => call(() => k.write(fd, new Uint8Array(x!.memory.buffer, p, n))),
+    sh_read: (fd: number, p: number, n: number) =>
+      call(() => {
+        const got = k.read(fd, new Uint8Array(x!.memory.buffer, p, n))
+        if (asProcess && interrupted()) abort()
+        return got
+      }),
+    sh_write: (fd: number, p: number, n: number) =>
+      call(() => {
+        if (asProcess && interrupted()) abort()
+        return k.write(fd, new Uint8Array(x!.memory.buffer, p, n))
+      }),
     sh_stat: (p: number, n: number, follow: number, out: number) =>
       call(() => {
         const st = k.stat(str(p, n), !follow)
@@ -208,7 +217,8 @@ export function createShell(rt: Runtime): Shell {
           st = 127
         }
         if (st !== undefined) {
-          if (killedAt) abort()
+          // The signal that ended the child may have been meant for the shell as well.
+          if (killedAt || interrupted()) abort()
           return st
         }
         if (interrupted()) {

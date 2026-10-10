@@ -641,10 +641,11 @@ Numbers: `docs/experiments/2026-10-10-first-open-and-shell.md`.
   the shell against 31–145 ms for an `rg` child.
 - **A syntax error anywhere stops the whole script before it starts** (the script is
   parsed in one piece; bash runs the lines before the error).
-- **Signals reach the shell only where it waits** (for a child, in `sleep`): there it takes
-  the process's pending signals, passes them to its children and ends with 128 + signal.
-  A loop of builtins is not interruptible short of SIGKILL (kerneld terminates the worker),
-  and a `timeout` on `execSync` is likewise checked only at a wait or a sleep.
+- **Signals reach a shell process only at its host calls** (waiting for a child, `sleep`,
+  starting a child, reading or writing a descriptor): there it takes the process's pending
+  signals, passes them to its children and ends with 128 + signal. A loop of builtins that
+  does no I/O is not interruptible short of SIGKILL (kerneld terminates the worker). A
+  `timeout` on `execSync` is checked only at a wait, a sleep or a spawn.
 - **`process.kill(-pid)` signals the process and its descendants.** The kernel has no
   process groups; a child started `detached` leads a group that is exactly its
   descendants, which is how OpenCode's shell tool kills a command.
