@@ -238,17 +238,22 @@ async function download(a: StoreImageArgs, dir: FileSystemDirectoryHandle, onPro
     }
     handle.flush()
     handle.close()
-    if (!announced) onProgress({ usable: { file: tmpName, arriving: false } })
     // Durable and verified from here on, whatever its name.
     await dir.getFileHandle(markOf(a.name), { create: true })
     let file = tmpName
-    try {
-      await (tmp as any).move(a.name)
-      await dir.removeEntry(markOf(a.name)).catch(() => {})
-      file = a.name
-    } catch {
-      // mounted early and held open by workers: the next open renames it
+    // Once the partial file was announced it may be opened under that name at any
+    // moment (or be open already, which makes a rename fail): it keeps the name for this
+    // session and the next open renames it.
+    if (!announced) {
+      try {
+        await (tmp as any).move(a.name)
+        await dir.removeEntry(markOf(a.name)).catch(() => {})
+        file = a.name
+      } catch {
+        // held open after all
+      }
     }
+    if (!announced) onProgress({ usable: { file, arriving: false } })
     return { bytes: received, ms: performance.now() - t0, cached: false, verified: streaming || !!hasher, file }
   } catch (e) {
     try {
