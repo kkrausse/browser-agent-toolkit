@@ -15,6 +15,12 @@ const manifest = await prepare({
   outDir: '.editor/prepared',
   source,
   openCodeDir,
+  // What a start-up reads from the dependency image, recorded from a real first open
+  // (`bun bench/first-open/trace.ts`, see docs/experiments/2026-10-10-first-open-and-shell.md):
+  // those 11 MB are laid out first, so a visitor's first open starts while the other
+  // 228 MB are still downloading. Stale lines only cost speed; re-record after a
+  // dependency upgrade.
+  startupOrder: existsSync(resolve(import.meta.dirname, 'editor-startup-order.txt')) ? resolve(import.meta.dirname, 'editor-startup-order.txt') : undefined,
   // EDITOR_FAKE_HOST=1: no image; the programs run natively behind the dev fake host.
   manifestOnly: process.env.EDITOR_FAKE_HOST === '1',
 })

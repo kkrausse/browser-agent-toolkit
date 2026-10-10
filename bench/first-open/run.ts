@@ -74,7 +74,7 @@ const result = await page.evaluate(() => {
   const steps = {}
   for (const m of performance.getEntriesByType('mark')) if (m.name.startsWith('bat:') && !(m.name.slice(4) in steps)) steps[m.name.slice(4)] = Math.round((m.startTime - click) * 10) / 10
   const boot = {}
-  // The runtime's own boot timings (ms after bootRuntime began): the details of its `bat:boot.*` marks.
+  // The runtime's own boot timings (ms after bootRuntime began): the details of its bat:boot.* marks.
   const details = performance.getEntriesByType('mark').filter((m) => m.name.startsWith('bat:boot.')).map((m) => m.detail ?? {})
   for (const [k, v] of Object.entries(Object.assign({}, window.__batBoot ?? {}, ...details))) boot[k] = typeof v === 'number' ? Math.round(v * 10) / 10 : v
   const complete = performance.getEntriesByName('bat:boot.image-complete')[0]
