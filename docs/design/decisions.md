@@ -452,3 +452,16 @@ Numbers: `docs/experiments/2026-10-09-net.md`. Code: `crates/bat-kernel/src/{htt
   journal on. Not reproduced in five repeats of the same sequence nor in a 2,400-write
   stress with pipe allocation. It smells like heap corruption or a lock left held; the
   ring code added here writes into kernel memory from JS and is the first suspect.
+- **The oxide scanner is vendored at tag v4.3.3, not built from the fork rev.**
+  `kkrausse/tailwindcss@11050dda` is upstream `main` plus one line and no longer matches
+  the 4.3.3 binding (283 differences on a symlinked source); the vendored tree with the
+  fork's line applied is identical to native in the differential. Target `wasm32-wasip1`
+  with a WASI written in the package: the scanner's dependencies use `std::fs`.
+- **lightningcss gets a lazy front, not a slimmer Wasm**: dev never calls it (0 calls in
+  12 traced runs); the 110–135 ms were the eager load of 15.9 MB.
+- **rollup stays `@rollup/wasm-node`**: 6 ms load, 59 ms for 19 parses, 1.2% of the first
+  page, and native rollup is no faster inside the server.
+- **The shipped Vite cache carries a `.gitignore` (`*`).** Tailwind's automatic source is
+  the whole workspace, which has no `.gitignore`, so the scanner read the optimizer's
+  bundles (5.81 of 5.83 MB scanned) and the CSS depended on optimizer timing. This changes
+  the served `style.css` (11,310 → 6,146 bytes: only what the sources use).

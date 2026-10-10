@@ -8,7 +8,12 @@
       "overlay": "dir:../../../packages/guest-shims/esbuild"
     },
     { "package": "rollup", "with": "npm:@rollup/wasm-node@{version}", "expect": "dist/wasm-node/bindings_wasm_bg.wasm" },
-    { "package": "lightningcss", "with": "npm:lightningcss-wasm@{version}", "expect": "lightningcss_node.wasm" },
+    {
+      "package": "lightningcss",
+      "with": "npm:lightningcss-wasm@{version}",
+      "expect": "lightningcss_node.wasm",
+      "overlay": "dir:../../../packages/guest-shims/lightningcss"
+    },
     {
       "package": "@tailwindcss/oxide",
       "with": "dir:../../../packages/guest-shims/tailwindcss-oxide",
