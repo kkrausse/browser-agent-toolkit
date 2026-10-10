@@ -5,6 +5,7 @@
   "scripts": {
     "prepare:editor": "bun prepare.ts",
     "build": "bun --bun react-router build",
+    "codex": "bun codex.ts",
     "start": "NODE_ENV=production bun server.ts",
     "editor": "bun run prepare:editor && bun run build && bun run start",
     "editor:fake": "EDITOR_FAKE_HOST=1 bun run prepare:editor && bun run build && EDITOR_FAKE_HOST=1 bun run start",

@@ -895,3 +895,38 @@ no server of its own. Measured in Chrome 154.
   cache (`pageshow`, `persisted`), and takes `?reset=1` out of the address before anything
   can reload it.
 
+## 2026-10-10 codex in the TODO example: one filesystem, by attaching wasm-term's Worker to the kernel (`examples/todo-app/codex`)
+
+codex (`wasm-term`'s `codex-local`) keeps files in wasm-term's in-memory tree, in its own
+Worker; the app's source, `node_modules` and Vite are in the kernel. For an edit by codex to
+reach the preview these have to be the same files. Considered:
+
+| | a. kernel behind codex's project directory | b. two trees, mirrored both ways | c. codex's file tools over a message protocol to the page |
+| --- | --- | --- | --- |
+| Stale reads | none: one copy | codex reads its copy; what Vite, OpenCode or a child wrote arrives a notification later, and the guest's Worker only takes messages at its next host call | none, but every call waits for the page's event loop |
+| Races | what two native programs on one disk have (below) | a write on each side between two syncs needs a winner; a patch computed against a stale copy applies cleanly to the wrong text | as (a) |
+| Effort | a WASI shim (330 lines) and a process table (255 lines) in the example; three small hooks in wasm-term; no kernel or codex change | the mirror, plus a way to push changes into a Worker that is blocked in `Atomics.wait` | a protocol and its blocking client |
+| Makes possible | commands as kernel processes: `node`, `npx tsc` on the files codex edits | reading and patching only | reading and patching only |
+
+Chosen: (a). It was within reach because attaching is `{ module, memory }` plus
+`attachKernel` (kernel-abi.md section 2), a non-process worker can become a host process
+(`bat_host_proc_new`), and the shell is already a kernel executable (`/bin/sh`).
+
+- **Only `/workspace` is the kernel's.** `CODEX_HOME` (the sign-in) stays in wasm-term's tree
+  and IndexedDB, so commands and guest programs cannot read it through the filesystem.
+- **Blocking.** wasm-term's guest sleeps on its own ring with `Atomics.wait`; a kernel pipe
+  cannot wake that address. While a command runs, the wait is cut into 3 ms slices and the
+  pipes are read without blocking. A second waiter thread or a kernel-to-ring wake would remove
+  the polling; not needed at this size (a `rg` is 4 to 30 ms end to end).
+- **Terminating the Worker** goes through the kernel's kill gate, done by the page (it has a
+  kernel instance): mark dying, wait for lock depth 0, terminate, free the thread later; its
+  commands are killed and its host process marked exited.
+- **What is not atomic.** `apply_patch` writes a file as open-with-truncate then write, two
+  kernel calls, as natively. Vite can be told of the change between them and read an empty
+  file; the write's own event then triggers a second update. Not seen in the runs here (the
+  preview showed the new text 50 to 150 ms after the turn, without a frame reload), not
+  excluded. Two agents patching the same file at once are not serialised either.
+- **Would change the choice**: a guest that needs its project on a filesystem the kernel
+  cannot be (a second kernel, another origin), or a browser where attaching a foreign Worker to
+  the shared memory fails; then (b) with the kernel as the only writer during a turn.
+

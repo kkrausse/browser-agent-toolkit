@@ -54,4 +54,6 @@ export interface CodexModule {
   hasCodexCredentials(): Promise<boolean>
   /** Forgets everything codex keeps in this browser (configuration, history, sessions, sign-in). */
   forgetCodexState(): Promise<void>
+  /** With `net: 'direct'`: what this page's origin can and cannot do at OpenAI's hosts (chatgpt.com answers only a few origins). */
+  codexOriginNote(): string
 }

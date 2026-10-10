@@ -77,7 +77,9 @@ export default function CodexPanel({ kernel, policy, active, handle, onPrompt }:
         if (!mounted.screen().some(line => /^\s*›/.test(line) || /Sign in with ChatGPT/.test(line))) return
         clearInterval(poll)
         timings.prompt = Math.round(performance.now() - started)
-        setStatus(chosen.backend === 'openai' ? `Requests go ${chosen.net === 'tunnel' ? `through the relay ${chosen.tcpRelay} as TLS` : 'straight to OpenAI'}; sign in inside the terminal.` : `Scripted model (${chosen.backend}); no sign-in, no tokens.`)
+        setStatus(chosen.backend !== 'openai' ? `Scripted model (${chosen.backend}); no sign-in, no tokens.`
+          : chosen.net === 'tunnel' ? `Sign in inside the terminal. Requests go to OpenAI as TLS through the relay ${chosen.tcpRelay}, which only carries bytes.`
+          : `Sign in inside the terminal. Requests go from this tab straight to OpenAI. ${module.codexOriginNote()}`)
         onPrompt?.(timings.prompt)
         void module.hasCodexCredentials().then(value => { if (current) setSignedIn(value) })
       }, 50)

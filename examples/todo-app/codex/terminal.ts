@@ -17,7 +17,7 @@
 // this origin's IndexedDB (database `wasm-term`, namespace `todo-codex`).
 import type { HttpBlocked, HttpSeen } from '../../../wasm-term/host/index'
 import { openPersistStore } from '../../../wasm-term/host/persist-store'
-import { chatgptAllows, originRefusedMessage } from '../../../wasm-term/web/direct'
+import { chatgptAllows, originNote, originRefusedMessage } from '../../../wasm-term/web/direct'
 import { mountTerminal } from '../../../wasm-term/web/embed'
 import environment from './environment.md' with { type: 'text' }
 import type { CodexModule, CodexOptions, MountedCodex } from '../src/codex-api'
@@ -157,5 +157,8 @@ export async function hasCodexCredentials(): Promise<boolean> {
 /** The workspace is the editor's and is not touched. */
 export const forgetCodexState = (): Promise<void> => openPersistStore(NAMESPACE).clear()
 
+/** With `net=direct`: what this page's origin can and cannot do at OpenAI's hosts. */
+export const codexOriginNote = (): string => originNote(location.origin).replace('open this directory at', 'open this page at')
+
 // The panel loads this file by URL and knows it as `CodexModule`.
-void ({ mountCodex, clearCodexCredentials, hasCodexCredentials, forgetCodexState } satisfies CodexModule)
+void ({ mountCodex, clearCodexCredentials, hasCodexCredentials, forgetCodexState, codexOriginNote } satisfies CodexModule)
