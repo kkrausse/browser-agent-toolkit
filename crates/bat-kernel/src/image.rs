@@ -2,7 +2,7 @@
 //! on demand through the host into a chunk cache shared by every instance.
 
 use crate::errno::*;
-use crate::lock::WaitQ;
+use crate::lock::{Mutex, WaitQ};
 use crate::sys;
 use bat_image::Image;
 use core::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering::*};
@@ -56,15 +56,81 @@ fn hash_path(p: &[u8]) -> u32 {
 #[no_mangle]
 pub static BAT_FAULT_WORD: AtomicU32 = AtomicU32::new(0);
 
-fn host_read_exact(id: u32, off: u64, dst: &mut [u8]) -> R<()> {
+/// An image may be mounted while its file is still being downloaded: the file grows
+/// front to back, so a read that comes back short has asked for bytes that are not there
+/// yet. Per image id (known before the mount): `COMPLETE`, `ARRIVING`, or `FAILED` once
+/// the download has given up. Set by the host with `bat_image_arriving`.
+pub const COMPLETE: u32 = 0;
+pub const ARRIVING: u32 = 1;
+pub const FAILED: u32 = 2;
+const MAX_IMAGES: usize = 16;
+#[allow(clippy::declare_interior_mutable_const)]
+const NOT_ARRIVING: AtomicU32 = AtomicU32::new(COMPLETE);
+static ARRIVAL: [AtomicU32; MAX_IMAGES] = [NOT_ARRIVING; MAX_IMAGES];
+
+pub fn arrival(id: u32) -> u32 {
+    ARRIVAL.get(id as usize).map_or(COMPLETE, |a| a.load(Acquire))
+}
+pub fn set_arrival(id: u32, state: u32) {
+    if let Some(a) = ARRIVAL.get(id as usize) {
+        a.store(state, Release);
+    }
+}
+
+/// Reads recorded for a start-up order (`bat_image_trace`): `(image, offset, length)` of
+/// every positioned read, in order. Off unless a host turns it on.
+static TRACE_ON: AtomicU32 = AtomicU32::new(0);
+static TRACE: Mutex<Vec<(u32, u64, u32)>> = Mutex::new(Vec::new());
+const TRACE_MAX: usize = 1 << 20;
+
+pub fn trace(on: bool) {
+    TRACE_ON.store(on as u32, Release);
+    if !on {
+        TRACE.lock().clear();
+    }
+}
+/// Copy the recorded reads of image `id` out as `(offset, length)` pairs of f64, starting
+/// at record `from`. Returns the number of pairs written.
+pub fn trace_read(id: u32, from: usize, out: &mut [f64]) -> usize {
+    let t = TRACE.lock();
+    let mut n = 0;
+    for &(_, off, len) in t.iter().filter(|r| r.0 == id).skip(from) {
+        if n * 2 + 1 >= out.len() {
+            break;
+        }
+        out[n * 2] = off as f64;
+        out[n * 2 + 1] = len as f64;
+        n += 1;
+    }
+    n
+}
+
+enum HostRead {
+    Done,
+    /// This thread has no handle for the image.
+    NoHandle,
+    /// Fewer bytes than asked for: past the end of what the file holds so far.
+    Short,
+}
+
+fn host_read(id: u32, off: u64, dst: &mut [u8]) -> R<HostRead> {
     let n = sys::image_read(id, off, dst);
     if n == HOST_NO_HANDLE {
-        return Err(EAGAIN);
+        return Ok(HostRead::NoHandle);
     }
-    if n < 0 || n as usize != dst.len() {
+    if n < 0 {
         return Err(EIO);
     }
-    Ok(())
+    Ok(if n as usize == dst.len() { HostRead::Done } else { HostRead::Short })
+}
+
+/// For the head, which the host only mounts once it is there.
+fn host_read_exact(id: u32, off: u64, dst: &mut [u8]) -> R<()> {
+    match host_read(id, off, dst)? {
+        HostRead::Done => Ok(()),
+        HostRead::NoHandle => Err(EAGAIN),
+        HostRead::Short => Err(EIO),
+    }
 }
 
 impl ImageMount {
@@ -125,8 +191,12 @@ impl ImageMount {
         (self.file_len - start).min(CHUNK as u64) as usize
     }
 
-    /// Load chunk `ci` on this thread. Err(EAGAIN) if this thread has no handle.
-    pub fn load(&self, ci: usize) -> R<*const u8> {
+    /// Load chunk `ci` on this thread. Err(EAGAIN) if this thread has no handle, or if
+    /// the chunk has not arrived yet and the caller asked not to wait (or cannot).
+    /// While the image is arriving a thread that may block waits here for the chunk;
+    /// the slot is never left `LOADING` during that wait, so a thread that is killed
+    /// while waiting holds nothing.
+    pub fn load(&self, ci: usize, wait: bool) -> R<*const u8> {
         let slot = self.slots.get(ci).ok_or(EIO)?;
         loop {
             let s = slot.load(Acquire);
@@ -139,9 +209,26 @@ impl ImageMount {
                 }
                 let len = self.chunk_len(ci);
                 let mut buf = Vec::<u8>::with_capacity(len);
-                let r = host_read_exact(self.id, (ci as u64) << CHUNK_LOG2, unsafe {
+                let r = host_read(self.id, (ci as u64) << CHUNK_LOG2, unsafe {
                     core::slice::from_raw_parts_mut(buf.as_mut_ptr(), len)
                 });
+                let r = match r {
+                    Ok(HostRead::Done) => Ok(()),
+                    Ok(HostRead::NoHandle) => Err(EAGAIN),
+                    Ok(HostRead::Short) if arrival(self.id) == ARRIVING => {
+                        slot.store(ABSENT, Release);
+                        self.wq.wake_all();
+                        if !wait || !crate::thread::can_block() {
+                            return Err(EAGAIN);
+                        }
+                        // Woken by `bat_image_progress`; the timeout covers a host that does not call it.
+                        let seq = self.wq.seq();
+                        self.wq.wait(seq, 10.0);
+                        continue;
+                    }
+                    Ok(HostRead::Short) => Err(EIO),
+                    Err(e) => Err(e),
+                };
                 match r {
                     Ok(()) => {
                         unsafe { buf.set_len(len) };
@@ -179,7 +266,7 @@ impl ImageMount {
         if s > LOADING {
             return Ok(s as *const u8);
         }
-        match self.load(ci) {
+        match self.load(ci, true) {
             Err(EAGAIN) => {}
             other => return other,
         }
@@ -194,17 +281,35 @@ impl ImageMount {
             if s > LOADING {
                 return Ok(s as *const u8);
             }
-            if waited > 200 {
-                return Err(EIO);
+            match arrival(self.id) {
+                // The supervisor answers "not there yet" without waiting: ask again.
+                ARRIVING => {
+                    if waited % 2 == 1 {
+                        crate::proc::supervisor_request(crate::proc::Work::Fault { image: self.id, chunk: ci as u32 });
+                    }
+                }
+                _ if waited > 200 => return Err(EIO),
+                _ => {}
             }
             self.wq.wait(seq, 50.0);
             waited += 1;
         }
     }
 
+    /// More of an arriving image is in its file (or its state changed): wake the waiters.
+    pub fn progress(&self) {
+        self.wq.wake_all();
+    }
+
     pub fn read_at(&self, mut off: u64, dst: &mut [u8]) -> R<()> {
         if off + dst.len() as u64 > self.file_len {
             return Err(EIO);
+        }
+        if TRACE_ON.load(Relaxed) != 0 {
+            let mut t = TRACE.lock();
+            if t.len() < TRACE_MAX {
+                t.push((self.id, off, dst.len() as u32));
+            }
         }
         let mut done = 0;
         while done < dst.len() {

@@ -583,9 +583,14 @@ pub extern "C" fn bat_image_fault(image: u32, chunk: u32) -> i32 {
         v.images.get(image as usize).copied().flatten()
     };
     let r = match m {
-        Some(m) => m.load(chunk as usize).map(|_| 0),
+        Some(m) => m.load(chunk as usize, false).map(|_| 0),
         None => Err(EINVAL),
     };
+    if r == Err(EAGAIN) && crate::image::arrival(image) == crate::image::ARRIVING {
+        // Not downloaded yet. `bat_image_progress` wakes whoever asked; waking them now
+        // would only make them ask again at once.
+        return -EAGAIN;
+    }
     crate::image::BAT_FAULT_WORD.fetch_add(1, SeqCst);
     sys::notify(crate::image::BAT_FAULT_WORD.as_ptr(), u32::MAX);
     ret(r)
@@ -610,6 +615,37 @@ pub unsafe extern "C" fn bat_image_mount(id: u32, name: *const u8, nlen: usize, 
         vfs::mount(m, pp)?;
         Ok(m.image.len() as i32)
     })())
+}
+/// Download state of image `id` (which may be reserved and not mounted yet):
+/// 0 complete, 1 arriving (reads past what the file holds wait), 2 failed (they fail).
+#[no_mangle]
+pub extern "C" fn bat_image_arriving(id: u32, state: u32) {
+    crate::image::set_arrival(id, state);
+    bat_image_progress(id);
+}
+/// More bytes of an arriving image are in its file: wake the readers waiting for them.
+#[no_mangle]
+pub extern "C" fn bat_image_progress(id: u32) {
+    let m = {
+        let v = vfs::VFS.read();
+        v.images.get(id as usize).copied().flatten()
+    };
+    if let Some(m) = m {
+        m.progress();
+    }
+    crate::image::BAT_FAULT_WORD.fetch_add(1, SeqCst);
+    sys::notify(crate::image::BAT_FAULT_WORD.as_ptr(), u32::MAX);
+}
+/// Record every positioned image read from now on (0 stops and forgets).
+#[no_mangle]
+pub extern "C" fn bat_image_trace(on: u32) {
+    crate::image::trace(on != 0);
+}
+/// Recorded reads of image `id` from record `from`: `(offset, length)` f64 pairs into
+/// `out` (`cap` f64 slots). Returns the number of pairs.
+#[no_mangle]
+pub unsafe extern "C" fn bat_image_trace_read(id: u32, from: u32, out: *mut f64, cap: usize) -> u32 {
+    crate::image::trace_read(id, from as usize, core::slice::from_raw_parts_mut(out, cap)) as u32
 }
 #[no_mangle]
 pub extern "C" fn bat_image_count() -> u32 {
