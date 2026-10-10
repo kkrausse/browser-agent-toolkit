@@ -4,6 +4,7 @@
   "small_model": "mock/mock-small",
   "autoupdate": false,
   "share": "disabled",
+  "permission": { "bash": "ask", "edit": "ask" },
   "provider": {
     "mock": {
       "name": "Mock LLM",

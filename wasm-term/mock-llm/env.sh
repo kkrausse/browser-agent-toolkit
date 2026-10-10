@@ -44,6 +44,9 @@ opencode_env() {
   local root="$STATE_DIR/opencode"
   export XDG_CONFIG_HOME="$root/config" XDG_DATA_HOME="$root/data" XDG_STATE_HOME="$root/state" XDG_CACHE_HOME="$root/cache"
   mkdir -p "$XDG_CONFIG_HOME/opencode" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"
+  # opencode's scratch dir is $TMPDIR/opencode (shared /tmp/opencode otherwise).
+  export TMPDIR="$root/tmp"
+  mkdir -p "$TMPDIR"
   export OPENCODE_DISABLE_AUTOUPDATE=1 OPENCODE_DISABLE_MODELS_FETCH=1
   export OPENCODE_SERVER_PASSWORD="$MOCK_OPENCODE_PASSWORD"
 }

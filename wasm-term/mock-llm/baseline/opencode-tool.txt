@@ -1,12 +1,4 @@
-   Mock session                  +
-  ┃
-  ┃  hello there
-  ┃
-
-     Hello from mock-llm. This is a scripted plain-text reply, streamed in small chunks so the client's
-     incremental rendering is exercised. No model was called and no tokens were spent.
-
-     Build · Mock Model · 334ms · 157.9 tok/s
+   Mock session                    Mock session                  +
 
   ┃
   ┃  please use a tool
@@ -25,7 +17,15 @@
 
      The shell scenario is complete. MOCK-TOOL-DONE
 
-     Build · Mock Model · 422ms · 151.5 tok/s
+     Build · Mock Model · 8.0s · 142.0 tok/s
+
+
+
+
+
+
+
+
 
   ┃
   ┃

@@ -1,0 +1,35 @@
+   Mock session                  ! Mock session                  +
+
+  ┃
+  ┃  please use a tool
+  ┃
+
+     I will run a shell command.
+
+  ┃
+  ┃  ⠋ echo mock-llm-tool-ok && pwd
+  ┃
+
+     Press ctrl+b to move running work to the background
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃  △ Permission required
+  ┃
+  ┃  $ echo mock-llm-tool-ok && pwd
+  ┃
+  ┃
+  ┃   Allow once   Always allow   Reject                       ctrl+f fullscreen  ⇆ select  enter confirm
+  ┃
