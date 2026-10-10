@@ -272,7 +272,19 @@ impl Vfs {
             while i < p.len() {
                 // Everything below `loc` comes from the image alone: answer
                 // from the image's path table instead of walking components.
-                if loc.img != NONE && img_base != usize::MAX && (loc.ov == NONE || self.dir(loc.ov)?.children.is_empty()) {
+                // That is so when the overlay has nothing here, or nothing under
+                // the next name (an overlay node always has its parents): a mount
+                // point or a written file elsewhere in a directory does not put
+                // its siblings on the slow path.
+                let image_only = loc.img != NONE && img_base != usize::MAX && (loc.ov == NONE || {
+                    let children = &self.dir(loc.ov)?.children;
+                    children.is_empty() || {
+                        let start = (i + 1).min(p.len());
+                        let end = p[start..].iter().position(|&b| b == b'/').map_or(p.len(), |n| start + n);
+                        !children.contains_key(&p[start..end])
+                    }
+                });
+                if image_only {
                     let m = self.image(loc.img);
                     let mut k = p.len();
                     loop {
