@@ -11,7 +11,8 @@ export type ToNetd =
 
 /** netd → service worker. */
 export type FromNetd =
-  | { t: 'response'; id: number; status: number; statusText: string; headers: [string, string][]; body: ReadableStream<Uint8Array> | null }
+  /** `body` is a transferred stream, or the whole body when it is small and its length was announced. */
+  | { t: 'response'; id: number; status: number; statusText: string; headers: [string, string][]; body: ReadableStream<Uint8Array> | ArrayBuffer | null }
   | { t: 'error'; id: number; code: string; message: string }
 
 /** Preview frame shim → netd, over the per-socket channel. */

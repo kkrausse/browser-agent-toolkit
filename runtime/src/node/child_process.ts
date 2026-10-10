@@ -397,16 +397,29 @@ function create(rt: Runtime): any {
       if (listener >= 0) {
         k.setNonblock(listener, true)
         this.#open++
+        // Until the child has connected, messages wait here.
+        const queued: unknown[][] = []
+        this.connected = true
+        ;(this as any).send = (...args: unknown[]) => {
+          queued.push(args)
+          return true
+        }
+        ;(this as any).disconnect = () => {
+          this.connected = false
+        }
         loop.onFd(listener, POLLIN, () => {
           const fd = k.accept(listener)
           if (fd === undefined) return
           loop.offFd(listener)
           k.close(listener)
           listener = -1
+          const wasConnected = this.connected
           channel = attachIpc(this, fd, () => {
             this.#open--
             this.#maybeClose()
           })
+          for (const args of queued) (this as any).send(...args)
+          if (!wasConnected) (this as any).disconnect()
         })
       }
       loop.onChild(r.pid, (status: number) => {

@@ -55,7 +55,7 @@ export function createTransformer(rt: Runtime): Transformer {
   const stats = { transforms: 0, cacheHits: 0, ms: 0, bytes: 0, instantiateMs: 0 }
   let wasm: Exports | undefined
   let cacheReady = false
-  const cacheDir = `${rt.config.cacheDir}/modules`
+  const cacheDir = `${rt.config.cacheDir}/modules-a1`
 
   function instance(): Exports {
     if (!wasm) {
@@ -67,7 +67,8 @@ export function createTransformer(rt: Runtime): Transformer {
   }
 
   function encodeOptions(o: TransformOptions): Uint8Array {
-    let flags = 0
+    // Bit 11: `await x` -> `__bat_u(await __bat_w(x))`, the async-context hooks (node/async_hooks.ts).
+    let flags = 1 << 11
     if (o.packageType === 'commonjs') flags |= 1
     if (o.packageType === 'module') flags |= 2
     if (o.forceKind) flags |= (o.forceKind === 'cjs' ? 1 : 2) << 2

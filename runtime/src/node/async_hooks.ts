@@ -10,18 +10,50 @@
 //     and restores it when run;
 //   - `Promise.prototype.then` (so also `catch`/`finally`) and `queueMicrotask`
 //     are wrapped the same way from the first AsyncLocalStorage on;
-//   - the continuation of a native `await` cannot be intercepted. It runs with
-//     the frame of the callback that resumed it, because the loop then runs one
-//     callback per task and leaves that callback's frame in place while its
-//     microtasks drain; and `run(store, asyncFn)` leaves its frame in place
-//     until the next callback, so the part of `asyncFn` after its first
-//     `await` of an already-settled promise still sees the store.
+//   - `await` itself: the module transform (bat-modules, `async_context`)
+//     compiles `await x` to `__bat_u(await __bat_w(x))`. While a storage is in
+//     use, `__bat_w` pairs the awaited value (or rejection) with the current
+//     frame and `__bat_u` puts the frame back before the function continues
+//     (or rethrows), so the code after an `await`, including `catch` and
+//     `finally`, runs in the context it was suspended in. Before the first
+//     AsyncLocalStorage both are pass-throughs.
 //
-// What this does not give: a continuation resumed by a promise that some
-// *other* context resolved sees that other context's frame.
+// Not covered: the implicit awaits of `for await` and `await using`, and code
+// that reached V8 without the transform (`new Function`, `eval`). There the
+// continuation sees the frame of the callback that resumed it.
 import { ctx, type Frame } from '../process/loop'
 import type { Runtime } from '../process/runtime'
 import { registerBuiltin } from './registry'
+
+/** An awaited outcome travelling with the frame that awaited it. */
+class Held {
+  constructor(
+    readonly frame: Frame,
+    readonly value: unknown,
+    readonly threw: boolean,
+  ) {}
+}
+const nativePromise = Promise
+const nativeThen = Promise.prototype.then
+
+/** The `await` hooks the module transform emits. Installed on the global object at start-up. */
+export function awaitWrap(x: unknown): unknown {
+  if (!ctx.active) return x
+  const frame = ctx.frame
+  return nativeThen.call(
+    nativePromise.resolve(x),
+    (v: unknown) => new Held(frame, v, false),
+    (e: unknown) => new Held(frame, e, true),
+  )
+}
+export function awaitUnwrap(v: unknown): unknown {
+  if (v instanceof Held) {
+    ctx.frame = v.frame
+    if (v.threw) throw v.value
+    return v.value
+  }
+  return v
+}
 
 let activated = false
 function activate(rt: Runtime) {
@@ -29,7 +61,6 @@ function activate(rt: Runtime) {
   activated = true
   ctx.active = true
   const g = rt.host.global
-  const nativeThen = g.Promise.prototype.then
   const wrap = (fn: (v: unknown) => unknown, frame: Frame) =>
     function (this: unknown, v: unknown) {
       const prev = ctx.frame
@@ -126,9 +157,7 @@ function create(rt: Runtime): any {
         ctx.frame = prev
         throw e
       }
-      // An async callback continues after this returns; see the note at the top of the file.
-      if (result === null || (typeof result !== 'object' && typeof result !== 'function') || typeof result.then !== 'function') ctx.frame = prev
-      else deferRestore(frame, prev)
+      ctx.frame = prev
       return result
     }
     exit(fn: (...a: any[]) => any, ...args: unknown[]) {
@@ -159,20 +188,6 @@ function create(rt: Runtime): any {
       this.#enabled = false
     }
   }
-  /**
-   * `run(store, asyncFn)` returned a pending promise. The caller's synchronous
-   * remainder must see its own frame again, but the microtasks that follow in
-   * this task belong to `asyncFn`. A microtask queued now runs after the
-   * caller's synchronous code has finished... and before nothing else we can
-   * order against, so the frame is put back as soon as the caller's stack has
-   * unwound: by a microtask that only acts if nobody replaced the frame since.
-   */
-  function deferRestore(_frame: Frame, prev: Frame) {
-    // Restoring immediately keeps the caller exact; the async body regains its frame through
-    // the wrapped `then`/scheduling for everything except a bare `await` of a settled value.
-    ctx.frame = prev
-  }
-
   const executionAsyncResource = () => rt.process
   return {
     AsyncLocalStorage,

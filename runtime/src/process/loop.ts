@@ -63,10 +63,10 @@ export interface LoopInternals extends Loop {
 }
 
 export function createLoop(host: {
-  setTimeout: typeof setTimeout
-  clearTimeout: typeof clearTimeout
-  queueMicrotask: typeof queueMicrotask
-  MessageChannel: typeof MessageChannel
+  setTimeout(fn: () => void, ms: number): unknown
+  clearTimeout(t: any): void
+  queueMicrotask(fn: () => void): void
+  MessageChannel: { new (): MessageChannel }
 }): LoopInternals {
   let kernel: Kernel | undefined
   let hooks: LoopHooks | undefined
@@ -382,14 +382,15 @@ export function createLoop(host: {
   }
 
   // ---- kernel readiness ----
-  const fdHandlers = new Map<number, (mask: number) => void>()
-  const childHandlers = new Map<number, (status: number) => void>()
-  const watchHandlers = new Map<number, (kind: number, path: string) => void>()
+  // Handlers carry the async context that was current when they were registered.
+  const fdHandlers = new Map<number, [(mask: number) => void, Frame]>()
+  const childHandlers = new Map<number, [(status: number) => void, Frame]>()
+  const watchHandlers = new Map<number, [(kind: number, path: string) => void, Frame]>()
   /** Children that exited before anyone asked. */
   const exited = new Map<number, number>()
   let waiting = false
   /** Kernel events taken but not yet delivered: [handler, args]. */
-  let ready: [(...a: any[]) => void, unknown[]][] = []
+  let ready: [(...a: any[]) => void, unknown[], Frame][] = []
   let readyAt = 0
   /** Move queued kernel events into `ready`. */
   function takeKernel() {
@@ -405,33 +406,33 @@ export function createLoop(host: {
         if (token === TOKEN_WATCH) {
           for (const e of k.watchRead()) {
             const h = watchHandlers.get(e.id)
-            if (h) ready.push([h, [e.kind, e.path]])
+            if (h) ready.push([h[0], [e.kind, e.path], h[1]])
           }
         } else if (token === TOKEN_SIGNAL) {
           const bits = k.sigTake()
-          for (let s = 1; s < 32; s++) if (bits & (1 << s)) ready.push([(sig: number) => hooks?.signal(sig), [s]])
+          for (let s = 1; s < 32; s++) if (bits & (1 << s)) ready.push([(sig: number) => hooks?.signal(sig), [s], undefined])
         } else if (token >= TOKEN_CHILD) {
           const pid = token - TOKEN_CHILD
           const h = childHandlers.get(pid)
           if (h) {
             childHandlers.delete(pid)
-            ready.push([h, [mask]])
+            ready.push([h[0], [mask], h[1]])
           } else exited.set(pid, mask)
         } else {
           // Looked up when delivered: the handler may be replaced or removed by an earlier callback.
-          ready.push([(m: number) => fdHandlers.get(token)?.(m), [mask]])
+          ready.push([(m: number) => fdHandlers.get(token)?.[0](m), [mask], fdHandlers.get(token)?.[1]])
         }
       }
     }
   }
   function stepKernel(): boolean {
     if (readyAt < ready.length) {
-      const [h, args] = ready[readyAt++]
+      const [h, args, frame] = ready[readyAt++]
       if (readyAt === ready.length) {
         ready = []
         readyAt = 0
       }
-      run(h, undefined, undefined, args)
+      run(h, frame, undefined, args)
       return true
     }
     return false
@@ -475,7 +476,7 @@ export function createLoop(host: {
       channel.port2.postMessage(0)
     }
   }
-  let hostTimer: ReturnType<typeof setTimeout> | undefined
+  let hostTimer: unknown
   let hostTimerDue = Infinity
   function scheduleWake() {
     // Drop stale heap heads so they do not keep waking us.
@@ -500,6 +501,7 @@ export function createLoop(host: {
   }
 
   let exitCheck = 0
+  let ranAtTurnStart = 0
   let inTurn = false
   /** 0 idle, 1 timers, 2 kernel events, 3 immediates. A turn that yields between callbacks resumes in its phase. */
   let phase = 0
@@ -511,6 +513,7 @@ export function createLoop(host: {
         stats.turns++
         timerLimit = timerSeq
         phase = 1
+        ranAtTurnStart = ran
       }
       for (;;) {
         let did: boolean
@@ -551,6 +554,8 @@ export function createLoop(host: {
     if (immediates.length) ping()
     scheduleWake()
     armKernelWait()
+    // A turn that ran something starts the countdown again: its callbacks may have queued microtasks.
+    if (ran !== ranAtTurnStart) exitCheck = 0
     if (refs <= 0 && ticks.length === 0 && ready.length === 0) {
       // Let the microtasks this turn produced run, then look again.
       if (exitCheck === 0) {
@@ -581,7 +586,7 @@ export function createLoop(host: {
     refs: () => refs,
     defer,
     onFd(fd, mask, cb) {
-      fdHandlers.set(fd, cb)
+      fdHandlers.set(fd, [cb, ctx.frame])
       kernel!.subscribe(fd, mask)
       // An fd that is already ready queues its event at once: make sure a turn looks.
       ping()
@@ -600,10 +605,10 @@ export function createLoop(host: {
       if (status !== undefined) {
         exited.delete(pid)
         nextTick(cb, status)
-      } else childHandlers.set(pid, cb)
+      } else childHandlers.set(pid, [cb, ctx.frame])
     },
     onWatch(id, cb) {
-      watchHandlers.set(id, cb)
+      watchHandlers.set(id, [cb, ctx.frame])
     },
     offWatch(id) {
       watchHandlers.delete(id)
@@ -627,6 +632,14 @@ export function createLoop(host: {
     stop() {
       stopped = true
       if (hostTimer !== undefined) host.clearTimeout(hostTimer)
+      // Do not leave an async waiter registered on shared memory when this worker is terminated.
+      if (kernel && waiting) {
+        try {
+          Atomics.notify(kernel.inst.i32(), kernel.x.bat_event_word() >>> 2)
+        } catch {
+          // the process record may already be gone
+        }
+      }
     },
   }
 }

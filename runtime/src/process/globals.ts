@@ -2,6 +2,7 @@
 // what a Node program must not see (cheaply: delete the own properties), and
 // install Node's globals. The runtime keeps the browser functions it needs in
 // `host` before this runs.
+import { awaitUnwrap, awaitWrap } from '../node/async_hooks'
 import type { ProcessControl } from '../node/process'
 import type { LoopInternals } from './loop'
 import type { Runtime } from './runtime'
@@ -22,7 +23,9 @@ export function installGlobals(rt: Runtime, loop: LoopInternals, ctl: ProcessCon
   const g = rt.host.global
   for (const name of HIDDEN) {
     try {
-      if (!delete g[name]) Object.defineProperty(g, name, { value: undefined, configurable: true, writable: true })
+      delete g[name]
+      // Most of these live on WorkerGlobalScope.prototype: shadow them on the global object itself.
+      if (name in g) Object.defineProperty(g, name, { value: undefined, configurable: true, writable: true, enumerable: false })
     } catch {
       // not configurable in this browser: leave it
     }
@@ -43,6 +46,8 @@ export function installGlobals(rt: Runtime, loop: LoopInternals, ctl: ProcessCon
     })
 
   define('global', g)
+  define('__bat_w', awaitWrap)
+  define('__bat_u', awaitUnwrap)
   define('process', rt.process)
   define('setTimeout', loop.setTimeout)
   define('setInterval', loop.setInterval)
@@ -51,7 +56,12 @@ export function installGlobals(rt: Runtime, loop: LoopInternals, ctl: ProcessCon
   define('setImmediate', loop.setImmediate)
   define('clearImmediate', loop.clearImmediate)
   lazy('Buffer', () => rt.require('buffer').Buffer)
-  define('navigator', Object.freeze({ hardwareConcurrency: 1, language: 'en-US', languages: ['en-US'], platform: 'linux', userAgent: `Node.js/${rt.config.version.slice(1, 3)}` }))
+  // The runtime's own OPFS code (kernel/opfs.ts) reaches storage through `navigator`: keep that one door, unlisted.
+  const realNavigator = g.navigator
+  const nav = { hardwareConcurrency: 1, language: 'en-US', languages: ['en-US'], platform: 'linux', userAgent: `Node.js/${rt.config.version.slice(1, 3)}` }
+  Object.defineProperty(nav, 'storage', { value: realNavigator?.storage, enumerable: false })
+  Object.defineProperty(nav, 'locks', { value: realNavigator?.locks, enumerable: false })
+  define('navigator', Object.freeze(nav))
   define('console', createConsole(rt, ctl))
   const perf: any = g.performance
   if (perf && !perf.eventLoopUtilization) {

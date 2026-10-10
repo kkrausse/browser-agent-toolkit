@@ -21,6 +21,17 @@ let ctx: NetContext | undefined
 let client: HttpClient | undefined
 const downloads = new Map<number, AbortController>()
 
+const SMALL_BODY = 256 * 1024
+function announcedLength(headers: [string, string][]): number {
+  let length = -1
+  for (const [name, value] of headers) {
+    const lower = name.toLowerCase()
+    if (lower === 'content-length') length = /^\d+$/.test(value) ? Number(value) : -1
+    else if (lower === 'content-type' && /event-stream/i.test(value)) return -1
+  }
+  return length
+}
+
 function serve(port: MessagePort) {
   const inflight = new Map<number, AbortController>()
   const post = (m: FromNetd, transfer: Transferable[] = []) => port.postMessage(m, transfer)
@@ -34,9 +45,29 @@ function serve(port: MessagePort) {
     client!
       .request(m.port, { method: m.method, path: m.path, headers: m.headers, body: m.body, signal: abort.signal })
       .then(
-        (res) => {
+        async (res) => {
+          const head = { t: 'response' as const, id: m.id, status: res.status, statusText: res.statusText, headers: res.headers }
+          if (!res.body) return post({ ...head, body: null })
+          // A transferred stream costs a message port pair and a cross-thread pipe. A small
+          // body of announced length (most module requests of a dev server) is already in
+          // the socket ring or about to be: send it whole. Everything else streams.
+          const length = announcedLength(res.headers)
+          if (length >= 0 && length <= SMALL_BODY) {
+            const whole = new Uint8Array(length)
+            let at = 0
+            const reader = res.body.getReader()
+            for (;;) {
+              const { done, value } = await reader.read()
+              if (done) break
+              if (at + value.length > length) break
+              whole.set(value, at)
+              at += value.length
+            }
+            const buffer = (at === length ? whole : whole.slice(0, at)).buffer as ArrayBuffer
+            return post({ ...head, body: buffer }, [buffer])
+          }
           // The stream is transferred; when the frame cancels it the connection closes.
-          post({ t: 'response', id: m.id, status: res.status, statusText: res.statusText, headers: res.headers, body: res.body }, res.body ? [res.body as unknown as Transferable] : [])
+          post({ ...head, body: res.body }, [res.body as unknown as Transferable])
         },
         (err) => post({ t: 'error', id: m.id, code: String(err?.code ?? err?.name ?? 'EFAIL'), message: String(err?.message ?? err) }),
       )

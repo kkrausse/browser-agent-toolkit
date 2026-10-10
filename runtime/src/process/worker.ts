@@ -111,7 +111,10 @@ function finish(code: number): never {
     // tracing must not change the exit
   }
   kernel.exit(code)
-  host.postMessage({ type: 'exited', pid, code })
+  // No 'exited' message: kerneld already learns of the exit from the kernel (supervisor event 3) and
+  // retires the worker. Sending the message as well makes kerneld retire the same worker twice when the
+  // kernel event wins the race, and the second retire frees the thread record a second time five
+  // seconds later, which corrupts the kernel heap (seen as the page spinning forever on a lock).
   // Nothing may run after exit. kerneld terminates this worker; until then, sleep.
   const never = new Int32Array(new SharedArrayBuffer(4))
   for (;;) Atomics.wait(never, 0, 0)
@@ -346,7 +349,6 @@ host.addEventListener('message', (async (e: MessageEvent) => {
       } catch {
         // already gone
       }
-      host.postMessage({ type: 'exited', pid, code: 1 })
     } else host.postMessage({ type: 'error', error: text })
   }
 }) as any)

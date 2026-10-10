@@ -34,7 +34,7 @@ function setBridge(port: MessagePort) {
   port.onmessage = (e: MessageEvent<FromNetd>) => {
     const m = e.data
     const p = pending.get(m.id)
-    if (!p) return void (m.t === 'response' && m.body?.cancel().catch(() => {}))
+    if (!p) return void (m.t === 'response' && m.body instanceof ReadableStream && m.body.cancel().catch(() => {}))
     pending.delete(m.id)
     if (m.t === 'response') p.resolve(m)
     else p.reject(Object.assign(new Error(m.message), { code: m.code }))
@@ -232,15 +232,16 @@ async function toGuest(event: FetchEvent, guestPort: number, url: URL): Promise<
     }
   }
   for (const [name, value] of ISOLATION) out.set(name, value)
+  const discard = () => (res.body instanceof ReadableStream ? res.body.cancel().catch(() => {}) : undefined)
   if (res.status < 200 || res.status > 599) {
-    await res.body?.cancel().catch(() => {})
+    await discard()
     return plain(502, `The preview server answered with status ${res.status}.`)
   }
   const nullBody = res.status === 204 || res.status === 205 || res.status === 304 || request.method === 'HEAD'
-  let body = nullBody ? null : res.body
-  if (nullBody) void res.body?.cancel().catch(() => {})
+  let body: ReadableStream<Uint8Array> | ArrayBuffer | null = nullBody ? null : res.body
+  if (nullBody) void discard()
   if (body && html && res.status !== 206) {
-    body = injectShim(body)
+    body = injectShim(body instanceof ReadableStream ? body : new Response(body).body!)
     out.delete('content-length')
   }
   return new Response(body, { status: res.status, statusText: /^[\t\x20-\x7e]*$/.test(res.statusText) ? res.statusText : '', headers: out })
@@ -270,6 +271,8 @@ self.addEventListener('fetch', (event) => {
   if (!match) return
   const guestPort = Number(match[1])
   const below = match[2] ?? '/'
+  // Answered here: the cost of the service-worker path alone (docs/experiments/2026-10-09-net.md).
+  if (below === '/__bat/ping') return event.respondWith(new Response('pong', { headers: [...ISOLATION, ['Cache-Control', 'no-store']] }))
   const prefixes = hostPaths.get(guestPort)
   if (prefixes?.some((p) => below === p || below.startsWith(p.endsWith('/') ? p : `${p}/`) || below.startsWith(`${p}?`))) {
     event.respondWith(toHost(event.request, url.origin + below + url.search))
