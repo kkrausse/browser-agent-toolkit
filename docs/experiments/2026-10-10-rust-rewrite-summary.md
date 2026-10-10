@@ -253,6 +253,18 @@ Deduplicated from all nine reports and this pass. "Source" names the report with
 13. **Memory was never measured**: a process worker, the two boot-time spares each holding
     a program script, and the image cache, which has no eviction (reading the whole tree
     holds the image size, 239 MB, in shared memory). (kernel-m0, startup)
+13a. **Chrome charges the origin several times what its files hold.** After two opens the
+    origin's OPFS held 255 MB in 7 files (two images, a 14.9 MB snapshot, the journal) and
+    stayed there over four opens, and clearing the origin freed 243 MB on disk; but
+    `navigator.storage.estimate()` and DevTools' quota figure said 688 MB after the first
+    open and 1,150 MB from the second on, all of it "file system". The origin used for
+    every measurement here (about 60 opens, 5 of them after wiping OPFS) was charged
+    6,550 MB. Measured at the end of this pass, cause not found (candidates: the image is
+    written at offsets while it arrives; each worker holds its own access handle to it).
+    It is quota accounting, not disk, but quota is what eviction and `QuotaExceededError`
+    go by. Also seen: both image files still carried the `.partial` name (with their
+    `.ok` marker) after four opens, where the first-open report says the second open
+    renames them; they are read correctly either way.
 14. Networking limits: guest cookies are invisible to `document.cookie` in the frame and
     the jar is lost when the service worker restarts; `http.request` buffers a whole
     request body; no `Accept-Encoding` on the kernel path; `https.createServer` throws;
@@ -340,6 +352,8 @@ non-lockfile packages; both programs start at once, each in its own boot-time sp
 Older files in `docs/experiments/` (2026-09-29 to 2026-10-03) describe the previous runtime.
 
 ## 9. Not verified in this pass
+
+The cause of the quota figure in 13a, and whether it grows without bound.
 
 Firefox and Safari; an idle machine; a real or throttled network on the final build; a
 reload during a turn; an agent-added dependency; the image-identity check after a toolkit
