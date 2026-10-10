@@ -64,7 +64,7 @@ index 810bad3..7dbd285 100644
 +#[cfg(not(any(feature = "use-dev-tty", target_os = "wasi")))]
  pub(crate) use self::mio::UnixInternalEventSource;
 diff --git a/src/event/source/unix/tty.rs b/src/event/source/unix/tty.rs
-index f67feee..a3a237c 100644
+index f67feee..57a7a1e 100644
 --- a/src/event/source/unix/tty.rs
 +++ b/src/event/source/unix/tty.rs
 @@ -1,9 +1,12 @@
@@ -93,6 +93,22 @@ index f67feee..a3a237c 100644
                  receiver
              },
              #[cfg(feature = "event-stream")]
+@@ -132,7 +137,14 @@ impl EventSource for UnixInternalEventSource {
+             make_pollfd(&self.wake_pipe.receiver),
+         ];
+ 
+-        while timeout.leftover().is_none_or(|t| !t.is_zero())
++        // wasm-term: on wasi the loop runs at least once, so a zero timeout still
++        // hands out events that an earlier read already parsed and takes one
++        // non-blocking look at the descriptors. The async `EventStream` there has
++        // no helper thread to do the reading; it calls this with a zero timeout,
++        // and anything short of that strands parsed events until the next input.
++        let mut first_pass = cfg!(target_os = "wasi");
++        while std::mem::take(&mut first_pass)
++            || timeout.leftover().is_none_or(|t| !t.is_zero())
+             || self.parser.pending_escape_expired()
+         {
+             // check if there are buffered events from the last read
 diff --git a/src/event/sys/unix/waker.rs b/src/event/sys/unix/waker.rs
 index 1c55f3b..e034de5 100644
 --- a/src/event/sys/unix/waker.rs

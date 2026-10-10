@@ -8,14 +8,16 @@
 //! - a current-thread runtime, because wasm32-wasip1 has one thread. tokio's
 //!   I/O driver parks in `poll_oneoff`, which is where the terminal, SIGWINCH
 //!   and the WebSocket are all waited on;
-//! - the remote endpoint is mandatory: `--remote ws://HOST:PORT`, or the
-//!   `CODEX_REMOTE_ADDR` environment variable.
+//! - the remote endpoint is mandatory: `--remote ws://HOST:PORT[/path]`, or the
+//!   `CODEX_REMOTE_ADDR` environment variable;
+//! - `CODEX_WASM_CWD` names the working directory (a path on the server).
 
 use clap::Parser;
 use codex_arg0::Arg0DispatchPaths;
 use codex_config::LoaderOverrides;
 use codex_tui::Cli;
 use codex_tui::ExitReason;
+use codex_tui::RemoteAppServerEndpoint;
 use codex_tui::run_main;
 use codex_utils_cli::CliConfigOverrides;
 use std::io::Write;
@@ -45,8 +47,7 @@ fn main() -> anyhow::Result<()> {
         .ok_or_else(|| {
             anyhow::anyhow!("no app server to connect to: pass --remote ws://HOST:PORT or set CODEX_REMOTE_ADDR")
         })?;
-    let endpoint =
-        codex_tui::resolve_remote_addr(&remote).map_err(|err| anyhow::anyhow!("{err}"))?;
+    let endpoint = resolve_endpoint(&remote)?;
     let mut inner = top_cli.inner;
     inner
         .config_overrides
@@ -93,6 +94,20 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Upstream only takes `ws://host:port` with nothing after it. A browser never
+/// talks to the app-server directly (it rejects requests that carry `Origin`),
+/// so here the address is some proxy's, which usually lives at a path:
+/// `wss://page.example/proxy/codex`. Any ws/wss URL is passed through as it is.
+fn resolve_endpoint(remote: &str) -> anyhow::Result<RemoteAppServerEndpoint> {
+    if remote.starts_with("ws://") || remote.starts_with("wss://") {
+        return Ok(RemoteAppServerEndpoint::WebSocket {
+            websocket_url: remote.to_string(),
+            auth_token: None,
+        });
+    }
+    codex_tui::resolve_remote_addr(remote).map_err(|err| anyhow::anyhow!("{err}"))
+}
+
 /// The emulated machine starts every program in `/` with an empty home. The TUI
 /// requires `$CODEX_HOME` (default `$HOME/.codex`) to be an existing directory
 /// and resolves config layers from the working directory upwards.
@@ -106,8 +121,19 @@ fn prepare_emulated_home() -> anyhow::Result<()> {
     // `std::env::temp_dir()` panics on WASI ("not supported by WASI yet"); the
     // tempfile crate asks it unless told where to go.
     let _ = tempfile::env::override_temp_dir(std::path::Path::new("/tmp"));
-    if std::env::current_dir().is_ok_and(|cwd| cwd == std::path::Path::new("/")) {
-        std::env::set_current_dir(&home)?;
+    // The TUI reports its own working directory to the server as the project
+    // directory (as the native client does with `codex --remote`). Here that is
+    // a path on the server's machine, named by the page; it only has to exist.
+    match std::env::var("CODEX_WASM_CWD").ok().filter(|dir| dir.starts_with('/')) {
+        Some(dir) => {
+            std::fs::create_dir_all(&dir)?;
+            std::env::set_current_dir(&dir)?;
+        }
+        None => {
+            if std::env::current_dir().is_ok_and(|cwd| cwd == std::path::Path::new("/")) {
+                std::env::set_current_dir(&home)?;
+            }
+        }
     }
     Ok(())
 }

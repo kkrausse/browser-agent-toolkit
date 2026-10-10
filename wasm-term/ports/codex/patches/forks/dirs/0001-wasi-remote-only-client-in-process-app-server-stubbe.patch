@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Sat, 10 Oct 2026 00:48:44 -0700
+Subject: [PATCH] wasi: remote-only client (in-process app-server stubbed),
+ startup probe on wasi, local time and home dir through chrono/dirs forks,
+ temp_dir guards, wasm-ship profile
+
+---
+ src/wasm.rs | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/src/wasm.rs b/src/wasm.rs
+index 3ee1d27..ac2b17c 100644
+--- a/src/wasm.rs
++++ b/src/wasm.rs
+@@ -2,6 +2,13 @@
+ 
+ use std::path::PathBuf;
+ 
++// wasm-term: on WASI there is an environment and a filesystem, so the home
++// directory is `$HOME` as on unix (no passwd lookup). The rest stay absent.
++#[cfg(target_os = "wasi")]
++pub fn home_dir() -> Option<PathBuf> {
++    std::env::var_os("HOME").map(PathBuf::from).filter(|home| home.is_absolute())
++}
++#[cfg(not(target_os = "wasi"))]
+ pub fn home_dir()         -> Option<PathBuf> { None }
+ 
+ pub fn cache_dir()        -> Option<PathBuf> { None }

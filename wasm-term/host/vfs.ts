@@ -166,3 +166,20 @@ export function createVfs(): Vfs {
 
   return { root, nowNs, resolve, mkdir, createFile, symlink, mkdirp, writeFile, readFile, write, truncate };
 }
+
+/** Serves the page's `Program.readFile` / `listFiles`: a copy of the file's bytes, or a JSON
+ * array of `{ path, size }` for every regular file below a directory; null when `path` is neither. */
+export function serveFile(vfs: Vfs, op: number, path: string): Uint8Array | null {
+  if (op === 0) return vfs.readFile(path)?.slice() ?? null;
+  const found = vfs.resolve(vfs.root, path, true);
+  if (typeof found === "number" || found.node?.kind !== "dir") return null;
+  const files: { path: string; size: number }[] = [];
+  const walk = (dir: DirNode, prefix: string): void => {
+    for (const [name, node] of dir.entries) {
+      if (node.kind === "dir") walk(node, `${prefix}/${name}`);
+      else if (node.kind === "file") files.push({ path: `${prefix}/${name}`, size: node.size });
+    }
+  };
+  walk(found.node, path.replace(/\/+$/, ""));
+  return new TextEncoder().encode(JSON.stringify(files));
+}

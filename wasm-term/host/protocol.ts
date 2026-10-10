@@ -29,7 +29,11 @@ export const FRAME_RESIZE = 2; // payload: u16 cols, rows, xpixel, ypixel
 export const FRAME_SIGNAL = 3; // payload: u32 signo (sent by the page, e.g. kill)
 export const FRAME_NET = 4; // payload: u32 handle, u32 kind, data
 export const FRAME_CLIPBOARD = 5; // payload: u32 request id, u32 ok (1/0), then the text or the error (utf-8)
+export const FRAME_FILE = 6; // payload: u32 request id, u32 op (FILE_READ / FILE_LIST), then the path (utf-8)
 export const FRAME_MORE = 0x80;
+
+export const FILE_READ = 0;
+export const FILE_LIST = 1;
 
 // FRAME_NET kinds. 1-5 are also the `kind` values of the guest's ws_recv.
 export const WS_OPEN = 1; // data: negotiated subprotocol (utf-8)
@@ -68,7 +72,8 @@ export interface PersistRoots {
 
 export type WorkerMessage =
   | { t: "out"; data: Uint8Array }
-  | { t: "exit"; code: number; signal?: number; error?: string }
+  /** `lingers`: the Worker still answers `FileRequest` messages; the page keeps it until `Program.kill()`. */
+  | { t: "exit"; code: number; signal?: number; error?: string; lingers?: boolean }
   | { t: "drain" }
   | { t: "ws_open"; handle: number; url: string; protocols: string[] }
   | { t: "ws_send"; handle: number; data: Uint8Array | string }
@@ -81,4 +86,16 @@ export type WorkerMessage =
   | { t: "persist"; path: string; data: Uint8Array | null }
   | { t: "clipboard_write"; text: string }
   /** Answered with a FRAME_CLIPBOARD frame carrying the same id. */
-  | { t: "clipboard_read"; id: number };
+  | { t: "clipboard_read"; id: number }
+  /** Answer to a FRAME_FILE frame (or, after exit, a `file` message): the file's bytes, a JSON listing, or null when there is no such path. */
+  | { t: "file"; id: number; data: Uint8Array | null }
+  /** Where a wasm guest is in starting up: fetching the module (bytes so far, of `total` when known), compiling it, running. */
+  | { t: "load"; phase: "download" | "compile" | "start"; loaded: number; total: number };
+
+/** After exit a wasm guest's Worker stays to answer these (its vfs outlives the program). */
+export interface FileRequest {
+  t: "file";
+  id: number;
+  op: number;
+  path: string;
+}

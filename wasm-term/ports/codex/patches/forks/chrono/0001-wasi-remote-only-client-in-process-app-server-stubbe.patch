@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Sat, 10 Oct 2026 00:48:44 -0700
+Subject: [PATCH] wasi: remote-only client (in-process app-server stubbed),
+ startup probe on wasi, local time and home dir through chrono/dirs forks,
+ temp_dir guards, wasm-ship profile
+
+---
+ src/offset/local/mod.rs | 26 ++++++++++++++++++++++++--
+ 1 file changed, 24 insertions(+), 2 deletions(-)
+
+diff --git a/src/offset/local/mod.rs b/src/offset/local/mod.rs
+index 5741d24..ccb7a4b 100644
+--- a/src/offset/local/mod.rs
++++ b/src/offset/local/mod.rs
+@@ -46,13 +46,35 @@ mod inner {
+     pub(super) fn offset_from_utc_datetime(
+         _utc_time: &NaiveDateTime,
+     ) -> MappedLocalTime<FixedOffset> {
+-        MappedLocalTime::Single(FixedOffset::east_opt(0).unwrap())
++        MappedLocalTime::Single(host_offset())
+     }
+ 
+     pub(super) fn offset_from_local_datetime(
+         _local_time: &NaiveDateTime,
+     ) -> MappedLocalTime<FixedOffset> {
+-        MappedLocalTime::Single(FixedOffset::east_opt(0).unwrap())
++        MappedLocalTime::Single(host_offset())
++    }
++
++    /// wasm-term: WASI has no time-zone interface and there is no zone
++    /// database, so the host (the browser page) passes its UTC offset in the
++    /// environment: `WASM_TERM_UTC_OFFSET_MINUTES`, minutes east of UTC at
++    /// program start. One fixed offset: a DST change while the program runs is
++    /// not followed. Absent or malformed means UTC, as before.
++    fn host_offset() -> FixedOffset {
++        #[cfg(target_os = "wasi")]
++        {
++            static OFFSET: std::sync::OnceLock<i32> = std::sync::OnceLock::new();
++            let seconds = *OFFSET.get_or_init(|| {
++                std::env::var("WASM_TERM_UTC_OFFSET_MINUTES")
++                    .ok()
++                    .and_then(|minutes| minutes.trim().parse::<i32>().ok())
++                    .filter(|minutes| minutes.abs() < 24 * 60)
++                    .map_or(0, |minutes| minutes * 60)
++            });
++            return FixedOffset::east_opt(seconds).unwrap_or_else(|| FixedOffset::east_opt(0).unwrap());
++        }
++        #[cfg(not(target_os = "wasi"))]
++        FixedOffset::east_opt(0).unwrap()
+     }
+ }
+ 

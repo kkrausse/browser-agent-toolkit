@@ -12,11 +12,16 @@
 //   /proxy/opencode/...  ->  OPENCODE_UPSTREAM  (default http://127.0.0.1:4792), streamed
 //   /proxy/codex         ->  CODEX_UPSTREAM     (default ws://127.0.0.1:4796), WebSocket
 
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, extname, join, normalize } from "node:path";
 import { nodeShimsPlugin } from "../host/node/bun-plugin";
+import type { Manifest } from "../ports/codex/scripts/package";
+import { codexGuest } from "../ports/codex/web/guest";
 import { opencodeGuest } from "../ports/opencode/web/guest";
-import type { GuestInfo, JsGuest } from "./guests";
+import type { GuestInfo, JsGuest, WasmGuest } from "./guests";
+
+/** Wasm guests that are ports: a packaged directory each (content-hashed, precompressed), served under /guests/<name>/. */
+const wasmGuests: WasmGuest[] = [codexGuest];
 
 /** JavaScript guests (ports). Each is served from its own directory under /guests/<name>/. */
 const jsGuests: JsGuest[] = [
@@ -72,11 +77,47 @@ const TYPES: Record<string, string> = {
   ".json": "application/json",
 };
 
+/** A packaged guest's manifest, read on every use so a rebuild shows up without a restart. */
+function manifestOf(guest: WasmGuest): Manifest | null {
+  const path = join(guest.site, "manifest.json");
+  return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as Manifest) : null;
+}
+
 function guestList(): GuestInfo[] {
   const wasm: GuestInfo[] = existsSync(guestsDir)
     ? readdirSync(guestsDir).filter(name => name.endsWith(".wasm")).sort().map(name => ({ name: basename(name, ".wasm"), kind: "wasm" }))
     : [];
-  return [...wasm, ...jsGuests.map(({ dir, build, entry, ...info }) => info)];
+  const packaged = wasmGuests.map(({ site, build, ...info }): GuestInfo => {
+    const manifest = manifestOf({ site, ...info });
+    const url = (file: string) => `/guests/${info.name}/${file}`;
+    // Not built: the page asks for this path and shows the server's answer, which says how to build it.
+    if (!manifest?.default) return { ...info, module: url("not-built.wasm") };
+    return { ...info, module: url(manifest.default.file), builds: Object.fromEntries(Object.entries(manifest).map(([name, entry]) => [name, url(entry.file)])) };
+  });
+  return [...wasm, ...packaged, ...jsGuests.map(({ dir, build, entry, ...info }) => info)];
+}
+
+/** A packaged module: megabytes, named after its own hash. Sent in the best
+ * encoding the browser takes (compressed once, when it was packaged), with the
+ * real size in a header for the page's progress display, and cacheable for
+ * good: a rebuild has another name. `application/wasm` is what lets the
+ * browser compile it while it downloads. */
+function packagedModule(request: Request, guest: WasmGuest, file: string): Response {
+  const entry = Object.values(manifestOf(guest) ?? {}).find(candidate => candidate.file === file);
+  const path = join(guest.site, file);
+  if (!entry || !existsSync(path)) return respond(`Not built: ${path}\nRun: ${guest.build}\n`, "text/plain", {}, 404);
+  const headers: Record<string, string> = {
+    "Cache-Control": "public, max-age=31536000, immutable",
+    ETag: `"${entry.hash.slice(0, 32)}"`,
+    Vary: "Accept-Encoding",
+    "X-Wasm-Term-Size": String(entry.size),
+  };
+  if (request.headers.get("if-none-match") === headers.ETag) return respond(null, "application/wasm", headers, 304);
+  const accepted = (request.headers.get("accept-encoding") ?? "").split(",").map(part => part.trim().split(";")[0]);
+  for (const [encoding, suffix] of [["br", ".br"], ["gzip", ".gz"]] as const) {
+    if (accepted.includes(encoding) && existsSync(path + suffix)) return respond(Bun.file(path + suffix), "application/wasm", { ...headers, "Content-Encoding": encoding });
+  }
+  return respond(Bun.file(path), "application/wasm", headers);
 }
 
 /** A port's build output: megabytes that change only when rebuilt. Unlike the
@@ -199,6 +240,9 @@ const server = Bun.serve<SocketData>({
     const guest = /^\/guests\/([\w-]+)\.wasm$/.exec(path);
     if (guest) return file(join(guestsDir, `${guest[1]}.wasm`), "application/wasm");
     if (path === "/guests.json") return respond(JSON.stringify(guestList()), "application/json");
+    const packaged = /^\/guests\/([\w-]+)\/([\w.-]+\.wasm)$/.exec(path);
+    const wasmGuest = packaged && wasmGuests.find(candidate => candidate.name === packaged[1]);
+    if (packaged && wasmGuest) return packagedModule(request, wasmGuest, packaged[2]!);
     const jsFile = /^\/guests\/([\w-]+)\/(.+)$/.exec(path);
     const jsGuest = jsFile && jsGuests.find(candidate => candidate.name === jsFile[1]);
     if (jsFile && jsGuest) {
@@ -286,4 +330,4 @@ const server = Bun.serve<SocketData>({
   },
 });
 
-console.log(`wasm-term: ${server.url}  (launcher; or ?guest=repl, ?guest=opencode, ...)`);
+console.log(`wasm-term: ${server.url}  (launcher; or ?guest=repl, ?guest=opencode, ?guest=codex, ...)`);

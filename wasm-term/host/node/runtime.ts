@@ -19,7 +19,7 @@ import { createMachine, type Machine, ProcessExit } from "../machine";
 import { createPersister } from "../persist";
 import { H_WAKE, type InitMessage, type WorkerMessage } from "../protocol";
 import { createRingReader } from "../ring";
-import { createVfs, type Vfs } from "../vfs";
+import { createVfs, serveFile, type Vfs } from "../vfs";
 import { createNodeFs, type NodeFs } from "./fs";
 import { installNodeGlobals } from "./globals";
 import { createNodeProcess } from "./process";
@@ -65,6 +65,11 @@ export async function runJsGuest(init: InitMessage, post: Post): Promise<void> {
   }
   if (init.env.HOME) vfs.mkdirp(init.env.HOME);
   const persister = init.persist ? createPersister(vfs, init.persist, post) : null;
+  // Program.readFile / listFiles from the page (while the program runs; its Worker goes away at exit).
+  machine.onFile = (id, op, path) => {
+    const data = serveFile(vfs, op, path);
+    post({ t: "file", id, data }, data ? [data.buffer] : []);
+  };
 
   let exited = false;
   function exit(code: number, signal?: number, error?: string): void {

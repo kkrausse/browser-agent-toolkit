@@ -87,10 +87,15 @@ impl Stream for EventStream {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
-            // A zero timeout only looks at already-parsed events; the tiny
-            // non-zero one lets the source read whatever the terminal has
-            // ready, and returns at once when there is nothing.
-            match internal::poll(Some(Duration::from_micros(1)), &EventFilter) {
+            // Never blocks: hands out the next event an earlier read already
+            // parsed, else reads whatever the terminal has ready (the wasi
+            // source makes one pass even with a zero timeout). It must not
+            // depend on a timeout still having time left: a 1 µs one had
+            // usually expired before the source looked, by the clock's own
+            // granularity, and the rest of a burst (a fast-typed line, key
+            // repeat, wheel reports) then sat in the parser until the next
+            // keystroke.
+            match internal::poll(Some(Duration::ZERO), &EventFilter) {
                 Ok(true) => {
                     return match internal::read(&EventFilter) {
                         Ok(InternalEvent::Event(event)) => Poll::Ready(Some(Ok(event))),

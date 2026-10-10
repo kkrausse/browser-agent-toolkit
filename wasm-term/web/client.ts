@@ -4,8 +4,11 @@
 //   /?guest=repl                 which guest to run (see /guests.json)
 //   &arg=a&arg=b                 extra argv entries
 //   &env=KEY=value               extra environment
-//   &<param>=value               a guest's own settings (opencode: server, password, dir);
-//                                server defaults to /proxy/opencode on this origin
+//   &<param>=value               a guest's own settings (opencode: server, password, dir;
+//                                codex: remote, dir, sandbox); the server settings default
+//                                to this origin's reverse proxy
+//   &build=<name>                another build of a packaged guest (codex: names)
+//   &renderer=canvas|webgl       which terminal renderer (default: WebGL unless it is software-emulated)
 //   &persist=0                   do not load or store the guest's persistent directories
 //   &reset=1                     forget what was stored for this guest first
 //
@@ -34,6 +37,15 @@ declare global {
       exit: ExitStatus | null;
       /** What programs get as the system clipboard; replaceable (tests, browsers without the async clipboard API). */
       clipboard: ClipboardBridge;
+      /** Debugging: a file out of the program's filesystem as text (null = no such file), e.g.
+       * `await wasmTerm.readFile("/home/user/.codex/log/codex-tui.log")`. Works after the program has exited too. */
+      readFile(path: string): Promise<string | null>;
+      /** Debugging: every file below a directory, with sizes. */
+      listFiles(directory?: string): Promise<{ path: string; size: number }[]>;
+      /** Debugging: saves a file out of the program's filesystem through the browser's download. */
+      download(path: string): Promise<boolean>;
+      /** How the module arrived: milliseconds from the Worker's start to each phase, and the bytes. */
+      load: { downloadedMs?: number; compiledMs?: number; bytes?: number };
     };
   }
 }
@@ -60,9 +72,28 @@ if (!crossOriginIsolated) fatal("This page is not cross-origin isolated; SharedA
 if (!/^[\w-]+$/.test(guest)) fatal(`Bad guest name: ${guest}`);
 const info: GuestInfo = guests.find(candidate => candidate.name === guest) ?? { name: guest, kind: "wasm" };
 
+/** WebGL where there is a GPU. Without one (headless and remote-desktop browsers) the browser
+ * emulates WebGL in software, slowly enough (seconds per frame, measured with codex's animated
+ * start screen in headless Chrome) to starve this thread, which also carries the program's input
+ * and network traffic. There the 2D canvas renderer is the fast one. `&renderer=` overrides. */
+function rendererChoice(): "webgl" | "canvas" {
+  const asked = params.get("renderer");
+  if (asked === "canvas" || asked === "webgl") return asked;
+  try {
+    const gl = document.createElement("canvas").getContext("webgl2");
+    const info = gl?.getExtension("WEBGL_debug_renderer_info");
+    const name = String((info && gl?.getParameter(info.UNMASKED_RENDERER_WEBGL)) ?? "");
+    gl?.getExtension("WEBGL_lose_context")?.loseContext();
+    if (/swiftshader|llvmpipe|softpipe|software/i.test(name)) return "canvas";
+  } catch {
+    // no WebGL at all: the terminal falls back by itself
+  }
+  return "webgl";
+}
+
 await init();
 const terminal = new Terminal({
-  rendererType: "webgl",
+  rendererType: rendererChoice(),
   // Ctrl+V is the terminal's literal-next key (and a key binding in many TUIs),
   // not paste: paste stays on Cmd+V / Ctrl+Shift+V and the browser's paste event.
   ctrlVPaste: false,
@@ -99,9 +130,15 @@ for (const pair of params.getAll("env")) {
 // A URL setting that is only a path means "on this page's origin": the dev
 // server's reverse proxy, the default, which works from any device the page
 // itself loads on.
+const guestArgs: string[] = [];
 for (const param of info.params ?? []) {
-  const value = params.get(param.query) ?? param.default;
-  env[param.env] = param.url && value.startsWith("/") ? new URL(value, location.origin).href.replace(/\/$/, "") : value;
+  let value = params.get(param.query) ?? param.default;
+  if (param.url && value.startsWith("/")) {
+    value = new URL(value, location.origin).href.replace(/\/$/, "");
+    if (param.url === "ws") value = value.replace(/^http/, "ws");
+  }
+  if (param.env) env[param.env] = value;
+  if (param.args && value !== "") guestArgs.push(...param.args.map(arg => arg.replaceAll("{}", value)));
 }
 
 const persist = params.get("persist") === "0"
@@ -114,14 +151,28 @@ const clipboard: ClipboardBridge = {
   writeText: text => navigator.clipboard.writeText(text),
 };
 
+// A large module takes a while to arrive and compile; say so instead of showing an empty terminal.
+const loading = document.querySelector<HTMLDivElement>("#loading")!;
+const megabytes = (bytes: number) => `${(bytes / 1e6).toFixed(bytes < 1e7 ? 1 : 0)} MB`;
+const loadStarted = performance.now();
+const load: Window["wasmTerm"]["load"] = {};
+let loadingShown: ReturnType<typeof setTimeout> | undefined = setTimeout(() => loading.classList.add("shown"), 300);
+function hideLoading(): void {
+  clearTimeout(loadingShown);
+  loadingShown = undefined;
+  loading.classList.remove("shown");
+}
+
+const build = params.get("build");
+const moduleUrl = (build && info.builds?.[build]) || info.module || `/guests/${guest}.wasm`;
 const sent: string[] = [];
 const pixels = cellPixels();
 const program = startProgram({
-  guestUrl: info.kind === "js" ? `/guests/${guest}/guest.js` : `/guests/${guest}.wasm`,
+  guestUrl: info.kind === "js" ? `/guests/${guest}/guest.js` : moduleUrl,
   kernelUrl: "/kernel.wasm",
   workerUrl: info.kind === "js" ? "/js-worker.js" : "/worker.js",
-  args: [guest, ...params.getAll("arg")],
-  env: { ...env, WASM_TERM_ORIGIN: location.origin },
+  args: [guest, ...guestArgs, ...params.getAll("arg")],
+  env: { ...info.env, ...env, WASM_TERM_ORIGIN: location.origin },
   cols: terminal.cols,
   rows: terminal.rows,
   xpixel: Math.round(pixels.width * terminal.cols),
@@ -132,8 +183,28 @@ const program = startProgram({
     readText: () => window.wasmTerm.clipboard.readText(),
     writeText: text => window.wasmTerm.clipboard.writeText(text),
   },
-  onOutput: data => terminal.write(data),
+  onOutput(data) {
+    if (loadingShown !== undefined) hideLoading();
+    terminal.write(data);
+  },
+  onLoad({ phase, loaded, total }) {
+    const label = loading.querySelector<HTMLElement>(".label")!;
+    const bar = loading.querySelector<HTMLElement>(".bar > div")!;
+    if (phase === "download") {
+      label.textContent = total ? `Loading ${guest}: ${megabytes(loaded)} of ${megabytes(total)}` : `Loading ${guest}: ${megabytes(loaded)}`;
+      bar.style.width = total ? `${Math.min(100, (loaded / total) * 100).toFixed(1)}%` : "0";
+    } else if (phase === "compile") {
+      load.downloadedMs = Math.round(performance.now() - loadStarted);
+      load.bytes = loaded;
+      label.textContent = `Compiling ${guest} (${megabytes(loaded)})`;
+      bar.style.width = "100%";
+    } else {
+      load.compiledMs = Math.round(performance.now() - loadStarted);
+      label.textContent = `Starting ${guest}`;
+    }
+  },
   onExit(status) {
+    hideLoading();
     window.wasmTerm.exit = status;
     const how = status.signal ? `killed by signal ${status.signal}` : `exit code ${status.code}`;
     const detail = status.error ? `\r\n${status.error.replaceAll(/\r?\n/g, "\r\n")}` : "";
@@ -177,6 +248,20 @@ window.wasmTerm = {
   sent,
   exit: null,
   clipboard,
+  load,
+  async readFile(path) {
+    const data = await program.readFile(path);
+    return data && new TextDecoder().decode(data);
+  },
+  listFiles: (directory = "/") => program.listFiles(directory),
+  async download(path) {
+    const data = await program.readFile(path);
+    if (!data) return false;
+    const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([data as BlobPart])), download: path.split("/").pop() || "file" });
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+    return true;
+  },
   screen() {
     const buffer = terminal.buffer.active;
     const lines: string[] = [];

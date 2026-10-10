@@ -4,7 +4,7 @@
 
 import type { Pty } from "./kernel";
 import {
-  FRAME_CLIPBOARD, FRAME_INPUT, FRAME_NET, FRAME_RESIZE, FRAME_SIGNAL, H_OUT_ACK, HTTP_BODY, HTTP_END, HTTP_ERROR, HTTP_HEAD,
+  FRAME_CLIPBOARD, FRAME_FILE, FRAME_INPUT, FRAME_NET, FRAME_RESIZE, FRAME_SIGNAL, H_OUT_ACK, HTTP_BODY, HTTP_END, HTTP_ERROR, HTTP_HEAD,
   OUT_WINDOW, WS_CLOSE, WS_ERROR, type WorkerMessage,
 } from "./protocol";
 import type { RingReader } from "./ring";
@@ -86,6 +86,8 @@ export interface Machine {
   lastError: string;
   /** Called from `pump()` with the page's answer to a `clipboard_read` request. */
   onClipboard: ((id: number, ok: boolean, text: string) => void) | null;
+  /** Called from `pump()` when the page asks for a file or a directory listing (`Program.readFile` / `listFiles`). */
+  onFile: ((id: number, op: number, path: string) => void) | null;
 }
 
 export function createMachine(pty: Pty, ring: RingReader, postMessage: (message: WorkerMessage, transfer: Transferable[]) => void): Machine {
@@ -174,6 +176,9 @@ export function createMachine(pty: Pty, ring: RingReader, postMessage: (message:
       } else if (frame.type === FRAME_CLIPBOARD) {
         const view = new DataView(frame.payload.buffer, frame.payload.byteOffset);
         machine.onClipboard?.(view.getUint32(0, true), view.getUint32(4, true) === 1, new TextDecoder().decode(frame.payload.subarray(8)));
+      } else if (frame.type === FRAME_FILE) {
+        const view = new DataView(frame.payload.buffer, frame.payload.byteOffset);
+        machine.onFile?.(view.getUint32(0, true), view.getUint32(4, true), new TextDecoder().decode(frame.payload.subarray(8)));
       }
     }
     if (consumed && ring.writerWaiting()) post({ t: "drain" });
@@ -213,6 +218,7 @@ export function createMachine(pty: Pty, ring: RingReader, postMessage: (message:
     net,
     lastError: "",
     onClipboard: null,
+    onFile: null,
   };
   return machine;
 }

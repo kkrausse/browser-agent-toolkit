@@ -16,6 +16,8 @@
 //   resize:CxR     change the window size
 //   screen         print the screen
 //   raw            print the bytes the program has written so far, escaped
+//   cat:PATH       print a file out of the program's filesystem (e.g. its log)
+//   ls:DIR         list the files below a directory of the program's filesystem
 // The screen is printed once more when the steps run out or the program exits.
 
 import { Terminal } from "@xterm/headless";
@@ -122,7 +124,12 @@ for (const step of steps) {
     terminal.resize(c!, r!);
     program.resize(c!, r!);
   } else if (kind === "screen") await show(`screen after ${steps.indexOf(step)} steps`);
-  else if (kind === "raw") {
+  else if (kind === "cat") {
+    const data = await program.readFile(value);
+    console.log(`\n===== ${value} =====\n${data ? new TextDecoder().decode(data) : "(no such file)"}\n=====`);
+  } else if (kind === "ls") {
+    console.log(`\n===== ${value} =====\n${(await program.listFiles(value)).map(file => `${String(file.size).padStart(8)}  ${file.path}`).join("\n")}\n=====`);
+  } else if (kind === "raw") {
     console.log(JSON.stringify(Buffer.concat(raw).toString("utf8")));
   } else throw new Error(`unknown step ${step}`);
 }

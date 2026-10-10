@@ -19,11 +19,16 @@
       .terminal-keys { display: grid; padding-bottom: max(6px, env(safe-area-inset-bottom)); }
       #terminal { touch-action: pinch-zoom; }
     }
+    #loading { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #a6a69c; font: 14px/1.4 ui-monospace, monospace; pointer-events: none; }
+    #loading.shown { display: flex; }
+    #loading .bar { width: min(320px, 70vw); height: 4px; border-radius: 2px; background: #2a2a37; overflow: hidden; }
+    #loading .bar > div { width: 0; height: 100%; background: #7e9cd8; transition: width 0.15s linear; }
     #fatal { position: fixed; inset: 0; margin: 0; padding: 16px; color: #e06c75; font: 14px/1.4 monospace; white-space: pre-wrap; display: none; }
   </style>
 </head>
 <body>
   <div id="terminal"></div>
+  <div id="loading" role="status" aria-live="polite"><div class="label">Loading</div><div class="bar"><div></div></div></div>
   <pre id="fatal"></pre>
   <script type="module" src="/client.js"></script>
 </body>
