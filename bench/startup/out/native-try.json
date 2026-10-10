@@ -1,0 +1,207 @@
+{
+ "meta": {
+  "label": "native-try",
+  "date": "2026-10-10T08:09:26.187Z",
+  "node": "v24.18.0",
+  "prepared": "/home/kkrausse/devfs/repos/kkrausse/bat-rust/target-perf/tree/examples/todo-app/.editor/prepared",
+  "image": "image-5ac8e77d1366c361.batimg"
+ },
+ "summary": {
+  "vite": {
+   "load1": {
+    "n": 3,
+    "median": 37.59,
+    "min": 36.25,
+    "max": 37.59
+   },
+   "listening": {
+    "n": 3,
+    "median": 1136.6,
+    "min": 927.4,
+    "max": 1298.3
+   },
+   "document": {
+    "n": 3,
+    "median": 2292.3,
+    "min": 2108.4,
+    "max": 2364.2
+   },
+   "page": {
+    "n": 3,
+    "median": 2870.9,
+    "min": 2493.4,
+    "max": 2885.5
+   },
+   "requests": {
+    "n": 3,
+    "median": 31,
+    "min": 31,
+    "max": 31
+   },
+   "viteReadyIn": {
+    "n": 3,
+    "median": 1074,
+    "min": 892,
+    "max": 1224
+   }
+  }
+ },
+ "samples": [
+  {
+   "kind": "vite",
+   "load": [
+    36.25,
+    26.2,
+    25.67
+   ],
+   "listening": 1298.3,
+   "document": 2292.3,
+   "page": 2870.9,
+   "requests": 31,
+   "viteReadyIn": 1224,
+   "slowest": [
+    {
+     "url": "/preview/5173/",
+     "at": 1298,
+     "ms": 994,
+     "bytes": 14124
+    },
+    {
+     "url": "/preview/5173/@id/__x00__virtual:react-router/hmr-runtime",
+     "at": 2333,
+     "ms": 428,
+     "bytes": 73144
+    },
+    {
+     "url": "/preview/5173/@vite/client",
+     "at": 2307,
+     "ms": 376,
+     "bytes": 179480
+    },
+    {
+     "url": "/preview/5173/src/home.tsx",
+     "at": 2296,
+     "ms": 359,
+     "bytes": 16869
+    },
+    {
+     "url": "/preview/5173/.browser-editor-cache/vite/deps/chunk-TRTQSARU.js?v=835ed04b",
+     "at": 2340,
+     "ms": 356,
+     "bytes": 7552
+    },
+    {
+     "url": "/preview/5173/.browser-editor-cache/vite/deps/react_jsx-dev-runtime.js?v=835ed04b",
+     "at": 2324,
+     "ms": 342,
+     "bytes": 12502
+    }
+   ],
+   "optimizerRan": false
+  },
+  {
+   "kind": "vite",
+   "load": [
+    37.59,
+    26.64,
+    25.81
+   ],
+   "listening": 927.4,
+   "document": 2364.2,
+   "page": 2885.5,
+   "requests": 31,
+   "viteReadyIn": 892,
+   "slowest": [
+    {
+     "url": "/preview/5173/",
+     "at": 927,
+     "ms": 1436,
+     "bytes": 14124
+    },
+    {
+     "url": "/preview/5173/@id/__x00__virtual:react-router/hmr-runtime",
+     "at": 2416,
+     "ms": 381,
+     "bytes": 73144
+    },
+    {
+     "url": "/preview/5173/src/home.tsx",
+     "at": 2372,
+     "ms": 336,
+     "bytes": 16869
+    },
+    {
+     "url": "/preview/5173/@vite/client",
+     "at": 2388,
+     "ms": 336,
+     "bytes": 179480
+    },
+    {
+     "url": "/preview/5173/.browser-editor-cache/vite/deps/chunk-TRTQSARU.js?v=835ed04b",
+     "at": 2423,
+     "ms": 321,
+     "bytes": 7552
+    },
+    {
+     "url": "/preview/5173/.browser-editor-cache/vite/deps/react_jsx-dev-runtime.js?v=835ed04b",
+     "at": 2402,
+     "ms": 309,
+     "bytes": 12502
+    }
+   ],
+   "optimizerRan": false
+  },
+  {
+   "kind": "vite",
+   "load": [
+    37.59,
+    26.64,
+    25.81
+   ],
+   "listening": 1136.6,
+   "document": 2108.4,
+   "page": 2493.4,
+   "requests": 31,
+   "viteReadyIn": 1074,
+   "slowest": [
+    {
+     "url": "/preview/5173/",
+     "at": 1137,
+     "ms": 972,
+     "bytes": 14124
+    },
+    {
+     "url": "/preview/5173/@vite/client",
+     "at": 2124,
+     "ms": 277,
+     "bytes": 179488
+    },
+    {
+     "url": "/preview/5173/src/editing.tsx",
+     "at": 2184,
+     "ms": 229,
+     "bytes": 2088
+    },
+    {
+     "url": "/preview/5173/src/style.css?url",
+     "at": 2184,
+     "ms": 223,
+     "bytes": 379
+    },
+    {
+     "url": "/preview/5173/@id/__x00__virtual:react-router/hmr-runtime",
+     "at": 2147,
+     "ms": 219,
+     "bytes": 73144
+    },
+    {
+     "url": "/preview/5173/.browser-editor-cache/vite/deps/react-dom_client.js?v=835ed04b",
+     "at": 2138,
+     "ms": 216,
+     "bytes": 1113637
+    }
+   ],
+   "optimizerRan": false
+  }
+ ]
+}

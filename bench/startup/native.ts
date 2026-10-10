@@ -127,7 +127,7 @@ for (let i = 0; i < n; i++) {
       const r = await run(join(scratch, `ws-${kind}`), app)
       const sample = { kind, load: before, ...Object.fromEntries(Object.entries(r).map(([k, v]) => [k, round(v)])) }
       samples.push(sample)
-      console.error(`${String(i + 1).padStart(2)} ${kind.padEnd(8)} load ${before[0].toFixed(1).padStart(5)}  ${Object.entries(sample).filter(([k]) => !['kind', 'load', 'target'].includes(k)).map(([k, v]) => `${k} ${v}`).join('  ')}`)
+      console.error(`${String(i + 1).padStart(2)} ${kind.padEnd(8)} load ${before[0].toFixed(1).padStart(5)}  ${Object.entries(sample).filter(([k]) => !['kind', 'load', 'target', 'slowest'].includes(k)).map(([k, v]) => `${k} ${v}`).join('  ')}`)
     } catch (e) {
       console.error(`${i + 1} ${kind} failed: ${(e as Error).message.slice(0, 3000)}`)
     }

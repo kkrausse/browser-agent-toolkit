@@ -38,12 +38,16 @@ async function vite() {
   const origin = `http://127.0.0.1:${launch.port}`
   const base = `/preview/${launch.port}/`
   const seen = new Map<string, Promise<{ body: string; type: string; status: number }>>()
+  const timings: { url: string; at: number; ms: number; bytes: number }[] = []
   const get = (url: string, accept: string) => {
     let p = seen.get(url)
     if (!p) {
       p = (async () => {
+        const at = performance.now()
         const response = await fetch(origin + url, { headers: { accept, 'sec-fetch-dest': accept.includes('html') ? 'document' : 'script' } })
-        return { body: await response.text(), type: response.headers.get('content-type') ?? '', status: response.status }
+        const body = await response.text()
+        timings.push({ url: url.slice(0, 90), at: Math.round(at - t0), ms: Math.round(performance.now() - at), bytes: body.length })
+        return { body, type: response.headers.get('content-type') ?? '', status: response.status }
       })()
       seen.set(url, p)
     }
@@ -74,7 +78,7 @@ async function vite() {
   await sleep(300)
   const reported = /ready in (\d+)/.exec(state.log.replace(/\x1b\[[0-9;]*m/g, ''))?.[1]
   await finish(child, 'SIGTERM')
-  return { listening, document, page, requests: seen.size, viteReadyIn: reported ? Number(reported) : undefined, optimizerRan: /optimized dependencies changed|new dependencies optimized|Re-optimizing/i.test(state.log) }
+  return { listening, document, page, requests: seen.size, viteReadyIn: reported ? Number(reported) : undefined, slowest: timings.sort((a, b) => b.ms - a.ms).slice(0, 6), optimizerRan: /optimized dependencies changed|new dependencies optimized|Re-optimizing/i.test(state.log) }
 }
 
 async function openCode() {

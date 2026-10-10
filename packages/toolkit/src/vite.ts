@@ -64,6 +64,13 @@ export function browserEditor(options: BrowserEditorOptions): any {
       const original = config.assetsInclude;
       config.assetsInclude = function assetsInclude(file: string) { return original(file); };
     },
+    transform(code: string, id: string) {
+      // An optimized dependency has no source map here (see `config`). Vite then makes one up
+      // for every such response, with the whole file as its content: react-dom's 1.1 MB chunk
+      // went out as 6.1 MB and took the server 290 ms (native: 500-750 ms under load). A map
+      // with empty mappings is Vite's way of saying "none, and do not invent one".
+      if (isGuest() && id.includes('/.browser-editor-cache/vite/deps/')) return { code, map: { mappings: '' } };
+    },
     load(id: string) {
       if (isGuest() && id.split('?')[0] === editingModule) return 'export default function Editing(){return null}';
     },
