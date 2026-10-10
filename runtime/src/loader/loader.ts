@@ -68,6 +68,8 @@ export interface Loader {
   /** Compile function-body text as CommonJS at `filename` and run it against `module` (Module.prototype._compile). */
   compileCjs(source: string, filename: string, module: any): any
   main(): any
+  /** URL of the program script that contains `path`, if it is not loaded yet. */
+  programUrl(path: string): string | undefined
   stats: Record<string, number>
 }
 
@@ -118,9 +120,7 @@ export function createLoader(rt: Runtime, builtins: Builtins): Loader {
   })
   let programOf: Map<string, string> | undefined
   const programLoaded = new Set<string>()
-  function programFunction(path: string): Function | undefined {
-    const have = defined.get(path)
-    if (have) return have
+  function programName(path: string): string | undefined {
     if (!programOf) {
       programOf = new Map()
       const names = kernel.imageNames()
@@ -137,7 +137,12 @@ export function createLoader(rt: Runtime, builtins: Builtins): Loader {
         }
       }
     }
-    const name = programOf.get(path)
+    return programOf.get(path)
+  }
+  function programFunction(path: string): Function | undefined {
+    const have = defined.get(path)
+    if (have) return have
+    const name = programName(path)
     if (name === undefined || programLoaded.has(name)) return undefined
     programLoaded.add(name)
     const url = rt.config.programs[name]
@@ -725,6 +730,19 @@ export function createLoader(rt: Runtime, builtins: Builtins): Loader {
     resolve,
     compileCjs,
     main: () => main?.module,
+    programUrl(path) {
+      let real = path
+      try {
+        real = kernel.realpath(path)
+      } catch {
+        return undefined
+      }
+      const name = programName(real)
+      if (name === undefined || programLoaded.has(name) || defined.has(real)) return undefined
+      programLoaded.add(name)
+      stats.programs++
+      return rt.config.programs[name]
+    },
   }
   ;(Module as any)._extensions = extensions
   ;(Module as any)._cache = cache

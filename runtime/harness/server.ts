@@ -9,7 +9,10 @@
 //   /runtime/<file>        runtime/dist/<file>            Cache-Control: no-cache (revalidated, ETag)
 //   /runtime/v/<tag>/<file>  same bytes, immutable for a year (code-cache experiments)
 //   /prepared/<file>       prepared output directory, content-addressed names → immutable
+//   /prepared-v/<tag>/<file>  same bytes, immutable, fresh URL per tag
+//   /prepared-revalidate/<tag>/<file>  same bytes, no-cache (ETag revalidation)
 //   /prepared-nocache/<file>  same bytes, no-store
+//   /sw-cache/<tag>/<file>    answered by harness/sw.js from Cache Storage (page query sw=1)
 //   /kernel.wasm           the kernel build (target-runtime if present, else target-kernel)
 import { existsSync, statSync } from 'node:fs'
 import { join, normalize } from 'node:path'
@@ -66,7 +69,11 @@ Bun.serve({
       await Bun.write(Bun.file('/tmp/bat-harness-beat.log'), `${Date.now()} ${url.search}\n`)
       return new Response('', { headers: isolation })
     }
-    if (path === '/sw.js') return file(req, join(here, 'sw.js'), 'no-store')
+    if (path === '/sw.js') {
+      const r = await file(req, join(here, 'sw.js'), 'no-store')
+      r.headers.set('Service-Worker-Allowed', '/')
+      return r
+    }
     if (path === '/kernel.wasm') return file(req, kernelWasm(), 'no-cache')
     let m = /^\/runtime\/v\/[^/]+\/(.+)$/.exec(path)
     if (m) return file(req, join(dist, m[1]), IMMUTABLE)
@@ -74,6 +81,11 @@ Bun.serve({
     if (m) return file(req, join(dist, m[1]), 'no-cache')
     m = /^\/prepared\/(.+)$/.exec(path)
     if (m) return file(req, join(prepared, m[1]), m[1] === 'manifest.json' ? 'no-cache' : IMMUTABLE)
+    // Same bytes under a fresh URL: a cache experiment starts from nothing by picking a new tag.
+    m = /^\/prepared-v\/[^/]+\/(.+)$/.exec(path)
+    if (m) return file(req, join(prepared, m[1]), IMMUTABLE)
+    m = /^\/prepared-revalidate\/[^/]+\/(.+)$/.exec(path)
+    if (m) return file(req, join(prepared, m[1]), 'no-cache')
     m = /^\/prepared-nocache\/(.+)$/.exec(path)
     if (m) return file(req, join(prepared, m[1]), 'no-store')
     return new Response('not found', { status: 404, headers: isolation })

@@ -242,6 +242,34 @@ function run(info: ProcInfo) {
   })
   // Held until the entry's synchronous part has run, so an early empty turn is not mistaken for the end.
   loop.ref()
+  // The entry's program script is fetched with import() (as a module), not importScripts(): measured
+  // in Chrome 154, only that path gets a V8 code cache (docs/experiments/2026-10-09-node-runtime.md).
+  // Programs met later, during synchronous loading, still use importScripts.
+  if (config.programLoad !== 'importScripts' && script !== undefined && script !== '-') {
+    const url = loader.programUrl(script)
+    if (url) {
+      rt.mark('entry')
+      ;(importModule(url) as Promise<unknown>).then(
+        () => {
+          rt.mark(`program ${url.slice(url.lastIndexOf('/') + 1, url.lastIndexOf('-'))}`.replace('program program-', 'program '))
+          startEntry(launch, script, true)
+        },
+        (e) => {
+          ctl.mainSettled()
+          ctl.uncaught(e)
+          loop.unref()
+        },
+      )
+      return
+    }
+  }
+  startEntry(launch, script, false)
+}
+
+// `import()` must not be seen by the bundler, and a classic worker script may use it.
+const importModule = new Function('u', 'return import(u)') as (url: string) => Promise<unknown>
+
+function startEntry(launch: Launch, script: string | undefined, marked: boolean) {
   try {
     if (launch.version) {
       ctl.writeFd(1, `${config.version}\n`)
@@ -254,7 +282,7 @@ function run(info: ProcInfo) {
       else void loader.import(p.id, base)
     }
     let pending: Promise<unknown> | undefined
-    rt.mark('entry')
+    if (!marked) rt.mark('entry')
     if (launch.evalSource !== undefined) {
       if (launch.print) {
         // The value of the script is the value of a direct eval inside a CommonJS wrapper (so `require` is in scope).

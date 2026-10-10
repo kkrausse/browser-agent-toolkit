@@ -4,6 +4,7 @@
 import { bootKernel, type BootedKernel } from '../src/kernel/boot'
 import { POLLHUP, POLLIN, TOKEN_CHILD, type Kernel } from '../src/kernel/kernel'
 import { processWorkerUrl } from '../src/process/config'
+import { DEFAULT_CONFIG } from '../src/process/runtime'
 
 export interface RunOptions {
   /** argv after `node`. */
@@ -53,6 +54,13 @@ const readers = new Map<number, () => void>()
 
 async function start() {
   out.textContent = ''
+  if (params.get('sw') === '1') {
+    await navigator.serviceWorker.register('/sw.js', { scope: '/' })
+    await navigator.serviceWorker.ready
+    if (!navigator.serviceWorker.controller) await new Promise((r) => navigator.serviceWorker.addEventListener('controllerchange', r, { once: true }))
+  } else {
+    for (const r of await navigator.serviceWorker.getRegistrations()) if (r.active?.scriptURL.endsWith('/sw.js')) await r.unregister()
+  }
   const t0 = performance.now()
   const prepared = params.get('prepared') ?? '/prepared/'
   manifest = await (await fetch(`${prepared}manifest.json`)).json()
@@ -68,7 +76,10 @@ async function start() {
       nodelibUrl: 'bat-nodelib.js',
       wasm: { modules: 'bat_modules.wasm', native: 'bat_node_native.wasm', sqlite: 'sqlite3.wasm' },
       programs,
+      // As the host SDK does: route the guest's global fetch (loopback goes to kernel sockets).
+      prewarm: [...DEFAULT_CONFIG.prewarm, 'bat:net-globals'],
       trace: params.has('trace'),
+      programLoad: params.get('pm') === 'importScripts' ? 'importScripts' : undefined,
     }),
     processWorkerType: 'classic',
     namespace: params.get('ns') ?? 'bat-node',

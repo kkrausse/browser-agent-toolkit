@@ -16,6 +16,8 @@ export interface RuntimeConfig {
   version: string
   /** Builtins to instantiate in the warm spare before a pid is assigned. */
   prewarm: string[]
+  /** How the entry's program script is fetched: import() as a module (default; code-cached by Chrome) or importScripts. */
+  programLoad?: 'importScripts' | 'import'
   /** Write loader/boot timings to stderr at exit when set (also env BAT_TRACE=1). */
   trace?: boolean
 }
