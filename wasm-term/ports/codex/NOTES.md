@@ -34,17 +34,21 @@ start screen, prompt and streamed reply, tool call, approval prompt, resize, `/q
 What it took, all reproducible (section 7 has the commands, the burn-down table, what is
 stubbed, what was observed and what is still open):
 
-- 13 small crates.io forks (cfg arms and stand-ins; `scripts/forks.txt`) and a tokio fork that
+- 15 small crates.io forks (cfg arms and stand-ins; `scripts/forks.txt`) and a tokio fork that
   adds API-compatible `process` / `signal` / socket stand-ins and an inline blocking pool;
 - crossterm from `wasm-term/guests/crossterm-wasi` (the kernel side's backend, used as is);
-- a patch series of 36 files on the codex workspace, mostly third `cfg` arms, plus one
+- a patch series of about 45 files on the codex workspace, mostly third `cfg` arms, plus one
   new file that carries the WebSocket;
-- a 110-line `main` (`ports/codex/main`) and a wasi-sdk C toolchain for aws-lc, ring, sqlite,
+- a 130-line `main` (`ports/codex/main`) and a wasi-sdk C toolchain for aws-lc, ring, sqlite,
   oniguruma, zstd, bzip2 and tree-sitter.
 
-The first session's text below (sections 2-6) is kept as written; where the second session
-found otherwise it says so in section 7. In short: no part of the graph had to be cut out, and
-single-threaded was enough.
+The first session's text below (sections 2-6) is kept as written; where later sessions found
+otherwise it says so in section 7. In short: no part of the graph had to be cut out to make it
+compile, single-threaded was enough, and one stub (the embedded server's entry point) halves
+the module.
+
+Since the third session it is a guest on the shared dev page:
+`https://<machine>.<tailnet>.ts.net:4790/?guest=codex` (README, "codex in the browser").
 
 ## 2. Crate graph (question 1)
 
@@ -437,10 +441,13 @@ Additional requirements, in order of how certain I am that the port needs them. 
 
 ## 7. Build, burn-down, and how to run it
 
-State at the end of the second session: **the TUI crate compiles, the port links to one
-`wasm32-wasip1` module, and it runs**: on the real kernel headless under Bun, and in Chrome on a
-dev page, against mock-llm through the 4796 proxy, completing prompt/reply, tool-call and
-approval-prompt turns. Approach (a), single-threaded, held; nothing forced a move to threads.
+State at the end of the third session: **the TUI crate compiles, the port links to one
+`wasm32-wasip1` module, and it runs as the guest `codex` on the shared dev page** (4790, also over
+tailnet HTTPS), against mock-llm through the page's own `/proxy/codex` relay: prompt/reply, tool
+call, approval prompt, markdown, long replies with scrolling, resize, paste, overlays, history
+across reloads, `/quit`, checked by `web/verify/run.sh codex` against the native captures. It also
+still runs headless under Bun on the real kernel (`web/harness.ts`). Approach (a),
+single-threaded, held; nothing forced a move to threads.
 
 ### Layout
 
@@ -448,15 +455,19 @@ approval-prompt turns. Approach (a), single-threaded, held; nothing forced a mov
 wasm-term/ports/codex/
   NOTES.md, HOST-REQUESTS.md
   main/                      the browser `main` (crate codex-wasm-term, a member of the patched codex workspace)
-  web/server.ts              dev page on 4799: wasm-term's page + Worker runtime, codex as the guest
+  web/guest.ts               how the shared dev page (wasm-term/web, port 4790) offers the guest: parameters, defaults, persisted directories
   web/harness.ts             headless run of any guest under Bun on the real kernel, xterm-headless as the terminal
-  dist/                      (gitignored) codex.wasm, codex-small.wasm
+  dist/                      (gitignored) codex.wasm (names), codex-small.wasm, codex-ship.wasm, codex-ship-opt.wasm
+  dist/site/                 (gitignored) what the page serves: codex-<hash>.wasm with .br and .gz, manifest.json
   scripts/env.sh             build environment (target, wasi-sdk, tokio_unstable, jobs=6)
   scripts/setup.sh           recreate vendor/ trees from upstream pins + patches/
   scripts/check.sh <label>   cargo check the TUI lib for wasm, log to vendor/check-<target>-<label>.log
   scripts/errs.sh <label>    the errors of that log, paths shortened
   scripts/count.sh           how many workspace crates have checked
-  scripts/build.sh           link the module into dist/ (PROFILE=wasm | wasm-small)
+  scripts/build.sh           link the module into dist/ (PROFILE=wasm | wasm-small | wasm-ship)
+  scripts/ship.sh            build.sh for the names and ship profiles, wasm-opt, package.ts: everything the page needs
+  scripts/package.ts         content-hash, brotli and gzip a build into dist/site/ and point the manifest at it
+  scripts/sizes.ts           section sizes of a module and, with names, code size per crate
   scripts/commit-vendor.sh   commit dirty vendor trees to their port branches and re-export patches/
   scripts/export-patches.sh  regenerate patches/ from the port branches
   scripts/fork-crate.sh      start a crates.io fork under vendor/forks/ (records it in forks.txt)
@@ -465,13 +476,15 @@ wasm-term/ports/codex/
   patches/codex/             against openai/codex rust-v0.162.0
   patches/tokio/             against tokio 1.52.3 (crates.io)
   patches/forks/<crate>/     against the crates.io version in forks.txt
-wasm-term/vendor/            (gitignored) codex/, tokio/, forks/*, tools/wasi-sdk, codex-target/, check-*.log, build-*.log
+wasm-term/vendor/            (gitignored) codex/, tokio/, forks/*, tools/wasi-sdk, tools/binaryen, codex-target/, check-*.log, build-*.log
 ```
 
 Each tree under `vendor/` is a git repo with a pristine base (`upstream` branch or the upstream
 tag) and a `wasm-term-port` branch; `patches/` is `git format-patch` of the difference.
-**[ran]** at the end of this session: every series was applied to a fresh worktree of its base
-with `git am` and compared equal to the port branch (codex, tokio, 13 forks).
+**[ran]** at the end of the second session, and again at the end of the third: every series was
+applied to a fresh worktree of its base with `git am` and compared equal to the port branch
+(codex, tokio, 15 forks). The crossterm backend is not one of them: it is
+`wasm-term/guests/crossterm-wasi` (`wasi.patch` plus `overlay/`, regenerated there).
 
 ### Reproduce each stage
 
@@ -480,20 +493,23 @@ cd wasm-term/ports/codex
 scripts/setup.sh                       # only on a machine without vendor/
 scripts/check.sh mylabel               # type-check: ~1 min warm, ~10 min cold, 6 jobs
 scripts/count.sh                       # "131 of 133" (the other two are proc macros, built for the host)
-scripts/build.sh                       # link dist/codex.wasm: 16 min cold, 15 s after a change to main/,
-                                       # 4-8 min after a change to a low workspace crate
+scripts/build.sh                       # link dist/codex.wasm (names kept): 16 min cold, 15 s after a change to main/,
+                                       # 2 min after a change to codex-tui, 4-8 min after a change to a low workspace crate
 PROFILE=wasm-small scripts/build.sh    # dist/codex-small.wasm
+scripts/ship.sh                        # names build + wasm-ship (fat LTO, 27 min cold) + wasm-opt + package into dist/site/
+scripts/ship.sh --names-only           # only the names build, repackaged (the quick loop; open the page with &build=names)
 
 ../../mock-llm/up.sh                   # backend in Docker (re-read mock-llm/README.md first)
 
 # headless, on the real kernel (Bun): prints the screen as text
 cd web && bun install
-bun harness.ts @@ --remote ws://127.0.0.1:4796 -c 'sandbox_mode="danger-full-access"' \
-  ::: "until:Ask Codex" type:"hello there" wait:300 key:enter "until:Worked for" screen
+bun harness.ts --env CODEX_WASM_CWD=/tmp/wasm-term-workspace @@ --remote ws://127.0.0.1:4796 -c 'sandbox_mode="danger-full-access"' \
+  ::: "until:Ask Codex" type:"hello there" wait:300 key:enter "until:Worked for" screen cat:/home/user/.codex/history.jsonl
 
-# in a browser
-bun server.ts                          # http://127.0.0.1:4799/
-# http://127.0.0.1:4799/?guest=codex&remote=ws://127.0.0.1:4796&persist=0&arg=-c&arg=sandbox_mode%3D%22danger-full-access%22
+# in a browser: the shared dev page (wasm-term/web; README "Run it")
+#   http://127.0.0.1:4790/?guest=codex            defaults: remote=/proxy/codex, dir=/tmp/wasm-term-workspace, sandbox=danger-full-access
+#   ../../web/verify/run.sh codex                 the browser checks (WASM_TERM_URL=https://... for the tailnet URL)
+#   cd ../../web && bun verify/profile.ts 'http://127.0.0.1:4790/?guest=codex&build=names&persist=0' --blocked
 ```
 
 `@@` starts the guest's arguments and `:::` the harness steps (Bun swallows a bare `--`).
@@ -541,8 +557,10 @@ unchanged. The whole graph is linked in; the embedded server is simply never sta
 | portable-pty fork | no serial, no filedescriptor; `native_pty_system().openpty()` fails | **[ran]** compile |
 | rama-net / rama-tcp / rama-udp, tonic forks | a few cfg lines each | **[ran]** compile |
 | gethostname, gix-fs, rustls-native-certs, tokio-graceful forks | first session | **[ran]** compile |
-| codex workspace patch | 7 commits, 36 files (683 lines added); list below | **[ran]** |
-| `main/` | current-thread runtime, `--remote` / `CODEX_REMOTE_ADDR`, prepares the emulated home | **[ran]** |
+| chrono fork (0.4.43) | `chrono::Local` on WASI is the fixed offset in `WASM_TERM_UTC_OFFSET_MINUTES` (the host passes the browser's; `docs/abi.md`) instead of UTC | **[ran]**: turn footers show local time, compared with the browser's clock by `web/verify/codex.js` |
+| dirs fork (6.0.0) | `dirs::home_dir()` on WASI is `$HOME` | **[ran]** compile and link; the `~` abbreviation it enables was not exercised (see "Differences from native") |
+| codex workspace patch | 9 commits; list below | **[ran]** |
+| `main/` | current-thread runtime, `--remote` / `CODEX_REMOTE_ADDR` (any ws/wss URL, so a proxy path works), `CODEX_WASM_CWD`, prepares the emulated home | **[ran]** |
 | C toolchain | wasi-sdk 34; aws-lc-sys, ring, libsqlite3-sys, onig_sys, zstd-sys, bzip2-sys, tree-sitter* compile **and link** | **[ran]** |
 
 ### What is stubbed (fails at run time on WASI), and what was changed to work
@@ -554,15 +572,17 @@ Stubs, none reachable in remote mode without a user action:
 - ptys (`portable-pty`), Unix sockets (`codex-uds`, tonic's UDS connector), TCP/UDP sockets
   (socket2, tokio net), so also every HTTP request the TUI makes itself: the announcement tip,
   update check, cloud config, OTEL export, analytics. They fail fast and are tolerated;
-- the embedded (in-process) app-server: linked, never started; `shutdown_signal` only waits on
-  the `ctrl_c` stand-in;
+- the embedded (in-process) app-server: **not in the module any more**.
+  `InProcessAppServerClient::start` is a stub on WASI that returns `Unsupported`; it was the
+  only call from the client into `codex_app_server`, so the linker now drops the server and
+  everything in `codex-core` that only the server ran (see "Module"). The crates still
+  type-check and are still dependencies; nothing was removed from the graph;
 - system clipboard (`arboard`): compiled out as on Android. Copy still goes out as OSC 52;
 - native-tls, keyring-style platform integrations, `wxc_common` (Windows MXC), zip's xz;
 - symlink creation in `codex-git-utils`; sandboxed file open in `codex-exec-server`;
 - `--remote-auth-token-env`: refused with an explanation (a browser cannot send the header);
 - the unix-only parts of the TUI that already have a non-unix fallback upstream: job control
-  (Ctrl-Z), the batched startup probe (so no OSC 10/11 default-colour query; cursor position and
-  keyboard enhancement go through crossterm's own queries instead), the terminal-size monitor.
+  (Ctrl-Z), the terminal-size monitor.
 
 Made to work:
 
@@ -572,16 +592,31 @@ Made to work:
   `current_exe()`;
 - `history.jsonl`: append mode; the advisory lock is treated as held;
 - `codex-state` quick-check identity by path hash (no `file-id` on WASI);
+- the batched startup probe (`tui/src/terminal_probe.rs`), compiled for WASI: wasi-libc has
+  `poll`, `read` and `fcntl(O_NONBLOCK)`; there is no `dup`, so the probe opens `/dev/tty` a
+  second time, which upstream already has as its fallback. One write of `ESC[6n`, OSC 10, OSC 11,
+  `ESC[?u`, `ESC[c`, as natively; ghostty-web answers all five, so the terminal's default colours
+  are known and the shaded rows (composer, user messages) are derived from them **[ran]**;
+- history across sessions: `message-history` identifies the history file by inode, which std
+  does not expose on WASI, and without an identity it refuses every lookup. A fixed identity on
+  WASI (one file per machine) makes arrow-up reach prompts from before a reload **[ran]**;
 - the transport, below.
 
 Three std holes on WASI that are handled in `main/` rather than patched at each use, **[ran]**
 (`vendor`-less probe program under the harness): `std::env::temp_dir()` **panics**
 (`not supported by WASI yet`), so `tempfile::env::override_temp_dir("/tmp")` is called first;
 `std::env::current_exe()` is `Unsupported`, so a nominal `codex_self_exe` is passed in;
-`dirs::home_dir()` is `None`, so `CODEX_HOME` is set explicitly. `std::fs::canonicalize` works.
-Any code path that calls `std::env::temp_dir()` directly will still abort the module; there are
-about 15 non-test call sites in the workspace (hooks output spill, MCP runtime, exec-server),
-none hit in the runs here.
+`dirs::home_dir()` was `None`, so `CODEX_HOME` is set explicitly (since the dirs fork it is
+`$HOME`, and `CODEX_HOME` is still set so that the page can pin it). `std::fs::canonicalize`
+works.
+
+Direct `std::env::temp_dir()` calls would abort the module. The non-test ones that are in the
+TUI's graph and can still be reached now that the server is gone are guarded
+(`if cfg!(target_os = "wasi") { "/tmp" } else { std::env::temp_dir() }`): `chatgpt` apply
+command, `cloud-tasks-client`, `exec-server-protocol` (temp-path normalisation), `hooks` output
+spill, the TUI's IDE-context socket lookup. Left alone: `arg0` (its dispatch is not called),
+`cli`, `linux-sandbox`, `app-server-test-client` (not in the graph), and call sites inside
+`#[cfg(test)]`. **[read]** which are reachable; none was hit in any run before or after.
 
 ### Transport
 
@@ -625,14 +660,48 @@ scheduler or driver code.
 
 ### Module
 
-| Build | Size | Notes |
-| --- | --- | --- |
-| `scripts/build.sh` (`wasm` profile: opt-level 1 for workspace crates, `s` for dependencies, names kept) | 202 MB (code 131 MB, name section 54 MB, data 16 MB) | 15m58s cold on 6 jobs with other agents building |
-| `PROFILE=wasm-small` (opt-level `s`, stripped) | 118 MB (38 MB with `gzip -1`) | 11m42s cold; runs the same turns headless |
+What the page serves is `wasm-ship` + `wasm-opt -Oz`, brotli-compressed: **11.4 MB over the
+wire, 38.7 MB to compile**, down from 118 MB (38 MB with `gzip -1`) at the end of the second
+session. All sizes **[ran]**, in MB (10^6 bytes); gzip is `gzip -1` as in the earlier notes,
+brotli is quality 9 with a 16 MiB window (what `package.ts` writes, about 1 minute per build).
 
-Not tried: LTO, `wasm-opt`, cutting the embedded server out of the graph (the last is where the
-real saving is: `codex-app-server`, `codex-core`'s non-config modules and their dependencies are
-dead weight in a remote-only client).
+| Step | Build | Raw | gzip -1 | brotli 9 |
+| --- | --- | --- | --- | --- |
+| second session | `wasm` (opt-level 1 workspace, `s` dependencies, names kept) | 202.2 | | |
+| second session | `wasm-small` (opt-level `s`, stripped) | 117.8 | 38 | |
+| embedded server unreachable (one stub) | `wasm`, names kept | 104.6 | | 15.2 |
+| same | `wasm-small` | 58.7 | 18.4 | 11.3 |
+| + `wasm-opt -Oz` (no LTO) | `wasm-small` | 47.0 | 18.5 | 12.2 |
+| + fat LTO, one codegen unit | `wasm-ship` | 44.9 | 17.3 | 11.3 |
+| + `wasm-opt -Oz` | `wasm-ship`, **shipped** | 38.7 | 16.5 | 11.4 |
+
+What each step is and what it bought:
+
+- **The cut.** `scripts/sizes.ts` on the names build attributed 20.7 MB of code to `codex_core`
+  instantiations, 13.5 to `codex_tui`, 10.2 to `codex_app_server`. The client enters the server
+  in exactly one place, `codex_app_server::in_process::start`; with that call stubbed on WASI
+  the code section went from 131.6 MB to 66.9 MB (`codex_core` 20.7 to 5.3, `codex_app_server`
+  gone) with no other change. This is the "real cut" the earlier notes expected to need a
+  remote-only `codex-app-server-client`; the linker's dead-code removal does it once nothing
+  refers to the server. It is also the only step that shrank the download much.
+- **LTO.** `lto = "fat"`, `codegen-units = 1`: 58.7 to 44.9 MB raw, 27 minutes cold (the final
+  link alone about 15, single-threaded) and 13 GB peak. The compressed size did not move: what
+  LTO removes (duplicate generic instances, small non-inlined functions) is what brotli already
+  squeezed. It is worth having for the raw size, which is what the browser compiles and holds.
+- **`wasm-opt -Oz`** (binaryen 123, `vendor/tools/binaryen`): about 20% off the raw size in 2.5
+  minutes, and the compressed size goes *up* slightly (denser code compresses worse). Kept, again
+  for the raw size.
+- **Names.** Stripped from what ships (`strip = true`). The names build is packaged next to it
+  as `&build=names` for `web/verify/profile.ts` and readable traps.
+- **opt-level `z`** instead of `s`: not tried. The TUI redraws and re-wraps on every frame and the
+  runs here have no way to say what `z` costs there.
+
+What is left in the shipped module by crate (names build, so opt-level 1 for workspace crates:
+proportions, not sizes): `codex_tui` 13.1 MB, `codex_config` 7.1, `codex_core` 5.3, `core` 4.6,
+`codex_network_proxy` 3.0, `toml` 2.4, `codex_rollout` 2.2, `codex_exec_server` 1.9, `starlark`
+1.8. The next cuts would be the things `Config` drags in that a remote client never runs:
+the network proxy (rama), exec-policy's starlark, rollout. Each needs its own stub at the point
+where config loading reaches it, and none is large by itself.
 
 ### Observed running
 
@@ -659,49 +728,148 @@ renderer because WebGL2 is unavailable there), 192x55:
 - viewport change to 90x29: re-laid out; `/quit`: `exit code 0`;
 - idle: 2 `poll_oneoff` calls in 4 s.
 
-Differences from native seen so far: times are UTC (HOST-REQUESTS 1); no default-colour probe,
-so anything derived from the terminal's background colour (the shaded user-message rows) uses
-the fallback; `~` is not abbreviated in paths because there is no home directory lookup.
+Third session, on the shared page (Chrome under Xvfb through `browser-control`, at the tailnet
+HTTPS URL; ghostty-web's canvas renderer, there is no GPU), `web/verify/run.sh codex`: 35
+checks. With the shipped build it was run five times: three runs passed all 35; one failed only
+"the long reply grew on screen in many steps" (not reproduced, cause not found); one stopped at
+its first screenshot, which the shared Chrome did not take within 30 s. From that browser on the
+same machine the shipped module was downloaded and compiled in 0.4 to 0.5 s and the start screen
+was up 0.75 s after navigation, when the machine was not busy (5 s and 10 s in one run when it
+was). `web/webkit/smoke.sh` (WebKit's Linux build, desktop and iPhone profiles): the module
+downloads, compiles and runs there too, first output about 1 s after navigation, prompt and
+reply, and in the iPhone profile the keys row against codex: arrow up recalls, Shift+Enter is a
+newline, Ctrl then c clears, Esc closes the slash popup.
+
+What the browser checks cover, each against the mock backend:
+
+- the launcher entry and its defaults; the module's URL, type, encoding and cache headers; the
+  loading indicator while it downloads and compiles;
+- connect through the page's own origin (`wss://.../proxy/codex`); start screen, plain prompt and
+  tool call equal to `mock-llm/baseline/codex-plain.txt` and `codex-tool.txt` line for line after
+  normalising times and the captures' older workspace path;
+- the turn footer's time equals the browser's local time;
+- markdown (emphasis, list, fenced and highlighted code, table, quote); a long reply streaming in
+  many steps, the wheel scrolling back through it and forward to its end;
+- resize to 84x30 and back; the slash-command popup; `/status`; the warnings viewer (F2);
+- paste (the browser's paste event as a bracketed paste), Shift+Enter as a newline, Ctrl+C;
+- `wasmTerm.readFile` / `listFiles`; `config.toml` and `history.jsonl` in IndexedDB and not the
+  scratch or log directories; arrow-up recalling a prompt from before a reload;
+- a line written to the terminal in one burst is shown whole and the Enter after it submits;
+- the approval dialog (`sandbox=workspace-write`, prompt `run with approval`) equal to
+  `codex-tool-approval.txt`, `y`, the command's output; `/quit` with code 0; files still
+  readable after exit.
+
+codex 0.162 owns the whole screen (alternate buffer, mouse reporting, its own transcript
+scrolling), so there is no terminal scrollback to compare and no separate transcript pager:
+Ctrl+T does nothing in this mode. That is upstream's behaviour, not the port's **[inferred]**
+from the native client's identical screens; it was not checked natively.
+
+Differences from native seen so far:
+
+- `~` is not abbreviated. The mechanism is there now (`dirs::home_dir()` is `$HOME`), but the
+  paths the TUI shows are the server's and the emulated home is `/home/user`, which is nobody's
+  home on the server. `&env=HOME=/home/agent` (the mock server's home; `CODEX_HOME` stays pinned
+  by the page) should make the two agree; not run.
+- A session across a DST change keeps the offset it started with.
+- The TUI's own HTTP requests still fail (announcement tip, update check).
+
+### The "startup stall" (second session's open problem 1): not a stall
+
+The second session saw a burst of characters followed 1.5 s later by Enter put a newline in the
+composer instead of submitting, and concluded from key-event timestamps that the only thread
+computed for about 1.2 s after the first paint. It did not. What was established, in order:
+
+1. **[ran]** `web/verify/profile.ts` (Chrome's sampling profiler on the Worker, wasm names from
+   the module): the longest stretch in which the guest's thread does not go idle is under
+   200 ms (start-up: config loading, the first frames), and during the alleged stall the thread
+   sits in `poll_oneoff` under tokio's park. `WASM_TERM_TRACE=1` now reports compute gaps of
+   100 ms or more; it reports none there.
+2. **[ran]** A trace of every `poll_oneoff` and terminal `fd_read`: the eleven characters are read
+   in one `fd_read` when they are written, and the Enter is read 1.5 s later. Nothing arrives
+   late at the syscall level.
+3. **[ran]** Logging inside the TUI (to a file, read back with the new `readFile`): the composer
+   received `h` when the burst arrived and the other ten characters only when Enter did, 1 ms
+   before it. So ten parsed key events sat somewhere for 1.5 s.
+
+**Root cause: `guests/crossterm-wasi`, `EventStream`.** With no helper thread on WASI, the stream
+polls the reader itself, and it did so with a 1 µs timeout. The tty source's loop only runs
+`while timeout has time left`, and that is also the loop that hands out events an earlier read
+already parsed. Whether 1 µs "has time left" by the time the loop tests it depends on the
+clock's granularity and the call overhead; usually it did not. So after one `read` that parsed
+several events, the first was delivered and the stream then found the reader "empty", cleared
+tokio's readiness and parked. The remaining events came out one per later wake-up, whatever
+caused it. Fast typing, key repeat, wheel reports and unbracketed pastes all hit this; a turn's
+streaming output masked it by waking the task. Fix: on WASI the source makes one pass even with
+a zero timeout (parsed events first, then one non-blocking look at the descriptors), and the
+stream asks with zero. It is in `guests/crossterm-wasi` (`wasi.patch`, `overlay/`), not in this
+port's patches; the Rust guests were rebuilt with it and `web/verify/run.sh terminal-functions`
+still passes (57 of 57).
+
+**[ran]** Harness, burst at the moment the composer appears, Enter 1.5 s later: 0 of 4 submitted
+before, 5 of 5 after. The same on the page is a check in `web/verify/codex.js`.
+
+A second effect looked like the same problem in a headless browser and is not in the guest at
+all: **the page's main thread is the program's only path for input and network events**, and
+software-emulated WebGL (no GPU) took 0.7 to 3.5 s per frame of codex's animated start screen.
+Every one of the roughly ten sequential RPCs of start-up then waited for a frame (the proxy log
+shows the server answering in 2 to 8 ms and the next request following 250 to 500 ms later),
+stretching start-up to seconds, during which input goes to codex's provisional start-up
+composer. The page now uses the 2D canvas renderer when WebGL is software (`web/client.ts`;
+`&renderer=` overrides): 6 ms between main-thread tasks instead of 1.4 s in the same
+measurement. Not established: how a phone's real GPU behaves under the same animation.
 
 ### Open problems
 
-1. **A stall of about 1.2 s on the only thread shortly after the first paint** **[ran]**. Found
-   through its symptom: in the harness, a burst of characters followed 1.5 s later by Enter
-   sometimes put a newline in the composer instead of submitting (3 of 5 runs submitted; spaced
-   keystrokes and bracketed pastes 5 of 5 each). With temporary logging of key events (removed
-   again), the failing runs show the event loop not running between about t=1.0 s and t=2.3 s
-   after start; the queued characters and Enter are then handled 1 ms apart, which codex's
-   paste-burst heuristic (`tui/src/bottom_pane/paste_burst.rs`, 120 ms Enter window) correctly
-   reads as a paste. No wake-up is lost and nothing is wrong with timers. The import trace
-   shows no syscalls during the gap, so it is computation. **[inferred]**: work that natively
-   runs on the blocking pool or another worker thread (syntax/theme set loading and similar
-   one-off initialisation) and here runs inline. The `wasm-small` build shows the same 3 of 5.
-   Effect for a person: input typed in the first couple of seconds after the screen appears is
-   applied late. Finding what it is needs a profile; `dist/codex.wasm` keeps its name section for that
-   (profiling it in Chrome was not tried).
-2. Direct `std::env::temp_dir()` callers (above).
-3. Nothing persisted across reloads was checked (`persist` is configured for `~/.codex` in
-   `web/server.ts`; the browser runs used `persist=0`).
-4. Only short sessions were run. Long transcripts, large history replays (multi-megabyte
-   frames), reconnect after a dropped socket, and mouse/alternate-screen overlays are untested.
+1. Memory on a phone is unmeasured. The only number is crude: Playwright's WebKit on Linux, all
+   of that browser's processes together, held about 640 to 700 MB more resident memory with the
+   shipped module running than before the page was opened (about 800 MB more with the 105 MB
+   names build). That includes the terminal, a 32 MiB stack and JavaScriptCore's compiled code.
+   It says the engine can do it, and nothing about what iOS allows a tab.
+2. Only short sessions were run. Large history replays (multi-megabyte frames), reconnect after a
+   dropped socket, and sessions long enough to grow the transcript are untested.
+3. `web/harness.ts` starts from an empty `~/.codex` every run (no persistence store outside a
+   browser).
+4. Ctrl+T (transcript pager) does nothing in 0.162's owned-screen mode; not compared with native.
 
 ### Ordered remaining work
 
-1. Profile and remove or defer the startup stall (open problem 1).
-2. Fidelity: give the TUI's unix startup probe a WASI arm (`terminal_probe.rs`: wasi-libc has
-   `poll`, `read` and `fcntl(O_NONBLOCK)`; `dup` must become a second open of `/dev/tty`) so
-   default colours are detected; read the UTC offset once the host passes it; abbreviate `~`.
-3. Guard or replace the direct `temp_dir()` calls.
-4. Size: LTO and `wasm-opt`; then the real cut, building `codex-app-server-client` remote-only
-   on WASI so the embedded server leaves the graph (first-session steps 4-5, now an optimisation
-   rather than a prerequisite).
-5. Integration into the shared page on 4790 (someone else's): `web/server.ts` shows the whole
-   guest description (name, `remote` parameter, persist roots).
-6. HTTP for the TUI's own requests through `wasm_term.http_open` as a hyper connector, if the
+1. Measure on a real phone: load time on a mobile network, memory, whether iOS keeps the tab.
+   If memory is the limit, the next size steps are in "Module" (stub what `Config` drags in).
+2. Authentication for a real server: the proxy must authenticate the browser and add the bearer
+   token (HOST-REQUESTS 3). Nothing in the port changes.
+3. HTTP for the TUI's own requests through `wasm_term.http_open` as a hyper connector, if the
    announcement tip and update check are wanted.
-7. Upgrades: re-run `setup.sh` against the new tag, fix what no longer applies, `check.sh`,
-   `build.sh`, the harness line above. Check `grep -c legacy_core tui/src -r` first; when
-   upstream finishes that migration most of this graph disappears.
+4. If a busy page main thread turns out to matter on real devices: the network bridge in its
+   own Worker (HOST-REQUESTS 5).
+
+### Upgrading to a new codex release
+
+1. Look first: `grep -c legacy_core tui/src -r` in the new tag. When upstream has finished
+   moving the TUI off `codex_core::config`, most of this graph and most of the patch series
+   disappear, and the right move is to start the series over rather than rebase it.
+2. Bump `CODEX_UPSTREAM_TAG` / `CODEX_UPSTREAM_COMMIT` in `scripts/env.sh`, move `vendor/codex`
+   aside, run `scripts/setup.sh`. `git am` stops at the first patch that no longer applies;
+   fix it there (`git am --continue`), keeping each change a `cfg` arm. The patches most likely
+   to conflict are the ones in `tui/` (0004, the probe gates in 0008) and `Cargo.toml`.
+3. Check the versions in `scripts/forks.txt` and `setup.sh` (tokio) against the new
+   `Cargo.lock`: a fork must be of the version the lock file names, or cargo ignores the
+   `[patch]` entry with a warning. For a changed version, move the old fork aside, re-run
+   `setup.sh` (it copies the new version and applies `patches/forks/<crate>`), fix what fails.
+4. If the crossterm revision in `[patch.crates-io]` changed, set `CROSSTERM_REV` in
+   `guests/crossterm-wasi/setup.sh` and regenerate there (`setup.sh --force`); its three layers
+   are described in that script.
+5. `scripts/check.sh <label>` until `scripts/count.sh` says all but the proc macros check, then
+   `scripts/ship.sh`, the harness line above, `web/verify/run.sh codex` and
+   `web/webkit/smoke.sh`.
+6. `scripts/commit-vendor.sh "<what changed>"` (commits each dirty tree to its `wasm-term-port`
+   branch and re-exports `patches/`), then prove the series: apply each to a fresh worktree of
+   its base with `git am` and compare with the port branch (the loop is at the end of this
+   file).
+7. Things that silently go wrong rather than fail: a new call from the client into
+   `codex_app_server` (the module doubles in size; `scripts/sizes.ts` shows it), a new direct
+   `std::env::temp_dir()` on a reachable path (aborts when hit), a new `cfg(unix)` /
+   `cfg(not(unix))` pair around terminal start-up in `tui/src/tui.rs` (the WASI build silently
+   takes the fallback).
 
 ## 8. Rules followed
 
@@ -711,6 +879,30 @@ model provider was called. Second session: the mock backend was only ever starte
 once as a client through `mock-llm/run-codex-client.sh` to compare paste behaviour; one npm
 package (`@xterm/headless`) was installed under `ports/codex/web/node_modules`. Nothing new was
 installed system-wide or into `~/.rustup`.
+
+Third session: nothing in `~/.codex` or the user's opencode/codex state was touched; the native
+`codex` was run once as a client (`mock-llm/run-codex-client.sh`, isolated home) to compare paste
+behaviour, with `termctrl`; no model provider was called. Profiling and the main-thread
+measurements used a private headless Chrome started by Playwright from `web/node_modules`, not
+the shared one. binaryen 123 was added under `wasm-term/vendor/tools/binaryen`; nothing was
+installed system-wide. The dev server unit was restarted several times and is running; the
+Docker backend and the tailscale serve entry were left as they were.
+
+Re-applying the series (what "confirmed" means above):
+
+```sh
+cd wasm-term/ports/codex && source scripts/env.sh
+check() { # <repo> <base ref> <patch dir>
+  git -C "$1" worktree add -q --detach /tmp/reapply "$2" &&
+  git -C /tmp/reapply -c user.name=port -c user.email=port@local am -q "$3"/*.patch &&
+  git -C /tmp/reapply diff --quiet HEAD "$(git -C "$1" rev-parse wasm-term-port)" && echo "ok $1"
+  git -C "$1" worktree remove --force /tmp/reapply
+}
+P="$PWD/patches"   # absolute: git -C changes directory
+check "$CODEX_SRC" "$CODEX_UPSTREAM_TAG" "$P/codex"
+check ../../vendor/tokio upstream "$P/tokio"
+for d in ../../vendor/forks/*/; do check "${d%/}" upstream "$P/forks/$(basename "$d")"; done
+```
 
 Toolchains added (first session): wasi-sdk 34 and emsdk under
 `wasm-term/vendor/tools/`, and the `wasm32-unknown-emscripten` rust-std component for the

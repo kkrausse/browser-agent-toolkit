@@ -163,8 +163,8 @@ settings. The parameters and their defaults (the mock backend):
 | `sandbox` | `danger-full-access` | passed as `-c sandbox_mode="..."`. The mock backend's container cannot run codex's sandbox, so anything else fails there, except that `workspace-write` with the prompt `run with approval` shows the approval dialog. Empty = the server's own setting |
 | `build` | (the shipped module) | `names`: the build that kept its name section, for `web/verify/profile.ts` and readable traps |
 
-The module is 12 MB compressed (section "Module" of the NOTES has the
-table); the page shows a progress bar while it arrives and compiles, and the
+The module is 11.4 MB over the wire (brotli) and 38.7 MB to compile
+(`ports/codex/NOTES.md`, "Module", has the table); the page shows a progress bar while it arrives and compiles, and the
 browser caches it for good: its URL contains its hash, so a rebuild is a new
 URL. `scripts/ship.sh` is `build.sh` for the two profiles plus `wasm-opt` and
 `package.ts`; the server reads `dist/site/manifest.json` on every load, so a

@@ -107,9 +107,15 @@ the async runtime's reactor to do the waiting:
   terminal (`/dev/tty` opened for reading) and its own SIGWINCH descriptor;
   the ABI guarantees neither ever polls writable. **Do not register fd 0, 1 or
   2 with tokio.**
-- When either is readable the stream runs the ordinary event reader with a
-  1 µs timeout (a zero timeout only inspects already-parsed events), which
-  reads the terminal without blocking.
+- On every poll the stream runs the ordinary event reader with a zero
+  timeout. On wasi the tty source makes one pass even then: it hands out the
+  next event an earlier read already parsed, else takes one non-blocking look
+  at the descriptors (`wasi.patch`, `tty.rs`). It used to ask with a 1 µs
+  timeout instead, and the source only looks while its timeout has time left,
+  which 1 µs usually did not: of several events parsed from one read (a
+  fast-typed line, key repeat, wheel reports) only the first was delivered and
+  the rest waited for the next input. Found through the codex port
+  (`ports/codex/NOTES.md`, "The startup stall").
 
 Consequences for the codex port:
 

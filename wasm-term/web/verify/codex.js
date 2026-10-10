@@ -196,7 +196,7 @@ for (let i = 0; i < 600 && !(await text()).includes("END-OF-LONG-RESPONSE"); i++
   steps.add((await rows()).filter(line => /line \d+/i.test(line)).length + ":" + (await rows()).filter(Boolean).pop());
   await page.waitForTimeout(50);
 }
-check("streaming: the long reply grew on screen in many steps while it arrived", steps.size >= 10, steps.size);
+check("streaming: the long reply grew on screen in many steps while it arrived", steps.size >= 10, [...steps].slice(0, 12));
 await turnDone("long scroll", 60000);
 await page.waitForTimeout(500);
 const bottom = await text();
@@ -272,7 +272,11 @@ check("persistence: CODEX_HOME (config.toml, history.jsonl) is in IndexedDB, its
   stored.includes("/home/user/.codex/history.jsonl") && stored.includes("/home/user/.codex/config.toml") && stored.every(path => !/\/\.codex\/(tmp|log)\//.test(path)), stored);
 await press("ArrowUp", 600);
 const recalled = (await rows()).filter(line => line.includes("›"));
-check("persistence: prompt history survives the reload (arrow up recalls the last prompt)", recalled.some(line => /long scroll|show me markdown/.test(line)), recalled);
+// The last entry is the draft that ctrl+c cleared above: codex keeps those in its history too.
+check("persistence: prompt history survives the reload (arrow up recalls the last entry of history.jsonl)", recalled.some(line => /pasted via the paste event|long scroll|\/status/.test(line)), recalled);
+await press("ArrowUp", 400); await press("ArrowUp", 400); await press("ArrowUp", 600);
+const older = await text();
+check("persistence: further arrow-ups walk back through earlier prompts", /long scroll|show me markdown|please use a tool/.test(older.slice(older.lastIndexOf("›"))), (await rows()).filter(line => line.includes("›")));
 await press("Control+c", 500);
 
 // ---- typing right at startup (the lost-input bug this port found in crossterm-wasi) ------------------

@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Sat, 10 Oct 2026 01:45:18 -0700
+Subject: [PATCH] wasi: history file identity on wasi, so prompts from before a
+ reload can be recalled
+
+---
+ codex-rs/message-history/src/lib.rs | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/codex-rs/message-history/src/lib.rs b/codex-rs/message-history/src/lib.rs
+index d6cca6a..0239021 100644
+--- a/codex-rs/message-history/src/lib.rs
++++ b/codex-rs/message-history/src/lib.rs
+@@ -443,7 +443,16 @@ fn log_identity(metadata: &std::fs::Metadata) -> Option<u64> {
+     Some(metadata.creation_time())
+ }
+ 
+-#[cfg(not(any(unix, windows)))]
++// wasm-term: without an identity no entry of an earlier session can be looked
++// up (`lookup_history_entry` gives up), so arrow-up history would end at the
++// page reload. The emulated machine has one history file and std's inode
++// accessor is unstable on WASI: a fixed identity says "the same file".
++#[cfg(target_os = "wasi")]
++fn log_identity(_metadata: &std::fs::Metadata) -> Option<u64> {
++    Some(1)
++}
++
++#[cfg(not(any(unix, windows, target_os = "wasi")))]
+ fn log_identity(_metadata: &std::fs::Metadata) -> Option<u64> {
+     None
+ }
