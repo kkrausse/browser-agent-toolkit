@@ -257,6 +257,13 @@ not a terminal. `ports/codex/NOTES.md`, section 8, has the details, the coverage
 bash and the numbers. `&shell=off&env=CODEX_WASM_SHELL=0` runs without a shell (the model's
 commands then get a "no shell in this build" error it can read).
 
+**The relay by itself** (`web/tcp-relay-main.ts`). The same tunnel as a program of its own, for a
+page that is served from somewhere else (a static build): `RELAY_ORIGINS="https://app.example" bun
+web/tcp-relay-main.ts` listens on `127.0.0.1:4799` and answers only a WebSocket at
+`/tcp?host=&port=`, for the listed page origins and for port 443 of `RELAY_HOSTS` (default
+`api.openai.com chatgpt.com auth.openai.com`); it has none of the test names. The page is pointed
+at it with `&tcp=wss://<relay>/tcp`. It needs TLS in front (an https page cannot open `ws://`).
+
 **The TCP tunnel** (`net=tunnel`; `/proxy/tcp?host=<name>&port=<n>` on :4790, `web/tcp-relay.ts`). One
 WebSocket is one TCP connection: the server resolves the name, connects, and copies bytes both
 ways. codex does everything above that inside the module, exactly as the native binary does:
