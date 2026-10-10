@@ -402,9 +402,9 @@ implements the client side (`ports/codex/patches/forks/reqwest`, `src/async_impl
 
 ### 3.4 Child processes
 
-A guest runs commands in **the machine's shell**: bat-rust's `bat-sh`, a POSIX-style shell with
-the coreutils built in (`cat`, `ls`, `sed`, `grep`, `rg`, `find`, ...; `host/sh/`, built from a
-pinned bat-rust commit by `host/sh/build.sh`). There are no other programs: what is not a
+A guest runs commands in **the machine's shell**: this repository's `bat-sh`, a POSIX-style shell with
+the coreutils built in (`cat`, `ls`, `sed`, `grep`, `rg`, `find`, ...; `host/sh/`, built from
+`crates/bat-sh` of the same checkout by `host/sh/build.sh`). There are no other programs: what is not a
 command of that shell is "command not found" (127). The shell works on **the guest's own
 filesystem**, the same objects `path_open` reaches, so a file either side writes is there for the
 other at once. A machine started without a shell (`ProgramOptions.shell`) fails `proc_spawn`

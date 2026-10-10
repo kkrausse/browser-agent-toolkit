@@ -144,6 +144,14 @@ The ranked list of known gaps is in the
 | `third_party/` | Node's `lib/` and the notices |
 | `docs/design/`, `docs/experiments/` | design, decisions, formats; measurements and reports |
 
+## wasm-term
+
+[`wasm-term/`](wasm-term/README.md) is a separate project kept in this repository: real
+terminal clients (the OpenCode and codex TUIs) running in a browser tab on an emulated
+machine with a pty. It has its own README, build, checks and `third_party/`, and is in
+neither the Cargo workspace nor the bun workspaces, so nothing above builds or tests it. It
+builds its shell from `crates/bat-sh`, and `examples/terminal-app` embeds its OpenCode client.
+
 ## Prerequisites
 
 None of these is installed by the repository:

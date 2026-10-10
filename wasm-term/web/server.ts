@@ -39,7 +39,7 @@ const root = join(import.meta.dir, "..");
 const port = Number(process.env.PORT ?? 4790);
 const kernelWasm = join(root, "kernel/target/wasm32-unknown-unknown/release/wasm_term_kernel.wasm");
 const guestsDir = join(root, "guests/dist");
-/** bat-rust's shell, built from a pinned commit by host/sh/build.sh. */
+/** The shell: crates/bat-sh of this repository, built by host/sh/build.sh. */
 const shellWasm = join(root, "host/sh/dist/bat_sh.wasm");
 const ghosttyWasm = Bun.fileURLToPath(import.meta.resolve("@random/ghostty-web/ghostty-vt.wasm"));
 

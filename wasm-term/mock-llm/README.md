@@ -269,7 +269,9 @@ Driven with `termctrl` in a real PTY: the host's native TUIs (client
 launchers above) against the containerised servers, no tap in between.
 `opencode-plain`, `opencode-tool` and `codex-tool` were re-captured that way;
 the other three are from the earlier host-side servers and still show the old
-workspace path, with otherwise the same screens. Captures are the visible screen as text (`termctrl`'s PNG output has no
+workspace path, with otherwise the same screens. That path, and the one in
+`ports/opencode/captures/`, is under `random/.claude/worktrees/wasm-term/`: the
+captures were taken before the project moved into this repository. Captures are the visible screen as text (`termctrl`'s PNG output has no
 glyphs on this machine, so no screenshots are checked in).
 
 | Capture | Shows |

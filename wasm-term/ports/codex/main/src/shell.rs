@@ -2,7 +2,7 @@
 //! "The spawn seam"): every command codex starts, whether it is the model's
 //! `exec_command`, the user's `!command` or an app-server `command/exec`, runs
 //! as a child process of this program on the wasm-term host (`proc_spawn`,
-//! docs/abi.md 3.4). The host runs it in bat-rust's shell (bash-like, the
+//! docs/abi.md 3.4). The host runs it in this repository's bat-sh shell (bash-like, the
 //! coreutils built in) in its own Worker, on the same filesystem codex's file
 //! tools use, and delivers stdout, stderr and the exit status as events on one
 //! descriptor that tokio's reactor polls like any other.

@@ -37,7 +37,7 @@ export interface PersistOptions {
   exclude?: string[];
 }
 
-/** A shell for the program's `proc_*` calls (wasm guests): bat-rust's `bat_sh.wasm`, see `proc.ts`. */
+/** A shell for the program's `proc_*` calls (wasm guests): `bat_sh.wasm`, this repository's crates/bat-sh, see `proc.ts`. */
 export interface ShellOptions {
   /** `bat_sh.wasm`. */
   moduleUrl: string;

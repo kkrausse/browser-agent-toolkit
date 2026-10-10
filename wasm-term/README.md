@@ -1,8 +1,8 @@
 # wasm-term
 
 Run real terminal programs (TUI clients) entirely in the browser: no server-side
-PTY. The display is the sibling [`ghostty-web`](../ghostty-web/README.md)
-package (official Ghostty WASM + WebGL2). The program runs in a Web Worker
+PTY. The display is the [`ghostty-web`](third_party/ghostty-web/README.md)
+package (official Ghostty WASM + WebGL2; a snapshot under `third_party/`). The program runs in a Web Worker
 against an emulated "local machine": a PTY with a line discipline, a
 filesystem, clocks, env, and network access bridged to browser APIs.
 
@@ -17,6 +17,15 @@ Targets, in order:
    (`codex --remote <addr>` natively).
 
 Testing never calls a real model: `mock-llm/` serves scripted responses.
+
+The project is self-contained in this directory and is not part of the
+toolkit's Cargo or bun workspaces; the rest of the repository does not build
+or test it. It uses one thing from the repository, the `bat-sh` shell
+(`../crates/bat-sh`), and one thing uses it: `../examples/terminal-app` embeds
+its opencode guest. It was developed in another repository (`random`, as the
+directory `wasm-term/`) and moved here with its history on 2026-10-10; commit
+hashes in the notes (`156426a`, `ac36686`, ...) are that repository's, and the
+notes call this repository's Rust runtime "bat-rust", the name of its checkout.
 
 ## Shape
 
@@ -41,7 +50,7 @@ Testing never calls a real model: `mock-llm/` serves scripted responses.
   signal delivery (SIGWINCH/SIGINT), and outbound network. The exact ABI is
   documented in `docs/abi.md` and is the contract between host and guests.
 - **Commands**: a guest can run shell commands as child processes
-  (`proc_spawn` and friends). The shell is bat-rust's `bat-sh` (bash-like,
+  (`proc_spawn` and friends). The shell is this repository's `bat-sh` (`../crates/bat-sh`: bash-like,
   coreutils and `rg` built in) in its own Worker, on the guest's own
   filesystem. There are no other programs: no git, python or node.
 - **Blocking syscalls**: the guest blocks in the Worker with
@@ -58,11 +67,12 @@ Testing never calls a real model: `mock-llm/` serves scripted responses.
 | Path | What |
 | --- | --- |
 | `kernel/` | Rust crate(s): pty + line discipline, compiled to wasm |
-| `host/` | TypeScript: worker runtime, WASI + custom imports, vfs, net bridge, persistence; `host/node/` runs JavaScript programs on the same machine (node-style `process`, `fs`, ...); `host/proc.ts`, `host/sh/`, `host/shell-worker.ts` are child processes: the shell (`host/sh/build.sh` builds it from a pinned bat-rust commit) |
+| `host/` | TypeScript: worker runtime, WASI + custom imports, vfs, net bridge, persistence; `host/node/` runs JavaScript programs on the same machine (node-style `process`, `fs`, ...); `host/proc.ts`, `host/sh/`, `host/shell-worker.ts` are child processes: the shell (`host/sh/build.sh` builds it from `../crates/bat-sh`) |
 | `web/` | Bun dev server (COOP/COEP), the launcher and the page wiring ghostty-web to a program; `web/verify/` browser checks |
 | `guests/` | Test programs built for the guest ABI |
 | `mock-llm/` | Scripted model server + isolated opencode/codex server configs |
 | `ports/opencode/`, `ports/codex/` | Per-client port work and notes |
+| `third_party/` | Snapshot of the `ghostty-web` package and of three `bun-web-terminal` files, from the repository `random`; `third_party/README.md` says what and how to refresh it |
 | `vendor/` | Upstream checkouts and toolchains, gitignored |
 
 ## Ports
@@ -78,9 +88,10 @@ Testing never calls a real model: `mock-llm/` serves scripted responses.
 ## Run it
 
 Needs bun, cargo with the `wasm32-unknown-unknown` and `wasm32-wasip1`
-targets, network access once (to clone the crossterm fork), and for the shell a
-checkout of bat-rust that has the commit named in `host/sh/bat-sh.lock`
-(`BAT_RUST_REPO`, default the `codex-shell` worktree on this machine).
+targets, and network access once (to clone the crossterm fork). The shell is
+built from `../crates/bat-sh` of this checkout; `host/sh/bat-sh.lock` records
+which source tree and what module came out (`host/sh/build.sh --record` after
+the crate changed).
 
 ```sh
 cd wasm-term/kernel && cargo test          # line discipline against termios behaviour
@@ -305,7 +316,7 @@ with that in mind.
 
 On a touch device (or a window narrower than 600px) the page adds what
 `bun-web-terminal` uses on a phone, importing its touch, viewport and wheel
-code (`web/mobile.ts`):
+code (`web/mobile.ts`; the three files are in `third_party/bun-web-terminal/`):
 
 - a row of keys under the terminal: keyboard, Esc, Ctrl, Tab, arrows,
   Shift+Enter (a new line in the prompt of codex and opencode, where the
@@ -392,4 +403,6 @@ is `guests/README.md`.
 - Toolchains that are not installed (zig, wasi-sdk, …) go under
   `wasm-term/vendor/tools/`, not system-wide.
 - Commit only your own paths (`git add wasm-term/<your-dir>`); several agents
-  share this worktree. Branch `wasm-term`; never `main`.
+  may share a worktree. Branch `wasm-term` of this repository; never `main`.
+- `third_party/` is a snapshot: change those packages in `random` and refresh
+  it with `third_party/sync.sh`.

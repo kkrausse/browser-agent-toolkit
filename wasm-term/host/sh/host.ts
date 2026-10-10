@@ -1,4 +1,4 @@
-// The filesystem side of bat-sh's host calls (bat-rust crates/bat-sh/src/sys.rs),
+// The filesystem side of bat-sh's host calls (crates/bat-sh/src/sys.rs of this repository),
 // served from wasm-term's vfs: the same tree the WASI guest reads and writes
 // through path_open / fd_read / fd_write. One ShHost per shell run; it owns the
 // run's descriptor table, so everything a killed shell had open goes with it.

@@ -1,8 +1,8 @@
-// bat_sh.wasm (bat-rust crates/bat-sh, target wasm32-unknown-unknown) as it
-// comes out of bat-rust's own build (host/sh/build.sh pins the commit): 24 imports
+// bat_sh.wasm (crates/bat-sh of this repository, target wasm32-unknown-unknown) as it
+// comes out of that crate's own wasm build (host/sh/build.sh runs it): 24 imports
 // in module `sh`, the exports sh_alloc / sh_free / sh_run. This file binds the
 // imports to a `Call` (host.ts) and encodes the run request; it is the same job
-// bat-rust/runtime/src/process/sh.ts does against the bat-rust kernel.
+// runtime/src/process/sh.ts of this repository does against its kernel.
 
 import { type Call, OP } from "./host";
 

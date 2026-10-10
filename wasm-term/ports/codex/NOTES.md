@@ -1094,7 +1094,7 @@ never reaches the seam; codex intercepts it and applies the patch in-process.
 host's child processes (`proc_spawn` / `proc_recv` / `proc_send` / `proc_signal`,
 `docs/abi.md` 3.4, through `wasm_term_tokio::Child`). The host runs each command in bat-rust's
 `bat-sh` (a bash-like shell with the coreutils, `rg`, `diff` and so on built in; one 0.86 MB wasm
-module pinned by `host/sh/bat-sh.lock`) in a shell Worker, on the vfs codex's own file tools
+module, built from `crates/bat-sh` of this repository and recorded in `host/sh/bat-sh.lock`) in a shell Worker, on the vfs codex's own file tools
 use. `SHELL-DESIGN.md` is the why; section 0 there lists where the build differs from the plan.
 
 What codex asks for, and what it gets **[ran]** unless marked:
@@ -1161,7 +1161,8 @@ model does with it is **[inferred]**: no real model was called.
 
 #### Coverage against real bash
 
-bat-rust's differential cases (`crates/bat-sh/tests/codex-cases.tsv`, branch `codex-shell`):
+bat-rust's differential cases (`crates/bat-sh/tests/codex-cases.tsv` of this repository; they came
+in with the branch `codex-shell`):
 each command line is run by the machine's bash, with the machine's real `rg` 15.1, GNU `diff`,
 `nl`, gawk and so on, and by bat-sh, on the same files; "same" means equal stdout and exit status.
 
@@ -1171,7 +1172,11 @@ each command line is run by the machine's bash, with the machine's real `rg` 15.
 | the same 215 now (native bat-sh, `codex-coverage.sh`) | 215 | 173 | 19 | 23 |
 | 312 cases added with the new commands | 312 | 297 | 15 | 0 |
 | all, native | 527 | 470 | 34 | 23 |
-| all, **through this integration** (pinned `bat_sh.wasm` on the vfs, `bun host/sh/coverage.ts`) | 527 | 468 | 36 | 23 |
+| all, **through this integration** (`bat_sh.wasm` on the vfs, `bun host/sh/coverage.ts`) | 527 | 468 | 36 | 23 |
+
+(The last row is 469 / 35 / 23 on some runs: the case `rg -l / -g` compares with the order in
+which the machine's multi-threaded `rg` lists files, which varies. Seen after the move, with the
+module built before it and the one built after.)
 
 All **[ran]**. Added, each compared with the real tool: `rg` (102 cases, 99 same), `nl` (15),
 `diff` (37, 36 same), `awk` (66; 64 same natively, 62 through the adapter), `timeout` (12),
@@ -1204,8 +1209,9 @@ What differs or is missing, by how much a model will notice:
   `tree` sorts by byte (as `LC_COLLATE=C`).
 - Version strings (`npm --version`, `awk --version`) are bat-sh's own.
 
-The bat-rust branch is `codex-shell`, 9 commits on `a2e480d` (the last is `6427fd7`), not
-pushed; none of it is on bat-rust's `main` or its `rewrite/rust` branch. `bat_sh.wasm` grew
+The bat-rust branch is `codex-shell`, 9 commits on `a2e480d` (the last is `6427fd7`). When this
+was written it was not pushed and on no other branch; since the move (section 10) it is merged
+into the branch `wasm-term`, which this project is on. `bat_sh.wasm` grew
 from 0.48 MB to 0.86 MB as built here (awk is about 180 kB of that), 0.36 MB gzipped.
 
 #### Numbers
@@ -1402,3 +1408,37 @@ Toolchains added (first session): wasi-sdk 34 and emsdk under
 stable toolchain via rustup (for the approach (c) measurement). Running rustup inside the
 checkout also made it sync the 1.95.0 toolchain that upstream's `rust-toolchain.toml` pins
 (it downloaded at least the `rust-src` component); the builds here do not use it.
+
+## 10. Moved into browser-agent-toolkit (2026-10-10)
+
+"bat-rust" in these notes is the Rust runtime of the repository this project now lives in
+(browser-agent-toolkit; `bat-rust` was the name of its checkout). Sections 1 to 9 were written
+while wasm-term was the directory `wasm-term/` of the repository `random`, and say so in places:
+commit hashes (`156426a`, `ac36686`, `fae3863`) are `random`'s, "this worktree" was
+`random/.claude/worktrees/wasm-term`, and the captures in `mock-llm/baseline/` and
+`ports/opencode/captures/` show that path because the native clients ran there.
+
+What changed with the move:
+
+- **History.** The 47 commits that touched `wasm-term/` came along (`git log -- wasm-term/`),
+  rewritten only in that their trees sit under `wasm-term/`, so their hashes differ from `random`'s.
+- **ghostty-web and bun-web-terminal** were siblings in `random`. They are a snapshot now:
+  `third_party/` (`third_party/README.md`, `third_party/sync.sh`). The package is still named
+  `@random/ghostty-web`.
+- **The shell** is built from `crates/bat-sh` of the same checkout (`host/sh/build.sh`), not from a
+  commit pinned in another worktree; `BAT_RUST_REPO` and `vendor/bat-sh-src` are gone,
+  `vendor/bat-sh-target` is still the build directory. Same source tree as the pinned `6427fd7`.
+  The module is 857,471 bytes where the one built in `random` was 857,466: the same functions in
+  another order, because cargo hashes the crate's absolute path into symbol names (`build.sh` has
+  the measurement). The 0.86 MB above stands.
+- **`vendor/`, the `dist/` outputs, `.state/`** were moved, not rebuilt. Every script finds them
+  relative to itself, so nothing in the patch tooling changed. What held the old absolute path and
+  was repointed: the symlinks `web/webkit/install.sh` makes under `vendor/webkit-syslibs/lib` and
+  in the WebKit build's `sys/lib`, Playwright's `vendor/playwright-browsers/.links`, the systemd
+  unit (`web/serve-up.sh` rewrites it), and the git pointers of the native opencode client's
+  snapshot store under `.state/`. Old session logs under `.state/` still name the old path.
+- **Cargo after the move**: kernel and guests rebuilt only their own crates (seconds);
+  `scripts/check.sh` re-checked 216 units in 2 min 46 s, the forks under `vendor/` and what
+  depends on them, the registry crates being reused.
+- `examples/terminal-app` of the repository takes the opencode guest from `../../wasm-term` by
+  default.

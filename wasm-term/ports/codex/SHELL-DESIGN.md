@@ -4,9 +4,11 @@ Question: codex runs in a browser tab as a `wasm32-wasip1` guest of wasm-term. H
 shell tool (run a command, read its output, get the exit status) get a real shell and a
 filesystem shared with codex's own file tools, using the `bat-rust` project?
 
-Paths used below: **WT** = this worktree's `wasm-term/`; **BR** = the bat-rust worktree
-`/home/kkrausse/devfs/repos/kkrausse/bat-rust/.claude/worktrees/codex-shell` (branch
-`codex-shell`, off `rewrite/rust`). "Ran" means I ran it; "read" means I read the code and
+Since this was written wasm-term moved into the bat-rust repository itself (browser-agent-toolkit,
+branch `wasm-term`, which has `codex-shell` merged): **WT** below is `wasm-term/` and **BR** the
+root of the same checkout. At the time they were two repositories: WT the directory `wasm-term/`
+of a worktree of `random`, BR a worktree of bat-rust on the branch `codex-shell` (off
+`rewrite/rust`). "Ran" means I ran it; "read" means I read the code and
 did not run it; "inferred" means neither.
 
 ## 0. Status: built (2026-10-10, later the same day)
@@ -17,12 +19,12 @@ record of why; what exists is described where it lives:
 | Part of the design | Where it is now |
 | --- | --- |
 | 5.1 the `proc_*` imports and the descriptor | `host/proc.ts`, `host/wasi.ts`; the contract is `docs/abi.md` 3.4 |
-| 5.2 `bat_sh.wasm` | built from a pinned bat-rust commit by `host/sh/build.sh` (`host/sh/bat-sh.lock`); bound in `host/sh/wasm.ts`, `host/sh/host.ts` |
+| 5.2 `bat_sh.wasm` | built from `crates/bat-sh` of this repository by `host/sh/build.sh` (`host/sh/bat-sh.lock` records the source tree and the module); bound in `host/sh/wasm.ts`, `host/sh/host.ts` |
 | 5.3 the channel, shell Workers | `host/sh/channel.ts`, `host/shell-worker.ts`, the supervisor in `host/index.ts` |
 | the Rust side | `guests/wasm-term-sys` (`process::Child`), `guests/wasm-term-tokio` (`Child`) |
 | codex | `ports/codex/main/src/shell.rs`, a `ProcessBackend` (NOTES.md section 8) |
 | section 6, the prototype | **removed** (`ports/shell-proto/`, last in commit `156426a`): its host code became `host/sh/` and `host/proc.ts`, its guest `guests/proc`, its coverage runner `host/sh/coverage.ts`. Its measurements below are the prototype's and are kept as the record; current ones are in NOTES.md |
-| section 7 step 5, the missing programs | bat-rust branch `codex-shell` (NOTES.md has the coverage) |
+| section 7 step 5, the missing programs | `crates/bat-sh` of this repository (the commits of the branch `codex-shell`; NOTES.md has the coverage) |
 
 Where the build differs from sections 5 to 7, and why:
 
@@ -387,7 +389,7 @@ Code: `WT/ports/shell-proto/` (commit `ac36686`). Nothing under `host/`, `web/`,
 
 ```sh
 # once: wasm-term's kernel (cd WT/web && bun run build) and bat_sh.wasm:
-cd /home/kkrausse/devfs/repos/kkrausse/bat-rust/.claude/worktrees/codex-shell
+cd <BR>
 CARGO_TARGET_DIR=$PWD/target-codex-shell/sh-wasm sh crates/bat-sh/build-wasm.sh
 
 cd <WT>/ports/shell-proto
