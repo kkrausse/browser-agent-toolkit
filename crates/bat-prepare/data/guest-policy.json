@@ -10,9 +10,9 @@
     { "package": "rollup", "with": "npm:@rollup/wasm-node@{version}", "expect": "dist/wasm-node/bindings_wasm_bg.wasm" },
     { "package": "lightningcss", "with": "npm:lightningcss-wasm@{version}", "expect": "lightningcss_node.wasm" },
     {
-      "package": "@tailwindcss/oxide-wasm32-wasi",
-      "with": "https://registry.npmjs.org/@tailwindcss/oxide-wasm32-wasi/-/oxide-wasm32-wasi-{version}.tgz",
-      "expect": "tailwindcss-oxide.wasm32-wasi.wasm"
+      "package": "@tailwindcss/oxide",
+      "with": "dir:../../../packages/guest-shims/tailwindcss-oxide",
+      "expect": "tailwindcss-oxide.wasm"
     }
   ],
   "prune": {

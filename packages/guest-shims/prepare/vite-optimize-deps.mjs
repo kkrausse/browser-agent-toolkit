@@ -112,6 +112,15 @@ for (const environment of Object.values(result.environments)) {
     count++; bytes += fs.statSync(target).size;
   }
 }
+// Tools that walk the project for source files (Tailwind's scanner) skip what a .gitignore
+// names. In the guest the cache directory is inside the workspace, which has no .gitignore
+// of its own, so megabytes of optimized dependencies would be scanned for class names on
+// every stylesheet transform, and the generated CSS would depend on whether the optimizer
+// had already written its output.
+for (const environment of Object.values(result.environments)) if (environment.cacheDir) {
+  const ignore = path.join(files, path.dirname(environment.cacheDir), '.gitignore');
+  if (!fs.existsSync(ignore)) { fs.writeFileSync(ignore, '*\n'); count++; }
+}
 // Leave the stage as it was found.
 for (const environment of Object.values(result.environments)) if (environment.cacheDir) fs.rmSync(path.join(stage, environment.cacheDir), { recursive: true, force: true });
 fs.writeFileSync(path.join(kept, 'result.json'), JSON.stringify(result, null, 1));
