@@ -37,6 +37,9 @@ export async function isolate(workerUrl: string, scope: string, note: (kind: str
     throw Error(`This page could not be cross-origin isolated (service worker ${navigator.serviceWorker.controller ? 'controls the page' : 'does not control the page'}, crossOriginIsolated ${crossOriginIsolated}).`)
   }
   sessionStorage.setItem(key, String(tries + 1))
+  // Seen in Chrome 154: the browser kept this document, waiting here, and brought it back
+  // on a later reload of the isolated page. It then has to go again.
+  addEventListener('pageshow', (event: PageTransitionEvent) => { if (event.persisted) location.reload() })
   note('stage', 'reloading once so the service worker serves this page')
   location.reload()
   await new Promise(() => {})

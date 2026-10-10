@@ -58,6 +58,14 @@ const api = { script: '/tmp/todo-api.mjs', port: 3001, store: `${workspace}/.ser
 const builtModel = process.env.MODEL_URL || undefined
 
 const params = new URLSearchParams(location.search)
+// `?reset=1` is taken out of the address at once and remembered for this start only: the page
+// may reload itself before it gets that far (isolate.ts), and a later reload must not reset again.
+const resetKey = 'terminal-app-reset'
+if (params.get('reset') === '1') {
+  try { sessionStorage.setItem(resetKey, '1') } catch { /* no storage: no reset */ }
+  params.delete('reset')
+  history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}`)
+}
 const model: ModelEndpoint = {
   baseURL: params.get('model') ?? builtModel ?? `${location.protocol}//${location.hostname}:4311/v1`,
   id: params.get('modelId') ?? 'scripted',
@@ -120,12 +128,11 @@ async function main() {
   const manifest = await response.json() as EditorManifest
   if (!manifest.launch.agent) throw Error('The prepared directory has no OpenCode server')
   const runtimeModule = await import(new URL(manifest.runtime?.entry ?? 'runtime/host.js', manifestUrl).href) as { bootRuntime: BootRuntime; resetWorkspace(options: { manifestUrl: string }): Promise<void> }
-  if (params.get('reset') === '1') {
+  if (sessionStorage.getItem(resetKey)) {
+    sessionStorage.removeItem(resetKey)
     await runtimeModule.resetWorkspace({ manifestUrl })
     // The terminal client's files (wasm-term keeps them in IndexedDB); this origin has no other database.
     for (const database of await indexedDB.databases()) if (database.name) indexedDB.deleteDatabase(database.name)
-    params.delete('reset')
-    history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}`)
   }
   const { bootRuntime } = runtimeModule
   say('Opening the workspace in this browser…')
