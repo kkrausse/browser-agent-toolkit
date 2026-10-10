@@ -13,7 +13,7 @@
 //   2. OpenCode server artefact → .runtime/opencode-2.0.3/ ($BAT_OPENCODE_DIR overrides;
 //      copied from a sibling checkout of the old toolkit when one exists, else downloaded
 //      from the checksummed release asset)
-//   3. kernel.wasm, bat_modules.wasm, bat_node_native.wasm, the bat-prepare CLI
+//   3. kernel.wasm, bat_modules.wasm, bat_node_native.wasm, bat_sh.wasm, the bat-prepare CLI
 //   4. runtime bundles → runtime/dist/
 //   5. the toolkit package → packages/toolkit/dist/
 import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
@@ -83,6 +83,7 @@ export async function setup(): Promise<{ env: Record<string, string> }> {
   await run('kernel.wasm', ['bash', 'crates/bat-kernel/build.sh'], { env: { CARGO_TARGET_DIR: target } })
   await run('bat_modules.wasm', ['sh', 'crates/bat-modules/build-wasm.sh'], { env: { CARGO_TARGET_DIR: target } })
   await run('bat_node_native.wasm', ['sh', 'crates/bat-node-native/build-wasm.sh'], { env: { CARGO_TARGET_DIR: join(target, 'native-wasm') } })
+  await run('bat_sh.wasm', ['sh', 'crates/bat-sh/build-wasm.sh'], { env: { CARGO_TARGET_DIR: join(target, 'sh-wasm') } })
   await run('bat-prepare', ['cargo', 'build', '--release', '-q', '-p', 'bat-prepare'], { env: { CARGO_TARGET_DIR: target } })
   const kernel = join(target, 'wasm32-wasip1-threads/release/bat_kernel.wasm')
   await run('runtime bundles', ['bun', 'runtime/build.ts'])
