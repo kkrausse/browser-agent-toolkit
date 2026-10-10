@@ -18,7 +18,8 @@ const here = import.meta.dir
 const root = normalize(join(here, '../..'))
 const port = Number(process.argv[2] ?? process.env.PORT ?? 4102)
 const dist = join(here, '../dist')
-const prepared = process.env.BAT_PREPARED ?? join(root, 'target-prepare/out/todo-new')
+// The node-runtime agent's own prepare output (built with its bat-modules fix) wins over the prepare agent's.
+const prepared = process.env.BAT_PREPARED ?? [join(root, 'target-runtime/prepared/todo'), join(root, 'target-prepare/out/todo-new')].find((d) => existsSync(join(d, 'manifest.json')))!
 const kernelWasm = () => {
   if (process.env.BAT_KERNEL_WASM) return process.env.BAT_KERNEL_WASM
   const candidates = ['target-runtime', 'target-kernel'].map((t) => join(root, t, 'wasm32-wasip1-threads/release/bat_kernel.wasm')).filter(existsSync)
@@ -60,6 +61,11 @@ Bun.serve({
     const path = decodeURIComponent(url.pathname)
     if (path.includes('..')) return new Response('forbidden', { status: 403, headers: isolation })
     if (path === '/' || path === '/index.html') return file(req, join(here, 'index.html'), 'no-store')
+    if (path === '/beat') {
+      // Liveness of the page's main thread, for diagnosing hangs: `?debug=beat` on the page.
+      await Bun.write(Bun.file('/tmp/bat-harness-beat.log'), `${Date.now()} ${url.search}\n`)
+      return new Response('', { headers: isolation })
+    }
     if (path === '/sw.js') return file(req, join(here, 'sw.js'), 'no-store')
     if (path === '/kernel.wasm') return file(req, kernelWasm(), 'no-cache')
     let m = /^\/runtime\/v\/[^/]+\/(.+)$/.exec(path)

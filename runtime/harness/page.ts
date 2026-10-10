@@ -181,6 +181,10 @@ async function run(o: RunOptions): Promise<RunResult> {
   return { pid: p.pid, code: status, stdout: stdout.text(), stderr: err, ms, spawnedAt, timedOut, trace }
 }
 
+if (params.get('debug') === 'beat') {
+  let n = 0
+  setInterval(() => void fetch(`/beat?n=${n++}&procs=${encodeURIComponent(JSON.stringify(k?.procList?.() ?? []))}`).catch(() => {}), 250)
+}
 const ready = start()
 ready.catch((e) => log(String(e?.stack ?? e), 'err'))
 ;(window as any).batHarness = {

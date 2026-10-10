@@ -14,9 +14,9 @@
 // The server (runtime/harness/server.ts, port 4102) is started if it is not running. The page
 // lives in the browser-control session `bat-node`.
 import { spawn, spawnSync } from 'node:child_process'
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdtempSync, readdirSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 
 const PORT = Number(process.env.BAT_HARNESS_PORT ?? 4102)
 const SESSION = process.env.BAT_HARNESS_SESSION ?? 'bat-node'
@@ -134,9 +134,14 @@ async function main() {
     else {
       const host = argv.shift()
       if (!host) throw new Error('run: which script?')
-      const name = `/workspace/.harness/${basename(host)}`
-      run.files[name] = readFileSync(host, 'utf8')
-      run.args = [name, ...argv]
+      // The script's siblings come along, so a guest can be several files.
+      const dir = dirname(host)
+      for (const f of readdirSync(dir)) {
+        const p = join(dir, f)
+        const st = statSync(p)
+        if (st.isFile() && st.size < 1 << 20) run.files[`/workspace/.harness/${f}`] = readFileSync(p, 'utf8')
+      }
+      run.args = [`/workspace/.harness/${basename(host)}`, ...argv]
     }
   } else throw new Error(`unknown command ${command}`)
   const result = browser(`return await page.evaluate(async (o) => { await window.batHarness.ready; return await window.batHarness.run(o) }, ${JSON.stringify(run)})`, opts.timeout + 30000)
