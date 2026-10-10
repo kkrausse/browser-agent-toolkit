@@ -10,6 +10,9 @@ export interface GuestParam {
   label: string;
   default: string;
   secret?: boolean;
+  /** The value is a URL; one starting with `/` is a path on the page's own origin
+   * (the dev server's reverse proxy) and reaches the program as an absolute URL. */
+  url?: boolean;
   hint?: string;
 }
 

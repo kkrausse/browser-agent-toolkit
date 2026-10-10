@@ -4,7 +4,8 @@
 //   /?guest=repl                 which guest to run (see /guests.json)
 //   &arg=a&arg=b                 extra argv entries
 //   &env=KEY=value               extra environment
-//   &<param>=value               a guest's own settings (opencode: server, password, dir)
+//   &<param>=value               a guest's own settings (opencode: server, password, dir);
+//                                server defaults to /proxy/opencode on this origin
 //   &persist=0                   do not load or store the guest's persistent directories
 //   &reset=1                     forget what was stored for this guest first
 //
@@ -94,7 +95,13 @@ for (const pair of params.getAll("env")) {
 }
 
 // A guest's own settings arrive as environment variables.
-for (const param of info.params ?? []) env[param.env] = params.get(param.query) ?? param.default;
+// A URL setting that is only a path means "on this page's origin": the dev
+// server's reverse proxy, the default, which works from any device the page
+// itself loads on.
+for (const param of info.params ?? []) {
+  const value = params.get(param.query) ?? param.default;
+  env[param.env] = param.url && value.startsWith("/") ? new URL(value, location.origin).href.replace(/\/$/, "") : value;
+}
 
 const persist = params.get("persist") === "0"
   ? undefined

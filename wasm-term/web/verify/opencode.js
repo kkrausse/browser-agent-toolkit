@@ -71,7 +71,7 @@ const defaults = await page.evaluate(() => {
   return Object.fromEntries([...new FormData(form)]);
 });
 check("launcher lists opencode with the mock backend's defaults",
-  defaults.server === "http://127.0.0.1:4792" && defaults.password === "wasm-term-mock" && defaults.dir === "/tmp/wasm-term-workspace", defaults);
+  defaults.server === "/proxy/opencode" && defaults.password === "wasm-term-mock" && defaults.dir === "/tmp/wasm-term-workspace", defaults);
 check("launcher lists the wasm guests too", await page.evaluate(() => !!document.querySelector('input[name="guest"][value="repl"]')));
 await shot("opencode-launcher");
 await page.evaluate(() => {

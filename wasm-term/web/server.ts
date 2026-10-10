@@ -5,6 +5,12 @@
 // Besides the page it serves the kernel wasm, the wasm guests, the JavaScript
 // guests' directories (ports), and a few endpoints under /test/ that the `net`
 // guest talks to.
+//
+// It is also a reverse proxy to the backends a guest talks to, so the page can
+// reach them same-origin (no CORS, no mixed content when the page is served
+// over https, one port to expose):
+//   /proxy/opencode/...  ->  OPENCODE_UPSTREAM  (default http://127.0.0.1:4792), streamed
+//   /proxy/codex         ->  CODEX_UPSTREAM     (default ws://127.0.0.1:4796), WebSocket
 
 import { existsSync, readdirSync } from "node:fs";
 import { basename, extname, join, normalize } from "node:path";
@@ -117,7 +123,65 @@ function sse(url: URL): Response {
   return respond(stream, "text/event-stream");
 }
 
-const server = Bun.serve({
+// ---- reverse proxy ----------------------------------------------------------
+
+const opencodeUpstream = (process.env.OPENCODE_UPSTREAM ?? "http://127.0.0.1:4792").replace(/\/+$/, "");
+const codexUpstream = (process.env.CODEX_UPSTREAM ?? "ws://127.0.0.1:4796").replace(/\/+$/, "");
+
+/** Headers that describe one hop, not the message: never forwarded in either direction. */
+const HOP_HEADERS = ["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade", "host"];
+
+/** Forwards one request to `upstream` and streams the answer back as it arrives
+ * (the opencode event stream is one response that never ends). Method, path,
+ * query (opencode also accepts its credentials as `?auth_token=`), body and
+ * headers, `Authorization` included, pass through unchanged. */
+async function proxyHttp(request: Request, upstream: string, rest: string, search: string): Promise<Response> {
+  const headers = new Headers(request.headers);
+  for (const name of HOP_HEADERS) headers.delete(name);
+  // The upstream sees a non-browser client: no Origin, so its CORS allow-list never applies.
+  headers.delete("origin");
+  headers.delete("referer");
+  // Bun's fetch decodes the body, so ask for it plain rather than decode and re-encode a stream.
+  headers.set("accept-encoding", "identity");
+  let response: Response;
+  try {
+    response = await fetch(`${upstream}${rest}${search}`, {
+      method: request.method,
+      headers,
+      body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+      redirect: "manual",
+      signal: request.signal,
+    });
+  } catch (error) {
+    if (request.signal.aborted) return respond(null, "text/plain", {}, 499);
+    return respond(`wasm-term proxy: ${upstream} is not reachable (${(error as Error).message})\n`, "text/plain", {}, 502);
+  }
+  const out = new Headers(response.headers);
+  for (const name of HOP_HEADERS) out.delete(name);
+  out.delete("content-encoding");
+  out.delete("content-length");
+  // Same-origin now: the upstream's CORS answers would only confuse, and a Basic
+  // challenge would make the browser put up its own login dialog over the TUI's.
+  for (const name of [...out.keys()]) if (name.startsWith("access-control-")) out.delete(name);
+  out.delete("www-authenticate");
+  for (const [name, value] of Object.entries(isolation)) if (name !== "Cache-Control" || !out.has("cache-control")) out.set(name, value);
+  // Stops any intermediary (tailscale serve, nginx) from holding events back.
+  if ((out.get("content-type") ?? "").startsWith("text/event-stream")) out.set("X-Accel-Buffering", "no");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers: out });
+}
+
+/** One browser WebSocket relayed to an upstream one. */
+interface Relay {
+  kind: "relay";
+  url: string;
+  protocols: string[];
+  upstream?: WebSocket;
+  /** Frames from the browser that arrived before the upstream connection opened. */
+  pending: (string | Uint8Array)[];
+}
+type SocketData = { kind: "echo" } | Relay;
+
+const server = Bun.serve<SocketData>({
   hostname: process.env.HOST ?? "127.0.0.1",
   port,
   idleTimeout: 120,
@@ -151,9 +215,22 @@ const server = Bun.serve({
       return built(request, target, TYPES[extname(target)] ?? "application/octet-stream");
     }
 
+    // ---- reverse proxy -------------------------------------------------------
+    if (path === "/proxy/opencode" || path.startsWith("/proxy/opencode/")) {
+      // No idle timeout: the event stream may be quiet for longer than any limit.
+      server.timeout(request, 0);
+      return proxyHttp(request, opencodeUpstream, path.slice("/proxy/opencode".length) || "/", url.search);
+    }
+    if (path === "/proxy/codex" || path.startsWith("/proxy/codex/")) {
+      const protocols = (request.headers.get("sec-websocket-protocol") ?? "").split(",").map(part => part.trim()).filter(Boolean);
+      const data: Relay = { kind: "relay", url: `${codexUpstream}${path.slice("/proxy/codex".length)}${url.search}`, protocols, pending: [] };
+      if (server.upgrade(request, { data })) return undefined as unknown as Response;
+      return respond("expected a WebSocket upgrade\n", "text/plain", {}, 426);
+    }
+
     // ---- endpoints for the `net` guest -------------------------------------
     if (path === "/test/ws") {
-      if (server.upgrade(request)) return undefined as unknown as Response;
+      if (server.upgrade(request, { data: { kind: "echo" } })) return undefined as unknown as Response;
       return respond("expected a WebSocket upgrade\n", "text/plain", {}, 426);
     }
     if (path === "/test/sse") return sse(url);
@@ -164,10 +241,40 @@ const server = Bun.serve({
     return respond("Not found\n", "text/plain", {}, 404);
   },
   websocket: {
+    // Room for the largest frames a relayed protocol sends (codex thread history).
+    maxPayloadLength: 64 * 1024 * 1024,
     open(socket) {
-      socket.send("hello from /test/ws");
+      const data = socket.data;
+      if (data.kind === "echo") {
+        socket.send("hello from /test/ws");
+        return;
+      }
+      const upstream = new WebSocket(data.url, data.protocols);
+      upstream.binaryType = "arraybuffer";
+      data.upstream = upstream;
+      upstream.onopen = () => {
+        for (const frame of data.pending.splice(0)) upstream.send(frame);
+      };
+      upstream.onmessage = event => {
+        socket.send(typeof event.data === "string" ? event.data : new Uint8Array(event.data as ArrayBuffer));
+      };
+      // 1005/1006 are reserved: they describe a close and cannot be sent in one.
+      upstream.onclose = event => socket.close([1005, 1006, 1015].includes(event.code) ? 1011 : event.code, event.reason);
+      upstream.onerror = () => socket.close(1011, "upstream unreachable");
+    },
+    close(socket, code, reason) {
+      const data = socket.data;
+      if (data.kind !== "relay") return;
+      data.upstream?.close([1005, 1006, 1015].includes(code) ? 1000 : code, reason);
     },
     message(socket, message) {
+      const data = socket.data;
+      if (data.kind === "relay") {
+        const frame = typeof message === "string" ? message : new Uint8Array(message);
+        if (data.upstream?.readyState === WebSocket.OPEN) data.upstream.send(frame);
+        else data.pending.push(frame);
+        return;
+      }
       // Echo: text comes back upper-cased, binary comes back reversed, "bye" closes.
       if (typeof message === "string") {
         if (message === "bye") socket.close(1000, "goodbye");

@@ -11,7 +11,8 @@ export const opencodeGuest: JsGuest = {
   build: "cd wasm-term/ports/opencode && bun run build:native && bun run build:tui",
   // Defaults are the token-free backend from wasm-term/mock-llm (mock-llm/up.sh).
   params: [
-    { query: "server", env: "OPENCODE_SERVER_URL", label: "Server URL", default: "http://127.0.0.1:4792", hint: "an `opencode serve` this browser can reach; it must allow this page's origin (--cors)" },
+    // A path = same origin: the dev server's reverse proxy to the backend (web/server.ts, OPENCODE_UPSTREAM).
+    { query: "server", env: "OPENCODE_SERVER_URL", label: "Server URL", default: "/proxy/opencode", url: true, hint: "/proxy/opencode = through this page's server (works from any device); or the URL of an `opencode serve` this browser can reach directly, which must then allow this page's origin (--cors)" },
     { query: "password", env: "OPENCODE_SERVER_PASSWORD", label: "Password", default: "wasm-term-mock", secret: true, hint: "OPENCODE_SERVER_PASSWORD of the server (user is always opencode)" },
     { query: "dir", env: "OPENCODE_DIRECTORY", label: "Project directory", default: "/tmp/wasm-term-workspace", hint: "a path on the server's machine; empty = the directory the server runs in" },
   ],
