@@ -277,3 +277,72 @@ Numbers and evidence: `docs/experiments/2026-10-09-tools.md`.
   the manifest and skipped); and a base directory for `dir:` paths in the embedded policy
   (`$BAT_POLICY_BASE`, else the crate's `data/` at build time; it used to be the current
   directory).
+
+## 2026-10-09 sqlite: engine, VFS, journal mode, durability (runtime/src/sqlite)
+
+Measurements: `docs/experiments/2026-10-09-sqlite.md`.
+
+- **Own build of SQLite, not `@sqlite.org/sqlite-wasm` or wa-sqlite.** The amalgamation
+  (3.53.1, the version Node 24.18 bundles) compiled with wasi-sdk 34 and
+  `SQLITE_OS_OTHER`, with the VFS written in C beside it (`native/bat_sqlite.c`). The
+  result imports 18 functions from one module and no WASI or Emscripten runtime, so it
+  instantiates synchronously with about 200 lines of glue; the published builds need
+  either their Emscripten glue (asynchronous init) or a hand-written replacement for 36
+  imports, and their VFS hook is a JS struct binding. 653 KiB, 303 KiB gzip; the official
+  package's Wasm alone is about 850 KiB. clang is not installed on diesel2, so the binary
+  is committed; `native/build.sh` records the inputs and their hashes.
+- **`-Os`.** As fast as `-O2` once warm, a third smaller, and about half the cold cost
+  (V8 compiles each Wasm function on its first call; `-O2` inlining makes the functions a
+  first boot touches larger). `-Oz` was 2x slower on inserts.
+- **Left out of the build**: FTS3/5, R-Tree, Geopoly, session, load-extension (+250 KiB
+  for FTS5 and R-Tree at `-O2`). OpenCode uses none. `EXTRA=-DSQLITE_ENABLE_FTS5` adds one.
+- **Real WAL, with the WAL index and all locks in process memory.** `PRAGMA
+  journal_mode=WAL` returns `wal` and the file is an ordinary WAL database (native SQLite
+  opens it and vice versa). `xShmMap`/`xShmLock` are heap memory and a lock table in C
+  keyed by database path, shared by the connections of one process, so several
+  `DatabaseSync` objects on one file behave as on native (checked against native,
+  including SQLITE_BUSY). Chosen over exclusive locking mode because that would make a
+  second connection in the same process fail, and over answering `delete`/`memory`
+  because WAL writes each changed page once per commit and `MEMORY` journaling is not
+  crash-safe (the crash harness's control case shows it).
+- **Nothing coordinates two processes on one database file.** The kernel has no advisory
+  locks, and the WAL index is private to a process. Two guest processes writing the same
+  database at the same time can corrupt it. One process (OpenCode) owns its database
+  today. Doing this properly needs kernel support: byte-range or whole-file advisory locks
+  released when a process dies, and for WAL a shared mapping (the index could live in
+  kernel shared memory). Not built.
+- **xSync does not wait, and SQLite is told it need not sync to order writes.** The overlay
+  journal is one ordered stream of whole records, so a crash leaves all files as of one
+  instant between two operations. The kernel backend therefore reports
+  `SAFE_APPEND | SEQUENTIAL | POWERSAFE_OVERWRITE` and on xSync only asks kerneld to drain
+  (`kernel.flush()` not awaited, at most one request outstanding). Consequences: the file
+  is never corrupt after a crash or closed tab (3,978 crash points checked with native
+  SQLite, plus one reload mid-transaction in Chrome); a transaction that returned from
+  COMMIT can be lost if the tab dies before the drain. With OpenCode's
+  `synchronous=NORMAL` SQLite calls xSync only at checkpoints, so in practice the window
+  is kerneld's own 250 ms drain tick plus the OPFS write. `createKernelBackend(kernel,
+  { sync: 'wait' })` blocks in xSync until OPFS has the data (measured: 1,000 autocommits
+  76 ms instead of 18–24, 6 MB insert 129 ms instead of 35–45), for a caller that wants
+  commit to mean durable; then `synchronous=FULL` is what makes every commit sync.
+  **This depends on the journal staying a single ordered stream taken at record
+  boundaries**; if persistence ever becomes per-file or unordered, the device
+  characteristics in `backend-kernel.ts` must drop to `POWERSAFE_OVERWRITE` and `sync`
+  must default to `wait`.
+- **WAL doubles what goes to OPFS**: a page is written to the WAL and again at checkpoint,
+  and both are journaled (the browser bench pushed 60–130 MB through the journal). Not
+  reduced; a larger `wal_autocheckpoint` or a non-persistent `-wal` would be the levers,
+  and the second is unsafe.
+- **Cold start is the remaining cost, and prewarming is the runtime's choice.** Warm, a
+  call is within about 2x of native. The first statements of a process cost 40–80 ms under
+  Node and 59 ms on a first page load in Chrome (10–14 ms on later loads) because of lazy
+  Wasm compilation. `sqlite.__bat.prewarm(scratchFile?)` runs a canned workload; in the
+  same worker it brought the first boot to 4.9 ms in Chrome. Compiled code is shared by
+  workers that received the same `WebAssembly.Module`, so the module should be compiled
+  once (page or kerneld, `compileStreaming`) and posted, not compiled per process.
+- **Numbers cross the JS boundary as doubles.** Row values are fetched with one call per
+  row (`bat_row` fills a flat record); `changes` and `lastInsertRowid` come back as
+  doubles; BigInt is used only when an integer is outside ±(2^53−1) or `readBigInts` is
+  set. JS numbers bind as REAL, as in Node.
+- **Buffers given to SQLite come from `sqlite3_malloc`**, not libc `malloc`: SQLite frees
+  bound text and blobs with `sqlite3_free`, and the two are only the same allocator by
+  build accident (found as a heap trap in the differential run).
