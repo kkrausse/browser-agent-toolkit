@@ -368,6 +368,53 @@ const SHELL_SCENARIOS: Scenario[] = [
   },
 ];
 
+// ---- the TODO example (examples/todo-app, codex in its editor panel) ---------------------------
+// The working directory is the app's source as its dev server sees it: an edit shows in the live preview,
+// and `node` is a real program there.
+
+/** `todo-heading "Some text"`: finds the page's heading, reads around it, replaces it with the quoted text
+ * (default "Edited by codex") in a patch built from what the search returned, and checks the edit. */
+function todoHeadingPatch(turn: Turn): ToolCall | undefined {
+  const found = /^(\d+):(\s*)<h1>(.*)<\/h1>\s*$/m.exec(outputOf(turn.toolResults[0] ?? ""));
+  if (!found) return execCall(turn, "echo 'mock-llm: no <h1> line in src/home.tsx' >&2; exit 1");
+  const [, , indent, before] = found;
+  const after = /"([^"\n]+)"/.exec(turn.userText)?.[1] ?? "Edited by codex";
+  return patchCall(turn, ["*** Begin Patch", "*** Update File: src/home.tsx", "@@", `-${indent}<h1>${before}</h1>`, `+${indent}<h1>${after}</h1>`, "*** End Patch", ""].join("\n"));
+}
+
+const NODE_SCRIPT = [
+  "cat > /tmp/mock-count.mjs <<'EOF'",
+  "import { readFileSync, readdirSync } from 'node:fs'",
+  "const files = readdirSync('src').filter(name => name.endsWith('.tsx'))",
+  "const lines = files.map(name => readFileSync(`src/${name}`, 'utf8').split('\\n').length)",
+  "console.log(`mock-node-script: ${files.length} tsx files, ${lines.reduce((a, b) => a + b, 0)} lines, heading ${/<h1>(.*)<\\/h1>/.exec(readFileSync('src/home.tsx', 'utf8'))?.[1]}`)",
+  "EOF",
+  "node /tmp/mock-count.mjs",
+].join("\n");
+
+const TODO_SCENARIOS: Scenario[] = [
+  {
+    name: "todo-heading",
+    match: /\btodo-heading\b/i,
+    step: script("todo-heading", [
+      (t) => ({ say: "finding the heading.", tool: execCall(t, 'rg -n "<h1>" src/home.tsx') }),
+      (t) => ({ say: "reading around it.", tool: execCall(t, "nl -ba src/home.tsx | sed -n '20,24p'") }),
+      (t) => ({ say: "changing the heading.", tool: todoHeadingPatch(t) }),
+      (t) => ({ say: "checking the edit.", tool: execCall(t, 'rg -n "<h1>" src/home.tsx') }),
+    ], (turn) => `Heading now: \`${lastLine(outputOf(turn.toolResults[3] ?? "")).trim()}\``),
+  },
+  {
+    // Programs: node itself, a script of the model's own on the project's files, the project's typecheck.
+    name: "todo-node",
+    match: /\btodo-node\b/i,
+    step: script("todo-node", [
+      (t) => ({ say: "asking node what it is.", tool: execCall(t, "node -e 'console.log(\"mock-node-ok\", process.version, 6 * 7)'") }),
+      (t) => ({ say: "running a script on the source.", tool: execCall(t, NODE_SCRIPT) }),
+      (t) => ({ say: "running the project's typecheck.", tool: execCall(t, 'npx tsc --noEmit -p . ; echo "tsc-exit=$?"', { yield_time_ms: 120000 }) }),
+    ], (turn) => `Script: \`${lastLine(outputOf(turn.toolResults[1] ?? ""))}\`\nTypecheck: \`${lastLine(outputOf(turn.toolResults[2] ?? ""))}\``),
+  },
+];
+
 const SCENARIOS: Scenario[] = [
   {
     name: "title",
@@ -381,6 +428,7 @@ const SCENARIOS: Scenario[] = [
     step: () => ({ text: "" }), // handled before streaming: HTTP 400
   },
   ...SHELL_SCENARIOS,
+  ...TODO_SCENARIOS,
   {
     name: "multi-tool",
     match: /\bmulti[- ]?tool\b/i,

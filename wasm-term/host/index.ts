@@ -91,6 +91,12 @@ export interface ProgramOptions {
   clipboard?: ClipboardBridge;
   /** JavaScript guests: `fetch` of URLs under these prefixes is answered by the page (page-fetch.ts), e.g. by a server that runs in this tab. */
   pageFetch?: PageFetchOptions;
+  /** Passed as it is to a Worker entry that has hooks (`setWorkerHooks` in worker.ts); structured-cloned. */
+  host?: unknown;
+  /** What such a Worker entry sent with `{ t: "host" }`. */
+  onHostMessage?(data: unknown): void;
+  /** Called right before the program's Worker is terminated: the last moment to release what it holds elsewhere. */
+  beforeTerminate?(): void;
   /** Bytes for the terminal emulator (pty master output). */
   onOutput(data: Uint8Array): void;
   onExit?(status: ExitStatus): void;
@@ -212,6 +218,11 @@ export function startProgram(options: ProgramOptions): Program {
 
   function dropWorker(): void {
     lingering = false;
+    try {
+      options.beforeTerminate?.();
+    } catch (error) {
+      console.warn("wasm-term: beforeTerminate failed", error);
+    }
     worker.terminate();
     for (const resolve of fileWaiters.values()) resolve(null);
     fileWaiters.clear();
@@ -266,6 +277,8 @@ export function startProgram(options: ProgramOptions): Program {
       options.onLoad?.({ phase: message.phase, loaded: message.loaded, total: message.total });
     } else if (message.t === "log") {
       console.log(message.text);
+    } else if (message.t === "host") {
+      options.onHostMessage?.(message.data);
     } else if (message.t === "proc_need" || message.t === "proc_replace") {
       startShell(message.slot, message.channel, message.t === "proc_need" ? "need" : "replace");
     } else if (message.t === "proc_stat") {
@@ -300,6 +313,7 @@ export function startProgram(options: ProgramOptions): Program {
     ypixel: options.ypixel ?? 0,
     files: options.files,
     persist: options.persist && { roots: options.persist.roots, exclude: options.persist.exclude },
+    host: options.host,
   };
   let stopPageFetch: (() => void) | undefined;
   const transfer: Transferable[] = [];

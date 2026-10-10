@@ -19,7 +19,7 @@
 //   });
 
 import { init, Terminal } from "@random/ghostty-web";
-import { type ExitStatus, type PersistOptions, type Program, startProgram } from "../host/index";
+import { type ExitStatus, type PersistOptions, type Program, type ProgramOptions, startProgram } from "../host/index";
 import type { PageFetchOptions } from "../host/page-fetch";
 
 export type { PageFetchOptions } from "../host/page-fetch";
@@ -42,6 +42,8 @@ export interface MountOptions {
   fontSize?: number;
   theme?: { background: string; foreground: string };
   onExit?(status: ExitStatus): void;
+  /** Laid over what this function passes `startProgram`: a wasm guest (`guestUrl`, `workerUrl`, `args`), `http`, `tcpRelay`, `files`, `onLoad`, ... */
+  program?: Partial<ProgramOptions>;
 }
 
 export interface Mounted {
@@ -110,6 +112,7 @@ export async function mountTerminal(options: MountOptions): Promise<Mounted> {
     ypixel: Math.round(pixels.height * terminal.rows),
     persist: options.persist,
     pageFetch: options.pageFetch,
+    ...options.program,
     onOutput: data => terminal.write(data),
     onExit(status) {
       const how = status.signal ? `killed by signal ${status.signal}` : `exit code ${status.code}`;

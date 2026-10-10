@@ -4,6 +4,7 @@ import type { Todo } from '@/schema/todo'
 import { createStaticHandler } from '@/server/staticFiles'
 import { createEditorHandler, readModelCatalog } from '@kkrausse/browser-agent-toolkit/server'
 import { authorizeEditing } from '@/server/editing'
+import { createCodexFiles } from '@/server/codexFiles'
 import { resolve } from 'node:path'
 
 const isProduction = process.env.NODE_ENV === 'production'
@@ -35,6 +36,11 @@ const fakeHost = process.env.EDITOR_FAKE_HOST === '1'
   ? await (await import('./fake-host')).createTodoFakeHost(`http://127.0.0.1:${port}`)
   : undefined
 
+// Codex in the editor (codex.ts): static files only. Its model traffic goes from the tab to OpenAI, directly or,
+// with CODEX_TCP_RELAY=wss://host/tcp (wasm-term/web/tcp-relay-main.ts), as TLS through a relay that only copies bytes.
+const codex = createCodexFiles('.editor/codex')
+const codexPolicy = () => (codex.available() && !fakeHost ? { tcpRelay: process.env.CODEX_TCP_RELAY || undefined } : undefined)
+
 const forbidden = () => new Response('Editing is not authorized', { status: 403, headers: { 'Cache-Control': 'no-store' } })
 const withHeaders = (response: Response) => {
   for (const [key, value] of Object.entries(editor.headers)) response.headers.set(key, value)
@@ -60,7 +66,8 @@ const server = Bun.serve({
       }
       return editor.fetch(request)
     }
-    if (path === '/editing-policy') return Response.json({ allowed: authorizeEditing(request), fakeHost: !!fakeHost }, { headers: { 'Cache-Control': 'no-store' } })
+    if (codex.matches(path)) return authorizeEditing(request) ? withHeaders(await codex.fetch(request)) : forbidden()
+    if (path === '/editing-policy') return Response.json({ allowed: authorizeEditing(request), fakeHost: !!fakeHost, codex: codexPolicy() }, { headers: { 'Cache-Control': 'no-store' } })
     if (path.startsWith('/api/')) return withHeaders(await api(request))
     return useBuild ? withHeaders(await app(request)) : new Response('Not found', { status: 404 })
   },

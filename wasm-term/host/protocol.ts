@@ -77,6 +77,8 @@ export interface InitMessage {
   proc?: ProcInit;
   /** JavaScript guests: `fetch` of URLs under these prefixes goes to the page over this port (page-fetch.ts). */
   pageFetch?: import("./page-fetch").PageFetchInit;
+  /** For a Worker entry with hooks (`setWorkerHooks` in worker.ts): whatever the page's `ProgramOptions.host` was. */
+  host?: unknown;
 }
 
 export interface ProcInit {
@@ -142,7 +144,9 @@ export type WorkerMessage =
   /** One child ended: what it was and what it cost (`Program.procs`, for measurements and tests). */
   | { t: "proc_stat"; command: string; status: number; signal: number; calls: number; queueMs: number; runMs: number }
   /** Where a wasm guest is in starting up: fetching the module (bytes so far, of `total` when known), compiling it, running. */
-  | { t: "load"; phase: "download" | "compile" | "start"; loaded: number; total: number };
+  | { t: "load"; phase: "download" | "compile" | "start"; loaded: number; total: number }
+  /** From a Worker entry with hooks to the page's `ProgramOptions.onHostMessage`. */
+  | { t: "host"; data: unknown };
 
 /** After exit a wasm guest's Worker stays to answer these (its vfs outlives the program). */
 export interface FileRequest {

@@ -1,13 +1,13 @@
 import { useEffect, useState, type ComponentType } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
-type Panel = ComponentType<{ fakeHost: boolean; onExit(): void }>
+type Panel = ComponentType<{ fakeHost: boolean; codex?: { tcpRelay?: string }; onExit(): void }>
 
 /** App-owned UI gate. The server independently protects editor assets and model calls.
  * In the editor's own preview the toolkit's Vite plugin replaces this module with nothing. */
 export default function Editing() {
   const queryClient = useQueryClient()
-  const [policy, setPolicy] = useState<{ allowed: boolean; fakeHost: boolean }>()
+  const [policy, setPolicy] = useState<{ allowed: boolean; fakeHost: boolean; codex?: { tcpRelay?: string } }>()
   const [isEditing, setIsEditing] = useState(false)
   useEffect(() => {
     const abort = new AbortController()
@@ -44,7 +44,7 @@ export default function Editing() {
       {resetNote && <small role="status"> {resetNote}</small>}
     </aside>
     {isEditing && (Panel
-      ? <Panel fakeHost={policy.fakeHost} onExit={() => { setIsEditing(false); void queryClient.invalidateQueries() }} />
+      ? <Panel fakeHost={policy.fakeHost} codex={policy.codex} onExit={() => { setIsEditing(false); void queryClient.invalidateQueries() }} />
       : <p style={{ padding: '1rem' }}>Loading editor…</p>)}
   </>
 }

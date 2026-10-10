@@ -2,13 +2,33 @@
 // the guest's imports to the machine, runs `_start` to completion.
 
 import { loadKernel } from "./kernel";
-import { createMachine, ProcessExit } from "./machine";
+import { createMachine, type Machine, ProcessExit } from "./machine";
 import type { FileRequest, InitMessage, WorkerMessage } from "./protocol";
 import { createPersister } from "./persist";
-import { createProcesses } from "./proc";
+import { createProcesses, type Processes } from "./proc";
 import { createRingReader } from "./ring";
 import { createVfs, serveFile, type Vfs } from "./vfs";
 import { createWasi } from "./wasi";
+
+/** What a Worker entry of another project can change (it imports this file and calls `setWorkerHooks` before
+ * the page's init message arrives): examples/todo-app/codex puts a directory of the guest's filesystem and its
+ * child processes on the toolkit's kernel this way. */
+export interface WorkerHooks {
+  /** Called when the machine and the filesystem exist, before the guest is instantiated. */
+  setup?(context: { init: InitMessage; machine: Machine; vfs: Vfs; post(message: WorkerMessage, transfer?: Transferable[]): void }): Promise<WorkerSetup | void>;
+}
+export interface WorkerSetup {
+  /** Replaces the process table behind `proc_*` (default: the shell of proc.ts when the page gave one). */
+  processes?: Processes;
+  /** May replace entries of the guest's import object. */
+  imports?(imports: WebAssembly.Imports): void;
+  /** Called with the guest's memory before `_start`. */
+  setMemory?(memory: WebAssembly.Memory): void;
+}
+let hooks: WorkerHooks = {};
+export function setWorkerHooks(value: WorkerHooks): void {
+  hooks = value;
+}
 
 /** Where a program expects to find a shell (codex: `/bin/bash`, then `/bin/sh`). */
 const SHELL_STUBS = ["/bin/sh", "/bin/bash", "/usr/bin/bash", "/usr/bin/env"];
@@ -124,12 +144,15 @@ async function run(init: InitMessage): Promise<void> {
     post({ t: "file", id, data }, data ? [data.buffer] : []);
   };
 
-  const processes = init.proc ? createProcesses({ machine, vfs, init: init.proc, onFsChange: persister?.sync }) : undefined;
+  const custom = (await hooks.setup?.({ init, machine, vfs, post })) || undefined;
+  const processes = custom?.processes ?? (init.proc ? createProcesses({ machine, vfs, init: init.proc, onFsChange: persister?.sync }) : undefined);
   const wasi = createWasi({ args: init.args, env: init.env, machine, vfs, onFsChange: persister?.sync, processes });
+  custom?.imports?.(wasi.imports);
   if (init.env.WASM_TERM_TRACE) traceImports(wasi.imports);
   const instance = await WebAssembly.instantiate(guestModule, wasi.imports);
   const exports = instance.exports as { memory: WebAssembly.Memory; _start(): void };
   wasi.setMemory(exports.memory);
+  custom?.setMemory?.(exports.memory);
 
   let code = 0;
   let signal: number | undefined;

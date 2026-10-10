@@ -1,4 +1,17 @@
 .todo-editor{position:fixed;inset:0;z-index:30;display:grid;grid-template-columns:minmax(0,1fr) min(440px,45vw);background:#fafafa;color:#182230;font:14px system-ui}
+.todo-editor-wide{grid-template-columns:minmax(0,1fr) min(680px,58vw)}
+.todo-editor-panel>header [role=tablist]{display:flex;gap:0;margin-left:auto}
+.todo-editor-panel>header [role=tab]{border-radius:0}
+.todo-editor-panel>header [role=tab]:first-child{border-radius:6px 0 0 6px}
+.todo-editor-panel>header [role=tab]:last-child{border-radius:0 6px 6px 0;border-left:0}
+.todo-editor-panel>header [role=tab][aria-selected=true]{background:#182230;color:white;border-color:#182230}
+.todo-editor-chat[hidden],.todo-editor-codex[hidden]{display:none}
+.todo-editor-codex{flex:1;min-height:0;display:flex;flex-direction:column;background:#16161d}
+.todo-editor-codex-terminal{flex:1;min-height:0;overflow:hidden;padding:4px 0 0 6px}
+.todo-editor-codex>footer{padding:6px 12px;border-top:1px solid #2a2a37;background:white;font-size:12px;flex-shrink:0}
+.todo-editor-codex>footer p{margin:2px 0;line-height:1.5}
+.todo-editor-codex>footer button{border:1px solid #cbd5e1;border-radius:6px;padding:3px 8px;background:white;font:inherit;cursor:pointer}
+.todo-editor-codex-wait{flex:1;padding:12px}
 .todo-editor-preview{position:relative;min-width:0;height:100%}
 .todo-editor-preview .oc-editor-preview{position:absolute;inset:0;width:100%;height:100%;border:0}
 .todo-editor-preview>p{padding:12px}
