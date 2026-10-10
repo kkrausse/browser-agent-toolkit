@@ -424,6 +424,8 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
     () => publish({ status: 'ready', message: 'Ready. Ask the agent to change the app; changes stay local to this browser.', error: undefined }),
     error => { if (!lifetime.signal.aborted) publish({ status: 'failed', message: 'The editor did not start completely.', error: errorText(error) }); },
   );
+  // Up or failed: nothing waits for the network any more, the image's remainder may use it.
+  void ready.catch(() => {}).then(() => host.started?.());
   publish({ message: 'Starting preview and agent…' });
 
   const restart = async (name: 'preview' | 'agent') => {

@@ -31,6 +31,10 @@ export interface StoreImageArgs {
   sha256?: string
   /** Length of the image head: the file is usable (mountable) once this much is in it. */
   headBytes?: number
+  /** With a start-up order: where the bodies a start-up reads end. The download stops
+   * reading there until `resume` settles, so that what the programs fetch to start (their
+   * program scripts, the runtime's Wasm) does not share the link with 200 MB nobody waits for. */
+  firstBytes?: number
   /** Per-block SHA-256 file written by prepare, and its own hash. */
   sums?: { url: string; blockBytes: number; sha256: string }
   /** bat_node_native.wasm: streaming SHA-256 for a prepared directory without block sums. */
@@ -103,7 +107,7 @@ async function fetchSums(sums: NonNullable<StoreImageArgs['sums']>, blocks: numb
   return bytes
 }
 
-export async function storeImage(a: StoreImageArgs, onProgress: (p: StoreImageProgress) => void, signal?: AbortSignal): Promise<StoreImageResult> {
+export async function storeImage(a: StoreImageArgs, onProgress: (p: StoreImageProgress) => void, signal?: AbortSignal, resume?: Promise<void>): Promise<StoreImageResult> {
   const t0 = performance.now()
   const dir = await opfsDir(a.namespace, 'images')
   const cached = (file: string, size: number): StoreImageResult => {
@@ -134,11 +138,11 @@ export async function storeImage(a: StoreImageArgs, onProgress: (p: StoreImagePr
       }
       await dir.removeEntry(markOf(a.name)).catch(() => {})
     }
-    return download(a, dir, onProgress, signal, t0)
+    return download(a, dir, onProgress, signal, t0, resume)
   })
 }
 
-async function download(a: StoreImageArgs, dir: FileSystemDirectoryHandle, onProgress: (p: StoreImageProgress) => void, signal: AbortSignal | undefined, t0: number): Promise<StoreImageResult> {
+async function download(a: StoreImageArgs, dir: FileSystemDirectoryHandle, onProgress: (p: StoreImageProgress) => void, signal: AbortSignal | undefined, t0: number, resume?: Promise<void>): Promise<StoreImageResult> {
   const tmpName = partialOf(a.name)
   const tmp = await dir.getFileHandle(tmpName, { create: true })
   // Shared with the workers that read the image while it arrives.
@@ -193,7 +197,14 @@ async function download(a: StoreImageArgs, dir: FileSystemDirectoryHandle, onPro
     let block = new Uint8Array(blockBytes)
     let fill = 0
     let received = 0
+    // Not reading is the pause: the response backs up to the server.
+    let pauseAt = streaming && resume && a.firstBytes && a.firstBytes < a.bytes! ? Math.ceil(a.firstBytes / blockBytes) * blockBytes : 0
     for (;;) {
+      if (pauseAt && received >= pauseAt) {
+        pauseAt = 0
+        await tail
+        await Promise.race([resume, new Promise<void>((resolve) => signal?.addEventListener('abort', () => resolve(), { once: true }))])
+      }
       const { done, value } = await reader.read()
       if (failed) throw failed
       if (done) break

@@ -111,6 +111,9 @@ pub struct PackStats {
     /// Entries of the start-up order that were found and laid out first.
     #[serde(default)]
     pub first_files: u64,
+    /// File offset where the bodies laid out first end (0: no start-up order).
+    #[serde(default)]
+    pub first_bytes: u64,
     pub facts_bytes: u64,
     pub head_bytes: u64,
     pub image_bytes: u64,
@@ -222,7 +225,7 @@ pub fn write_image(items: &[Item], options: PackOptions, out: &Path) -> Result<P
     let mut ids: Vec<Option<FileId>> = Vec::with_capacity(items.len());
     let mut stats = PackStats {
         entries: 0, files: 0, dirs: 0, symlinks: 0, body_bytes: 0, compiled_modules: 0, compiled_bytes: 0,
-        failed_modules: 0, facts_only_modules: 0, program_modules: 0, first_files: 0, facts_bytes: 0, head_bytes: 0, image_bytes: 0, sha256: String::new(), transform_ms, write_ms: 0, hash_ms: 0,
+        failed_modules: 0, facts_only_modules: 0, program_modules: 0, first_files: 0, first_bytes: 0, facts_bytes: 0, head_bytes: 0, image_bytes: 0, sha256: String::new(), transform_ms, write_ms: 0, hash_ms: 0,
     };
     for (item, prep) in items.iter().zip(&prepared) {
         let err = |e| anyhow!("{}: {e}", item.path);
@@ -273,6 +276,9 @@ pub fn write_image(items: &[Item], options: PackOptions, out: &Path) -> Result<P
     }
     let plan = builder.plan().map_err(|e| anyhow!("image layout: {e}"))?;
     stats.head_bytes = plan.head.len() as u64;
+    if stats.first_files != 0 {
+        stats.first_bytes = plan.first_end;
+    }
     stats.image_bytes = plan.file_len;
     let image = bat_image::Image::new(&plan.head).map_err(|e| anyhow!("image head: {e:?}"))?;
     stats.entries = image.len() as u64;

@@ -106,6 +106,9 @@ export interface RuntimeHost {
    * of these root-absolute prefixes go to the page's real server instead of the guest
    * (`['/api']`). Routing only. Replaces the previous list for that port. */
   setHostPaths(port: number, prefixes: readonly string[]): void;
+  /** Optional. Called once the preview and the agent are up (or have failed): the runtime may
+   * now use the network for what it held back for them (the rest of the image download). */
+  started?(): void;
   /** Resolves when every write made so far is durable. */
   flush(): Promise<void>;
   /** Kills every process, flushes, releases the workspace lock. Idempotent. */

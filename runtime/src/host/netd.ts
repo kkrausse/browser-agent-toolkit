@@ -105,15 +105,22 @@ function serveWebSocket(m: Extract<ToNetd, { t: 'ws' }>) {
   ;(channel as any).onclose = () => ws.destroy()
 }
 
+let resumeDownloads!: () => void
+const downloadsResumed = new Promise<void>((resolve) => (resumeDownloads = resolve))
+
 const ops: Record<string, (a: any, id: number) => unknown> = {
   async storeImage(a, id) {
     const abort = new AbortController()
     downloads.set(id, abort)
     try {
-      return await storeImage(a, (progress) => postMessage({ id, progress }), abort.signal)
+      return await storeImage(a, (progress) => postMessage({ id, progress }), abort.signal, downloadsResumed)
     } finally {
       downloads.delete(id)
     }
+  },
+  /** The programs are up (or it has been long enough): fetch the rest of the images. */
+  resumeImages() {
+    resumeDownloads()
   },
   cancel(a: { id: number }) {
     downloads.get(a.id)?.abort()

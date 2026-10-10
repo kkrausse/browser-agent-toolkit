@@ -79,6 +79,8 @@ export interface RuntimeHost {
   spawn(launch: Launch): Promise<RuntimeProcess>
   endpoint(port: number): RuntimeEndpoint
   setHostPaths(port: number, prefixes: readonly string[]): void
+  /** The caller's programs are up: work that was held back for them (the rest of an image download) may go on. */
+  started(): void
   flush(): Promise<void>
   close(): Promise<void>
   /** Not part of the toolkit contract: boot timings (ms) and the kernel, for harnesses. */
@@ -92,6 +94,7 @@ interface ManifestImage {
   sha256?: string
   mount?: string
   headBytes?: number
+  firstBytes?: number
   sums?: { file: string; blockBytes: number; sha256: string }
 }
 interface Manifest {
@@ -250,6 +253,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
         headBytes: img.headBytes,
         sums: img.sums && { url: prepared(img.sums.file), blockBytes: img.sums.blockBytes, sha256: img.sums.sha256 },
         nativeWasmUrl: asset('bat_node_native.wasm'),
+        firstBytes: img.firstBytes,
       },
       [],
       (p: StoreImageProgress) => {
@@ -265,6 +269,9 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
   })
   const cancelDownloads = () => {
     for (const s of stores) void netd.call('cancel', { id: s.done.id })
+  // An image with a start-up order pauses after it; `started()` or this timer lets it go on.
+  const resumeImages = () => void netd.call('resumeImages').catch(() => {})
+  setTimeout(resumeImages, 20_000)
   }
 
   const programs: Record<string, string> = {}
@@ -653,6 +660,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
         return Promise.reject(e)
       }
       return kernel.flush()
+    started: resumeImages,
     },
     close() {
       return (closing ??= (async () => {

@@ -66,5 +66,9 @@ await Bun.write(traceFile, JSON.stringify(reads))
 const order = await $`${bin} order ${join(prepared, manifest.image.file)} ${traceFile}`.text()
 await Bun.write(out, order)
 await $`rm -f ${traceFile}`
+// How far into the file a start-up reaches: with a start-up order applied this is the
+// head plus the ordered bodies; anything far beyond is a read the order does not cover.
+const ends = reads.map(([offset, length]) => offset + length).sort((x, y) => x - y)
+console.log(`reads end at: median ${ends[ends.length >> 1]}, p99 ${ends[Math.floor(ends.length * 0.99)]}, max ${ends[ends.length - 1]} of ${manifest.image.bytes} bytes; beyond 16 MiB: ${reads.filter(([offset]) => offset > 16 << 20).length} reads`)
 console.log(`${reads.length} reads → ${order.split('\n').length - 2} files in ${out}`)
 console.log(order.split('\n')[0])

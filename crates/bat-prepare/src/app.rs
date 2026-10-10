@@ -75,10 +75,18 @@ pub struct ImageRecord {
     pub mount: String,
     pub entries: u64,
     pub head_bytes: u64,
+    /// With a start-up order: the head and the bodies a start-up reads end here. A
+    /// browser may leave the rest of the download until its programs are up.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub first_bytes: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub zstd: Option<Transfer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sums: Option<Sums>,
+}
+
+fn is_zero(n: &u64) -> bool {
+    *n == 0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -626,7 +634,7 @@ fn build_image(options: &AppOptions, app: &Path, policy: &Policy, pinned: &[(Str
         }
         let file = format!("image-{}.batimg", &layer.sha256[..16]);
         fs::rename(&tmp_image, options.out.join(&file))?;
-        layers.push(ImageRecord { file, bytes: layer.image_bytes, sha256: layer.sha256, mount, entries: layer.entries, head_bytes: layer.head_bytes, zstd: None, sums: None });
+        layers.push(ImageRecord { file, bytes: layer.image_bytes, sha256: layer.sha256, mount, entries: layer.entries, head_bytes: layer.head_bytes, first_bytes: 0, zstd: None, sums: None });
     }
     let pack_ms = ms(started) - deps_ms - collect_ms;
 
@@ -650,7 +658,7 @@ fn build_image(options: &AppOptions, app: &Path, policy: &Policy, pinned: &[(Str
 
     Ok(State {
         fingerprint: fingerprint.to_string(),
-        image: ImageRecord { file, bytes: stats.image_bytes, sha256: stats.sha256.clone(), mount: "/".into(), entries: stats.entries, head_bytes: stats.head_bytes, zstd: None, sums: None },
+        image: ImageRecord { file, bytes: stats.image_bytes, sha256: stats.sha256.clone(), mount: "/".into(), entries: stats.entries, head_bytes: stats.head_bytes, first_bytes: stats.first_bytes, zstd: None, sums: None },
         layers,
         programs,
         dependencies: installed.report,

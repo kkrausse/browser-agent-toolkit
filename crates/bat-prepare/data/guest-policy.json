@@ -24,7 +24,7 @@
     "packages": [],
     "nativePackages": true,
     "extensions": [".node"],
-    "paths": [],
+    "paths": ["**/@kkrausse/browser-agent-toolkit/dist/runtime/**"],
     "duplicatesOfApplication": true
   },
   "application": {

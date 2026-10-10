@@ -76,6 +76,8 @@ pub struct Plan {
     pub file_len: u64,
     /// One per [`Builder::file`] call, in call order.
     pub files: Vec<FileExtents>,
+    /// End of what [`Builder::first`] placed directly after the head (`head.len()` if nothing).
+    pub first_end: u64,
 }
 
 fn check_path(path: &str) -> Result<(), BuildError> {
@@ -297,6 +299,7 @@ impl Builder {
                 }
             }
         }
+        let first_end = cursor;
         for pos in 0..n {
             if let Node::File { len, .. } = self.entries[order[pos]].node {
                 if len != 0 && body_off[pos] == 0 {
@@ -391,7 +394,7 @@ impl Builder {
                 }
             })
             .collect();
-        Ok(Plan { head, file_len, files })
+        Ok(Plan { head, file_len, files, first_end })
     }
 }
 
