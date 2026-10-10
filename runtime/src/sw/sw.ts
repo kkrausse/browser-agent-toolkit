@@ -1,8 +1,12 @@
 /// <reference lib="webworker" />
-// The preview service worker. Scope `/preview/`: it controls only preview
-// frames, never the page that hosts the editor.
+// The preview service worker. Scope `/preview/` by default: it then controls only
+// preview frames, never the page that hosts the editor. Registered with a wider scope
+// (`bootRuntime({ serviceWorker: { url, scope } })`, for a host that cannot send
+// `Service-Worker-Allowed` or that serves the editor below a path), the preview lives at
+// `<scope>preview/` and everything else is left to the network or to another `fetch`
+// listener of the script that imported this one.
 //
-// A request for `/preview/<port>/…` is streamed to the guest listener on that
+// A request for `<prefix><port>/…` is streamed to the guest listener on that
 // port and its response streamed back. The worker cannot share the kernel's
 // memory, so it talks to the bridge worker (netd) over one MessagePort the
 // page hands to both; request and response bodies cross as transferred
@@ -22,12 +26,22 @@ const ISOLATION: [string, string][] = [
   // comes from the app's server and not from the page or the guest.
   ...(((self as unknown as { __batPreviewHeaders?: unknown }).__batPreviewHeaders as [string, string][] | undefined) ?? []),
 ]
-const SHIM = `<script>(${previewShim.toString()})()</script>`
-const route = /^\/preview\/(\d+)(\/.*)?$/
+/** `/preview/`, or `<scope>preview/` under a wider registration. */
+const scopePath = new URL(self.registration.scope).pathname
+const PREFIX = scopePath.endsWith('/preview/') ? scopePath : `${scopePath}${scopePath.endsWith('/') ? '' : '/'}preview/`
+const SHIM = `<script>(${previewShim.toString()})(${JSON.stringify(PREFIX)})</script>`
+const route = new RegExp(`^${PREFIX.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\d+)(\\/.*)?$`)
 
 let bridge: MessagePort | undefined
 let bridgeWaiters: ((port: MessagePort | undefined) => void)[] = []
 const hostPaths = new Map<number, string[]>()
+/** Per preview port: root-absolute prefixes its frame requests, and the guest port that answers them. */
+const guestPaths = new Map<number, [prefix: string, port: number][]>()
+const setGuestPaths = (all: Record<number, Record<string, number>> | undefined) => {
+  guestPaths.clear()
+  for (const [port, routes] of Object.entries(all ?? {})) guestPaths.set(Number(port), Object.entries(routes))
+}
+const under = (path: string, p: string) => path === p || path.startsWith(p.endsWith('/') ? p : `${p}/`) || path.startsWith(`${p}?`)
 const jars = new Map<number, Map<string, string>>()
 const pending = new Map<number, { resolve(m: Extract<FromNetd, { t: 'response' }>): void; reject(e: Error & { code?: string }): void }>()
 let nextId = 1
@@ -73,10 +87,13 @@ self.addEventListener('message', (event) => {
   if (m.t === 'bat-port') {
     hostPaths.clear()
     for (const [port, list] of Object.entries(m.hostPaths)) hostPaths.set(Number(port), list)
+    setGuestPaths(m.guestPaths)
     setBridge(m.port)
   } else if (m.t === 'bat-host-paths') {
     hostPaths.clear()
     for (const [port, list] of Object.entries(m.hostPaths)) hostPaths.set(Number(port), list)
+  } else if (m.t === 'bat-guest-paths') {
+    setGuestPaths(m.guestPaths)
   } else if (m.t === 'bat-closed') {
     dropBridge()
   } else if (m.t === 'bat-ws') {
@@ -272,13 +289,27 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
   if (url.origin !== self.location.origin) return
   const match = route.exec(url.pathname)
-  if (!match) return
+  if (!match) {
+    // A preview frame asking for a root-absolute path of "its" server (`/api/…`): the
+    // guest listener named for that prefix answers, and sees the path as it was asked.
+    if (!guestPaths.size || !event.request.referrer) return
+    let from: RegExpExecArray | null = null
+    try {
+      const referrer = new URL(event.request.referrer)
+      if (referrer.origin === url.origin) from = route.exec(referrer.pathname)
+    } catch {
+      // no usable referrer
+    }
+    const target = from && guestPaths.get(Number(from[1]))?.find(([p]) => under(url.pathname, p))
+    if (target) event.respondWith(toGuest(event, target[1], url))
+    return
+  }
   const guestPort = Number(match[1])
   const below = match[2] ?? '/'
   // Answered here: the cost of the service-worker path alone (docs/experiments/2026-10-09-net.md).
   if (below === '/__bat/ping') return event.respondWith(new Response('pong', { headers: [...ISOLATION, ['Cache-Control', 'no-store']] }))
   const prefixes = hostPaths.get(guestPort)
-  if (prefixes?.some((p) => below === p || below.startsWith(p.endsWith('/') ? p : `${p}/`) || below.startsWith(`${p}?`))) {
+  if (prefixes?.some((p) => under(below, p))) {
     event.respondWith(toHost(event.request, url.origin + below + url.search))
     return
   }

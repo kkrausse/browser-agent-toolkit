@@ -40,7 +40,12 @@ export interface BootOptions {
   /** Not part of the toolkit contract: overrides for harnesses. */
   namespace?: string
   persist?: boolean
-  serviceWorker?: boolean
+  /** `false`: no preview. An object: the worker script and its scope, for a page that is not
+   * served from `/` or whose server cannot send `Service-Worker-Allowed` (a static
+   * directory): the script is then one at or above `scope` that runs the runtime's `sw.js`
+   * (`importScripts`), and the preview is at `<scope>preview/<port>/`. Default: this
+   * directory's `sw.js` with scope `/preview/`. */
+  serviceWorker?: boolean | { url: string; scope: string }
   trace?: boolean
 }
 export interface FileStat {
@@ -79,6 +84,8 @@ export interface RuntimeHost {
   spawn(launch: Launch): Promise<RuntimeProcess>
   endpoint(port: number): RuntimeEndpoint
   setHostPaths(port: number, prefixes: readonly string[]): void
+  /** Root-absolute prefixes (`/api`) that the frame of `port` requests, each answered by a guest listener. */
+  setGuestPaths(port: number, routes: Readonly<Record<string, number>>): void
   /** The caller's programs are up: work that was held back for them (the rest of an image download) may go on. */
   started(): void
   flush(): Promise<void>
@@ -417,19 +424,23 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
 
   const reactor = createReactor(kernel)
   const codec = getCodec(kernel)
-  const { endpoint } = createEndpoints({ kernel, io: reactor }, location.origin, lifetime.signal)
+  const worker = typeof options.serviceWorker === 'object' ? options.serviceWorker : undefined
+  const scope = worker ? new URL(worker.scope, location.href).pathname.replace(/\/?$/, '/') : '/preview/'
+  const previewUrl = location.origin + (scope.endsWith('/preview/') ? scope : `${scope}preview/`)
+  const { endpoint } = createEndpoints({ kernel, io: reactor }, previewUrl, lifetime.signal)
   const live = (): void => {
     if (lifetime.signal.aborted) throw new Error('The runtime is closed')
   }
 
   // ---- service worker ----
   const hostPaths: Record<number, string[]> = {}
+  const guestPaths: Record<number, Record<string, number>> = {}
   let serviceWorker: ServiceWorker | undefined
   const toWorker = (m: ToServiceWorker, transfer: Transferable[] = []) => serviceWorker?.postMessage(m, transfer)
   const sendPort = (target: ServiceWorker) => {
     const channel = new MessageChannel()
     void netd.call('port', { port: channel.port1 }, [channel.port1])
-    target.postMessage({ t: 'bat-port', port: channel.port2, hostPaths } satisfies ToServiceWorker, [channel.port2])
+    target.postMessage({ t: 'bat-port', port: channel.port2, hostPaths, guestPaths } satisfies ToServiceWorker, [channel.port2])
   }
   const onWorkerMessage = (e: MessageEvent) => {
     // The worker was restarted by the browser and lost its port.
@@ -437,7 +448,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
   }
   if (options.serviceWorker !== false && 'serviceWorker' in navigator) {
     try {
-      const registration = await navigator.serviceWorker.register(asset('sw.js'), { scope: '/preview/', updateViaCache: 'none' })
+      const registration = await navigator.serviceWorker.register(worker ? new URL(worker.url, location.href).href : asset('sw.js'), { scope, updateViaCache: 'none' })
       const activated = (worker: ServiceWorker) =>
         new Promise<ServiceWorker>((resolve, reject) => {
           if (worker.state === 'activated') return resolve(worker)
@@ -659,6 +670,10 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
     setHostPaths(port, prefixes) {
       hostPaths[port] = [...prefixes]
       toWorker({ t: 'bat-host-paths', hostPaths })
+    },
+    setGuestPaths(port, routes) {
+      guestPaths[port] = { ...routes }
+      toWorker({ t: 'bat-guest-paths', guestPaths })
     },
     started: resumeImages,
     flush: () => {

@@ -26,12 +26,11 @@ export type WsFromNetd =
 
 /** Page → service worker. */
 export type ToServiceWorker =
-  | { t: 'bat-port'; port: MessagePort; hostPaths: Record<number, string[]> }
+  | { t: 'bat-port'; port: MessagePort; hostPaths: Record<number, string[]>; guestPaths?: Record<number, Record<string, number>> }
   | { t: 'bat-host-paths'; hostPaths: Record<number, string[]> }
+  | { t: 'bat-guest-paths'; guestPaths: Record<number, Record<string, number>> }
   | { t: 'bat-closed' }
 /** Service worker → page (any window client): the worker restarted and lost its port. */
 export type FromServiceWorker = { t: 'bat-need-port' }
 /** Preview frame shim → service worker. */
 export type ShimToServiceWorker = { t: 'bat-ws'; url: string; protocols: string[]; channel: MessagePort }
-
-export const PREVIEW_PREFIX = '/preview/'

@@ -1,19 +1,19 @@
 // Runs inside the preview frame, injected by the service worker at the top of
 // every HTML document it serves. A service worker cannot intercept a
 // WebSocket upgrade, so `WebSocket` is replaced: sockets to this origin under
-// `/preview/<port>/` are carried over a MessageChannel to the bridge worker,
+// the preview prefix (`/preview/<port>/`) are carried over a MessageChannel to the bridge worker,
 // which speaks the WebSocket protocol to the guest listener through the
 // kernel codec. Every other URL gets the native class. `EventSource` needs no
 // shim: its requests are ordinary fetches the service worker streams.
 //
 // This function is serialised with `toString()` into the page, so it must not
-// reference anything outside its own body.
-export function previewShim(): void {
+// reference anything outside its own body; the service worker passes its prefix.
+export function previewShim(prefix = '/preview/'): void {
   const w = globalThis as any
   if (w.__batPreviewShim) return
   w.__batPreviewShim = true
   const Native: typeof WebSocket = w.WebSocket
-  const guestPath = /^\/preview\/\d+(\/|$)/
+  const guestPath = { test: (path: string) => path.startsWith(prefix) && /^\d+(\/|$)/.test(path.slice(prefix.length)) }
   const CONNECTING = 0
   const OPEN = 1
   const CLOSING = 2

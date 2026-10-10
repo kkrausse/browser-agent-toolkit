@@ -4,9 +4,11 @@ import { resolve } from 'node:path';
 export const isGuest = () => process.env.BROWSER_AGENT_GUEST === '1';
 
 /** Base path of the app: `/preview/<port>/` in the guest, `/` on the host. Also the
- * framework basename (React Router's `basename`). */
+ * framework basename (React Router's `basename`). `BROWSER_AGENT_BASE` (the path of the
+ * runtime's `endpoint(port).url`) replaces the guest's default for an editor page that is
+ * served below a path. */
 export function previewBase(): string {
-  return isGuest() ? `/preview/${process.env.BROWSER_AGENT_PORT ?? '5173'}/` : '/';
+  return isGuest() ? process.env.BROWSER_AGENT_BASE || `/preview/${process.env.BROWSER_AGENT_PORT ?? '5173'}/` : '/';
 }
 
 export interface BrowserEditorOptions {

@@ -845,3 +845,53 @@ hook; nothing names that app.
   without a start-up module recording; `bench/startup/run.ts --record-modules` is written
   for the example's page. Page screenshots through CDP timed out twice while a Base UI
   select popup was open; the page itself stayed responsive.
+- **`BAT_HOST_LOOPBACK_PORTS`** (process environment, comma-separated ports): a guest request
+  to loopback on one of them goes to the browser's `fetch` instead of a kernel socket. Guest
+  outbound HTTP was already "loopback → guest listener, `host.internal` → the page's server,
+  anything else → the browser's fetch"; what was missing is a way to name a server on the
+  developer's own machine, which `examples/terminal-app` needs for a model endpoint the tab
+  calls directly (its mock on `127.0.0.1:4311`). Measured there in Chrome: the OpenCode
+  server's `POST <base>/responses` leaves the tab cross-origin under COOP/COEP, streams, and
+  is preceded by a preflight asking for `authorization, content-type, x-opencode-client,
+  x-opencode-project, x-opencode-session, x-session-affinity, x-session-id`.
+
+## 2026-10-10 an editor page as a directory of static files (`examples/terminal-app`)
+
+What it took to serve the terminal example from a file shelf at `/artifacts/<name>/`, with
+no server of its own. Measured in Chrome 154.
+
+- **`bootRuntime({ serviceWorker: { url, scope } })`.** The default stays the runtime's
+  `sw.js` with scope `/preview/`, which needs `Service-Worker-Allowed` and the origin's
+  root. With the option the page names a worker script at or above `scope` that runs the
+  runtime's (`importScripts`), and the preview is at `<scope>preview/<port>/`: the worker
+  and the frame's WebSocket shim take the prefix from `registration.scope`, and
+  `endpoint(port).url` follows. The guest's Vite base is that URL's path, given to the dev
+  server as `BROWSER_AGENT_BASE` (`previewBase()`); nothing prepared depends on it.
+- **One worker for the page and the preview**, not two with nested scopes. A wider scope
+  means the worker controls the editor page too, which the earlier design avoided; here that
+  is the point, since the same worker adds COOP/COEP to the page's responses (a static host
+  sends none) and reloads are how the page becomes isolated. The app's worker script does
+  that in its own `fetch` listener after importing the runtime's; the runtime's listener
+  answers only preview requests, so the two do not meet.
+- **`setGuestPaths(port, { '/api': 3001 })`** (optional in the contract). The TODO app calls
+  root-absolute `/api`, which under `setHostPaths` and before meant the page's server. With
+  no such server the app's backend is a guest program, and the worker sends a request to
+  that guest listener when it comes from a frame of `port` (by `Referer`: a frame that
+  sends none is not routed) and its path is under a named prefix. The guest sees the path
+  as asked. Chosen over a Vite middleware or proxy in the guest because the app's files
+  stay as they are: its Vite proxy sees paths only after the toolkit's plugin has put the
+  base back in front of them, so `/api` never matches there.
+- **Compressed files are inflated by the app's worker, not by the image loader.** A static
+  host sets no `Content-Encoding`, and `DecompressionStream` has gzip but no zstd or brotli.
+  The build ships `<name>.gz` only and the worker answers `<name>` with the inflated
+  stream, for every big file alike (image, program scripts, Wasm, the terminal's bundle).
+  The loader is unchanged: block checks, mounting at the head, and the pause after the
+  start-up part all act on the inflated stream, and not reading still backs up to the
+  network. Sizes: image 240 MB raw, 45 MB gzip, 32 MB zstd; whole directory 57 MB. A zstd
+  decoder in Wasm would save the 13 MB; not built.
+- **Seen**: after the page's one reload into isolation, Chrome kept the first, unisolated
+  document and showed it again on a later reload driven through the debugger (document age
+  243 s, navigation type `navigate`). The page reloads again when it is shown from that
+  cache (`pageshow`, `persisted`), and takes `?reset=1` out of the address before anything
+  can reload it.
+

@@ -4,6 +4,7 @@
 //
 //   bun run setup            build
 //   bun run editor           build, then prepare + build + serve examples/todo-app (PORT, default 3000)
+//   bun run terminal         the same for examples/terminal-app (PORT, default 4310)
 //
 // Needs: bun, cargo with the targets wasm32-wasip1-threads and wasm32-unknown-unknown
 // (`rustup target add …`), node 24 and network access the first time (dependencies and the
@@ -88,9 +89,11 @@ export async function setup(): Promise<{ env: Record<string, string> }> {
 
 if (import.meta.main) {
   const { env } = await setup()
-  if (process.argv[2] === 'editor') {
+  // `editor`: the TODO example; `terminal`: the same app with the OpenCode TUI (examples/terminal-app).
+  const example = { editor: 'examples/todo-app', terminal: 'examples/terminal-app' }[process.argv[2] ?? '']
+  if (example) {
     // The example's own script: prepare (image, manifest, runtime assets), build, serve.
-    const child = Bun.spawn(['bun', 'run', 'editor'], { cwd: join(root, 'examples/todo-app'), env: { ...process.env, ...env }, stdout: 'inherit', stderr: 'inherit', stdin: 'inherit' })
+    const child = Bun.spawn(['bun', 'run', 'editor'], { cwd: join(root, example), env: { ...process.env, ...env }, stdout: 'inherit', stderr: 'inherit', stdin: 'inherit' })
     for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => child.kill(signal))
     process.exit(await child.exited)
   }

@@ -1,0 +1,6 @@
+node_modules/
+.editor/
+.wasm-term/
+dist/
+dist-*/
+.env.local
