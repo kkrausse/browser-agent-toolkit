@@ -243,6 +243,24 @@ export function createProcess(rt: Runtime, loop: LoopInternals, finish: (code: n
       if (n !== 0) loop.nextTick(signal, n)
       return true
     }
+    if (pid < 0) {
+      // A process group. The kernel has none; a child started with `detached` leads a group that
+      // is exactly its descendants, so signal the process and everything below it.
+      const all = kernel.procList()
+      const targets = [-pid]
+      for (let i = 0; i < targets.length; i++) for (const p of all) if (p.ppid === targets[i] && p.state !== 2) targets.push(p.pid)
+      let found = false
+      for (const target of targets.reverse()) {
+        try {
+          kernel.kill(target, n)
+          found = true
+        } catch {
+          // already gone
+        }
+      }
+      if (!found) throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH', errno: -3, syscall: 'kill' })
+      return true
+    }
     try {
       kernel.kill(pid, n)
     } catch (e: any) {

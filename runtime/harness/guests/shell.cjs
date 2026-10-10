@@ -88,6 +88,19 @@ async function calls() {
     c.on('close', (code, signal) => resolve({ code, signal, out }))
     setTimeout(() => c.kill(), 150)
   })
+  const group = await new Promise((resolve) => {
+    // As OpenCode's shell tool does it: detached, then a signal to the group.
+    const c = cp.spawn('/bin/bash', ['-c', 'node -e "setInterval(() => {}, 1000)"; echo never'], { detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    let out = ''
+    c.stdout.on('data', (d) => (out += d))
+    c.on('close', (code, signal) => resolve({ code, signal, out, ms: Date.now() - t0 }))
+    const t0 = Date.now()
+    setTimeout(() => process.kill(-c.pid, 'SIGTERM'), 300)
+  })
+  check('kill of a process group', () => {
+    eq([group.code === 143 || group.signal === 'SIGTERM', group.out], [true, ''])
+    assert(group.ms < 3000, `took ${group.ms} ms`)
+  })
   check('kill of a shell process', () => eq(killed, { code: null, signal: 'SIGTERM', out: '' }))
   const streamed = await new Promise((resolve) => {
     const c = cp.spawn('sh', ['-c', 'while read line; do echo "got $line"; done'])
