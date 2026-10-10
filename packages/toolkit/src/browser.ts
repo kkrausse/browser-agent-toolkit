@@ -85,13 +85,12 @@ const sourceMarker = `${workspaceRoot}/.server/source-installed`;
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 /**
- * When each program starts. The agent starts once the preview's server is listening:
- * a cold dev server must not compete with the agent's boot for its first listen, and
- * from then on the two overlap. A preview that never listens never starts the agent.
- * Both are joined, and the preview's failure is reported first.
+ * When each program starts: both at once. Each is its own process worker over the shared
+ * kernel, so neither waits for the other (measured in docs/experiments/2026-10-09-startup.md;
+ * the old runtime's one kernel thread was the reason to stagger them). Both are joined, and
+ * the preview's failure is reported first.
  */
-export async function startupOrder(preview: { listening: Promise<void>; ready: Promise<void> }, startAgent: () => Promise<void>): Promise<void> {
-  await preview.listening;
+export async function startupOrder(preview: { ready: Promise<void> }, startAgent: () => Promise<void>): Promise<void> {
   const agent = startAgent();
   void agent.catch(() => {});
   await preview.ready;
@@ -160,6 +159,25 @@ async function loadRuntime(manifest: EditorManifest, manifestUrl: string): Promi
   const module = await import(/* @vite-ignore */ entry);
   if (typeof module.bootRuntime !== 'function') throw Error(`Runtime module ${entry} does not export bootRuntime`);
   return module.bootRuntime;
+}
+
+/**
+ * Optional: call when the control that opens the editor is shown (not when it is used), so
+ * the open itself starts with the runtime module loaded and the kernel compiled. It fetches
+ * the manifest and the runtime's code; it does not take the workspace, write anything or
+ * start a program, so it is safe on a page whose visitor never opens the editor. Failures
+ * are left for `openEditor` to report.
+ */
+export function preloadEditor(options: { base?: string } = {}): void {
+  const manifestUrl = new URL((options.base ?? '/editor/') + 'manifest.json', location.href).href;
+  void (async () => {
+    const response = await fetch(manifestUrl, { cache: 'no-store' });
+    if (!response.ok) return;
+    const manifest = parseManifest(await response.json());
+    if (!manifest.image) return;
+    const module = await import(/* @vite-ignore */ new URL(manifest.runtime?.entry ?? 'runtime/host.js', manifestUrl).href);
+    module.preloadRuntime?.();
+  })().catch(() => {});
 }
 
 /**
@@ -401,7 +419,6 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
     mark('chat.ready');
   };
   const order = preview.start();
-  void order.listening.catch(error => adoptFirst(Promise.reject(Error(`The agent was not started: ${errorText(error)}`))));
   const ready = startupOrder(order, startAgentAndChat);
   void ready.then(
     () => publish({ status: 'ready', message: 'Ready. Ask the agent to change the app; changes stay local to this browser.', error: undefined }),

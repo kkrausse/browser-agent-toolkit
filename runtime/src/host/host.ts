@@ -159,6 +159,28 @@ export async function resetWorkspace(options: { manifestUrl: string; namespace?:
   if (!done) throw busy()
 }
 
+let kernelModule: { url: string; module: Promise<WebAssembly.Module> } | undefined
+const compileKernel = (url: string) => {
+  if (kernelModule?.url !== url) {
+    const module = WebAssembly.compileStreaming(fetch(url))
+    kernelModule = { url, module }
+    // A failed fetch is retried by the next caller.
+    module.catch(() => {
+      if (kernelModule?.module === module) kernelModule = undefined
+    })
+  }
+  return kernelModule.module
+}
+
+/**
+ * What can be done before the user asks for the editor, without taking the workspace: this
+ * module is loaded (the caller imported it) and the kernel is compiled. Call it when the
+ * control that opens the editor is shown. Nothing is locked, written or spawned.
+ */
+export function preloadRuntime(): void {
+  void compileKernel(new URL('kernel.wasm', import.meta.url).href).catch(() => {})
+}
+
 export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
   const t0 = performance.now()
   const manifest = options.manifest as Manifest
@@ -184,8 +206,15 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
   }
   if (tracing) {
     traceCollect('page')
-    ;(globalThis as any).__batBoot = timings
     trace('boot.start', undefined, t0)
+  }
+  // Always on (microseconds): user-timing marks of the boot phases, the sub-timings as `detail`.
+  const timed = (name: string) => {
+    try {
+      performance.mark(`bat:boot.${name}`, { detail: { ...timings } })
+    } catch {
+      // no user timing
+    }
   }
 
   // The bridge worker starts first: it downloads the image while the kernel boots.
@@ -206,6 +235,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
   try {
     booted = await bootKernel({
       wasmUrl: asset('kernel.wasm'),
+      module: compileKernel(asset('kernel.wasm')),
       kerneldUrl: asset('bat-kerneld.js'),
       processWorkerUrl: processWorkerUrl(asset('bat-process.js'), {
         nodelibUrl: 'bat-nodelib.js',
@@ -220,6 +250,9 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
       persist: options.persist ?? true,
       noPersist: ['/.bat', '/tmp'],
       warmSpare: true,
+      // The preview and the agent start together: one warm worker each.
+      spares: 2,
+      images: [image.file],
       trace: tracing,
     } as Parameters<typeof bootKernel>[0])
   } catch (e) {
@@ -229,8 +262,9 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
     throw new Error(`kernel boot failed: ${(e as Error).message}`, { cause: e })
   }
   timings.kernel = performance.now() - t0
-  Object.assign(timings, { kernelCompile: booted.timings.compileMs, kernelAttach: booted.timings.attachMs, kerneldInit: booted.timings.kerneldMs, restore: booted.restored?.ms ?? 0 })
+  Object.assign(timings, { kernelCompile: booted.timings.compileMs, kernelAttach: booted.timings.attachMs, kerneldInit: booted.timings.kerneldMs, restore: booted.restored?.ms ?? 0, journalBytes: booted.restored?.journalBytes ?? 0 })
   trace('boot.kernel')
+  timed('kernel')
   progress({ phase: 'kernel' })
 
   const lifetime = new AbortController()
@@ -248,6 +282,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
     ])
     timings.image = performance.now() - t0
     trace('boot.image')
+    timed('image')
     timings.imageCached = stored.cached
     progress({ phase: 'image', loaded: stored.bytes, total: stored.bytes, cached: stored.cached })
     const mounted = await booted.mountImage(image.file, image.mount ?? '/').catch((e) => {
@@ -265,8 +300,11 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
     teardown()
     throw e
   }
+  // Tracing: the page's kernel binding, for inspecting the workspace from a measuring script.
+  if (tracing) (globalThis as any).__batKernel = kernel
   timings.mounted = performance.now() - t0
   trace('boot.mounted')
+  timed('mounted')
 
   const reactor = createReactor(kernel)
   const codec = getCodec(kernel)
@@ -543,6 +581,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
   addEventListener('pagehide', () => toWorker({ t: 'bat-closed' }))
   timings.total = performance.now() - t0
   trace('boot.done')
+  timed('done')
   progress({ phase: 'ready' })
   return host
 }

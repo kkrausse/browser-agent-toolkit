@@ -107,7 +107,7 @@ const result = await page.evaluate(() => {
   const zero = performance.timeOrigin + click
   const marks = (window.__batTrace ?? []).map((m) => ({ src: m.src, name: m.name, ms: Math.round((m.t - zero) * 10) / 10, data: m.data })).sort((a, b) => a.ms - b.ms)
   const boot = {}
-  for (const [k, v] of Object.entries(window.__batBoot ?? {})) boot[k] = typeof v === 'number' ? Math.round(v * 10) / 10 : v
+  for (const [k, v] of Object.entries(performance.getEntriesByName('bat:boot.done')[0]?.detail ?? {})) boot[k] = typeof v === 'number' ? Math.round(v * 10) / 10 : v
   return { steps, trace: marks, boot, error: document.querySelector('.todo-editor [role=alert]')?.textContent ?? undefined, log: document.querySelector('.todo-editor details pre')?.textContent?.split('\\n').slice(-40) }
 })
 await page.getByRole('button', { name: 'Exit' }).click()

@@ -31,11 +31,40 @@ export async function imageExists(namespace: string, name: string): Promise<numb
   }
 }
 
-/** Read-only sync handle; many workers may hold one on the same file. Workers only. */
-export async function openImageHandle(namespace: string, name: string): Promise<SyncHandle> {
+async function openImage(namespace: string, name: string): Promise<SyncHandle> {
   const dir = await opfsDir(namespace, 'images')
   const h = await dir.getFileHandle(name)
   return (await (h as any).createSyncAccessHandle({ mode: 'read-only' })) as SyncHandle
+}
+const early = new Map<string, Promise<SyncHandle>>()
+/**
+ * Start opening an image this worker will be asked to open once it is mounted (the host
+ * knows the name from the manifest before the kernel exists). An image file carries its
+ * name only when complete, so a file that is there can be opened; one that is not yet
+ * (first download) is simply opened later.
+ */
+export function preopenImage(namespace: string, name: string): void {
+  const key = `${namespace}/${name}`
+  if (early.has(key)) return
+  const opening = openImage(namespace, name)
+  opening.catch(() => {
+    if (early.get(key) === opening) early.delete(key)
+  })
+  early.set(key, opening)
+}
+/** Read-only sync handle; many workers may hold one on the same file. Workers only. */
+export async function openImageHandle(namespace: string, name: string): Promise<SyncHandle> {
+  const key = `${namespace}/${name}`
+  const opening = early.get(key)
+  if (opening) {
+    early.delete(key)
+    try {
+      return await opening
+    } catch {
+      // not there when asked early
+    }
+  }
+  return openImage(namespace, name)
 }
 
 /**

@@ -7,7 +7,7 @@
 import { attachKernel, type KernelInstance } from './attach'
 import { createKernel, type Kernel } from './kernel'
 import { trace, traceEnable } from '../trace'
-import { fnv1a32, imageExists, openImageHandle, opfsDir, removeImage, storeImage, type SyncHandle } from './opfs'
+import { fnv1a32, imageExists, openImageHandle, opfsDir, preopenImage, removeImage, storeImage, type SyncHandle } from './opfs'
 
 interface InitArgs {
   module: WebAssembly.Module
@@ -19,6 +19,10 @@ interface InitArgs {
   processWorkerType?: 'module' | 'classic'
   runnerUrl: string
   warmSpare: boolean
+  /** Warm process workers made at boot (default 1); afterwards one is kept. */
+  spares?: number
+  /** Names of images that will be mounted: handles are opened ahead of the mount. */
+  images?: string[]
   trace?: boolean
 }
 interface Proc {
@@ -38,7 +42,7 @@ let k: Kernel
 let cfg: InitArgs
 const handles: (SyncHandle | undefined)[] = []
 const procs = new Map<number, Proc>()
-let spare: Promise<Proc> | undefined
+const spares: Promise<Proc>[] = []
 let journal: SyncHandle | undefined
 let journalSize = 0
 let nextSlot: 'snap-a' | 'snap-b' = 'snap-a'
@@ -72,17 +76,25 @@ function createProcessWorker(): Promise<Proc> {
         retire(proc, 0)
       } else reject(new Error(e.message))
     }
-    worker.postMessage({ type: 'attach', module: cfg.module, memory: cfg.memory, namespace: cfg.namespace })
+    worker.postMessage({ type: 'attach', module: cfg.module, memory: cfg.memory, namespace: cfg.namespace, images: cfg.images })
   })
 }
-function ensureSpare() {
-  if (cfg.warmSpare && !spare) spare = createProcessWorker()
+function ensureSpare(count = 1) {
+  if (!cfg.warmSpare) return
+  while (spares.length < count) {
+    const made = createProcessWorker()
+    // A worker that failed to start must not be handed to a spawn later.
+    made.catch(() => {
+      const i = spares.indexOf(made)
+      if (i >= 0) spares.splice(i, 1)
+    })
+    spares.push(made)
+  }
 }
 async function spawn(pid: number) {
   stats.spawns++
-  trace('spawn.request', { pid, spare: !!spare })
-  const taken = spare ?? createProcessWorker()
-  spare = undefined
+  trace('spawn.request', { pid, spares: spares.length })
+  const taken = spares.shift() ?? createProcessWorker()
   let proc: Proc
   try {
     proc = await taken
@@ -150,7 +162,7 @@ async function mount(name: string, path: string) {
   k.x.bat_free(p, nb.length + pb.length + 8)
   if (rc < 0) throw new Error(`mount ${name} at ${path} failed: errno ${-rc}`)
   const t1 = performance.now()
-  if (spare) void spare.then((s) => s.worker.postMessage({ type: 'images' })).catch(() => {})
+  for (const spare of spares) void spare.then((s) => s.worker.postMessage({ type: 'images' })).catch(() => {})
   for (const proc of procs.values()) proc.worker.postMessage({ type: 'images' })
   return { id, entries: rc, ms: t1 - t0, openHandleMs: tOpen - t0, indexMs: t1 - tOpen }
 }
@@ -379,6 +391,11 @@ async function init(args: InitArgs) {
   cfg = args
   if (args.trace) traceEnable('kerneld')
   trace('kerneld.init')
+  // Before the lock and the overlay restore, so the workers boot while those run: a process
+  // worker only needs the shared memory, which the page has already initialised. (When the
+  // lock is refused they die with this worker.)
+  ensureSpare(args.spares ?? 1)
+  for (const name of args.images ?? []) preopenImage(args.namespace, name)
   if (args.persist) {
     // One writer per origin and namespace.
     const tryLock = () =>
@@ -421,7 +438,6 @@ async function init(args: InitArgs) {
   trace('kerneld.restored', restored)
   if (!args.persist) for (const path of args.noPersist) excludePath(path)
   void supervise()
-  ensureSpare()
   return { pid, restored }
 }
 
@@ -439,7 +455,7 @@ const ops: Record<string, (a: any) => unknown> = {
   flush: () => drainJournal(),
   spareReady: async () => {
     ensureSpare()
-    await spare
+    await Promise.all(spares)
     return true
   },
   stats: () => ({ ...stats, journalSize, procs: [...procs.keys()] }),

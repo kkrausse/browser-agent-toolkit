@@ -15,7 +15,7 @@
 // Configuration arrives in the worker URL's fragment (processWorkerUrl()).
 import { attachKernel, type KernelInstance } from '../kernel/attach'
 import { createKernel, type Kernel, type ProcInfo } from '../kernel/kernel'
-import { openImageHandle, type SyncHandle } from '../kernel/opfs'
+import { openImageHandle, preopenImage, type SyncHandle } from '../kernel/opfs'
 import { createLoader, type Loader } from '../loader/loader'
 import { createBuiltins, type Builtins } from '../node/builtins'
 import '../node/index'
@@ -334,6 +334,7 @@ host.addEventListener('message', (async (e: MessageEvent) => {
     if (m.type === 'attach') {
       e.stopImmediatePropagation()
       namespace = m.namespace
+      for (const name of m.images ?? []) preopenImage(namespace, name)
       inst = await attachKernel({
         module: m.module,
         memory: m.memory,

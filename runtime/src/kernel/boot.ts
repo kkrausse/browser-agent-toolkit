@@ -22,6 +22,12 @@ export interface BootOptions {
   /** Directories whose contents are never persisted (caches). */
   noPersist?: string[]
   warmSpare?: boolean
+  /** Warm process workers made at boot (default 1). */
+  spares?: number
+  /** Names of the images that will be mounted, so workers open their handles ahead of the mount. */
+  images?: string[]
+  /** The kernel module, when the caller already started compiling it (preload). */
+  module?: Promise<WebAssembly.Module>
   /** Startup tracing in kerneld (runtime/src/trace.ts). */
   trace?: boolean
 }
@@ -44,7 +50,7 @@ export interface BootedKernel {
 export async function bootKernel(opts: BootOptions): Promise<BootedKernel> {
   if (!crossOriginIsolated) throw new Error('kernel: the page is not cross-origin isolated (COOP/COEP headers missing)')
   const t0 = performance.now()
-  const module = await WebAssembly.compileStreaming(fetch(opts.wasmUrl))
+  const module = await (opts.module ?? WebAssembly.compileStreaming(fetch(opts.wasmUrl)))
   const t1 = performance.now()
   const memory = createKernelMemory()
   const inst = await attachKernel({ module, memory, canBlock: false, first: true })
@@ -82,6 +88,8 @@ export async function bootKernel(opts: BootOptions): Promise<BootedKernel> {
     processWorkerType: opts.processWorkerType ?? 'module',
     runnerUrl: opts.runnerUrl ? new URL(opts.runnerUrl, location.href).href : '',
     warmSpare: opts.warmSpare ?? true,
+    spares: opts.spares ?? 1,
+    images: opts.images ?? [],
     trace: opts.trace ?? false,
   })
   const t3 = performance.now()
