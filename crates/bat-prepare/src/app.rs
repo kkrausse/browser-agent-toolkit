@@ -347,6 +347,10 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
     if transfer_changed {
         fs::write(&state_path, serde_json::to_vec_pretty(&state)?)?;
     }
+    // Program scripts are as large as the image's start-up part and compress as well.
+    for program in &state.programs {
+        ensure_zst(&options.out.join(&program.file), options.zstd_level)?;
+    }
     let transfer_ms = ms(transfer_started);
 
     // ---- Manifest: launch descriptions and project files. Always recomputed.
@@ -379,6 +383,7 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
         let sha256 = pack::sha256_hex(&bytes);
         let file = format!("derived-{}.json", &sha256[..16]);
         write_if_changed(&options.out.join(&file), &bytes)?;
+        ensure_zst(&options.out.join(&file), options.zstd_level)?;
         let owns: Vec<&String> = policy.project_scripts.iter().filter(|s| scripts.iter().any(|r| r["name"] == s.name.as_str() && r["ok"] == true)).flat_map(|s| &s.owns).collect();
         for path in &owns {
             check_relative(path)?;
@@ -425,10 +430,10 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
     for entry in fs::read_dir(&options.out)? {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().into_owned();
-        // `image-<hash>.batimg`, with its `.zst` and `.sums` beside it.
-        let image = name.starts_with("image-").then(|| name.find(".batimg").map(|at| &name[..at + ".batimg".len()])).flatten();
-        let ours = image.is_some() || (name.starts_with("program-") && name.ends_with(".js")) || (name.starts_with("derived-") && name.ends_with(".json"));
-        if ours && !keep.contains(image.unwrap_or(name.as_str())) {
+        // An output, or the `.zst` / `.sums` beside one.
+        let base = name.strip_suffix(".zst").or_else(|| name.strip_suffix(".sums")).unwrap_or(&name);
+        let ours = (base.starts_with("image-") && base.ends_with(".batimg")) || (base.starts_with("program-") && base.ends_with(".js")) || (base.starts_with("derived-") && base.ends_with(".json"));
+        if ours && !keep.contains(base) {
             fs::remove_file(entry.path())?;
         }
     }
@@ -704,18 +709,38 @@ fn ensure_transfer(out: &Path, record: &mut ImageRecord, level: i32) -> Result<b
     let zstd_file = format!("{}.zst", record.file);
     let zstd_ok = record.zstd.as_ref().is_some_and(|z| z.file == zstd_file && z.level == level && fs::metadata(out.join(&z.file)).is_ok_and(|m| m.len() == z.bytes));
     if !zstd_ok {
-        let tmp = out.join(format!("{zstd_file}.tmp{}", std::process::id()));
-        let mut source = fs::File::open(&image)?;
-        // Levels up to 19 keep the window at 8 MiB or less, the most a browser accepts
-        // for `Content-Encoding: zstd`. The frame carries its content size and checksum.
-        let mut encoder = zstd::stream::Encoder::new(fs::File::create(&tmp)?, level)?;
-        encoder.include_checksum(true)?;
-        encoder.set_pledged_src_size(Some(record.bytes))?;
-        encoder.multithread(std::thread::available_parallelism().map_or(1, |n| n.get() as u32))?;
-        std::io::copy(&mut source, &mut encoder)?;
-        encoder.finish()?;
-        fs::rename(&tmp, out.join(&zstd_file))?;
-        record.zstd = Some(Transfer { bytes: fs::metadata(out.join(&zstd_file))?.len(), file: zstd_file, level });
+        let bytes = write_zst(&image, level)?;
+        record.zstd = Some(Transfer { bytes, file: zstd_file, level });
     }
     Ok(before != (record.zstd.clone(), record.sums.clone()))
+}
+
+/// `<file>.zst` beside a content-addressed output, unless it is there already. The
+/// server handler answers a request for `<file>` with it (`Content-Encoding: zstd`).
+fn ensure_zst(file: &Path, level: i32) -> Result<()> {
+    let mut name = file.as_os_str().to_os_string();
+    name.push(".zst");
+    if fs::metadata(&name).is_err() {
+        write_zst(file, level.clamp(1, 19))?;
+    }
+    Ok(())
+}
+
+/// Compress `file` to `<file>.zst`; returns the compressed size.
+fn write_zst(file: &Path, level: i32) -> Result<u64> {
+    let mut target = file.as_os_str().to_os_string();
+    target.push(".zst");
+    let mut tmp = target.clone();
+    tmp.push(format!(".tmp{}", std::process::id()));
+    let mut source = fs::File::open(file).with_context(|| format!("open {}", file.display()))?;
+    // Levels up to 19 keep the window at 8 MiB or less, the most a browser accepts
+    // for `Content-Encoding: zstd`. The frame carries its content size and checksum.
+    let mut encoder = zstd::stream::Encoder::new(fs::File::create(&tmp)?, level)?;
+    encoder.include_checksum(true)?;
+    encoder.set_pledged_src_size(Some(source.metadata()?.len()))?;
+    encoder.multithread(std::thread::available_parallelism().map_or(1, |n| n.get() as u32))?;
+    std::io::copy(&mut source, &mut encoder)?;
+    encoder.finish()?;
+    fs::rename(&tmp, &target)?;
+    Ok(fs::metadata(&target)?.len())
 }

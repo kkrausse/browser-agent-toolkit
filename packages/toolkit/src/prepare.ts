@@ -91,8 +91,17 @@ function findRuntime(explicit?: string): string {
 async function installRuntime(outDir: string, runtimeDir: string): Promise<void> {
   const target = join(outDir, 'runtime');
   await mkdir(target, { recursive: true });
+  // A first open downloads all of it (about 5 MB of scripts and Wasm): a `.zst` beside
+  // each file, which the server handler answers with (`Content-Encoding: zstd`).
+  const { unlink } = await import('node:fs/promises');
+  const zlib = await import('node:zlib') as unknown as { zstdCompressSync?: (data: Uint8Array, options?: unknown) => Uint8Array; constants: Record<string, number> };
+  const zstd = zlib.zstdCompressSync && ((data: Uint8Array) => zlib.zstdCompressSync!(data, { params: { [zlib.constants.ZSTD_c_compressionLevel]: 19 } }));
   for (const entry of await readdir(runtimeDir, { withFileTypes: true })) {
-    if (entry.isFile() && !entry.name.startsWith('.')) await copyFile(join(runtimeDir, entry.name), join(target, entry.name));
+    if (!entry.isFile() || entry.name.startsWith('.') || entry.name.endsWith('.zst')) continue;
+    await copyFile(join(runtimeDir, entry.name), join(target, entry.name));
+    const bytes = await readFile(join(target, entry.name));
+    if (zstd && bytes.length > 1024) await writeFile(join(target, entry.name + '.zst'), zstd(bytes));
+    else await unlink(join(target, entry.name + '.zst')).catch(() => {});
   }
 }
 
