@@ -156,3 +156,53 @@
   WASI.
 - **bat-image needed nothing extra**: the kernel reads the head with one host call and uses
   `Image<'static>` over it.
+
+## 2026-10-09 modules: transform and loader format (bat-modules)
+
+Spec: `docs/design/module-format.md`; reference loader `crates/bat-modules/harness/loader.mjs`.
+
+- **An ES module is a generator function `function* (__bat)`, not the seven-parameter
+  function the design sketched.** The prelude defines export getters, fetches dependency
+  namespaces, and `yield`s once; the loader links the whole static graph (first `.next()` of
+  each module), then evaluates (second `.next()`). A plain function cannot stop between the
+  two, and the alternatives all failed a concrete case: evaluating a dependency before the
+  importer has bound its namespace breaks a cycle where B calls a hoisted function of A that
+  reads A's import (the case the old runtime retried with `with(...)`); and a synchronous
+  module that imports a module with top-level await has to wait without itself being async.
+  Top-level await is `async function*`; the only change is the header, chosen from a facts
+  bit. Verified against native Node on a cycle and an edge-case graph, and on Vite's chunk
+  cycle.
+- **ES modules get no `require`/`module`/`exports`/`__filename`/`__dirname` parameters**, as
+  in Node. That removes the whole class of "ESM declares its own `require`" collisions, and
+  `typeof require` checks in bundles take the branch they take in Node. One reserved
+  identifier remains, `__bat` (the prefix covers the prelude's locals); a source using it
+  is rejected rather than silently miscompiled. CommonJS keeps Node's five parameters plus
+  `__bat` for `import()`.
+- **JavaScript is edited in place, not re-printed.** Decisions come from oxc's AST and
+  scope analysis; the output is the source with spans replaced. Lines are exact without a
+  source map and unchanged CommonJS (3,352 of 3,374 CommonJS files in the TODO tree) is
+  returned borrowed and flagged `CODE_IS_SOURCE`. TypeScript/JSX go through oxc's
+  transformer and codegen first, then the same pass; only they get a source map.
+- **Full scope analysis (oxc_semantic) is kept for ES modules** although it is 40% of the
+  time on the OpenCode bundle (parse 0.31 s, semantic 0.30 s, rewrite 0.09 s; 0.75–0.88 s
+  total against 0.73 s for the old lexer rewrite). A hand-rolled "is this name shadowed"
+  walk would be faster and is exactly the kind of approximation this rewrite removes; the
+  cost is paid once at prepare time. The whole TODO tree (5,355 files, 103.6 MB including
+  that bundle) takes 1.1 s on 12 threads.
+- **CommonJS export names are a superset of Node 24's lexer, quirks included.** Checked
+  with Node's internal `cjs_lexer` binding over the tree's 4,227 CommonJS files: 0 files
+  miss a name Node reports. Three lexer quirks had to be reproduced for that (listed in
+  module-format.md §6).
+- **Mixed files load as ES modules**: CommonJS by extension or package type but written
+  with `import`/`export` (Node refuses these). Warning diagnostic, not an error.
+- **The Wasm build is its own Cargo workspace (`crates/bat-modules/wasm`) with a stub
+  `js-sys`.** oxc_transformer → oxc_compat → oxc-browserslist depends on js-sys on every
+  wasm32 target; in a cdylib that exports ~1,500 wasm-bindgen descriptor functions and
+  imports only wasm-bindgen's post-processor can satisfy (first build: 2.36 MB, would not
+  instantiate). With the stub: no imports, four exports, 1.86 MB (0.58 MB gzip). The
+  separate workspace keeps the `[patch]`, the size profile and the lock file away from the
+  native build.
+- **oxc helper calls are imports of `@oxc-project/runtime/helpers/*`** (legacy decorators;
+  private fields under `useDefineForClassFields: false`). oxc has no inline-helper mode.
+  The runtime has to provide that package for workspace code using those options.
+  Standard decorators are not lowered by oxc at all: warning, output kept as written.

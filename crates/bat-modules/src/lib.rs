@@ -273,8 +273,9 @@ fn transform_in<'s>(
     filename: &str,
     options: &Options,
 ) -> Output<'s> {
-    // Node strips a UTF-8 byte order mark before compiling.
-    let source = source.strip_prefix('\u{feff}').unwrap_or(source);
+    // A UTF-8 byte order mark stays where it is: U+FEFF is white space in
+    // JavaScript, also inside a function body, and keeping it keeps offsets
+    // (and "code is source") exact. Only JSON has to drop it.
     let mut diagnostics = Vec::new();
     let (lang, hint) = classify(filename, options);
 
@@ -484,6 +485,7 @@ fn redeclares_wrapper_variable(program: &Program) -> bool {
 }
 
 fn json(source: &str) -> Output<'_> {
+    let source = source.strip_prefix('\u{feff}').unwrap_or(source);
     let mut code = String::with_capacity(source.len() + 32);
     code.push_str("module.exports=JSON.parse(");
     esm::push_js_string(&mut code, source);
