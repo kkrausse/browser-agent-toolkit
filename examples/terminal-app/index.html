@@ -3,29 +3,46 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OpenCode TUI + preview, in the tab</title>
+  <title>TODO app + OpenCode terminal, in the tab</title>
   <style>
-    html, body { height: 100%; margin: 0; background: #16161d; color: #a6a69c; font: 13px/1.4 ui-monospace, monospace; overflow: hidden; }
-    body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-    #left { position: relative; min-width: 0; min-height: 0; border-right: 1px solid #363646; }
+    html, body { height: 100%; margin: 0; overflow: hidden; background: #fafafa; font: 13px/1.4 system-ui, sans-serif; }
+    /* The app fills the page; the terminal is a panel on its right edge that slides out of
+       the way and is as wide as it was dragged (--panel, kept per browser). */
+    body { display: flex; --panel: min(560px, 55vw); }
+    #app { flex: 1 1 0; min-width: 0; height: 100%; border: 0; background: #fff; }
+    #panel { position: relative; flex: 0 0 var(--panel); width: var(--panel); min-width: 0; height: 100%; display: flex; flex-direction: column; background: #16161d; color: #a6a69c; margin-right: 0; transition: margin-right .18s ease; }
+    body.closed #panel { margin-right: calc(-1 * var(--panel)); visibility: hidden; transition: margin-right .18s ease, visibility 0s .18s; }
+    body.dragging #panel { transition: none; }
+    /* While dragging, the pointer must not fall into the app's frame or the terminal. */
+    body.dragging #app, body.dragging #terminal { pointer-events: none; }
+    #grip { position: absolute; left: -4px; top: 0; bottom: 0; width: 9px; cursor: col-resize; z-index: 2; touch-action: none; }
+    #grip::after { content: ""; position: absolute; left: 4px; top: 0; bottom: 0; width: 1px; background: #363646; }
+    #grip:hover::after, body.dragging #grip::after { width: 3px; left: 3px; background: #7e9cd8; }
+    #panel > header { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border-bottom: 1px solid #363646; font: 12px ui-monospace, monospace; }
+    #panel > header span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    button { font: 12px ui-monospace, monospace; color: #dcd7ba; background: #16161d; border: 1px solid #363646; border-radius: 4px; padding: 3px 9px; cursor: pointer; }
+    #open { position: fixed; top: 8px; right: 8px; z-index: 3; display: none; }
+    body.closed #open { display: block; }
+    #body { position: relative; flex: 1 1 0; min-height: 0; }
     #terminal { position: absolute; inset: 0; overflow: hidden; }
     #terminal canvas { display: block; }
-    #status { position: absolute; inset: 0; margin: 0; padding: 16px; white-space: pre-wrap; pointer-events: none; }
+    #status { position: absolute; inset: 0; margin: 0; padding: 12px; white-space: pre-wrap; pointer-events: none; font: 12px/1.5 ui-monospace, monospace; }
     #status.error { color: #e06c75; }
-    #right { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: #fff; }
-    #preview { flex: 1; min-height: 0; width: 100%; border: 0; background: #fff; }
-    #log { flex: 0 0 auto; background: #16161d; border-top: 1px solid #363646; }
-    #log summary { padding: 4px 8px; cursor: pointer; user-select: none; }
-    #log pre { margin: 0; padding: 0 8px 8px; height: 30vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
-    @media (max-width: 800px) { body { grid-template-columns: none; grid-template-rows: minmax(0, 3fr) minmax(0, 2fr); } #left { border-right: 0; border-bottom: 1px solid #363646; } }
+    #log { flex: 0 0 auto; border-top: 1px solid #363646; font: 12px ui-monospace, monospace; }
+    #log summary { padding: 4px 10px; cursor: pointer; user-select: none; }
+    #log pre { margin: 0; padding: 0 10px 8px; height: 26vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+    @media (max-width: 700px) { body { --panel: 100vw; } }
   </style>
 </head>
 <body>
-  <div id="left"><div id="terminal"></div><pre id="status">Starting…</pre></div>
-  <div id="right">
-    <iframe id="preview" title="App preview"></iframe>
+  <iframe id="app" title="The TODO app, served by its dev server in this tab"></iframe>
+  <aside id="panel" aria-label="OpenCode terminal">
+    <div id="grip" role="separator" aria-orientation="vertical" aria-label="Resize the terminal panel" tabindex="0"></div>
+    <header><span id="title">OpenCode</span><button id="close" title="Hide the terminal (it keeps running)">Close</button></header>
+    <div id="body"><div id="terminal"></div><pre id="status">Starting…</pre></div>
     <details id="log"><summary>OpenCode server output</summary><pre></pre></details>
-  </div>
+  </aside>
+  <button id="open">OpenCode</button>
   <script type="module" src="/main.js"></script>
 </body>
 </html>

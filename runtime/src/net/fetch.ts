@@ -7,6 +7,11 @@
 //                                                 mixed content); the URL already carries the
 //                                                 page's scheme and port (RuntimeHost.hostOrigin)
 //   anything else                               → the browser's fetch
+//
+// A loopback port named in the process's `BAT_HOST_LOOPBACK_PORTS` (comma-separated) is the
+// machine's, not the guest's: it goes to the browser's fetch like any other host. Without
+// that a server on the developer's own machine (a local model endpoint) could not be told
+// apart from a guest listener.
 import type { Runtime } from '../process/runtime'
 import { createHttpClient, headerPairs, toResponse, type HttpClient, type WireResponse } from './client'
 import { getNet, isLoopback } from './net'
@@ -36,7 +41,9 @@ function createGuestFetch(rt: Runtime): GuestFetch {
   const pageOrigin = new URL(rt.host.location.origin)
 
   const stripBrackets = (h: string) => (h.startsWith('[') ? h.slice(1, -1) : h)
-  const isLocal = (url: URL) => url.protocol === 'http:' && isLoopback(stripBrackets(url.hostname))
+  // Read per request: the process's environment is bound after this is created.
+  const hostPort = (url: URL) => ((rt as any).process?.env?.BAT_HOST_LOOPBACK_PORTS ?? '').split(',').includes(url.port || '80')
+  const isLocal = (url: URL) => url.protocol === 'http:' && isLoopback(stripBrackets(url.hostname)) && !hostPort(url)
   const isHostAlias = (url: URL) => url.hostname === HOST_ALIAS
   /** `host.internal` is this worker's own origin under another name. */
   const toPage = (url: URL) => {

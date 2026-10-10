@@ -6,6 +6,7 @@
   "scripts": {
     "setup": "bun scripts/setup.ts",
     "editor": "bun scripts/setup.ts editor",
+    "terminal": "bun scripts/setup.ts terminal",
     "build": "bun run --cwd packages/toolkit build",
     "typecheck": "bun run --cwd runtime typecheck && bun run --cwd packages/toolkit typecheck && bun run --cwd examples/todo-app typecheck",
     "example:fake": "bun run build && bun run --cwd examples/todo-app editor:fake"
