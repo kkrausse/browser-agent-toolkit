@@ -9,7 +9,7 @@ source ./env.sh
 
 # A port held by something else (typically an old host-side launcher) makes
 # `docker compose up` fail half-way; say who holds it instead.
-for port in $MOCK_LLM_PORT $OPENCODE_PORT $CODEX_PORT $CODEX_TAP_PORT; do
+for port in $MOCK_LLM_PORT $OPENCODE_PORT $CODEX_PORT $CODEX_TAP_PORT $MOCK_TLS_PORT $MOCK_TLS_UNTRUSTED_PORT; do
   holder="$(ss -ltnpH "sport = :$port" 2>/dev/null | grep -oP 'users:\(\("\K[^"]+' | head -1 || true)"
   if [ -n "$holder" ] && [ "$holder" != "docker-proxy" ]; then
     echo "port $port is held by a host process ($holder). If it is an old mock-llm launcher, run mock-llm/stop.sh first." >&2
@@ -36,4 +36,10 @@ wait_for "mock model      http://$host:$MOCK_LLM_PORT/v1" "http://$host:$MOCK_LL
 wait_for "opencode serve  http://$host:$OPENCODE_PORT  (Basic $auth)" -u "$auth" "http://$host:$OPENCODE_PORT/api/info"
 wait_for "codex app-server ws://$host:$CODEX_PORT  (native TUI)" "http://$host:$CODEX_PORT/readyz"
 wait_for "codex for browsers ws://$host:$CODEX_TAP_PORT  (Origin stripped)" "http://$host:$CODEX_TAP_PORT/readyz"
+# The test CA of this start of the TLS front, for whoever has to trust it (web/server.ts serves it
+# to the page as /test/mock-ca.pem; a program gets it only with a mock backend). A certificate, not a key.
+mkdir -p "$STATE_DIR/mock-tls"
+docker compose exec -T tls cat /tmp/mock-tls/ca.pem > "$STATE_DIR/mock-tls/ca.pem.new" && mv "$STATE_DIR/mock-tls/ca.pem.new" "$STATE_DIR/mock-tls/ca.pem"
+wait_for "mock over TLS   https://mock-llm.test (127.0.0.1:$MOCK_TLS_PORT, CA $STATE_DIR/mock-tls/ca.pem)" \
+  --cacert "$STATE_DIR/mock-tls/ca.pem" --resolve "mock-llm.test:$MOCK_TLS_PORT:$host" "https://mock-llm.test:$MOCK_TLS_PORT/health"
 echo "workspace inside the containers: $WORKSPACE_DIR"

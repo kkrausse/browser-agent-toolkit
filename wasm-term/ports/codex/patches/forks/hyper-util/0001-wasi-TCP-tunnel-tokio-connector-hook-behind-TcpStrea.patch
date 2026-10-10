@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Sat, 10 Oct 2026 12:20:10 -0700
+Subject: [PATCH] wasi: TCP tunnel: tokio connector hook behind
+ TcpStream::connect, hyper-util connects by name on wasi, reqwest native
+ transport switch, WebSocket dialer and Responses WebSocket over it, webpki
+ roots for rustls configs
+
+---
+ Cargo.toml                        |  2 +-
+ src/client/legacy/connect/http.rs | 16 ++++++++++++++++
+ 2 files changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/Cargo.toml b/Cargo.toml
+index cbb578c..2ada8c8 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -192,7 +192,7 @@ optional = true
+ version = "0.2.4"
+ 
+ [dependencies.socket2]
+-version = ">=0.5.9, <0.7"
++version = "0.6"
+ features = ["all"]
+ optional = true
+ 
+diff --git a/src/client/legacy/connect/http.rs b/src/client/legacy/connect/http.rs
+index 00d6566..bb71f34 100644
+--- a/src/client/legacy/connect/http.rs
++++ b/src/client/legacy/connect/http.rs
+@@ -535,8 +535,23 @@ where
+         let (host, port) = get_host_port(config, &dst)?;
+         let host = host.trim_start_matches('[').trim_end_matches(']');
+ 
++        // wasm-term port: WASI preview1 has no resolver and no sockets. tokio's
++        // `TcpStream::connect` (the port's fork) hands the destination by name to whatever
++        // the program installed to carry TCP streams, or fails as an unreachable network.
++        // Socket options (nodelay, keepalive, buffer sizes, local addresses, happy eyeballs)
++        // do not exist there.
++        #[cfg(target_os = "wasi")]
++        {
++            let sock = TcpStream::connect((host, port))
++                .await
++                .map_err(ConnectError::m("tcp connect error"))?;
++            return Ok(TokioIo::new(sock));
++        }
++
+         // If the host is already an IP addr (v4 or v6),
+         // skip resolving the dns and start connecting right away.
++        #[cfg(not(target_os = "wasi"))]
++        {
+         let addrs = if let Some(addrs) = dns::SocketAddrs::try_parse(host, port) {
+             addrs
+         } else {
+@@ -562,6 +577,7 @@ where
+         }
+ 
+         Ok(TokioIo::new(sock))
++        }
+     }
+ }
+ 

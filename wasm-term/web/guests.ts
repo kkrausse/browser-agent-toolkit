@@ -32,6 +32,10 @@ export interface GuestInfo {
   importDir?: string;
   /** A wasm guest that runs commands: the page gives it a shell (`proc_*`, docs/abi.md 3.4). `?shell=inline|worker|off` overrides how. */
   shell?: boolean;
+  /** Files the page fetches from its own server into the program's filesystem before it starts, each
+   * only while every `when` condition holds for the guest's settings; `env` then names the path.
+   * A file the server does not have is left out. (codex-local: the mock's test CA, only with a mock backend.) */
+  fetchFiles?: { url: string; path: string; env?: string; when?: { param: string; in: string[] }[] }[];
   /** Environment the guest always gets (the page's `?env=` wins). */
   env?: Record<string, string>;
   /** A wasm guest's module, when it is not /guests/<name>.wasm; other builds of it by name (`?build=`). */

@@ -636,7 +636,9 @@ function chatReply(turn: Turn, step: Step): Response {
 // OpenAI Responses
 // ---------------------------------------------------------------------------
 
-function responsesReply(turn: Turn, step: Step): Response {
+/** One Responses reply as its event sequence, for either transport: `emit` is an SSE writer or a WebSocket's.
+ * Returns the response id and the output items (what a later `previous_response_id` refers to). */
+function responsesPlan(turn: Turn, step: Step): { completed: Json; run: (emit: Emit) => Promise<void> } {
   const respId = itemId("resp");
   const created_at = Math.floor(Date.now() / 1000);
   const u = usageFor(turn, step);
@@ -659,9 +661,7 @@ function responsesReply(turn: Turn, step: Step): Response {
   const base = { id: respId, object: "response", created_at, model: turn.model, output: [] as Json[], usage: null as Json | null };
   const completed = { ...base, status: "completed", output: items, usage };
 
-  if (!turn.stream) return json(completed);
-
-  return sseResponse(async (emit) => {
+  const run = async (emit: Emit) => {
     let seq = 0;
     const ev = (type: string, data: Json) => emit(type, { type, sequence_number: seq++, ...data });
     await ev("response.created", { response: { ...base, status: "in_progress" } });
@@ -692,7 +692,94 @@ function responsesReply(turn: Turn, step: Step): Response {
       await ev("response.output_item.done", { output_index, item });
     }
     await ev("response.completed", { response: completed });
+  };
+  return { completed, run };
+}
+
+function responsesReply(turn: Turn, step: Step): Response {
+  const plan = responsesPlan(turn, step);
+  return turn.stream ? sseResponse(plan.run) : json(plan.completed);
+}
+
+// ---------------------------------------------------------------------------
+// OpenAI Responses over WebSocket (what codex uses first with its built-in
+// `openai` provider): GET /v1/responses upgraded; the client sends
+// {"type":"response.create", ...the request body...} as a text frame and gets
+// the same events as the SSE stream, one JSON text frame each. A request with
+// `previous_response_id` carries only the input items added since that
+// response; `generate: false` is codex's prewarm (an empty completed response).
+// ---------------------------------------------------------------------------
+
+interface ResponsesSocket {
+  path: string;
+  authorization: string;
+  account: string;
+  userAgent: string;
+  originator: string;
+  /** response id -> the whole conversation up to and including that response's output. */
+  history: Map<string, Json[]>;
+  /** One request at a time, in order. */
+  queue: Promise<void>;
+}
+
+async function responsesSocketMessage(ws: { send(data: string): unknown; data: ResponsesSocket }, raw: string): Promise<void> {
+  const n = ++requestSeq;
+  const state = ws.data;
+  let body: Json;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    log(`#${n} WS ${state.path} !! invalid JSON (${raw.length} bytes)`);
+    ws.send(JSON.stringify({ type: "error", status: 400, error: { type: "invalid_request_error", message: "mock-llm: invalid JSON frame" } }));
+    return;
+  }
+  if (body.type !== "response.create") {
+    log(`#${n} WS ${state.path} frame type=${body.type} (ignored)`);
+    return;
+  }
+  const previous = typeof body.previous_response_id === "string" ? state.history.get(body.previous_response_id) : undefined;
+  const input: Json[] = [...(previous ?? []), ...(Array.isArray(body.input) ? body.input : [])];
+  const full = { ...body, input };
+  const fullRaw = JSON.stringify(full);
+  const emit: Emit = async (_event, data) => {
+    ws.send(typeof data === "string" ? data : JSON.stringify(data));
+    await sleep(DELAY_MS);
+  };
+  if (body.generate === false) {
+    const id = itemId("resp");
+    const response = { id, object: "response", created_at: Math.floor(Date.now() / 1000), model: body.model, output: [], usage: null };
+    state.history.set(id, input);
+    log(`#${n} WS ${state.path} prewarm (generate=false) items=${input.length}`);
+    await emit(null, { type: "response.created", sequence_number: 0, response: { ...response, status: "in_progress" } });
+    await emit(null, { type: "response.completed", sequence_number: 1, response: { ...response, status: "completed", usage: { input_tokens: 0, input_tokens_details: { cached_tokens: 0 }, output_tokens: 0, output_tokens_details: { reasoning_tokens: 0 }, total_tokens: 0 } } });
+    return;
+  }
+  auth.modelRequests.push({
+    path: `ws ${state.path}`,
+    authorization: state.authorization,
+    account: state.account,
+    userAgent: state.userAgent,
+    originator: state.originator,
+    contentEncoding: "",
+    tools: ((body.tools ?? []) as Json[]).map((tool) => String(tool.name ?? tool.function?.name ?? tool.type)),
+    browserTabNote: fullRaw.includes("running inside a browser tab"),
   });
+  if (auth.modelRequests.length > 50) auth.modelRequests.shift();
+  const turn = parseResponses(full, fullRaw);
+  const scenario = pickScenario(turn);
+  log(`#${n} WS ${state.path} model=${turn.model} items=${turn.messageCount}${previous ? ` (+${(body.input ?? []).length} after ${body.previous_response_id})` : ""} tools=${turn.tools.length} results=${turn.toolResults.length} user="${clip(turn.userText)}"`);
+  if (scenario.name === "error") {
+    log(`#${n}   -> scenario=error (websocket error event)`);
+    ws.send(JSON.stringify({ type: "error", status: 400, error: { type: "invalid_request_error", code: "mock_error", message: "mock-llm scripted failure (prompt contained mock-error)" } }));
+    return;
+  }
+  const step = scenario.step(turn);
+  log(`#${n}   -> scenario=${scenario.name} step=${turn.toolResults.length}${step.text ? ` text=${step.text.length}ch` : ""}${step.tool ? ` tool=${step.tool.name}(${clip(step.tool.payload, 100)})` : ""}`);
+  const plan = responsesPlan(turn, step);
+  state.history.set(plan.completed.id, [...input, ...plan.completed.output]);
+  // Old entries are only ever referred to by the next request.
+  if (state.history.size > 8) state.history.delete(state.history.keys().next().value!);
+  await plan.run(emit);
 }
 
 // ---------------------------------------------------------------------------
@@ -960,13 +1047,36 @@ async function handleModel(req: Request, path: string, parse: (b: Json, raw: str
   return reply(turn, step);
 }
 
-const server = Bun.serve({
+const server = Bun.serve<ResponsesSocket>({
   port: PORT,
   hostname: HOST,
   idleTimeout: 120,
-  async fetch(req) {
+  websocket: {
+    message(ws, message) {
+      const raw = typeof message === "string" ? message : new TextDecoder().decode(message);
+      ws.data.queue = ws.data.queue.then(() => responsesSocketMessage(ws, raw)).catch((err) => log(`!! websocket request failed: ${err}`));
+    },
+    close(ws, code) {
+      log(`WS ${ws.data.path} closed (${code})`);
+    },
+  },
+  async fetch(req, server) {
     const url = new URL(req.url);
     const path = url.pathname.replace(/\/+$/, "") || "/";
+    if (req.method === "GET" && /^(\/v1)?\/responses$/.test(path) && (req.headers.get("upgrade") ?? "").toLowerCase() === "websocket") {
+      const data: ResponsesSocket = {
+        path,
+        authorization: describeAuthorization(req.headers.get("authorization")),
+        account: req.headers.get("chatgpt-account-id") ?? "",
+        userAgent: req.headers.get("user-agent") ?? "",
+        originator: req.headers.get("originator") ?? "",
+        history: new Map(),
+        queue: Promise.resolve(),
+      };
+      log(`WS ${path} upgrade auth=${data.authorization} ua="${clip(data.userAgent, 40)}"`);
+      if (server.upgrade(req, { data })) return undefined as unknown as Response;
+      return json({ error: { message: "mock-llm: websocket upgrade failed" } }, 400);
+    }
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     if (req.method === "GET" && (path === "/" || path === "/health")) return json({ ok: true, service: "mock-llm", models: MODELS });
     if (req.method === "GET" && /^(\/v1)?\/models$/.test(path)) {

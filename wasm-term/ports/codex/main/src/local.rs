@@ -1,7 +1,11 @@
 //! `codex` for the browser with nothing behind it: the upstream TUI, the
 //! embedded app-server and the agent core in one module on one thread. Model
-//! requests leave through the host's `fetch` (the reqwest fork's WASI
-//! transport), by way of the page's pass-through relay.
+//! and sign-in requests leave one of two ways (`WASM_TERM_NET`, the page's `net=`):
+//! - `tunnel`: codex's own HTTP stack (reqwest, hyper, rustls) and WebSocket dialer over a
+//!   TCP stream the page's relay carries. TLS ends in this module, so the relay sees
+//!   ciphertext only;
+//! - `fetch`: the host's `fetch` (the reqwest fork's WASI transport) by way of the page's
+//!   pass-through HTTP relay, which terminates TLS and so can read everything.
 //!
 //! Differences from the native binary, all forced by the target:
 //! - no `arg0` dispatch, a current-thread runtime (see `main.rs`);
@@ -45,7 +49,28 @@ fn main() -> anyhow::Result<()> {
     shared::prepare_emulated_home()
         .map_err(|err| anyhow::anyhow!("failed to prepare the home directory: {err}"))?;
     let backend = std::env::var("CODEX_WASM_BACKEND").unwrap_or_else(|_| "mock".to_string());
-    let defaults = browser_defaults(&backend)
+    let tunnel = match std::env::var("WASM_TERM_NET").as_deref() {
+        Ok("tunnel") => true,
+        Ok("fetch") | Ok("") | Err(_) => false,
+        Ok(other) => anyhow::bail!("unknown WASM_TERM_NET {other:?} (tunnel or fetch)"),
+    };
+    trust_policy(&backend);
+    if tunnel {
+        // What tokio's `TcpStream::connect` does from here on: hyper-util's connector and the
+        // WebSocket dialer both end up there, with the host name still a name.
+        tokio::net::set_wasi_tcp_connector(|host, port| {
+            Box::pin(async move {
+                wasm_term_tokio::TcpStream::connect(&host, port)
+                    .await
+                    .map(wasm_term_tokio::TcpStream::into_inner)
+            })
+        });
+        reqwest::wasi_use_native_transport(true);
+    }
+    if let Ok(url) = std::env::var("CODEX_WASM_TLS_PROBE") {
+        return tls_probe(&url);
+    }
+    let defaults = browser_defaults(&backend, tunnel)
         .map_err(|err| anyhow::anyhow!("failed to set up the {backend} backend: {err}"))?;
     // In front, so that `-c` on the command line (the page's `?arg=`) wins.
     inner.config_overrides.raw_overrides.splice(0..0, defaults);
@@ -86,7 +111,7 @@ fn main() -> anyhow::Result<()> {
 /// - `mock-auth`: codex's own OpenAI provider and sign-in flow, with the model
 ///   API, the ChatGPT backend and the auth server all pointed at mock-llm's fakes.
 /// - `openai`: the real thing. Sign in with ChatGPT (device code) or an API key.
-fn browser_defaults(backend: &str) -> anyhow::Result<Vec<String>> {
+fn browser_defaults(backend: &str, tunnel: bool) -> anyhow::Result<Vec<String>> {
     let mut overrides: Vec<String> = [
         // No sandbox exists here and none is needed: the "machine" is the tab. With
         // any other mode codex routes file writes to a sandbox helper process.
@@ -108,7 +133,9 @@ fn browser_defaults(backend: &str) -> anyhow::Result<Vec<String>> {
     .to_vec();
     // `mock-llm.test` is the relay's https name for the same server: codex only
     // accepts an https ChatGPT backend, and sign-in is only testable through the relay.
-    let default_mock = if backend == "mock-auth" { "https://mock-llm.test" } else { "http://127.0.0.1:4791" };
+    // Through the tunnel it is always that name: the mock's TLS front has a certificate for it, and
+    // the tunnel's relay would otherwise carry plain HTTP, which is what the tunnel is there to avoid.
+    let default_mock = if backend == "mock-auth" || tunnel { "https://mock-llm.test" } else { "http://127.0.0.1:4791" };
     let mock = std::env::var("CODEX_WASM_MOCK_URL").unwrap_or_else(|_| default_mock.to_string());
     let mock = mock.trim_end_matches('/');
     // What this machine is, for the model: codex's own slot for it (`developer_instructions`
@@ -151,6 +178,77 @@ fn browser_defaults(backend: &str) -> anyhow::Result<Vec<String>> {
         other => anyhow::bail!("unknown CODEX_WASM_BACKEND {other:?} (mock, mock-auth or openai)"),
     }
     Ok(overrides)
+}
+
+/// Which certificate authorities this program trusts, decided here and nowhere else.
+///
+/// The baseline is the Mozilla root set compiled into the module (webpki-roots): there is no
+/// platform store on WASI. codex also honours `CODEX_CA_CERTIFICATE` and `SSL_CERT_FILE` /
+/// `SSL_CERT_DIR` (extra roots from a PEM file), which here would let a URL parameter
+/// (`?env=`) point the real backend at a root of someone's choosing. So all three are removed
+/// from the environment for every backend, and one is set again only for the two mock
+/// backends, from `WASM_TERM_TEST_CA`: the private CA of mock-llm's TLS front, which the page
+/// supplies together with the file, and only for those backends. With `backend=openai`
+/// nothing can add a root.
+fn trust_policy(backend: &str) {
+    let test_ca = std::env::var("WASM_TERM_TEST_CA").ok();
+    // SAFETY: single-threaded, before anything reads the environment concurrently.
+    unsafe {
+        for name in ["CODEX_CA_CERTIFICATE", "SSL_CERT_FILE", "SSL_CERT_DIR", "WASM_TERM_TEST_CA"] {
+            std::env::remove_var(name);
+        }
+        if matches!(backend, "mock" | "mock-auth") {
+            if let Some(path) = test_ca.filter(|path| std::path::Path::new(path).is_file()) {
+                std::env::set_var("CODEX_CA_CERTIFICATE", path);
+            }
+        }
+    }
+}
+
+/// `CODEX_WASM_TLS_PROBE=<url>`: instead of starting codex, make one GET with the HTTP client
+/// codex builds (same reqwest, same TLS configuration, same trust policy as above for the
+/// chosen backend and transport), print what came of it and exit: 0 for any HTTP response,
+/// 1 for a failure, whose error chain (certificate errors included) is printed.
+/// `CODEX_WASM_TLS_PROBE_REPEAT=n` repeats it on the same client, which shows what a new
+/// connection costs next to a reused one. For checking the transport and certificate
+/// verification without a conversation around it (web/verify/codex-local.js).
+fn tls_probe(url: &str) -> anyhow::Result<()> {
+    let repeat: usize = std::env::var("CODEX_WASM_TLS_PROBE_REPEAT").ok().and_then(|n| n.parse().ok()).unwrap_or(1);
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
+    let outcome = runtime.block_on(async {
+        let client = codex_http_client::build_reqwest_client_with_custom_ca(
+            reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)),
+        )?;
+        for round in 1..=repeat.max(1) {
+            let started = std::time::Instant::now();
+            let response = client.get(url).send().await?;
+            let head_ms = started.elapsed().as_secs_f64() * 1000.0;
+            let (status, version) = (response.status(), response.version());
+            let body = response.bytes().await?;
+            println!(
+                "tls-probe: {round} {url} -> {} {version:?} head {head_ms:.1} ms, body {} bytes after {:.1} ms",
+                status.as_u16(),
+                body.len(),
+                started.elapsed().as_secs_f64() * 1000.0
+            );
+        }
+        anyhow::Ok(())
+    });
+    match outcome {
+        Ok(()) => {
+            println!("tls-probe: ok");
+            Ok(())
+        }
+        Err(error) => {
+            println!("tls-probe: failed: {error:#}");
+            let mut source = error.source();
+            while let Some(cause) = source {
+                println!("tls-probe:   caused by: {cause}");
+                source = cause.source();
+            }
+            std::process::exit(1);
+        }
+    }
 }
 
 /// A TOML basic string.

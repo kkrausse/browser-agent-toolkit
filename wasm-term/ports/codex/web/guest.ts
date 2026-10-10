@@ -36,6 +36,7 @@ export const codexLocalGuest: WasmGuest = {
   build: "cd wasm-term/ports/codex && BIN=local scripts/ship.sh",
   params: [
     { query: "backend", env: "CODEX_WASM_BACKEND", label: "Backend", default: "mock", hint: "mock = the scripted model server from mock-llm, no sign-in, no tokens. openai = the real service: sign in with ChatGPT (device code) or an API key in the TUI. mock-auth = codex's real sign-in flow against mock-llm's fake auth server" },
+    { query: "net", env: "WASM_TERM_NET", label: "Network", default: "tunnel", hint: "tunnel = codex's own HTTP and TLS over a TCP stream this page's server only carries (it sees ciphertext; web/tcp-relay.ts). fetch = the browser's fetch through the HTTP relay below, which terminates TLS and can read tokens and content" },
     { query: "relay", env: "WASM_TERM_HTTP_RELAY", label: "HTTP relay", default: "/proxy/http", url: true, hint: "/proxy/http = this page's server forwards the program's HTTP requests to an allowlist of hosts (web/server.ts). Empty = the browser fetches them directly, which only works for servers that allow this page's origin (CORS)" },
     { query: "dir", env: "CODEX_WASM_CWD", label: "Project directory", default: "/home/user/project", hint: "a directory in this tab's filesystem; kept across reloads when it is below /home/user/project" },
     { query: "seed", env: "CODEX_WASM_SEED", label: "Seed a sample project", default: "1", hint: "1 = write a few sample files into the project directory if it is empty; 0 = leave it empty" },
@@ -43,6 +44,9 @@ export const codexLocalGuest: WasmGuest = {
   env: { TERM_PROGRAM: "ghostty", CODEX_HOME: "/home/user/.codex" },
   // Commands (the model's exec_command, the user's !command) run in the page's shell: main/src/shell.rs on `proc_*`.
   shell: true,
+  // The private CA of mock-llm's TLS front, which the module trusts in addition to the public roots only
+  // when it gets this file, and it gets it only with a mock backend (main/src/local.rs, `trust_policy`).
+  fetchFiles: [{ url: "/test/mock-ca.pem", path: "/etc/wasm-term/mock-ca.pem", env: "WASM_TERM_TEST_CA", when: [{ param: "backend", in: ["mock", "mock-auth"] }, { param: "net", in: ["tunnel"] }] }],
   // The launcher's "Import folder" / "Import .zip" write here: the project the agent works on.
   importDir: "/home/user/project",
   // Where sign-in leaves its tokens or API key (cli_auth_credentials_store = "file").

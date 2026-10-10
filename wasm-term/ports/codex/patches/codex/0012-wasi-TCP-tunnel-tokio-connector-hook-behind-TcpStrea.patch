@@ -1,0 +1,158 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Sat, 10 Oct 2026 12:20:10 -0700
+Subject: [PATCH] wasi: TCP tunnel: tokio connector hook behind
+ TcpStream::connect, hyper-util connects by name on wasi, reqwest native
+ transport switch, WebSocket dialer and Responses WebSocket over it, webpki
+ roots for rustls configs
+
+---
+ codex-rs/Cargo.lock                     |  5 ++--
+ codex-rs/Cargo.toml                     |  1 +
+ codex-rs/core/src/client.rs             |  9 ++++---
+ codex-rs/http-client/Cargo.toml         |  4 ++++
+ codex-rs/http-client/src/custom_ca.rs   |  4 ++++
+ codex-rs/websocket-client/src/dialer.rs | 31 +++++++++++++++++++++++++
+ 6 files changed, 49 insertions(+), 5 deletions(-)
+
+diff --git a/codex-rs/Cargo.lock b/codex-rs/Cargo.lock
+index af417a8..d599e7c 100644
+--- a/codex-rs/Cargo.lock
++++ b/codex-rs/Cargo.lock
+@@ -3736,6 +3736,7 @@ dependencies = [
+  "tracing",
+  "tracing-opentelemetry",
+  "tracing-subscriber",
++ "webpki-roots",
+  "windows-sys 0.61.2",
+  "zstd",
+ ]
+@@ -5279,9 +5280,11 @@ dependencies = [
+  "codex-arg0",
+  "codex-build-info",
+  "codex-config",
++ "codex-http-client",
+  "codex-tui",
+  "codex-utils-cli",
+  "codex-utils-pty",
++ "reqwest 0.12.28",
+  "tempfile",
+  "tokio",
+  "wasm-term-tokio",
+@@ -9061,8 +9064,6 @@ dependencies = [
+ [[package]]
+ name = "hyper-util"
+ version = "0.1.20"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "96547c2556ec9d12fb1578c4eaf448b04993e7fb79cbaad930a656880a6bdfa0"
+ dependencies = [
+  "base64 0.22.1",
+  "bytes",
+diff --git a/codex-rs/Cargo.toml b/codex-rs/Cargo.toml
+index 2e41aa6..4c3e3b4 100644
+--- a/codex-rs/Cargo.toml
++++ b/codex-rs/Cargo.toml
+@@ -681,6 +681,7 @@ tokio = { path = "../../tokio" }
+ chrono = { path = "../../forks/chrono" }
+ dirs = { path = "../../forks/dirs" }
+ gethostname = { path = "../../forks/gethostname" }
++hyper-util = { path = "../../forks/hyper-util" }
+ gix-fs = { path = "../../forks/gix-fs" }
+ rustls-native-certs = { path = "../../forks/rustls-native-certs" }
+ portable-pty = { path = "../../forks/portable-pty" }
+diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
+index 005b9dc..0259302 100644
+--- a/codex-rs/core/src/client.rs
++++ b/codex-rs/core/src/client.rs
+@@ -1029,9 +1029,12 @@ impl ModelClient {
+     /// WebSocket use is controlled by provider capability and session-scoped fallback state.
+     pub fn responses_websocket_enabled(&self) -> bool {
+         // wasm-term: a browser WebSocket cannot carry the `Authorization` header this
+-        // transport authenticates with, and there are no sockets to dial with. Use the
+-        // HTTP (SSE) transport from the start instead of after a failed retry budget.
+-        if cfg!(target_os = "wasi") {
++        // transport authenticates with, so without sockets of its own the program uses the
++        // HTTP (SSE) transport from the start instead of after a failed retry budget. With a
++        // TCP transport installed (the tunnel) the dialer does its own TLS and handshake,
++        // and this is the native behaviour again.
++        #[cfg(all(target_os = "wasi", target_env = "p1"))]
++        if !tokio::net::wasi_tcp_available() {
+             return false;
+         }
+         if !self.state.provider.info().supports_websockets
+diff --git a/codex-rs/http-client/Cargo.toml b/codex-rs/http-client/Cargo.toml
+index 5e38ac7..8430a08 100644
+--- a/codex-rs/http-client/Cargo.toml
++++ b/codex-rs/http-client/Cargo.toml
+@@ -54,3 +54,7 @@ doctest = false
+ # wasm-term port: native-tls needs OpenSSL, which is not built for WASI.
+ [target.'cfg(not(target_os = "wasi"))'.dependencies]
+ native-tls = "0.2"
++
++# wasm-term port: the trust anchors on WASI, where no platform store exists.
++[target.'cfg(target_os = "wasi")'.dependencies]
++webpki-roots = "1"
+diff --git a/codex-rs/http-client/src/custom_ca.rs b/codex-rs/http-client/src/custom_ca.rs
+index 6ca705d..0641153 100644
+--- a/codex-rs/http-client/src/custom_ca.rs
++++ b/codex-rs/http-client/src/custom_ca.rs
+@@ -257,6 +257,10 @@ fn build_rustls_client_config(
+         );
+     }
+     let _ = root_store.add_parsable_certificates(certs);
++    // wasm-term: there is no platform trust store on WASI (the list above is empty), so the
++    // baseline is the bundled Mozilla roots, the same set reqwest's rustls backend uses there.
++    #[cfg(target_os = "wasi")]
++    root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+ 
+     if let Some(bundle) = bundle {
+         let certificates = bundle.load_certificates()?;
+diff --git a/codex-rs/websocket-client/src/dialer.rs b/codex-rs/websocket-client/src/dialer.rs
+index e705bf8..b58f296 100644
+--- a/codex-rs/websocket-client/src/dialer.rs
++++ b/codex-rs/websocket-client/src/dialer.rs
+@@ -41,6 +41,36 @@ pub(crate) async fn connect(
+     tcp_nodelay: TcpNodelay,
+     loopback_direct: bool,
+ ) -> Result<(ConnectionInner, Response), WebSocketError> {
++    // wasm-term: one way out on WASI, a TCP stream by host name (tokio's connector hook; the
++    // relay behind it resolves). No resolver, no socket options and no proxy environment
++    // exist there, and tungstenite's own dialer resolves before it connects. TLS and the
++    // handshake are the same code as below, always with an explicit config: the default
++    // connector would start from a platform trust store that is empty on this target.
++    #[cfg(target_os = "wasi")]
++    {
++        let _ = (proxy_route, tcp_nodelay, loopback_direct);
++        let host = websocket_host(&request)?;
++        let port = websocket_port(&request)?;
++        let stream = TcpStream::connect((host, port))
++            .await
++            .map_err(WebSocketError::Io)?;
++        let tls_config = match tls_config {
++            Some(tls_config) => tls_config,
++            None => build_rustls_client_config_with_custom_ca()
++                .map_err(|error| WebSocketError::Io(error.into()))?,
++        };
++        let stream: Box<dyn AsyncIo> = Box::new(stream);
++        let (stream, response) = client_async_tls_with_config(
++            request,
++            stream,
++            Some(config),
++            Some(Connector::Rustls(tls_config)),
++        )
++        .await?;
++        return Ok((ConnectionInner::Right(stream), response));
++    }
++    #[cfg(not(target_os = "wasi"))]
++    {
+     let disable_nagle = tcp_nodelay == TcpNodelay::Enabled;
+     let proxy_url = match proxy_route {
+         OutboundProxyRoute::TransportDefault => {
+@@ -132,6 +162,7 @@ pub(crate) async fn connect(
+     )
+     .await?;
+     Ok((ConnectionInner::Right(stream), response))
++    }
+ }
+ 
+ #[derive(Debug, PartialEq, Eq)]

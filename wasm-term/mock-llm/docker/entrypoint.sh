@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Container entrypoint; the first argument picks the role (see compose.yaml).
 set -euo pipefail
-ROLE="${1:?role: workspace-init | mock | opencode | codex | edge}"
+ROLE="${1:?role: workspace-init | mock | tls | opencode | codex | edge}"
 shift
 DIR=/opt/mock-llm
 # Fixed path (created in the Dockerfile, agent-owned, a named volume at runtime).
@@ -27,6 +27,10 @@ case "$ROLE" in
     ;;
   mock)
     exec env MOCK_LLM_HOST=0.0.0.0 MOCK_LLM_PORT=4791 bun "$DIR/server.ts"
+    ;;
+  tls)
+    # TLS in front of the mock, with a certificate authority made here and now (tls-front.sh).
+    exec bash "$DIR/tls-front.sh"
     ;;
   opencode)
     mkdir -p "$HOME/.config/opencode"
@@ -54,7 +58,7 @@ case "$ROLE" in
   edge)
     # The only container with a leg outside the internal network. It holds no
     # tool and no config; it just copies bytes for the published ports.
-    exec bun "$DIR/tcp-forward.ts" 4791=mock:4791 4792=opencode:4792 4793=codex:4793 4796=codex:4796
+    exec bun "$DIR/tcp-forward.ts" 4791=mock:4791 4792=opencode:4792 4793=codex:4793 4796=codex:4796 4797=tls:4797 4798=tls:4798
     ;;
   *)
     echo "unknown role $ROLE" >&2

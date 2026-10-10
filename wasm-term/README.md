@@ -81,6 +81,7 @@ notes call this repository's Rust runtime "bat-rust", the name of its checkout.
 | --- | --- |
 | 4790 | `web/` dev server |
 | 4791 | mock model server (container); also the fake sign-in endpoints |
+| 4797, 4798 | the same server behind TLS as `mock-llm.test` (container): with a certificate from the mock's private test CA, and with one nobody signed |
 | 4792 | `opencode serve` (container) |
 | 4793 | `codex app-server` (container) |
 | 4796 | browser-facing codex proxy (container); strips `Origin`, which `codex app-server` rejects |
@@ -109,11 +110,12 @@ runs one directly.
 | `tui` | ratatui on crossterm, raw mode, mouse |
 | `async-tui` | tokio + crossterm `EventStream` + WebSocket |
 | `net`, `events` | network descriptors; raw event dump |
+| `tcp` | TCP streams through the relay: checks of the descriptor, blocking and under tokio |
 | `proc` | child processes: checks and timings of `proc_*` (`&shell=worker` or `&shell=inline&arg=inline`; `&arg=quick` skips the timings) |
 | `js-demo` | a JavaScript program on the node-style shim (`host/node/demo-guest.ts`) |
 | `opencode` | the real opencode 2.0.26 TUI, attached to a remote `opencode serve` |
 | `codex` | the real codex-cli 0.162.0 TUI (Rust, `wasm32-wasip1`), attached to a remote `codex app-server` |
-| `codex-local` | codex-cli 0.162.0 entirely in the tab: TUI, app-server and agent core in one module; model and sign-in requests go out through the page server's HTTP relay |
+| `codex-local` | codex-cli 0.162.0 entirely in the tab: TUI, app-server and agent core in one module; model and sign-in requests go out through the page server: as TLS the module does itself over a TCP relay (`net=tunnel`), or as `fetch` through an HTTP relay (`net=fetch`) |
 
 Page parameters: `&arg=...`, `&env=K=V` (`&env=WASM_TERM_TRACE=1` logs
 syscall rates, and stretches in which the program computed without reading
@@ -161,6 +163,7 @@ them same-origin: no CORS setup, no mixed content, one port to expose.
 | `/proxy/opencode/...` | `OPENCODE_UPSTREAM`, default `http://127.0.0.1:4792` | streamed as it arrives (the `/api/event` stream), no idle timeout; method, query (`?auth_token=` too), body and `Authorization` unchanged; `Origin` dropped going up, the Basic challenge header dropped coming down |
 | `/proxy/codex` | `CODEX_UPSTREAM`, default `ws://127.0.0.1:4796` | WebSocket relay, text and binary frames, subprotocols passed on |
 | `/proxy/http/<host>/<path>` | the named host, only if allowlisted | the pass-through relay for programs that make their own HTTP requests ("codex-local", below) |
+| `/proxy/tcp?host=&port=` | that host and port, only if allowlisted | a TCP connection as a WebSocket, bytes only: for programs that do their own TLS ("The TCP tunnel", below) |
 
 `mock-llm/down.sh` stops the backend. Prompts that select scripted replies
 (`please use a tool`, `show me markdown`, `long scroll`, ...) are listed in
@@ -199,7 +202,7 @@ rebuilt module is picked up without a restart.
 
 The same TUI with codex's app-server and agent core in the module too: the agent loop, the
 tools and the model calls all run in the tab. What is left on the server is a relay for its
-HTTP requests.
+network traffic: a TCP relay that only copies bytes (the default), or an HTTP relay.
 
 ```sh
 cd wasm-term/ports/codex
@@ -215,7 +218,8 @@ Open <http://127.0.0.1:4790/?guest=codex-local>, or the launcher.
 | Parameter | Default | |
 | --- | --- | --- |
 | `backend` | `mock` | `mock`: the scripted model server, no sign-in, no tokens. `openai`: the real service; the TUI asks you to sign in. `mock-auth`: codex's real sign-in flow and ChatGPT-style requests against mock-llm's fake auth server (what `web/verify/codex-local.js` uses) |
-| `relay` | `/proxy/http` | where the program's HTTP requests go: this page's server, which forwards them to an allowlist of hosts. Empty = the browser fetches directly (only servers that allow this origin by CORS) |
+| `net` | `tunnel` | how requests leave the tab. `tunnel`: codex's own HTTP stack (reqwest, hyper, rustls) and WebSocket dialer, over a TCP stream that this page's server only carries (`/proxy/tcp`); TLS ends in the module, so the server sees ciphertext. `fetch`: the browser's `fetch` through the HTTP relay below, which terminates TLS and can read everything |
+| `relay` | `/proxy/http` | with `net=fetch`: where the program's HTTP requests go: this page's server, which forwards them to an allowlist of hosts. Empty = the browser fetches directly (only servers that allow this origin by CORS) |
 | `dir` | `/home/user/project` | the project directory, in the tab's own filesystem |
 | `seed` | `1` | write the sample project (`ports/codex/main/sample/`: a README, three Python files in `src/`, a test, a CSV, notes) into the project directory if it is empty |
 
@@ -253,7 +257,48 @@ not a terminal. `ports/codex/NOTES.md`, section 8, has the details, the coverage
 bash and the numbers. `&shell=off&env=CODEX_WASM_SHELL=0` runs without a shell (the model's
 commands then get a "no shell in this build" error it can read).
 
-**The relay** (`/proxy/http/<host>[:port]/<path>` on :4790) forwards a request to
+**The TCP tunnel** (`net=tunnel`; `/proxy/tcp?host=<name>&port=<n>` on :4790, `web/tcp-relay.ts`). One
+WebSocket is one TCP connection: the server resolves the name, connects, and copies bytes both
+ways. codex does everything above that inside the module, exactly as the native binary does:
+TLS with rustls (certificates verified against the Mozilla roots compiled into the module),
+HTTP/1.1 or HTTP/2 as negotiated, its own headers and cookies, zstd request bodies, and the
+Responses API over a WebSocket when it uses its own `openai` provider.
+
+| | `net=tunnel` | `net=fetch` |
+| --- | --- | --- |
+| The page server can read | nothing of the content: TLS records. It knows the host and port it was asked for (the same name is in the TLS ClientHello), sizes and timing | everything: bearer tokens, prompts, replies, cookies (it terminates TLS on both sides and promises not to log them) |
+| The far end sees | codex's own TLS handshake and HTTP, from this machine's address | Bun's TLS handshake and HTTP client with codex's headers, from this machine's address |
+| Trust anchors | the module's bundled public roots; nothing in a URL or in `config.toml` can add one for the real backend | the server's (Bun's) roots |
+| Transport features | HTTP/2, Responses WebSocket, streamed uploads, codex's cookie handling | HTTP as `fetch` does it: whole request bodies, no WebSocket transport, decoding by the browser |
+
+What the tunnel's relay will do, so that it is not an open proxy for everyone who can load the
+page:
+
+- connect only to `host:port` pairs in its allowlist: port 443 of `api.openai.com`,
+  `chatgpt.com`, `auth.openai.com` (and of whatever `HTTP_RELAY_ALLOW` adds without an origin of
+  its own), `mock-llm.test:443` (the mock's TLS front on loopback), and the test names the `tcp`
+  guest and the checks use. `TCP_RELAY_ALLOW="host:port[=target-host:target-port] ..."` adds pairs;
+- resolve the name itself and connect to the address it checked. A name that resolves to a
+  private, loopback, link-local or CGNAT (tailnet) address is refused unless the entry names
+  its target (`=target`), which only the mock and the test endpoints do;
+- refuse a WebSocket whose `Origin` is not the page's own (WebSockets are not covered by CORS);
+- give up after 10 s without a connection (`TCP_RELAY_CONNECT_MS`), close after 10 minutes
+  without a byte (`TCP_RELAY_IDLE_MS`), after 6 hours (`TCP_RELAY_LIFETIME_MS`) or 2 GiB
+  (`TCP_RELAY_MAX_BYTES`), and hold at most 32 connections at once (`TCP_RELAY_MAX_CONNECTIONS`);
+- log one line per connection (`journalctl --user -u wasm-term-web | grep '^tcp '`): host, port,
+  bytes each way, seconds, how it ended.
+
+**A test CA, for the mock only.** `mock-llm.test` has a certificate from a CA that mock-llm's TLS
+container makes when it starts (`mock-llm/README.md`, "TLS"). The module trusts it in addition to
+the public roots only when the page hands it the CA file, and the page does that only for
+`backend=mock` and `backend=mock-auth` (`fetchFiles` in `ports/codex/web/guest.ts`). The module
+also decides for itself (`trust_policy` in `ports/codex/main/src/local.rs`): codex's own
+extra-root variables (`CODEX_CA_CERTIFICATE`, `SSL_CERT_FILE`, `SSL_CERT_DIR`) are removed from
+its environment for every backend, so `?env=` cannot set them, and one is set again only for the
+two mock backends. With `backend=openai` nothing adds a root: `web/verify/codex-local.js` asks
+for exactly that and sees the mock's certificate refused.
+
+**The HTTP relay** (`net=fetch`; `/proxy/http/<host>[:port]/<path>` on :4790) forwards a request to
 `<origin of host>/<path>` if the host is one of: `127.0.0.1:4791` and `mock-llm.test` (both the
 mock), `api.openai.com`, `chatgpt.com`, `auth.openai.com`; `HTTP_RELAY_ALLOW="host[=origin] ..."`
 in the server's environment adds more. It is stateless and adds nothing of its own. It sends

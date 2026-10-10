@@ -133,14 +133,30 @@ for (const pair of params.getAll("env")) {
 // server's reverse proxy, the default, which works from any device the page
 // itself loads on.
 const guestArgs: string[] = [];
+const settings: Record<string, string> = {};
 for (const param of info.params ?? []) {
   let value = params.get(param.query) ?? param.default;
+  settings[param.query] = value;
   if (param.url && value.startsWith("/")) {
     value = new URL(value, location.origin).href.replace(/\/$/, "");
     if (param.url === "ws") value = value.replace(/^http/, "ws");
   }
   if (param.env) env[param.env] = value;
   if (param.args && value !== "") guestArgs.push(...param.args.map(arg => arg.replaceAll("{}", value)));
+}
+
+// Files a guest wants from this server under its current settings (GuestInfo.fetchFiles).
+const fetched: Record<string, Uint8Array> = {};
+for (const wanted of info.fetchFiles ?? []) {
+  if (!(wanted.when ?? []).every(condition => condition.in.includes(settings[condition.param] ?? ""))) continue;
+  try {
+    const response = await fetch(wanted.url);
+    if (!response.ok) continue;
+    fetched[wanted.path] = new Uint8Array(await response.arrayBuffer());
+    if (wanted.env) env[wanted.env] = wanted.path;
+  } catch {
+    // not there: the program runs without it
+  }
 }
 
 const persist = params.get("persist") === "0"
@@ -181,6 +197,7 @@ const program = startProgram({
   workerUrl: info.kind === "js" ? "/js-worker.js" : "/worker.js",
   args: [guest, ...guestArgs, ...params.getAll("arg")],
   env: { ...info.env, ...env, WASM_TERM_ORIGIN: location.origin },
+  files: fetched,
   cols: terminal.cols,
   rows: terminal.rows,
   xpixel: Math.round(pixels.width * terminal.cols),

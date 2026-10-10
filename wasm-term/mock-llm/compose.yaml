@@ -2,6 +2,7 @@
 #
 #   workspace-init  one-shot, seeds the workspace volume (no network)
 #   mock      scripted model API                         (internal only)
+#   tls       TLS (HTTP/1.1, HTTP/2, WebSocket) in front of mock, private test CA (internal only)
 #   opencode  pinned `opencode serve`                    (internal only)
 #   codex     pinned `codex app-server` + Origin proxy   (internal only)
 #   edge      byte forwarder for the published ports     (internal + published)
@@ -9,7 +10,7 @@
 # `backend` is an internal network in isolated gateway mode: mock/opencode/codex
 # have no route to the internet and none to the host either. Docker does not publish ports from an
 # internal network, which is why `edge` exists: it sits on both networks and
-# forwards 127.0.0.1:4791/4792/4793/4796 inwards. It runs no agent and no tool.
+# forwards 127.0.0.1:4791/4792/4793/4796/4797/4798 inwards. It runs no agent and no tool.
 name: wasm-term-mock
 
 x-common: &common
@@ -28,6 +29,16 @@ services:
     networks: [backend]
     environment:
       MOCK_LLM_DELAY_MS: ${MOCK_LLM_DELAY_MS:-15}
+
+  # The mock again, over TLS, as `mock-llm.test`: for a client that does its own TLS (codex-local
+  # through the page's TCP tunnel). 4797 has a certificate from a CA generated when the container
+  # starts (its key is deleted once the certificate is signed); 4798 has one nobody signed, for
+  # checking that a client refuses it. See docker/tls-front.sh.
+  tls:
+    <<: *common
+    command: ["tls"]
+    networks: [backend]
+    depends_on: [mock]
 
   # One-shot: creates the throwaway git repo on the workspace volume if absent.
   workspace-init:
@@ -68,12 +79,14 @@ services:
     <<: *common
     command: ["edge"]
     networks: [backend, published]
-    depends_on: [mock, opencode, codex]
+    depends_on: [mock, tls, opencode, codex]
     ports:
       - "${MOCK_BIND:-127.0.0.1}:4791:4791"
       - "${MOCK_BIND:-127.0.0.1}:4792:4792"
       - "${MOCK_BIND:-127.0.0.1}:4793:4793"
       - "${MOCK_BIND:-127.0.0.1}:4796:4796"
+      - "${MOCK_BIND:-127.0.0.1}:4797:4797"
+      - "${MOCK_BIND:-127.0.0.1}:4798:4798"
 
 networks:
   backend:

@@ -11,6 +11,8 @@ CODEX_PORT=4793
 EGRESS_TRAP_PORT=4794
 OPENCODE_TAP_PORT=4795
 CODEX_TAP_PORT=4796
+MOCK_TLS_PORT=4797
+MOCK_TLS_UNTRUSTED_PORT=4798
 # Not a secret: fixed so the server, the native client and a browser client agree.
 # opencode serve generates a random password when none is given; it cannot be turned off.
 MOCK_OPENCODE_PASSWORD="${MOCK_OPENCODE_PASSWORD:-wasm-term-mock}"

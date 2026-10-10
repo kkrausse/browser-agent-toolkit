@@ -159,7 +159,12 @@ export function createTcpRelay(options: TcpRelayOptions) {
   };
   // mock-llm behind its TLS front (mock-llm/compose.yaml, service `tls`): the same server the HTTP relay
   // reaches as `mock-llm.test`, here with a certificate for that name from the mock's private CA.
-  alias("mock-llm.test:443", process.env.MOCK_LLM_TLS_UPSTREAM ?? "127.0.0.1:4797");
+  const mockTls = process.env.MOCK_LLM_TLS_UPSTREAM ?? "127.0.0.1:4797";
+  alias("mock-llm.test:443", mockTls);
+  // Two ways for that server to be the wrong one, for checking that a program verifies certificates:
+  // a certificate no CA vouches for, and the good certificate under a name it does not cover.
+  alias("untrusted.mock-llm.test:443", process.env.MOCK_LLM_TLS_UNTRUSTED ?? "127.0.0.1:4798");
+  alias("wrong-name.mock-llm.test:443", mockTls);
   alias("tcp-echo.test:7", `127.0.0.1:${echoPort}`);
   alias("tcp-reset.test:7", `127.0.0.1:${resetPort}`);
   alias("tcp-closed.test:7", "127.0.0.1:1"); // nothing listens: connection refused

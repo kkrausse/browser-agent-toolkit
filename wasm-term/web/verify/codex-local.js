@@ -1,12 +1,20 @@
 // Drives the codex-local guest (the codex TUI with its app-server and agent
-// core in the same wasm module) on the dev page in a real browser. Model and
-// sign-in requests go through the page server's relay (/proxy/http) to
+// core in the same wasm module) on the dev page in a real browser, against
 // mock-llm (mock-llm/up.sh): no real model, no real account. Run through
-// ./run.sh codex-local, which supplies BASE, SHOTS and ROOT.
+// ./run.sh codex-local, which supplies BASE, SHOTS and ROOT and runs this file
+// once per transport (NET):
+//   tunnel  codex's own HTTP, TLS and WebSocket code over the page server's TCP
+//           relay (/proxy/tcp) to the mock's TLS front, plus the relay-side
+//           checks: refusals, certificate verification, and that what the relay
+//           carried holds no plaintext (CAPTURE_BASE, a second server run.sh
+//           starts with TCP_RELAY_CAPTURE=1);
+//   fetch   the browser's fetch through the HTTP relay (/proxy/http).
 //
-// Nothing reaches a real host unless CODEX_LOCAL_REAL_AUTH=1 is set for run.sh:
-// then one more section asks the real auth.openai.com for a device code (the
-// unauthenticated first step of the sign-in flow; nothing is approved).
+// Nothing reaches a real host unless CODEX_LOCAL_REAL_AUTH=1 is set for run.sh.
+// Then, in the fetch pass, one more section asks the real auth.openai.com for a
+// device code (the unauthenticated first step of the sign-in flow; nothing is
+// approved), and in the tunnel pass the module makes exactly one unauthenticated
+// GET to the real api.openai.com (public roots, real-world TLS).
 // run.sh also supplies REAL_AUTH and IMPORT_ZIP (a small deflated archive).
 //
 // Returns { passed, failed, failures, checks }. Screenshots go to docs/screenshots/.
@@ -40,7 +48,7 @@ const turn = async (value, timeout = 30000) => {
   await page.waitForTimeout(400);
 };
 const open = async (query = "") => {
-  await page.goto(`${BASE}/?guest=codex-local${BUILD_QUERY}${query}`);
+  await page.goto(`${BASE}/?guest=codex-local&net=${NET}${BUILD_QUERY}${query}`);
   await page.waitForFunction(() => window.wasmTerm?.screen().join("").trim() || window.wasmTerm?.exit, null, { timeout: 180000 });
 };
 const start = async (query = "") => {
@@ -89,7 +97,23 @@ const since = async (value) => {
   const at = screen.lastIndexOf(`› ${value.slice(0, 40)}`);
   return at < 0 ? screen : screen.slice(at);
 };
-const numbers = {};
+const numbers = { net: NET };
+const TUNNEL = NET === "tunnel";
+/** One WebSocket to the TCP relay from the page: what it said first. */
+const tunnelTo = (base, host, port) => page.evaluate(([base, host, port]) => new Promise(resolve => {
+  const socket = new WebSocket(`${base.replace(/^http/, "ws")}/proxy/tcp?host=${host}&port=${port}`);
+  const done = (value) => { resolve(value); socket.close(); };
+  socket.onmessage = event => done(typeof event.data === "string" ? JSON.parse(event.data) : { t: "data" });
+  socket.onerror = () => done({ t: "socket-error" });
+  setTimeout(() => done({ t: "nothing" }), 8000);
+}), [base, host, port]);
+/** Runs the module's one-request probe (main/src/local.rs, CODEX_WASM_TLS_PROBE) and returns what it printed. */
+const probe = async (url, query = "", repeat = 1) => {
+  await page.goto(`${BASE}/?guest=codex-local&net=${NET}${BUILD_QUERY}&persist=0&shell=off&env=CODEX_WASM_TLS_PROBE=${encodeURIComponent(url)}&env=CODEX_WASM_TLS_PROBE_REPEAT=${repeat}${query}`);
+  await page.waitForFunction(() => window.wasmTerm?.exit, null, { timeout: 120000 }).catch(() => {});
+  // `flat` has no whitespace at all: the terminal wraps long lines wherever they reach the edge.
+  return page.evaluate(() => ({ exit: window.wasmTerm.exit?.code, out: window.wasmTerm.screen().filter(Boolean).join(" ").replace(/\s+/g, " "), flat: window.wasmTerm.screen().join("").replace(/\s+/g, "") }));
+};
 
 let load = null;
 try {
@@ -101,8 +125,8 @@ const defaults = await page.evaluate(() => {
   const form = document.querySelector('input[name="guest"][value="codex-local"]').form;
   return { ...Object.fromEntries([...new FormData(form)]), buttons: [...form.querySelectorAll("button")].map(button => button.textContent) };
 });
-check("launcher lists codex-local: mock backend, the relay, a project directory in the tab, a credentials button, the import buttons",
-  defaults.backend === "mock" && defaults.relay === "/proxy/http" && defaults.dir === "/home/user/project" && defaults.buttons.includes("Clear stored credentials")
+check("launcher lists codex-local: mock backend, the network choice, the relay, a project directory in the tab, a credentials button, the import buttons",
+  defaults.backend === "mock" && (defaults.net === "tunnel" || defaults.net === "fetch") && defaults.relay === "/proxy/http" && defaults.dir === "/home/user/project" && defaults.buttons.includes("Clear stored credentials")
     && defaults.buttons.includes("Import folder") && defaults.buttons.includes("Import .zip"), defaults);
 
 // ---- the relay by itself --------------------------------------------------------
@@ -128,6 +152,39 @@ let state = await mock();
 const first = state.modelRequests.at(-1) ?? {};
 check("the model request left the tab through the relay with codex's own headers (User-Agent, originator), no credentials",
   /^codex/.test(first.userAgent) && /^codex/.test(first.originator) && first.authorization === "(none)", first);
+
+// ---- the tunnel by itself: what the relay refuses, and that the module verifies certificates ----
+if (TUNNEL) {
+  const outside = await tunnelTo(BASE, "example.com", 443);
+  const plain = await page.evaluate(async () => (await fetch("/proxy/tcp?host=example.com&port=443")).status);
+  check("tcp relay: a destination outside the allowlist is refused (denied over the socket, 403 without an upgrade)", outside.t === "error" && outside.code === "denied" && plain === 403, { outside, plain });
+  const wrongPort = await tunnelTo(BASE, "chatgpt.com", 80);
+  check("tcp relay: an allowed host on another port is refused", wrongPort.t === "error" && wrongPort.code === "denied", wrongPort);
+  const loopback = await tunnelTo(BASE, "localhost", 7);
+  const literal = await tunnelTo(BASE, "127.0.0.1", 4791);
+  const metadata = await tunnelTo(BASE, "169.254.169.254", 80);
+  check("tcp relay: a private address is refused: an allowed name that resolves to loopback, and address literals that are not in the allowlist",
+    loopback.t === "error" && loopback.code === "denied" && /address/.test(loopback.message) && literal.code === "denied" && metadata.code === "denied", { loopback, literal, metadata });
+  const good = await probe("https://mock-llm.test/health", "", 2);
+  check("the module's own TLS reaches the mock: certificate verified against the test CA, HTTP/2 negotiated, the second request reuses the connection",
+    good.exit === 0 && /1https:\/\/mock-llm\.test\/health->200HTTP\/2\.0/.test(good.flat) && /2https:\/\/mock-llm\.test\/health->200HTTP\/2\.0/.test(good.flat), good);
+  numbers.probe = good.out.match(/head [\d.]+ ms/g);
+  const untrusted = await probe("https://untrusted.mock-llm.test/health");
+  check("certificate verification is on: a certificate no trusted CA signed is refused (UnknownIssuer)", untrusted.exit === 1 && /invalidpeercertificate:UnknownIssuer/.test(untrusted.flat), untrusted);
+  const wrongName = await probe("https://wrong-name.mock-llm.test/health");
+  check("certificate verification is on: the test CA's certificate under a name it does not cover is refused (not valid for name)", wrongName.exit === 1 && /invalidpeercertificate:certificatenotvalidforname"wrong-name\.mock-llm\.test"/.test(wrongName.flat), wrongName);
+  // The test CA is honoured only with a mock backend: with the real one selected the same server is not trusted,
+  // also when the page is asked for the CA variables directly.
+  const realBackend = await probe("https://mock-llm.test/health", "&backend=openai&env=WASM_TERM_TEST_CA=/etc/wasm-term/mock-ca.pem&env=CODEX_CA_CERTIFICATE=/etc/wasm-term/mock-ca.pem&env=SSL_CERT_FILE=/etc/wasm-term/mock-ca.pem");
+  check("the test CA cannot be switched on for the real backend: with backend=openai the mock's certificate is refused (UnknownIssuer)", realBackend.exit === 1 && /invalidpeercertificate:UnknownIssuer/.test(realBackend.flat), realBackend);
+  if (REAL_AUTH) {
+    // The one request to a real host: unauthenticated, answered 401 by the API. Public roots, real-world TLS.
+    const real = await probe("https://api.openai.com/v1/models", "&backend=openai");
+    check("real api.openai.com through the tunnel: TLS verified against the bundled public roots, an HTTP answer (401 without credentials)", real.exit === 0 && /->401HTTP\/2\.0/.test(real.flat), real);
+    numbers.realProbe = real.out;
+  }
+  await start();
+}
 
 // ---- markdown, long reply -------------------------------------------------------
 await turn("show me markdown");
@@ -387,6 +444,10 @@ state = await mock();
 const authed = state.modelRequests.at(-1) ?? {};
 check("the authenticated model request carries the bearer token and account id to the mock",
   /^Bearer mock access-\d+$/.test(authed.authorization) && authed.account === "acct_mock_0001" && /Hello from mock-llm/.test(await text()), authed);
+// Natively codex's own provider talks to the Responses API over a WebSocket first; a browser's WebSocket cannot
+// carry the Authorization header, so only the tunnel has it. Through fetch it is the HTTP stream, zstd-compressed.
+if (TUNNEL) check("through the tunnel the signed-in model request used the Responses WebSocket, as the native client does", /^ws /.test(authed.path), authed);
+else check("through fetch the signed-in model request is the HTTP stream with a zstd body", authed.path === "/v1/responses" && authed.contentEncoding === "zstd", authed);
 check("token refresh went through the relay (the first access token was inside the refresh window)",
   state.refreshes >= 1 && authed.authorization === `Bearer mock access-${state.generation}` && state.generation >= 2, { refreshes: state.refreshes, generation: state.generation, authed });
 check("the post-login account check was answered", state.accountChecks.some(entry => entry.status === 200), state.accountChecks);
@@ -427,8 +488,48 @@ await waitFor("Sign in with ChatGPT", 60000).catch(() => {});
 check("page-level sign-out (&signout=1): credentials gone, everything else kept",
   /Sign in with ChatGPT/.test(await text()) && !("/home/user/.codex/auth.json" in (await stored())) && (await stored())["/home/user/.codex/history.jsonl"] > 0, await text());
 
+// ---- what the relay carried: no plaintext ---------------------------------------------------
+// On the capture server (its own origin, so its own storage): sign in with an API key, take one turn, then
+// read back every byte the TCP relay copied for it.
+if (TUNNEL && CAPTURE_BASE) {
+  const secret = `sk-mock-capture-${Math.random().toString(36).slice(2)}-not-a-real-key`;
+  const asked = "hello there, relay capture check";
+  await page.goto(`${CAPTURE_BASE}/proxy/tcp/capture?clear=1`);
+  await page.goto(`${CAPTURE_BASE}/?guest=codex-local&net=tunnel${BUILD_QUERY}&backend=mock-auth&reset=1`);
+  await waitFor("Sign in with ChatGPT", 120000);
+  await focus();
+  await press("3", 800);
+  await type(secret);
+  await press("Enter", 2000);
+  for (let i = 0; i < 3 && !/Ask Codex/.test(await text()); i++) await press("Enter", 1500);
+  await waitFor("Ask Codex", 30000).catch(() => {});
+  await turn(asked);
+  const reply = /Hello from mock-llm\. This is a scripted plain-text reply/.test(await text());
+  state = await mock();
+  const carried = state.modelRequests.at(-1) ?? {};
+  const capture = await page.evaluate(async ([secret, asked]) => {
+    const entries = await (await fetch("/proxy/tcp/capture")).json();
+    const bytes = entries.map(entry => atob(entry.up) + atob(entry.down));
+    const all = bytes.join("\n");
+    const has = (needle) => all.includes(needle);
+    return {
+      connections: entries.length, bytes: all.length,
+      // Present: every connection starts with a TLS handshake record, and the server name is in the ClientHello.
+      tlsRecords: entries.every(entry => atob(entry.up).startsWith("\x16\x03")), serverName: has("mock-llm.test"),
+      // Absent: the key, the prompt, the reply, anything of HTTP.
+      secret: has(secret), secretPart: has(secret.slice(0, 24)), prompt: has(asked), reply: has("Hello from mock-llm"),
+      http: has("HTTP/1.1") || has("authorization") || has("Authorization") || has("Bearer ") || has("user-agent") || has("response.create") || has("output_text"),
+    };
+  }, [secret, asked]);
+  check("capture setup: the turn was answered and the mock saw the API key as the bearer token", reply && (carried.authorization ?? "").startsWith("Bearer sk-mock-capture-"), { reply, carried });
+  check("what the relay carried for the model request is TLS: records and the server name, and no plaintext of the bearer token, the prompt, the reply or HTTP",
+    capture.connections >= 1 && capture.bytes > 2000 && capture.tlsRecords && capture.serverName
+      && !capture.secret && !capture.secretPart && !capture.prompt && !capture.reply && !capture.http, capture);
+  numbers.capture = { connections: capture.connections, bytes: capture.bytes };
+}
+
 // ---- the real auth host: only the unauthenticated request for a code -------------------------
-if (REAL_AUTH) {
+if (REAL_AUTH && !TUNNEL) {
   await open("&backend=openai&signout=1");
   await waitFor("Sign in with ChatGPT", 60000);
   await focus();

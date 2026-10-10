@@ -1,0 +1,192 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Sat, 10 Oct 2026 12:20:10 -0700
+Subject: [PATCH] wasi: TCP tunnel: tokio connector hook behind
+ TcpStream::connect, hyper-util connects by name on wasi, reqwest native
+ transport switch, WebSocket dialer and Responses WebSocket over it, webpki
+ roots for rustls configs
+
+---
+ src/net/addr.rs       | 40 ++++++++++++++++++++++++++++++++++++++++
+ src/net/mod.rs        |  2 +-
+ src/net/tcp/stream.rs | 25 ++++++++++++++++++-------
+ src/wasi_stubs/net.rs | 23 +++++++++++++++++++++++
+ 4 files changed, 82 insertions(+), 8 deletions(-)
+
+diff --git a/src/net/addr.rs b/src/net/addr.rs
+index a098990..6c0f863 100644
+--- a/src/net/addr.rs
++++ b/src/net/addr.rs
+@@ -43,6 +43,11 @@ where
+     fn to_socket_addrs(&self, _: sealed::Internal) -> Self::Future {
+         (**self).to_socket_addrs(sealed::Internal)
+     }
++
++    #[cfg(all(target_os = "wasi", target_env = "p1"))]
++    fn wasi_host_port(&self) -> Option<(String, u16)> {
++        (**self).wasi_host_port()
++    }
+ }
+ 
+ // ===== impl SocketAddr =====
+@@ -53,6 +58,11 @@ impl sealed::ToSocketAddrsPriv for SocketAddr {
+     type Iter = std::option::IntoIter<SocketAddr>;
+     type Future = ReadyFuture<Self::Iter>;
+ 
++    #[cfg(all(target_os = "wasi", target_env = "p1"))]
++    fn wasi_host_port(&self) -> Option<(String, u16)> {
++        Some((self.ip().to_string(), self.port()))
++    }
++
+     fn to_socket_addrs(&self, _: sealed::Internal) -> Self::Future {
+         let iter = Some(*self).into_iter();
+         future::ready(Ok(iter))
+@@ -165,6 +175,13 @@ cfg_net! {
+         type Iter = sealed::OneOrMore;
+         type Future = sealed::MaybeReady;
+ 
++        #[cfg(all(target_os = "wasi", target_env = "p1"))]
++        fn wasi_host_port(&self) -> Option<(String, u16)> {
++            let (host, port) = self.rsplit_once(':')?;
++            let host = host.trim_start_matches('[').trim_end_matches(']');
++            Some((host.to_owned(), port.parse().ok()?))
++        }
++
+         fn to_socket_addrs(&self, _: sealed::Internal) -> Self::Future {
+             use crate::blocking::spawn_blocking;
+             use sealed::MaybeReady;
+@@ -193,6 +210,11 @@ cfg_net! {
+         type Iter = sealed::OneOrMore;
+         type Future = sealed::MaybeReady;
+ 
++        #[cfg(all(target_os = "wasi", target_env = "p1"))]
++        fn wasi_host_port(&self) -> Option<(String, u16)> {
++            Some((self.0.to_owned(), self.1))
++        }
++
+         fn to_socket_addrs(&self, _: sealed::Internal) -> Self::Future {
+             use crate::blocking::spawn_blocking;
+             use sealed::MaybeReady;
+@@ -233,6 +255,11 @@ cfg_net! {
+         fn to_socket_addrs(&self, _: sealed::Internal) -> Self::Future {
+             (self.0.as_str(), self.1).to_socket_addrs(sealed::Internal)
+         }
++
++        #[cfg(all(target_os = "wasi", target_env = "p1"))]
++        fn wasi_host_port(&self) -> Option<(String, u16)> {
++            Some((self.0.clone(), self.1))
++        }
+     }
+ 
+     // ===== impl String =====
+@@ -246,6 +273,11 @@ cfg_net! {
+         fn to_socket_addrs(&self, _: sealed::Internal) -> Self::Future {
+             self[..].to_socket_addrs(sealed::Internal)
+         }
++
++        #[cfg(all(target_os = "wasi", target_env = "p1"))]
++        fn wasi_host_port(&self) -> Option<(String, u16)> {
++            self[..].wasi_host_port()
++        }
+     }
+ }
+ 
+@@ -264,6 +296,14 @@ pub(crate) mod sealed {
+         type Future: Future<Output = io::Result<Self::Iter>> + Send + 'static;
+ 
+         fn to_socket_addrs(&self, internal: Internal) -> Self::Future;
++
++        /// wasm-term port: the destination as a name (or address literal) and a port, for a
++        /// connector that resolves names itself (`net::set_wasi_tcp_connector`). `None` for
++        /// forms that are not one destination.
++        #[cfg(all(target_os = "wasi", target_env = "p1"))]
++        fn wasi_host_port(&self) -> Option<(String, u16)> {
++            None
++        }
+     }
+ 
+     #[allow(missing_debug_implementations)]
+diff --git a/src/net/mod.rs b/src/net/mod.rs
+index d582fff..ef9427a 100644
+--- a/src/net/mod.rs
++++ b/src/net/mod.rs
+@@ -51,7 +51,7 @@ cfg_net! {
+     }
+     // wasm-term port: stand-ins, every operation fails `Unsupported`.
+     #[cfg(all(target_os = "wasi", target_env = "p1"))]
+-    pub use crate::wasi_stubs::net::{TcpSocket, UdpSocket};
++    pub use crate::wasi_stubs::net::{set_wasi_tcp_connector, wasi_tcp_available, TcpSocket, UdpSocket, WasiTcpConnector};
+ }
+ 
+ cfg_net_unix! {
+diff --git a/src/net/tcp/stream.rs b/src/net/tcp/stream.rs
+index b43c2fe..8d307a7 100644
+--- a/src/net/tcp/stream.rs
++++ b/src/net/tcp/stream.rs
+@@ -76,14 +76,25 @@ cfg_net! {
+ }
+ 
+ impl TcpStream {
+-    /// wasm-term port: WASI preview1 cannot open sockets; fail like an
+-    /// unreachable network so callers written against the native API compile.
++    /// wasm-term port: WASI preview1 cannot open sockets. A program whose host can carry a
++    /// TCP stream some other way installs a connector (`net::set_wasi_tcp_connector`), and
++    /// this hands it the destination by name: there is no resolver here either. Without a
++    /// connector it fails like an unreachable network, so callers written against the native
++    /// API compile and get an error they already handle.
+     #[cfg(all(target_os = "wasi", target_env = "p1"))]
+-    pub async fn connect<A: crate::net::ToSocketAddrs>(_addr: A) -> io::Result<TcpStream> {
+-        Err(io::Error::new(
+-            io::ErrorKind::Unsupported,
+-            "TCP connections are not available on wasm32-wasip1",
+-        ))
++    pub async fn connect<A: crate::net::ToSocketAddrs>(addr: A) -> io::Result<TcpStream> {
++        let destination = crate::net::addr::sealed::ToSocketAddrsPriv::wasi_host_port(&addr);
++        match (crate::wasi_stubs::net::tcp_connector(), destination) {
++            (Some(connector), Some((host, port))) => connector(host, port).await,
++            (Some(_), None) => Err(io::Error::new(
++                io::ErrorKind::InvalidInput,
++                "TcpStream::connect on wasm32-wasip1 takes one host and port",
++            )),
++            (None, _) => Err(io::Error::new(
++                io::ErrorKind::Unsupported,
++                "TCP connections are not available on wasm32-wasip1",
++            )),
++        }
+     }
+ 
+     cfg_not_wasip1! {
+diff --git a/src/wasi_stubs/net.rs b/src/wasi_stubs/net.rs
+index 367dd2e..35aa400 100644
+--- a/src/wasi_stubs/net.rs
++++ b/src/wasi_stubs/net.rs
+@@ -11,6 +11,29 @@ use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, RawFd};
+ use std::task::{Context, Poll};
+ use std::time::Duration;
+ 
++/// Opens a TCP stream to a host name (or address literal) and port: what
++/// `TcpStream::connect` calls on this target once a program has installed one.
++pub type WasiTcpConnector =
++    fn(String, u16) -> std::pin::Pin<Box<dyn std::future::Future<Output = io::Result<TcpStream>> + Send>>;
++
++static TCP_CONNECTOR: std::sync::OnceLock<WasiTcpConnector> = std::sync::OnceLock::new();
++
++/// Installs the connector behind `TcpStream::connect`. The first call wins. The stream it
++/// returns is an ordinary `TcpStream` (`from_std` on a descriptor that reads, writes and
++/// polls like a socket). Only a program that calls this links a connector in at all.
++pub fn set_wasi_tcp_connector(connector: WasiTcpConnector) {
++    let _ = TCP_CONNECTOR.set(connector);
++}
++
++/// Whether `TcpStream::connect` can work at all: a connector is installed.
++pub fn wasi_tcp_available() -> bool {
++    TCP_CONNECTOR.get().is_some()
++}
++
++pub(crate) fn tcp_connector() -> Option<WasiTcpConnector> {
++    TCP_CONNECTOR.get().copied()
++}
++
+ fn unsupported() -> io::Error {
+     io::Error::new(
+         io::ErrorKind::Unsupported,

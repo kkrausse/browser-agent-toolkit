@@ -1,0 +1,137 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Sat, 10 Oct 2026 12:20:10 -0700
+Subject: [PATCH] wasi: TCP tunnel: tokio connector hook behind
+ TcpStream::connect, hyper-util connects by name on wasi, reqwest native
+ transport switch, WebSocket dialer and Responses WebSocket over it, webpki
+ roots for rustls configs
+
+---
+ src/async_impl/client.rs | 30 +++++++++++++++++++++---------
+ src/async_impl/mod.rs    |  2 +-
+ src/async_impl/wasi.rs   | 16 ++++++++++++++++
+ src/lib.rs               |  3 +++
+ 4 files changed, 41 insertions(+), 10 deletions(-)
+
+diff --git a/src/async_impl/client.rs b/src/async_impl/client.rs
+index 28a33a2..7db6bdd 100644
+--- a/src/async_impl/client.rs
++++ b/src/async_impl/client.rs
+@@ -2610,11 +2610,15 @@ impl Client {
+             .uri(uri)
+             .version(version);
+ 
+-        // wasm-term port: no sockets on WASI; the host's `fetch` carries the request.
+-        // Cookies are applied here because the hyper stack's cookie layer is bypassed.
++        // wasm-term port: on WASI the request goes one of two ways. By default the host's
++        // `fetch` carries it (`wasi.rs`); cookies are applied here because the hyper stack's
++        // cookie layer is bypassed. A program that has a TCP transport (tokio's
++        // `set_wasi_tcp_connector`) and asked for it with `wasi_use_native_transport` gets
++        // the same hyper + rustls stack as on any other target, unchanged.
+         #[cfg(target_os = "wasi")]
+-        let in_flight = {
+-            let _ = (builder, version);
++        let fetch_in_flight = if super::wasi::native_transport() {
++            None
++        } else {
+             let mut wire_headers = headers.clone();
+             #[cfg(feature = "cookies")]
+             if let Some(store) = self.inner.cookie_store.as_ref() {
+@@ -2624,18 +2628,27 @@ impl Client {
+                     }
+                 }
+             }
+-            ResponseFuture::Wasi(super::wasi::send(method.clone(), url.clone(), wire_headers, body))
++            Some(wire_headers)
+         };
+         #[cfg(not(target_os = "wasi"))]
+-        let in_flight = match version {
++        let fetch_in_flight: Option<HeaderMap> = None;
++
++        let in_flight = match (fetch_in_flight, version) {
++            #[cfg(target_os = "wasi")]
++            (Some(wire_headers), _) => {
++                let _ = builder;
++                ResponseFuture::Wasi(super::wasi::send(method.clone(), url.clone(), wire_headers, body))
++            }
++            #[cfg(not(target_os = "wasi"))]
++            (Some(_), _) => unreachable!("the fetch transport exists only on WASI"),
+             #[cfg(feature = "http3")]
+-            http::Version::HTTP_3 if self.inner.h3_client.is_some() => {
++            (None, http::Version::HTTP_3) if self.inner.h3_client.is_some() => {
+                 let mut req = builder.body(body).expect("valid request parts");
+                 *req.headers_mut() = headers.clone();
+                 let mut h3 = self.inner.h3_client.as_ref().unwrap().clone();
+                 ResponseFuture::H3(h3.call(req))
+             }
+-            _ => {
++            (None, _) => {
+                 let mut req = builder.body(body).expect("valid request parts");
+                 *req.headers_mut() = headers.clone();
+                 let mut hyper = self.inner.hyper.clone();
+@@ -3010,7 +3023,6 @@ pin_project! {
+ }
+ 
+ enum ResponseFuture {
+-    #[cfg_attr(target_os = "wasi", allow(dead_code))]
+     Default(LayeredFuture<HyperService>),
+     #[cfg(target_os = "wasi")]
+     Wasi(super::wasi::WasiResponseFuture),
+diff --git a/src/async_impl/mod.rs b/src/async_impl/mod.rs
+index 31bc805..a0cc44a 100644
+--- a/src/async_impl/mod.rs
++++ b/src/async_impl/mod.rs
+@@ -14,4 +14,4 @@ mod response;
+ mod upgrade;
+ // wasm-term port: requests leave through the host's `http_open` (the browser's `fetch`).
+ #[cfg(target_os = "wasi")]
+-mod wasi;
++pub(crate) mod wasi;
+diff --git a/src/async_impl/wasi.rs b/src/async_impl/wasi.rs
+index 41cf5ce..01fd712 100644
+--- a/src/async_impl/wasi.rs
++++ b/src/async_impl/wasi.rs
+@@ -25,6 +25,7 @@
+ //!   host it allows. Unset: the URL is fetched as it is, which only works for
+ //!   servers that answer the browser's CORS checks.
+ 
++use std::sync::atomic::{AtomicBool, Ordering};
+ use std::future::Future;
+ use std::io;
+ use std::pin::Pin;
+@@ -38,6 +39,21 @@ use url::Url;
+ 
+ use super::body::{Body, ResponseBody};
+ 
++static NATIVE_TRANSPORT: AtomicBool = AtomicBool::new(false);
++
++/// Chooses how requests leave on WASI: `false` (the default), through the host's `fetch` as
++/// described above; `true`, through this crate's ordinary hyper + rustls stack over TCP, which
++/// needs tokio's `TcpStream::connect` to work (the port's tokio fork, with a connector
++/// installed). Then nothing in this module is used: headers, bodies, cookies, redirects,
++/// HTTP/2 and TLS are exactly as on a native target, and `WASM_TERM_HTTP_RELAY` is ignored.
++pub fn use_native_transport(native: bool) {
++    NATIVE_TRANSPORT.store(native, Ordering::Relaxed);
++}
++
++pub(super) fn native_transport() -> bool {
++    NATIVE_TRANSPORT.load(Ordering::Relaxed)
++}
++
+ /// Prefix under which headers a browser will not send or show travel to and from the relay.
+ const FORWARD_PREFIX: &str = "x-wasm-term-fwd-";
+ 
+diff --git a/src/lib.rs b/src/lib.rs
+index 1eb45aa..4fe68db 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -360,6 +360,9 @@ if_hyper! {
+         Body, Client, ClientBuilder, Request, RequestBuilder, Response, Upgraded,
+     };
+     pub use self::proxy::{Proxy,NoProxy};
++    // wasm-term port: which transport carries requests on WASI (see async_impl/wasi.rs).
++    #[cfg(target_os = "wasi")]
++    pub use self::async_impl::wasi::use_native_transport as wasi_use_native_transport;
+     #[cfg(feature = "__tls")]
+     // Re-exports, to be removed in a future release
+     pub use tls::{Certificate, Identity};

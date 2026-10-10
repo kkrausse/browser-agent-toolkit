@@ -8,7 +8,7 @@ ARG OPENCODE_VERSION=2.0.26
 ARG CODEX_VERSION=0.162.0
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git bubblewrap ca-certificates procps curl \
+ && apt-get install -y --no-install-recommends git bubblewrap ca-certificates procps curl nginx-light openssl \
  && rm -rf /var/lib/apt/lists/*
 
 # The platform packages hold the native binaries; the wrapper packages only add
@@ -29,7 +29,7 @@ RUN mkdir -p /opt/tools && cd /opt/tools \
 RUN useradd --create-home --uid 1100 --shell /bin/bash agent \
  && install -d -o agent -g agent /tmp/wasm-term-workspace
 COPY --chown=agent:agent server.ts tap-proxy.ts opencode.config.json codex.config.toml /opt/mock-llm/
-COPY --chown=agent:agent docker/tcp-forward.ts docker/entrypoint.sh /opt/mock-llm/
+COPY --chown=agent:agent docker/tcp-forward.ts docker/entrypoint.sh docker/tls-front.sh /opt/mock-llm/
 RUN chmod +x /opt/mock-llm/entrypoint.sh
 
 USER agent
