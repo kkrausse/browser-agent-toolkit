@@ -1,8 +1,8 @@
 // Bun bundler plugin for a JavaScript program that runs on the machine
 // (js-worker.ts): maps the Node built-ins Bun's browser target does not
-// polyfill onto modules/*.ts. Bun's own polyfills cover events, buffer,
-// stream, util, crypto, assert, string_decoder; `path` is wrapped to add the
-// `posix`/`win32` namespaces.
+// polyfill, or polyfills badly, onto modules/*.ts. Bun's own polyfills cover
+// events, buffer, stream, util, assert, string_decoder; `path` is wrapped to
+// add the `posix`/`win32` namespaces; `crypto` is replaced (see modules/crypto.ts).
 //
 //   await Bun.build({ target: "browser", plugins: [nodeShimsPlugin()], ... })
 import type { BunPlugin } from "bun";
@@ -20,6 +20,7 @@ export const NODE_SHIMS: Record<string, string> = {
   console: shim("console"),
   process: shim("process"),
   path: shim("path"),
+  crypto: shim("crypto"),
   // No meaning in a browser Worker: importing works, calling throws by name.
   child_process: shim("unavailable"),
   module: shim("unavailable"),

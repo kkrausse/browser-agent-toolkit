@@ -114,6 +114,8 @@ await page.waitForFunction(() => window.wasmTerm.exit !== null);
 check("default SIGINT disposition kills a program blocked in a timer", (await exited()).signal === 2, await exited());
 
 await open("repl", "Type help.");
+await enter("cat /home/user/notes.txt");
+check("persistence: a file written to the home directory by the previous run is there after a reload (IndexedDB)", (await lastLines(2))[0] === "kept in the vfs", await lastLines(3));
 await press("Control+d");
 await page.waitForFunction(() => window.wasmTerm.exit !== null);
 check("EOF (^D) on an empty line: read returns 0, program exits 0", (await exited()).code === 0 && (await text()).includes("[EOF: read returned 0 bytes]"));

@@ -12,4 +12,17 @@ const globals = globalThis as Record<string, any>
 const process = { env: {}, argv: [], platform: "linux", arch: "wasm32", versions: {}, cwd: () => "/", nextTick: queueMicrotask }
 globals.process = process
 globals.Buffer ??= Buffer
-installNodeGlobals({ fs: createNodeFs(createVfs(), { cwd: () => "/" }), process })
+const fs = createNodeFs(createVfs(), { cwd: () => "/" })
+installNodeGlobals({ fs, process })
+
+// parser.worker.ts stores each grammar in its cache directory and then hands
+// web-tree-sitter the cache *path*. Outside Node web-tree-sitter loads a
+// string with fetch(), which would ask the web server for that path. So
+// fetch() of a path that exists in the scratch filesystem is answered from it.
+const browserFetch = globalThis.fetch.bind(globalThis)
+globals.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+  if (typeof input === "string" && input.startsWith("/") && fs.existsSync(input)) {
+    return Promise.resolve(new Response(fs.readFileSync(input), { headers: { "Content-Type": "application/wasm" } }))
+  }
+  return browserFetch(input, init)
+}
