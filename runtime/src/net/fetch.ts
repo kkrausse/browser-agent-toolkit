@@ -12,6 +12,13 @@
 // machine's, not the guest's: it goes to the browser's fetch like any other host. Without
 // that a server on the developer's own machine (a local model endpoint) could not be told
 // apart from a guest listener.
+//
+// With `BAT_FETCH_DIAG=1` in the process's environment, a request handed to the browser's
+// fetch that rejects or is answered with a status of 400 or more leaves one line on the
+// process's stderr: `[bat fetch] <METHOD> <origin + path> -> <status | error>`. Never the
+// query string, headers or bodies. A cross-origin failure (CORS, mixed content, a host that
+// is down) is otherwise only the guest's "fetch failed", and the browser tells script no more
+// than "Failed to fetch": the line at least says which request it was.
 import type { Runtime } from '../process/runtime'
 import { createHttpClient, headerPairs, toResponse, type HttpClient, type WireResponse } from './client'
 import { getNet, isLoopback } from './net'
@@ -36,7 +43,32 @@ export function getGuestFetch(rt: Runtime): GuestFetch {
 function createGuestFetch(rt: Runtime): GuestFetch {
   const { io } = getNet(rt)
   const loop = rt.loop
-  const native = rt.host.fetch
+  const browserFetch = rt.host.fetch
+  const said = (input: RequestInfo | URL, init: RequestInit | undefined, result: string) => {
+    const process = (rt as any).process
+    if (process?.env?.BAT_FETCH_DIAG !== '1') return
+    let where = '(unparsed URL)'
+    try {
+      const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
+      where = url.origin + url.pathname
+    } catch { /* as it is */ }
+    const method = (init?.method ?? (typeof input === 'object' && !(input instanceof URL) ? input.method : 'GET')).toUpperCase()
+    try { process.stderr?.write(`[bat fetch] ${method} ${where} -> ${result}\n`) } catch { /* no stderr */ }
+  }
+  /** The browser's fetch, reporting what failed (see the top of the file). */
+  const native = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    let response: Response
+    try {
+      response = await browserFetch(input, init)
+    } catch (error) {
+      // An abort is the caller's own doing.
+      const name = (error as any)?.name
+      if (name !== 'AbortError' && name !== 'TimeoutError') said(input, init, `${name ?? 'Error'}: ${String((error as any)?.message ?? error).slice(0, 200)}`)
+      throw error
+    }
+    if (response.status >= 400) said(input, init, `HTTP ${response.status}`)
+    return response
+  }
   const client = createHttpClient({ kernel: rt.kernel, io })
   const pageOrigin = new URL(rt.host.location.origin)
 

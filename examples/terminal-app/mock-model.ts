@@ -12,6 +12,9 @@
 //   contains "heading"   reads src/home.tsx, then replaces the text of its <h1> with the
 //                        quoted text of the prompt (`set the heading to "Tasks"`), or with
 //                        the old text plus " (edited in the tab)"; ends SCRIPTED-EDIT-DONE
+//   starts "run `…`"     calls the shell tool with the command between the backquotes (the
+//                        page's configuration does not allow it, so the client asks first)
+//                        and repeats its output; ends SCRIPTED-SHELL-DONE
 //   anything else        a paragraph of streamed text; ends SCRIPTED-PLAIN-DONE
 //
 // wasm-term's mock-llm (`?model=http://<host>:4791/v1&modelId=mock-model`) has more scripts,
@@ -56,8 +59,14 @@ function call(turn: Turn, name: string, known: Record<string, string>): Step['ca
 function next(turn: Turn): Step {
   // The server asks for a session title in a request of its own, without tools.
   if (!turn.tools.length) return { text: 'Scripted session' }
-  if (!/\bheading\b/i.test(turn.user)) return { text: plain }
   const offered = `(offered: ${turn.tools.map(tool => tool.name).join(', ')})`
+  const command = /^run `([^`\n]+)`/i.exec(turn.user)?.[1]
+  if (command) {
+    if (turn.results.length) return { text: `The shell tool answered: ${turn.results[0]!.trim().slice(0, 300)} SCRIPTED-SHELL-DONE` }
+    const shell = call(turn, 'shell', { command })
+    return shell ? { text: `Running \`${command}\`.`, call: shell } : { text: `The run script needs the shell tool ${offered}.` }
+  }
+  if (!/\bheading\b/i.test(turn.user)) return { text: plain }
   if (turn.results.length === 0) {
     const read = call(turn, 'read', { filePath: file, file_path: file, path: file })
     return read ? { text: 'I will read `src/home.tsx` to find the heading.', call: read } : { text: `The heading script needs the read tool ${offered}.` }

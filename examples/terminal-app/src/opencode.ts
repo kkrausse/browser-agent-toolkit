@@ -20,13 +20,17 @@ export interface ModelEndpoint {
   apiKey: string
 }
 
-/** The whole global configuration: one provider, one model, file tools allowed without asking. */
+/** The whole global configuration: one provider, one model, file tools allowed without asking, the shell after asking. */
 export function serverConfig(model: ModelEndpoint) {
   return {
     $schema: 'https://opencode.ai/config.json',
     model: `direct/${model.id}`,
     snapshots: false,
-    permissions: ['read', 'edit', 'grep', 'glob'].map(action => ({ action, resource: '*', effect: 'allow' as const })),
+    // 2.0.26 has a shell tool (the runtime's `/bin/sh`) and allows it by default: here the client asks first.
+    permissions: [
+      ...['read', 'edit', 'grep', 'glob'].map(action => ({ action, resource: '*', effect: 'allow' as const })),
+      { action: 'shell', resource: '*', effect: 'ask' as const },
+    ],
     providers: { direct: {
       name: new URL(model.baseURL).host,
       activation: 'enabled' as const,
@@ -64,6 +68,9 @@ export function serverLaunch(description: LaunchDescription, password: string, m
   return toLaunch(description, {
     OPENCODE_PASSWORD: password,
     OPENCODE_DATABASE_PATH: `${state}/data/opencode.sqlite`,
+    // One stderr line per request of the server that the browser's fetch rejected or that was
+    // answered 400 or more (method, URL without its query, status or error); the page logs stderr.
+    BAT_FETCH_DIAG: '1',
     // In the guest, loopback means the guest's own listeners. A model endpoint on this
     // machine's loopback (the mock) is named here so the runtime hands it to the browser.
     ...(loopback ? { BAT_HOST_LOOPBACK_PORTS: url.port || '80' } : {}),
