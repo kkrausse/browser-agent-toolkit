@@ -845,3 +845,12 @@ hook; nothing names that app.
   without a start-up module recording; `bench/startup/run.ts --record-modules` is written
   for the example's page. Page screenshots through CDP timed out twice while a Base UI
   select popup was open; the page itself stayed responsive.
+- **`BAT_HOST_LOOPBACK_PORTS`** (process environment, comma-separated ports): a guest request
+  to loopback on one of them goes to the browser's `fetch` instead of a kernel socket. Guest
+  outbound HTTP was already "loopback → guest listener, `host.internal` → the page's server,
+  anything else → the browser's fetch"; what was missing is a way to name a server on the
+  developer's own machine, which `examples/terminal-app` needs for a model endpoint the tab
+  calls directly (its mock on `127.0.0.1:4311`). Measured there in Chrome: the OpenCode
+  server's `POST <base>/responses` leaves the tab cross-origin under COOP/COEP, streams, and
+  is preceded by a preflight asking for `authorization, content-type, x-opencode-client,
+  x-opencode-project, x-opencode-session, x-session-affinity, x-session-id`.

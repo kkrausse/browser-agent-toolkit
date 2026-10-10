@@ -68,7 +68,7 @@ function next(turn: Turn): Step {
     const edit = call(turn, 'edit', { filePath: file, file_path: file, path: file, oldString: before, old_string: before, newString: after, new_string: after })
     return edit ? { text: `The heading is "${old}". Changing it to "${wanted}".`, call: edit } : { text: `The heading script needs the edit tool ${offered}.` }
   }
-  return { text: `Done. The edit tool answered: \`${turn.results[1]!.split('\n').find(line => line.trim())?.slice(0, 120) ?? ''}\`. The preview on the right reloads by itself. SCRIPTED-EDIT-DONE` }
+  return { text: `Done. The edit tool answered: \`${turn.results[1]!.split('\n').find(line => line.trim())?.slice(0, 120) ?? ''}\`. The app beside this panel reloads by itself. SCRIPTED-EDIT-DONE` }
 }
 
 let serial = 0
