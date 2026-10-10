@@ -277,14 +277,24 @@ export async function collectImages(namespace: string, keep: string | string[]):
   const kept = new Set<string>()
   for (const name of Array.isArray(keep) ? keep : [keep]) for (const n of [name, partialOf(name), markOf(name)]) kept.add(n)
   const removed: string[] = []
-  for await (const name of (dir as any).keys() as AsyncIterable<string>) {
-    if (kept.has(name)) continue
-    try {
-      await dir.removeEntry(name)
-      removed.push(name)
-    } catch {
-      // in use by another tab's worker: next time
+  let held: string[] = []
+  for await (const name of (dir as any).keys() as AsyncIterable<string>) if (!kept.has(name)) held.push(name)
+  // A file some worker still holds open cannot be removed. The workers of an editor that
+  // was closed a moment ago let go within seconds, so try those once more; whatever is
+  // still held then (another tab's) waits for the next open.
+  for (const attempt of [0, 1]) {
+    const still: string[] = []
+    for (const name of held) {
+      try {
+        await dir.removeEntry(name)
+        removed.push(name)
+      } catch {
+        still.push(name)
+      }
     }
+    held = still
+    if (!held.length || attempt) break
+    await new Promise((resolve) => setTimeout(resolve, 5000))
   }
   return removed
 }
