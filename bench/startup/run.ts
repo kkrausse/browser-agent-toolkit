@@ -45,7 +45,8 @@ const load = () => readFileSync('/proc/loadavg', 'utf8').split(' ').slice(0, 3).
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 async function waitForLoad() {
   if (!maxLoad) return
-  for (let i = 0; i < 120 && load()[0] > maxLoad; i++) await sleep(5000)
+  // At most --max-wait seconds (default 600) per sample; then the sample is taken anyway and its load says so.
+  for (let waited = 0; waited < Number(arg('max-wait', '600')) && load()[0] > maxLoad; waited += 5) await sleep(5000)
 }
 
 async function execute<T>(code: string): Promise<T> {
