@@ -2,6 +2,7 @@
 // port), at a desktop viewport and with an iPhone device profile.
 //   web/webkit/smoke.sh [base URL]      default http://127.0.0.1:4790
 //   GUESTS=opencode,codex,proc,codex-local   which guests to run (default all four); PROFILE=desktop|iphone
+//   NET=tunnel|fetch                          codex-local's transport (default: the page's default, the tunnel)
 // Needs webkit/install.sh once, the dev server, and mock-llm/up.sh.
 //
 // This is WebKit's engine on Linux, not Safari: it says whether the page's
@@ -292,7 +293,19 @@ async function runShell(profile: string, options: BrowserContextOptions, touch: 
       }
     }
     if (guests.includes("codex-local")) {
-      await page.goto(`${base}/?guest=codex-local&persist=0`);
+      // NET=tunnel|fetch picks codex-local's transport (default: the page's own default).
+      const net = process.env.NET ? `&net=${process.env.NET}` : "";
+      if (process.env.NET !== "fetch") {
+        // The tunnel by itself first: the module's own TLS (rustls in wasm, on JavaScriptCore) over the
+        // page's binary WebSocket to the relay, against the mock's TLS front. One GET, then the program exits.
+        await page.goto(`${base}/?guest=codex-local&persist=0&shell=off&net=tunnel&env=CODEX_WASM_TLS_PROBE=${encodeURIComponent("https://mock-llm.test/health")}&env=CODEX_WASM_TLS_PROBE_REPEAT=2`);
+        await page.waitForFunction(() => window.wasmTerm?.exit, null, { timeout: 180_000 }).catch(() => {});
+        const out = await page.evaluate(() => window.wasmTerm.screen().join("").replace(/\s+/g, ""));
+        const times = /head([\d.]+)ms.*?head([\d.]+)ms/.exec(out);
+        check(`codex-local tunnel: TLS handshake and HTTP/2 inside the module, certificate verified (first request ${times?.[1]} ms, on the open connection ${times?.[2]} ms)`,
+          /1https:\/\/mock-llm\.test\/health->200HTTP\/2\.0/.test(out) && /tls-probe:ok/.test(out), out.slice(-400));
+      }
+      await page.goto(`${base}/?guest=codex-local&persist=0${net}`);
       const home = await waitFor(page, "Ask Codex", 240_000).then(() => true, () => false);
       check("codex-local: the module starts and shows its start screen", home, { tail: (await screen(page)).split("\n").filter(Boolean).slice(-6), errors: errors.slice(0, 3) });
       const key = (name: string) => page.locator(`.terminal-keys [data-key="${name}"]`).tap();

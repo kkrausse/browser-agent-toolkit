@@ -25,7 +25,7 @@ v5.6). The first `up.sh` downloads the base image and the two pinned packages;
 after that nothing in it uses the internet. Every `up.sh` after a `down.sh`
 starts from scratch (no sessions, fresh workspace); `docker compose stop` /
 `start` in this directory pauses and keeps them. Logs: `docker compose logs -f
-[mock|opencode|codex|edge]`.
+[mock|tls|opencode|codex|edge]`.
 
 | Host port (127.0.0.1) | What |
 | --- | --- |
@@ -33,6 +33,8 @@ starts from scratch (no sessions, fresh workspace); `docker compose stop` /
 | 4792 | `opencode serve` (Basic auth `opencode` / `wasm-term-mock`) |
 | 4793 | `codex app-server` (WebSocket, no auth); what `codex --remote` connects to |
 | 4796 | the same app-server through `tap-proxy.ts`, which drops `Origin`; **what a browser connects to** (see codex). Every frame is logged: `docker compose logs -f codex` |
+| 4797 | the model API and fake sign-in again, over TLS, as `https://mock-llm.test` with a certificate from this setup's private test CA (see "TLS") |
+| 4798 | the same with a certificate from a CA nobody is given: for checking that a client refuses it |
 
 URLs, auth and behaviour on these ports are the same as with the earlier
 host-side launchers. What changed for anyone writing a client:
@@ -69,11 +71,12 @@ Settings, as environment variables for `up.sh`:
 | `mock` | `backend` | `bun server.ts` on :4791 |
 | `opencode` | `backend` | `opencode serve --hostname 0.0.0.0 --port 4792`, config `opencode.config.json`, home `/home/agent` |
 | `codex` | `backend` | `codex app-server` on container-loopback :14793 (it has no auth and insists on loopback), `tcp-forward.ts` :4793 and `tap-proxy.ts` :4796 in front of it, config `codex.config.toml`, `CODEX_HOME=/home/agent/.codex` |
+| `tls` | `backend` | nginx on :4797 and :4798, TLS (HTTP/1.1, HTTP/2, WebSocket upgrades) in front of `mock:4791`; makes its certificates when it starts (`docker/tls-front.sh`) |
 | `workspace-init` | none | one-shot: creates the git repo with `hello.txt` on the workspace volume |
-| `edge` | `backend` + `published` | `tcp-forward.ts`: copies bytes from the four published ports to the containers above. No agent, no tool, no config |
+| `edge` | `backend` + `published` | `tcp-forward.ts`: copies bytes from the six published ports to the containers above. No agent, no tool, no config |
 
 All containers use one image (`docker/Dockerfile`, `oven/bun:1.4.0-debian` plus
-`git`, `bubblewrap`, `curl`): the binaries come from the npm packages
+`git`, `bubblewrap`, `curl`, `nginx-light`, `openssl`): the binaries come from the npm packages
 `@opencode/cli-linux-x64@2.0.26` (the platform package behind `@opencode/cli`,
 the one the host install also resolves to) and `@openai/codex@0.162.0`,
 installed with `bun add --ignore-scripts --exact`. Processes run as the
@@ -260,8 +263,52 @@ last an hour. Point codex at it with the environment variables
 `CODEX_APP_SERVER_LOGIN_ISSUER=<base>/auth`, `CODEX_REFRESH_TOKEN_URL_OVERRIDE=<base>/auth/oauth/token`,
 `CODEX_REVOKE_TOKEN_URL_OVERRIDE=<base>/auth/oauth/revoke` and the config keys
 `openai_base_url=<base>/v1`, `chatgpt_base_url=<base>/backend-api/`. codex only accepts an
-https `chatgpt_base_url`; the dev server's relay offers this server under the name
-`https://mock-llm.test` for that.
+https `chatgpt_base_url`; the dev server's HTTP relay offers this server under the name
+`https://mock-llm.test` for that, and its TCP relay offers the TLS front (next section) under the
+same name.
+
+## TLS
+
+For a client that does its own TLS and verifies certificates: the `codex-local` guest with
+`net=tunnel`, whose rustls runs inside the wasm module and reaches this server through the dev
+server's TCP relay (`web/tcp-relay.ts`: `mock-llm.test:443` goes to `127.0.0.1:4797`).
+
+The `tls` container (`docker/tls-front.sh`) makes, every time it starts:
+
+- a CA, `CN=wasm-term mock-llm test CA (not for real hosts)`, with critical name constraints
+  that permit the single name `mock-llm.test`; a server certificate for that name signed by it;
+  then **deletes the CA's private key**. Nothing that could sign another certificate exists
+  afterwards, and a certificate it had signed for any other name would not verify;
+- a second CA and a certificate for `mock-llm.test` / `untrusted.mock-llm.test` from it, and
+  deletes that CA entirely: port 4798 presents a chain nobody has a reason to trust.
+
+`up.sh` copies the CA certificate (not a key) to `wasm-term/.state/mock-tls/ca.pem`. The dev
+server serves it as `/test/mock-ca.pem`, and the page gives it to codex-local only with a mock
+backend (main README, "A test CA, for the mock only"). A new `up.sh` after `down.sh` is a new CA;
+reload the page.
+
+```sh
+curl --cacert ../.state/mock-tls/ca.pem --resolve mock-llm.test:4797:127.0.0.1 https://mock-llm.test:4797/health    # 200, HTTP/2
+curl --cacert ../.state/mock-tls/ca.pem --resolve mock-llm.test:4798:127.0.0.1 https://mock-llm.test:4798/health    # refused: unknown issuer
+```
+
+Names the dev server's TCP relay offers for it: `mock-llm.test:443` (4797),
+`untrusted.mock-llm.test:443` (4798), `wrong-name.mock-llm.test:443` (4797 again: the good
+certificate under a name it does not cover).
+
+## Responses over WebSocket
+
+codex's built-in `openai` provider talks to the Responses API over a WebSocket first and falls
+back to the HTTP stream only after its retry budget. The mock answers that too (it was read out
+of `codex-api/src/endpoint/responses_websocket.rs` and `core/src/client.rs`, then run):
+`GET /v1/responses` with `Upgrade: websocket`. Each text frame from the client is the request
+body with `"type": "response.create"`; the reply is the same event sequence as the HTTP stream,
+one JSON text frame per event. A request with `previous_response_id` carries only the input
+items added since that response, so the mock keeps each connection's conversation by response
+id. `"generate": false` is codex's prewarm: answered with an empty completed response. The
+handshake's headers (`Authorization`, `ChatGPT-Account-ID`, `User-Agent`, `originator`) are what
+`/auth/state` reports for such a request, with `path` = `ws /v1/responses`. A prompt containing
+`mock-error` gets an `{"type":"error","status":400,...}` frame.
 
 ## Native baselines
 

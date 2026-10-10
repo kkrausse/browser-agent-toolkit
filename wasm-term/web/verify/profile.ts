@@ -4,7 +4,10 @@
 // spent its time, as a top-down tree, and the longest stretches in which the
 // thread never went idle (a "stall": input is not processed meanwhile).
 //
-//   cd wasm-term/web && bun verify/profile.ts [url] [--seconds N] [--min-ms N] [--out trace.json] [--burst TEXT] [--blocked]
+//   cd wasm-term/web && bun verify/profile.ts [url] [--seconds N] [--min-ms N] [--out trace.json] [--burst TEXT] [--blocked] [--sum NAME=REGEX]...
+//
+// --sum adds one line per pattern: the thread's busy time in samples whose stack has a frame
+// matching it (e.g. --sum 'tls=rustls|aws_lc' for what TLS inside the module costs).
 //
 // The URL should load a build that kept its names, e.g.
 //   http://127.0.0.1:4790/?guest=codex&build=names&persist=0
@@ -20,6 +23,8 @@ let out = "";
 let burst = "";
 /** Also print where the thread was blocked (waiting in a host call), which is where input goes unread if the call does not watch the terminal. */
 let showBlocked = false;
+/** name -> pattern over a stack's function names. */
+const sums: [string, RegExp][] = [];
 while (argv.length) {
   const arg = argv.shift()!;
   if (arg === "--seconds") seconds = Number(argv.shift());
@@ -27,6 +32,10 @@ while (argv.length) {
   else if (arg === "--out") out = argv.shift()!;
   else if (arg === "--burst") burst = argv.shift()!;
   else if (arg === "--blocked") showBlocked = true;
+  else if (arg === "--sum") {
+    const [name, ...pattern] = argv.shift()!.split("=");
+    sums.push([name!, new RegExp(pattern.join("="))]);
+  }
   else url = arg;
 }
 
@@ -152,4 +161,14 @@ for (const stretch of stretches.slice(0, 3)) {
 if (showBlocked) {
   console.log("\n--- blocked in a host call (whole trace) ---");
   print(tree(waiting), 0);
+}
+
+if (sums.length) {
+  const busy = stretches.flatMap(stretch => stretch.samples);
+  const micros = (indexes: number[]) => indexes.reduce((sum, index) => sum + (guest.deltas[index] ?? 0), 0);
+  console.log(`\n--- sums over the whole trace ---\n${(micros(busy) / 1000).toFixed(0).padStart(6)} ms  busy (not idle, not blocked in a host call)`);
+  for (const [name, pattern] of sums) {
+    const matching = busy.filter(index => stack(guest, guest.samples[index]!).some(frame => pattern.test(frame)));
+    console.log(`${(micros(matching) / 1000).toFixed(0).padStart(6)} ms  ${name} (a frame matching /${pattern.source}/ on the stack)`);
+  }
 }

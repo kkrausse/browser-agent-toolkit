@@ -53,7 +53,7 @@ subjectAltName = DNS:mock-llm.test, DNS:untrusted.mock-llm.test
 authorityKeyIdentifier = keyid
 EXT
 openssl ecparam -name prime256v1 -genkey -noout -out other-ca.key 2>/dev/null
-openssl req -x509 -new -key other-ca.key -sha256 -days 30 -config ca.cnf -out other-ca.pem
+openssl req -x509 -new -key other-ca.key -sha256 -days 30 -config ca.cnf -subj "/CN=a CA nobody was given" -out other-ca.pem
 openssl ecparam -name prime256v1 -genkey -noout -out untrusted.key 2>/dev/null
 openssl req -new -key untrusted.key -subj "/CN=untrusted.mock-llm.test" -out untrusted.csr
 openssl x509 -req -in untrusted.csr -CA other-ca.pem -CAkey other-ca.key -CAcreateserial -sha256 -days 30 -extfile other.ext -out untrusted.pem 2>/dev/null
