@@ -402,7 +402,7 @@ fn run_project_scripts(policy: &Policy, options: &AppOptions, app: &Path, state:
         let ok = matches!(&status, Ok(status) if status.success());
         if !ok {
             eprintln!("project script {} failed ({status:?}); continuing without its files", script.name);
-            reports.push(json!({ "name": script.name, "ok": false, "ms": ms(started) }));
+            reports.push(json!({ "name": script.name, "ok": false }));
             continue;
         }
         let mut items = Vec::new();
@@ -415,7 +415,9 @@ fn run_project_scripts(policy: &Policy, options: &AppOptions, app: &Path, state:
             count += 1;
             bytes += len;
         }
-        reports.push(json!({ "name": script.name, "ok": true, "files": count, "bytes": bytes, "ms": ms(started) }));
+        eprintln!("project script {}: {count} files, {bytes} bytes in {} ms", script.name, ms(started));
+        // No timings in the manifest: equal inputs must give an equal manifest.
+        reports.push(json!({ "name": script.name, "ok": true, "files": count, "bytes": bytes }));
     }
     Ok(reports)
 }
