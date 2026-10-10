@@ -209,3 +209,21 @@ Spec: `docs/design/module-format.md`; reference loader `crates/bat-modules/harne
 - **Wasm build is `opt-level = "z"`** (supersedes the 1.86 MB figure above, which was "s"):
   1.24 MB, 0.46 MB gzip. On a 234-line TSX file, warm: z 1.6–1.8 ms, s 1.4 ms, 3 1.1–1.3 ms
   (2.29 MB). Workspace files are few, the download is paid by every visitor.
+
+## 2026-10-09 kernel: lookup fast path and JS boundary, from the M0 measurements
+
+- **Per-image path hash table, built at mount.** The component walk cost 1.4–1.9 µs per
+  stat of a nine-component path (a binary search per component, ~160 ns each in Wasm).
+  One pass over the index at mount (inside the 2 ms index time for 12,197 entries) builds
+  path → entry; a lookup below a directory with no overlay entries is then one probe.
+  Stat hit went from 2.3–5.7 µs to ~1.2 µs with two workers, and what is left is mostly
+  JavaScript (string copy in, object out).
+- **The RwLock is reader-preferring.** Readers used to queue behind a "waiters" bit, which
+  cost every reader 200 spins while it was set.
+- **Copies out of shared memory go through a private buffer; small reads should be
+  pooled.** `Uint8Array.slice` on the shared memory costs several µs per call (the
+  allocation, not the copy) and `TextDecoder`/`TextEncoder.encodeInto` refuse shared
+  buffers in Chrome 154. `readFileInto` and `statRaw`/`st` exist for layers that pool.
+- **The resolver is not written by the kernel agent.** The node-runtime agent put one in
+  `crates/bat-kernel/src/resolve.rs` while the kernel agent's own was being started; to
+  keep one resolver the kernel agent dropped its attempt and left that file alone.

@@ -311,7 +311,9 @@ the mount) has its chunks read by kerneld.
 | `bat_image_section(id, section, out)` | 0 | `out`: 2 × `u32` = ptr, len of an in-head section (2 program scripts, 3 meta) |
 | `bat_image_fault(image, chunk)` | 0 | supervisor: load a chunk on this thread and bump `BAT_FAULT_WORD` |
 
-The cache has no eviction yet (see `docs/design/decisions.md`).
+The cache has no eviction yet (see `docs/design/decisions.md`). Each mount also builds a
+hash table from full path to entry, so a lookup below a directory that has no overlay
+entries costs one probe (plus one per missing trailing component on a miss).
 
 ## 9. Overlay persistence
 
@@ -385,8 +387,10 @@ lists; `attach.ts` has all of them.
 `Kernel` functions throw `KernelError`; `try*` variants return `undefined` for
 `ENOENT`/`ENOTDIR`; `*Raw` variants return the raw `-errno`. Summary:
 
-- paths: `stat`, `tryStat`, `kindOf` (allocation-free existence probe), `readFile`,
-  `tryReadFile`, `readText`, `readModule` (compiled body + facts for the loader),
+- paths: `stat`, `tryStat`, `kindOf` (allocation-free existence probe), `statRaw` + `st`
+  (raw `-errno`, fields read lazily from the scratch area until the next call: build your
+  own Stats from it), `readFile`, `readFileInto(path, dst)` (no allocation; returns
+  `-(size) - 1` if `dst` is too small), `tryReadFile`, `readText`, `readModule` (compiled body + facts for the loader),
   `writeFile`, `mkdir`, `rmdir`, `unlink`, `rename`, `symlink`, `link`, `readlink`,
   `realpath`, `chmod`, `utimes`, `truncate`, `readdir`
 - fds: `open`, `close`, `read`, `readRaw`, `write`, `writeRaw`, `seek`, `fstat`,
@@ -399,7 +403,9 @@ lists; `attach.ts` has all of them.
 - images: `imageNames`, `imageStats`, `imageSection`
 - persistence and misc: `flush`, `flushSync`, `overlayGeneration`, `retrying`
 
-`readFile` and friends return private (non-shared) `Uint8Array` copies.
+`readFile` and friends return private (non-shared) `Uint8Array` copies. Allocating that
+array is most of the cost of a small read (`docs/experiments/2026-10-09-kernel-m0.md`):
+layers that serve many small reads should pool and use `readFileInto`.
 
 kerneld RPC ops (`booted.kerneld(op, args)`): `storeImage { name, url }`,
 `hasImage { name }`, `removeImage { name }`, `mount { name, path }`, `snapshot`, `flush`,
@@ -409,10 +415,10 @@ kerneld RPC ops (`booted.kerneld(op, args)`): `storeImage { name, url }`,
 
 Shapes are fixed here so callers can be designed for them; names may still gain parameters.
 
-- **Resolver**: `bat_resolve(specifier, slen, importer, ilen, conditions, out, cap) -> len`
-  writes the resolved absolute path (plus a format byte: CJS/ESM/JSON/builtin/wasm). Node
-  semantics (exports/imports, self-reference, extensions, realpath). Caches internally,
-  invalidated by `BAT_OVERLAY_GEN`.
+- **Resolver**: owned by the node-runtime agent, in `crates/bat-kernel/src/resolve.rs` with
+  its binding in `runtime/src/loader/resolve.ts`; its exports (`bat_resolve`,
+  `bat_package_scope`, `bat_resolve_stats`) are specified by that agent, not here. It reads
+  through the path functions of section 4 and keys its caches on `BAT_OVERLAY_GEN`.
 - **HTTP/1.1 codec**: incremental, over caller buffers, no fds:
   `bat_http_parser_new(kind) -> handle`, `bat_http_feed(handle, ptr, len, out, cap)` (events:
   head with method/target/status/headers, body chunk ranges, message end),
