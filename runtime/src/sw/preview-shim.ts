@@ -161,4 +161,14 @@ export function previewShim(): void {
     Object.defineProperty(Replacement, name, { value, enumerable: true })
   }
   w.WebSocket = Replacement
+  // A SharedWorker has its own global: the replacement above does not exist there, and a
+  // socket it opens to the guest would go to the real server. Vite's client waits for a
+  // restarted dev server from a SharedWorker made of a blob (`new WebSocket(url,
+  // 'vite-ping')`), so after a `vite.config.ts` change the frame polled the wrong server for
+  // ever and was never reloaded. Without the class the client pings from the page instead.
+  try {
+    Object.defineProperty(w, 'SharedWorker', { value: undefined, configurable: true, writable: true })
+  } catch {
+    // left as it is
+  }
 }
