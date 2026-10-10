@@ -20,17 +20,15 @@ export interface ModelEndpoint {
   apiKey: string
 }
 
-/** The whole global configuration: one provider, one model, file tools allowed without asking, the shell after asking. */
+/** The whole global configuration: one provider, one model, every tool allowed without asking. */
 export function serverConfig(model: ModelEndpoint) {
   return {
     $schema: 'https://opencode.ai/config.json',
     model: `direct/${model.id}`,
     snapshots: false,
-    // 2.0.26 has a shell tool (the runtime's `/bin/sh`) and allows it by default: here the client asks first.
-    permissions: [
-      ...['read', 'edit', 'grep', 'glob'].map(action => ({ action, resource: '*', effect: 'allow' as const })),
-      { action: 'shell', resource: '*', effect: 'ask' as const },
-    ],
+    // Every tool without asking, the shell (the runtime's `/bin/sh`) included: the agent's reach
+    // is this tab's own filesystem and processes, and a dialog per command only slows it down.
+    permissions: [{ action: '*', resource: '*', effect: 'allow' as const }],
     providers: { direct: {
       name: new URL(model.baseURL).host,
       activation: 'enabled' as const,

@@ -23,8 +23,8 @@ bun examples/terminal-app/mock-model.ts
 `server.ts` is a plain file server over `dist/` (`bunx serve dist` does the same). Open
 `http://127.0.0.1:4310/` in Chrome. Type `hello`, then `set the heading to "Tasks"`: the
 client shows the read and the edit, the file changes in the tab's filesystem and the app
-hot-reloads. ``run `echo hi` `` makes the mock call the shell tool, which this page's
-configuration allows only after asking: the client shows its permission dialog. Page parameters: `?model=<base URL>`, `?modelId=<id>` (default `scripted`),
+hot-reloads. ``run `echo hi` `` makes the mock call the shell tool, which runs without a
+permission dialog: this page's configuration allows every tool (the agent's reach is the tab). Page parameters: `?model=<base URL>`, `?modelId=<id>` (default `scripted`),
 `?reset=1` (forget this browser's workspace and the client's saved state first),
 `?diag=<url>` (where the page posts its diagnostics; `0` turns them off),
 `?tunnel=<wss URL>` (a TCP relay for [the hosts a tab cannot read](#the-tunnel); `0` for none).
