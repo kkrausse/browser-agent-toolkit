@@ -20,8 +20,9 @@
 //    struct sub-pointers, which is all OpenTUI uses `ptr()` for.
 //  * `toArrayBuffer(address, offset, length)` aliases native memory in Bun.
 //    Here it returns a copy, because an ArrayBuffer cannot alias a sub-range
-//    of linear memory. See NOTES.md ("toArrayBuffer aliasing") for the one
-//    upstream call site where that matters.
+//    of linear memory. The one upstream call site that depends on aliasing
+//    (OptimizedBuffer's raw cell arrays) is pointed at `view()` instead, by
+//    build/opentui-wasm-plugin.ts.
 //  * Declared FFI types are bun's; the module's real signatures are wasm32's
 //    (usize is 32-bit). Argument and return coercion follows the real wasm
 //    signature, read from the binary's type section.
@@ -56,6 +57,12 @@ export interface WasmFfi {
   toArrayBuffer(pointer: number | bigint, offset: number | undefined, length: number): ArrayBuffer
   JSCallback: new (callback: (...args: any[]) => any, definition: FfiFunction) => FfiCallback
   suffix: string
+  /** Not part of bun:ffi: a typed array over linear memory at a native address (detached when the memory grows). */
+  view<T extends ArrayBufferView>(
+    type: new (buffer: ArrayBufferLike, byteOffset: number, length: number) => T,
+    pointer: number | bigint,
+    length: number,
+  ): T
   /** Not part of bun:ffi: introspection for tests and NOTES. */
   readonly stats: WasmFfiStats
   readonly memory: WebAssembly.Memory
@@ -64,6 +71,8 @@ export interface WasmFfi {
 export interface WasmFfiStats {
   calls: number
   borrowedBytes: number
+  /** Bytes copied in for buffer arguments, per symbol. */
+  borrowedBySymbol: Map<string, number>
   pinnedBytes: number
   missingSymbols: string[]
   unimplementedImports: Set<string>
@@ -75,6 +84,19 @@ export interface WasmFfiHost {
   write(fd: number, bytes: Uint8Array): void
   /** Optional: a complete `wasi_snapshot_preview1` import object (the wasm-term kernel's). */
   wasi?: Record<string, (...args: any[]) => any>
+  /** Optional: what the FFI declarations cannot say about buffer arguments (see FfiHint). */
+  hints?: Record<string, FfiHint>
+}
+
+/** bun:ffi declares every buffer argument as "ptr"; whether native reads it,
+ * writes it, or both is not in the declaration, so by default a buffer is
+ * copied into linear memory before the call and back after it. A hint names
+ * an argument that is output only: nothing is copied in, and only as many
+ * bytes as the function reports having written (its return value) are copied
+ * back. */
+export interface FfiHint {
+  /** Index of the output-only buffer argument; the function returns the number of bytes it wrote there. */
+  out: number
 }
 
 type ValType = "i32" | "i64" | "f32" | "f64"
@@ -215,6 +237,7 @@ export async function createWasmFfi(wasm: BufferSource, host: WasmFfiHost): Prom
   const stats: WasmFfiStats = {
     calls: 0,
     borrowedBytes: 0,
+    borrowedBySymbol: new Map(),
     pinnedBytes: 0,
     missingSymbols: [],
     unimplementedImports: new Set(),
@@ -350,6 +373,16 @@ export async function createWasmFfi(wasm: BufferSource, host: WasmFfiHost): Prom
     return (memory.buffer as ArrayBuffer).slice(start, start + length)
   }
 
+  // Not part of bun:ffi. A typed array directly over linear memory at a
+  // native address: real aliasing, for the call sites that need it (the
+  // bundler plugin points OptimizedBuffer's raw cell arrays here). It lasts
+  // until the memory grows, which detaches it (length 0); holders re-derive.
+  const view = <T extends ArrayBufferView>(
+    type: new (buffer: ArrayBufferLike, byteOffset: number, length: number) => T,
+    pointer: number | bigint,
+    length: number,
+  ): T => new type(memory.buffer, Number(pointer), length)
+
   // --- calls ---------------------------------------------------------------
   interface Borrow {
     source: Uint8Array
@@ -437,9 +470,12 @@ export async function createWasmFfi(wasm: BufferSource, host: WasmFfiHost): Prom
       }
     }
 
+    const outIndex = host.hints?.[name]?.out ?? -1
+
     return (...args: any[]) => {
       stats.calls++
       let borrows: Borrow[] | undefined
+      let outBorrow: Borrow | undefined
       for (let index = 0; index < arity; index++) {
         const value = args[index]
         if (!pointerArg[index]) {
@@ -453,20 +489,31 @@ export async function createWasmFfi(wasm: BufferSource, host: WasmFfiHost): Prom
           const source = bytesOf(value)
           if (source.buffer === memory.buffer) args[index] = source.byteOffset
           else if (source.byteLength === 0) args[index] = 0
-          else {
+          else if (index === outIndex) {
+            outBorrow = { source, address: allocate(source.byteLength) }
+            args[index] = outBorrow.address
+          } else {
             const address = allocate(source.byteLength)
             u8().set(source, address)
             ;(borrows ??= []).push({ source, address })
             stats.borrowedBytes += source.byteLength
+            stats.borrowedBySymbol.set(name, (stats.borrowedBySymbol.get(name) ?? 0) + source.byteLength)
             args[index] = address
           }
         } else if (typeof value === "object" && "ptr" in value) args[index] = value.ptr ?? 0
         else throw new TypeError(`opentui wasm: ${name} argument ${index} is not a pointer`)
       }
       args.length = arity
+      let result: any
       try {
-        return convertResult(fn(...args))
+        result = convertResult(fn(...args))
+        return result
       } finally {
+        if (outBorrow !== undefined) {
+          const written = Math.min(Math.max(Number(result) || 0, 0), outBorrow.source.byteLength)
+          outBorrow.source.set(u8().subarray(outBorrow.address, outBorrow.address + written))
+          free(outBorrow.address)
+        }
         if (borrows !== undefined) {
           const memoryBytes = u8()
           for (const borrow of borrows) {
@@ -535,6 +582,7 @@ export async function createWasmFfi(wasm: BufferSource, host: WasmFfiHost): Prom
     },
     ptr,
     toArrayBuffer,
+    view,
     JSCallback: JSCallback as unknown as WasmFfi["JSCallback"],
     suffix: "wasm",
     stats,

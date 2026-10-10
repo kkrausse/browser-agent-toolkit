@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build:native": "sh native/build.sh",
-    "build:tui": "bun build/build-site.ts --target=browser",
+    "build:tui": "bun build/build-site.ts --target=browser --minify",
+    "build:tui:debug": "bun build/build-site.ts --target=browser",
     "build:tui:bun": "bun build/build-site.ts --target=bun",
     "demo:core": "bun build/bundle.ts demos/core-hello.ts --target=bun && bun demos/run-bun.ts dist/core-hello.js",
     "demo:opencode-bun": "bun build/build-site.ts --target=bun && demos/run-opencode-bun.sh",

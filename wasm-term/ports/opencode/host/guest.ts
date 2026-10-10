@@ -48,9 +48,22 @@ export async function main(context: JsGuestContext): Promise<number> {
   }
 
   const wasm = await (await fetch(`${base}opentui.wasm`)).arrayBuffer()
-  await bootOpentuiWasm(wasm, {
+  const ffi = await bootOpentuiWasm(wasm, {
     write: (fd, bytes) => process[fd === 2 ? "stderr" : "stdout"].write(bytes),
   })
+  if (env.WASM_TERM_FFI_STATS) {
+    // Once a second: FFI calls, bytes copied in and out for buffer arguments, pinned bytes, linear memory.
+    let last = { ...ffi.stats }
+    setInterval(() => {
+      const now = ffi.stats
+      const top = [...now.borrowedBySymbol].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name, bytes]) => `${name}=${bytes}`)
+      context.log(
+        `[opentui ffi 1s] calls=${now.calls - last.calls} copiedBytes=${now.borrowedBytes - last.borrowedBytes} pinnedBytes=${now.pinnedBytes} memory=${ffi.memory.buffer.byteLength} top: ${top.join(" ")}`,
+      )
+      now.borrowedBySymbol.clear()
+      last = { ...now }
+    }, 1000)
+  }
 
   // Only now: the TUI bundle reads process, the fs and the wasm core while its modules are evaluated.
   const app = (await import(/* @vite-ignore */ `${base}tui.js`)) as typeof import("./worker-app")

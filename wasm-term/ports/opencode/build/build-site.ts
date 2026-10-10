@@ -9,7 +9,8 @@
 //       parser.worker.js    OpenTUI's tree-sitter worker
 //       tree-sitter.wasm    web-tree-sitter's runtime
 //       assets/<lang>/...   the grammars and queries OpenTUI ships (markdown, js, ts, zig)
-//   add --minify for a smaller tui.js (anchors and stack traces are less readable).
+//   --minify (what `bun run build:tui` passes) halves tui.js; the linked source map still
+//   resolves stack traces. `bun run build:tui:debug` leaves it readable.
 import path from "node:path"
 import { cpSync, mkdirSync } from "node:fs"
 import type { BunPlugin } from "bun"

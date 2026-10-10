@@ -8,6 +8,7 @@
 //                                    pointer size 8           -> 4 (wasm32)
 //   3. core/src/zig.ts               existsSync(libPath)      -> true; one hand-read pointer
 //   4. core/src/zig-structs.ts       four usize fields: u64   -> u32
+//   5. core/src/buffer.ts            raw cell arrays: copies  -> views over linear memory
 //
 // plus two module replacements: `#opentui/runtime-assets` -> src/shims/opentui-runtime-assets.ts
 // and core/src/lib/host-clipboard.native.ts -> src/shims/host-clipboard.ts.
@@ -88,6 +89,28 @@ export function opentuiWasmPlugin(): BunPlugin {
           {
             find: `toPointer(data.getBigUint64(sources.arrayOffset, true))`,
             replace: `toPointer(data.getUint32(sources.arrayOffset, true))`,
+          },
+        ]),
+      }))
+
+      // OptimizedBuffer exposes its cell arrays as typed arrays that alias
+      // native memory (bun:ffi toArrayBuffer). A copy would be a stale
+      // snapshot: the renderer reads link ids for hit testing from it and
+      // callers may write cells through it. Real views over linear memory
+      // instead, re-derived after the memory grew (which detaches them).
+      build.onLoad({ filter: /[\\/]core[\\/]src[\\/]buffer\.ts$/ }, async (args) => ({
+        loader: "ts",
+        contents: applyEdits(args.path, await Bun.file(args.path).text(), [
+          {
+            find: `    if (this._rawBuffers !== null) {\n      return\n    }`,
+            replace: `    if (this._rawBuffers !== null && this._rawBuffers.char.buffer.byteLength !== 0) {\n      return\n    }`,
+          },
+          { find: `new Uint32Array(toArrayBuffer(charPtr, 0, size * 4))`, replace: `${BACKEND}.view(Uint32Array, charPtr, size)` },
+          { find: `new Uint16Array(toArrayBuffer(fgPtr, 0, size * 4 * 2))`, replace: `${BACKEND}.view(Uint16Array, fgPtr, size * 4)` },
+          { find: `new Uint16Array(toArrayBuffer(bgPtr, 0, size * 4 * 2))`, replace: `${BACKEND}.view(Uint16Array, bgPtr, size * 4)` },
+          {
+            find: `new Uint32Array(toArrayBuffer(attributesPtr, 0, size * 4))`,
+            replace: `${BACKEND}.view(Uint32Array, attributesPtr, size)`,
           },
         ]),
       }))

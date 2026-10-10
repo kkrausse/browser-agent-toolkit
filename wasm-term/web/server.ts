@@ -73,6 +73,24 @@ function guestList(): GuestInfo[] {
   return [...wasm, ...jsGuests.map(({ dir, build, entry, ...info }) => info)];
 }
 
+/** A port's build output: megabytes that change only when rebuilt. Unlike the
+ * rest (no-store, rebundled per load) these are revalidated with an ETag and
+ * sent gzipped, which is what load time over a real network depends on. */
+const compressed = new Map<string, { tag: string; body: Uint8Array }>();
+async function built(request: Request, path: string, type: string): Promise<Response> {
+  const stat = Bun.file(path);
+  const tag = `"${stat.lastModified.toString(36)}-${stat.size.toString(36)}"`;
+  const headers: Record<string, string> = { "Cache-Control": "no-cache", ETag: tag };
+  if (request.headers.get("if-none-match") === tag) return respond(null, type, headers, 304);
+  if (!/\bgzip\b/.test(request.headers.get("accept-encoding") ?? "") || path.endsWith(".map")) return respond(stat, type, headers);
+  let entry = compressed.get(path);
+  if (entry?.tag !== tag) {
+    entry = { tag, body: Bun.gzipSync(new Uint8Array(await stat.arrayBuffer())) };
+    compressed.set(path, entry);
+  }
+  return respond(entry.body as unknown as BodyInit, type, { ...headers, "Content-Encoding": "gzip", Vary: "Accept-Encoding" });
+}
+
 /** Server-sent events: `count` events, one every `interval` ms, each flushed on its own. */
 function sse(url: URL): Response {
   const count = Number(url.searchParams.get("count") ?? 5);
@@ -130,7 +148,7 @@ const server = Bun.serve({
       }
       const target = join(jsGuest.dir!, relative);
       if (!existsSync(target)) return respond(`Not built: ${target}\nRun: ${jsGuest.build}\n`, "text/plain", {}, 404);
-      return respond(Bun.file(target), TYPES[extname(target)] ?? "application/octet-stream");
+      return built(request, target, TYPES[extname(target)] ?? "application/octet-stream");
     }
 
     // ---- endpoints for the `net` guest -------------------------------------
