@@ -1,0 +1,11 @@
+[package]
+name = "bat-image"
+version = "0.1.0"
+edition = "2021"
+description = "Immutable dependency-tree image: no_std reader, native writer"
+license = "MIT"
+
+[features]
+default = ["std"]
+# `std` enables the writer. The reader is no_std and allocation-free.
+std = []
