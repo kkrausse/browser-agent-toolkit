@@ -1,0 +1,22 @@
+# Native codecs behind node:zlib and node:crypto (deflate/gzip/brotli streams,
+# digests, HMAC, KDFs, AES modes) with a C ABI over linear memory. A plain
+# library here so it is an ordinary member of the repository workspace; the
+# WebAssembly build that the runtime loads is the nested project in wasm/
+# (own workspace, lock file and size profile), built by build-wasm.sh.
+[package]
+name = "bat-node-native"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+crc32fast = { version = "1.5", default-features = false }
+brotli = { version = "8", default-features = false, features = ["std"] }
+digest = { version = "0.10", features = ["alloc"] }
+md-5 = { version = "0.10", default-features = false }
+sha1 = { version = "0.10", default-features = false }
+sha2 = { version = "0.10", default-features = false }
+pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
+scrypt = { version = "0.11", default-features = false }
+aes = "0.8"
+ghash = "0.5"
