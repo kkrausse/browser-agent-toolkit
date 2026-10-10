@@ -13,12 +13,16 @@ and refresh the snapshot.
 ## The snapshot
 
 Taken from `random` at commit `fae38631b15ad4d979d859088f9ca2656e2b424f` (branch `wasm-term`,
-2026-10-10), the commit wasm-term itself moved here from. That branch is `random`'s `main`
-plus, for these paths, one commit: `75ed11e` "ghostty-web: literal Ctrl+V option, focus
-reports, hover motion code, mouse-tracking read", which wasm-term needs (the same commit is
-`random`'s branch `ghostty-web-fixes`). The three `bun-web-terminal` files are as on `main`.
-`snapshot.lock` has the commit and the git object ids of what was taken; `ghostty-web/` here
-has the same git tree id as `ghostty-web/` there.
+2026-10-10), the commit wasm-term itself moved here from. That branch is `random`'s `main` as of
+`851e4e2` plus, for these paths, one commit: `75ed11e` "ghostty-web: literal Ctrl+V option, focus
+reports, hover motion code, mouse-tracking read", which wasm-term needs (`web/client.ts` sets
+`ctrlVPaste: false`). `snapshot.lock` has the commit and the git object ids of what was taken;
+`ghostty-web/` here has the same git tree id as `ghostty-web/` there.
+
+`random`'s branch `ghostty-web-fixes` carries that commit on a newer `main` (`8dbc0e0` on
+`20cf565`). It is not what this snapshot is: `main` has since changed `ghostty-web` (scrollback
+bounded by lines, not bytes) and `bun-web-terminal/src/touch.ts`. Refreshing from that branch, or
+from `main` once it is merged, brings those in; run the checks afterwards.
 
 To refresh it:
 
