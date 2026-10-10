@@ -15,7 +15,7 @@
 // This file also owns the shared Wasm instance (`nativeOf`), which zlib.ts
 // imports.
 import type { Runtime } from '../process/runtime'
-import { registerBuiltin } from './registry'
+import { registerBuiltin, unsupported } from './registry'
 
 export interface NativeExports {
   memory: WebAssembly.Memory
@@ -379,7 +379,7 @@ function createCrypto(rt: Runtime): any {
 
   function Hash(this: any, algorithm: unknown, options?: unknown): any {
     if (!(this instanceof Hash)) return new (Hash as any)(algorithm, options)
-    this[kState] = newState(algId(algorithm), null)
+    ;(this as any)[kState] = newState(algId(algorithm), null)
     LazyTransform.call(this, options)
   }
   Object.setPrototypeOf(Hash.prototype, LazyTransform.prototype)
@@ -421,7 +421,7 @@ function createCrypto(rt: Runtime): any {
     if (!(this instanceof Hmac)) return new (Hmac as any)(algorithm, key, options)
     const id = algId(algorithm)
     // The key is copied: the caller may reuse its buffer before digest().
-    this[kState] = newState(id, Uint8Array.from(keyBytes(key, 'key', options?.encoding)))
+    ;(this as any)[kState] = newState(id, Uint8Array.from(keyBytes(key, 'key', options?.encoding)))
     LazyTransform.call(this, options)
   }
   Object.setPrototypeOf(Hmac.prototype, LazyTransform.prototype)
@@ -799,7 +799,7 @@ function createCrypto(rt: Runtime): any {
   })
   for (const name of UNAVAILABLE) {
     const stub = function () {
-      throw coded(new Error(`crypto.${name} is not available in this runtime`), 'ERR_FEATURE_UNAVAILABLE_ON_PLATFORM')
+      unsupported('crypto', name)
     }
     Object.defineProperty(stub, 'name', { value: name })
     exports[name] = stub

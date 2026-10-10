@@ -20,3 +20,17 @@ codegen-units = 1
 panic = "abort"
 debug = 0
 strip = true
+
+# The module as a whole is built for size, but the digest compression
+# functions and the deflate/inflate inner loops are where the time goes and
+# are small: build those for speed.
+[profile.release.package.sha2]
+opt-level = 3
+[profile.release.package.sha1]
+opt-level = 3
+[profile.release.package.md-5]
+opt-level = 3
+[profile.release.package.miniz_oxide]
+opt-level = 3
+[profile.release.package.crc32fast]
+opt-level = 3
