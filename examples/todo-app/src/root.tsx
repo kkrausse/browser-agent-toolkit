@@ -6,7 +6,10 @@ import '@/style.css'
 import cssUrl from '@/style.css?url'
 import Editing from '@/editing'
 
-const queryClient = new QueryClient()
+// One client for the life of the page. A hot update of this module (any edit of the
+// stylesheet it imports) must not replace it: the mounted queries would stay on the old one.
+const queryClient: QueryClient = import.meta.hot?.data.queryClient ?? new QueryClient()
+if (import.meta.hot) import.meta.hot.data.queryClient = queryClient
 
 export function Layout({ children }: { children: ReactNode }) {
   return (
