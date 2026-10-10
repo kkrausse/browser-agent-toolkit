@@ -1,0 +1,105 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Sat, 10 Oct 2026 09:47:20 -0700
+Subject: [PATCH] wasi: process seam: an interrupter for driver-backed
+ processes on wasi (Ctrl-C from write_stdin reaches the emulated shell);
+ lockfile for the shell backend's dependency
+
+---
+ codex-rs/Cargo.lock               |  1 +
+ codex-rs/utils/pty/src/backend.rs |  6 +++++-
+ codex-rs/utils/pty/src/process.rs | 17 +++++++++++++++++
+ 3 files changed, 23 insertions(+), 1 deletion(-)
+
+diff --git a/codex-rs/Cargo.lock b/codex-rs/Cargo.lock
+index 16682d0..af417a8 100644
+--- a/codex-rs/Cargo.lock
++++ b/codex-rs/Cargo.lock
+@@ -5284,6 +5284,7 @@ dependencies = [
+  "codex-utils-pty",
+  "tempfile",
+  "tokio",
++ "wasm-term-tokio",
+ ]
+ 
+ [[package]]
+diff --git a/codex-rs/utils/pty/src/backend.rs b/codex-rs/utils/pty/src/backend.rs
+index 9aa6b1a..46deefa 100644
+--- a/codex-rs/utils/pty/src/backend.rs
++++ b/codex-rs/utils/pty/src/backend.rs
+@@ -22,6 +22,9 @@
+ //!   and stderr chunks on (a pty has one stream: leave `stderr_rx` `None`), a
+ //!   oneshot that resolves with the exit code, a `terminator` closure (kill
+ //!   now; must lead to the exit code being sent), and for a pty a `resizer`.
++//!   On WASI the driver also has an `interrupter` closure: what an interrupt
++//!   (`write_stdin("\u{3}")` to a process without a terminal) calls. Without
++//!   one, interrupting is unsupported, as for any driver upstream.
+ //! - The backend must drop its output senders when it has forwarded the last
+ //!   byte: readers keep waiting for that after the exit code arrives.
+ //! - `spawn` runs on the only thread, inside the tokio runtime. It must not
+@@ -39,7 +42,8 @@ use crate::SpawnedProcess;
+ use crate::TerminalSize;
+ use crate::spawn_from_driver;
+ 
+-/// What the model is told when it asks for a command and no shell is installed.
++/// What the model is told when it asks for a command and no shell is installed
++/// (wasm-term: `ports/codex/main/src/shell.rs` installs one for `codex-local`).
+ pub const NO_SHELL_MESSAGE: &str = "no shell in this build: codex is running inside a browser tab, where commands cannot be executed. \
+ Do not retry; work with the file tools (apply_patch) or ask the user to run the command elsewhere.";
+ 
+diff --git a/codex-rs/utils/pty/src/process.rs b/codex-rs/utils/pty/src/process.rs
+index 5593450..2d5792f 100644
+--- a/codex-rs/utils/pty/src/process.rs
++++ b/codex-rs/utils/pty/src/process.rs
+@@ -279,6 +279,8 @@ impl Drop for ProcessHandle {
+ /// Adapts a closure into a `ChildTerminator` implementation.
+ struct ClosureTerminator {
+     inner: Option<Box<dyn FnMut() + Send + Sync>>,
++    #[cfg(target_os = "wasi")]
++    interrupter: Option<Box<dyn FnMut() + Send + Sync>>,
+     #[cfg(windows)]
+     interrupt_terminates: bool,
+ }
+@@ -290,6 +292,13 @@ impl ChildTerminator for ClosureTerminator {
+             return self.kill();
+         }
+ 
++        // wasm-term: an emulated shell has no process group to signal; its backend says how.
++        #[cfg(target_os = "wasi")]
++        if let Some(interrupter) = self.interrupter.as_mut() {
++            (interrupter)();
++            return Ok(());
++        }
++
+         Err(unsupported_signal(signal))
+     }
+ 
+@@ -369,6 +378,10 @@ pub struct ProcessDriver {
+     pub terminator: Option<Box<dyn FnMut() + Send + Sync>>,
+     pub writer_handle: Option<JoinHandle<()>>,
+     pub resizer: Option<ResizeFn>,
++    /// wasm-term: delivers an interrupt (Ctrl-C) to the process. Without one,
++    /// interrupting a driver-backed process is unsupported, as upstream.
++    #[cfg(target_os = "wasi")]
++    pub interrupter: Option<Box<dyn FnMut() + Send + Sync>>,
+     /// Whether this Windows process is attached to a pseudo-console.
+     #[cfg(windows)]
+     pub tty: bool,
+@@ -384,6 +397,8 @@ pub fn spawn_from_driver(driver: ProcessDriver) -> SpawnedProcess {
+         terminator,
+         writer_handle,
+         resizer,
++        #[cfg(target_os = "wasi")]
++        interrupter,
+         #[cfg(windows)]
+         tty,
+     } = driver;
+@@ -456,6 +471,8 @@ pub fn spawn_from_driver(driver: ProcessDriver) -> SpawnedProcess {
+         writer_tx,
+         Box::new(ClosureTerminator {
+             inner: terminator,
++            #[cfg(target_os = "wasi")]
++            interrupter,
+             #[cfg(windows)]
+             interrupt_terminates,
+         }),

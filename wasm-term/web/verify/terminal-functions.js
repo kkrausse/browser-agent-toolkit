@@ -226,6 +226,25 @@ await press("Control+d");
 await page.waitForFunction(() => window.wasmTerm.exit !== null);
 check("js guest: EOF ends stdin, main() returns, exit 0", (await exited()).code === 0 && (await text()).includes("[EOF]"));
 
+// ---- child processes: the `proc` guest's own checks (docs/abi.md 3.4) ---------------
+// The guest prints one line per check and leaves the same as JSON in a file.
+const procResult = async (query) => {
+  await page.goto(`${BASE}/?guest=proc&persist=0${query}`);
+  await page.waitForFunction(() => window.wasmTerm?.exit, null, { timeout: 120000 }).catch(() => {});
+  return page.evaluate(async () => {
+    const workers = window.wasmTerm.program.shellWorkers;
+    try { return { ...JSON.parse(await window.wasmTerm.readFile("/home/user/proc-result.json")), workers }; } catch (error) { return { failed: -1, checks: [], error: String(error), exit: window.wasmTerm.exit, tail: window.wasmTerm.screen().slice(-12), workers }; }
+  });
+};
+const procWorker = await procResult("&shell=worker");
+for (const item of procWorker.checks) check(`proc: ${item.name}`, item.ok, item.detail);
+check("proc (shell Workers): the guest's checks all ran and passed", procWorker.failed === 0 && procWorker.checks.length >= 27, procWorker.error ?? procWorker.checks.filter(item => !item.ok));
+check("proc: the page started one shell Worker ahead, more on demand, and replaced the one whose command would not stop",
+  procWorker.workers?.[0]?.why === "need" && procWorker.workers.filter(worker => worker.why === "replace").length === 1 && procWorker.workers.length >= 5, procWorker.workers);
+const procInline = await procResult("&shell=inline&arg=inline&arg=quick");
+check("proc (inline shell, no Workers): the checks that hold without streaming, stdin and kill pass", procInline.failed === 0 && procInline.checks.length >= 15 && procInline.workers?.length === 0, procInline.error ?? procInline.checks.filter(item => !item.ok));
+const procNumbers = procWorker.numbers;
+
 await page.setViewportSize({ width: 1200, height: 800 });
 const failed = checks.filter(item => !item.ok);
-return { passed: checks.length - failed.length, failed: failed.length, failures: failed, checks: checks.map(item => `${item.ok ? "PASS" : "FAIL"} ${item.name}`) };
+return { passed: checks.length - failed.length, failed: failed.length, procNumbers, failures: failed, checks: checks.map(item => `${item.ok ? "PASS" : "FAIL"} ${item.name}`) };

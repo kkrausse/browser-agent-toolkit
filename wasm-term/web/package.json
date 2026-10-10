@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "cd ../kernel && cargo build --release --target wasm32-unknown-unknown && ../guests/build.sh",
+    "build": "cd ../kernel && cargo build --release --target wasm32-unknown-unknown && ../guests/build.sh && ../host/sh/build.sh",
     "dev": "bun server.ts",
     "typecheck": "tsc --noEmit"
   },

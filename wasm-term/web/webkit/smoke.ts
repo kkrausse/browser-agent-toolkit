@@ -272,16 +272,8 @@ async function runShell(profile: string, options: BrowserContextOptions, touch: 
   const procRun = async (query: string): Promise<ProcResult | null> => {
     await page.goto(`${base}/?guest=proc&persist=0${query}`);
     await page.waitForFunction(() => window.wasmTerm?.exit, null, { timeout: 120_000 }).catch(() => {});
-    // The result line is longer than the screen is wide: read it from the scrollback.
-    return page.evaluate(() => {
-      const buffer = window.wasmTerm.terminal.buffer.active;
-      let all = "";
-      for (let row = 0; row < buffer.length; row++) {
-        const line = buffer.getLine(row);
-        all += (line?.translateToString(true) ?? "") + (buffer.getLine(row + 1)?.isWrapped ? "" : "\n");
-      }
-      const at = all.lastIndexOf("RESULT {");
-      try { return at < 0 ? null : JSON.parse(all.slice(at + 7).split("\n")[0]!); } catch { return null; }
+    return page.evaluate(async () => {
+      try { return JSON.parse((await window.wasmTerm.readFile("/home/user/proc-result.json")) ?? ""); } catch { return null; }
     });
   };
   try {

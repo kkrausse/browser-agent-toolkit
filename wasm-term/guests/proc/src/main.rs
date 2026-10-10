@@ -6,7 +6,8 @@
 //!   &arg=quick                          the checks only
 //!   ?guest=proc&shell=inline&arg=inline the checks that hold when the shell runs inside proc_spawn
 //!
-//! Prints one line per check and a last line `RESULT {json}`.
+//! Prints one line per check and a last line `RESULT {json}`; the same JSON is
+//! written to `/home/user/proc-result.json`.
 
 use std::fs;
 use std::os::fd::AsRawFd;
@@ -344,6 +345,9 @@ fn main() {
     let failed = r.checks.iter().filter(|c| !c.1).count();
     let checks: Vec<String> = r.checks.iter().map(|(n, ok, d)| format!("{{\"name\":\"{}\",\"ok\":{ok},\"detail\":\"{}\"}}", esc(n), esc(&d.chars().take(300).collect::<String>()))).collect();
     let numbers: Vec<String> = r.numbers.iter().map(|(n, j)| format!("\"{}\":{j}", esc(n))).collect();
-    println!("RESULT {{\"failed\":{failed},\"checks\":[{}],\"numbers\":{{{}}}}}", checks.join(","), numbers.join(","));
+    let result = format!("{{\"failed\":{failed},\"checks\":[{}],\"numbers\":{{{}}}}}", checks.join(","), numbers.join(","));
+    // Also as a file: the page reads it with `wasmTerm.readFile` (the line is wider than any screen).
+    let _ = fs::write("/home/user/proc-result.json", &result);
+    println!("RESULT {result}");
     std::process::exit(if failed == 0 { 0 } else { 1 });
 }
