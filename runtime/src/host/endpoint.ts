@@ -11,7 +11,8 @@ export interface Endpoint {
   ready(signal?: AbortSignal): Promise<void>
 }
 
-export function createEndpoints(ctx: NetContext, origin: string, closed: AbortSignal) {
+/** `previewUrl`: where the service worker serves guest listeners, ending in `/` (`https://app.example/preview/`). */
+export function createEndpoints(ctx: NetContext, previewUrl: string, closed: AbortSignal) {
   const client: HttpClient = createHttpClient(ctx)
   const codec = getCodec(ctx.kernel)
   closed.addEventListener('abort', () => client.close(), { once: true })
@@ -39,7 +40,7 @@ export function createEndpoints(ctx: NetContext, origin: string, closed: AbortSi
 
   function endpoint(port: number): Endpoint {
     return {
-      url: `${origin}/preview/${port}/`,
+      url: `${previewUrl}${port}/`,
       fetch: (path, init) => fetchPort(port, path, init),
       async ready(signal) {
         await codec.waitForListener(port, signal ? AbortSignal.any([signal, closed]) : closed)

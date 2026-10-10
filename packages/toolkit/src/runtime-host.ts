@@ -34,6 +34,12 @@ export interface BootOptions {
   manifest: unknown;
   /** Aborting during boot rejects `bootRuntime`; afterwards it is equivalent to `close()`. */
   signal?: AbortSignal;
+  /** Optional. The preview's service worker, for a page that is not served from `/` or whose
+   * server cannot send `Service-Worker-Allowed` (a directory of static files): `url` is a
+   * script at or above `scope` that runs the runtime's `sw.js` (`importScripts`), and
+   * endpoints are then at `<scope>preview/<port>/`. Default: the runtime's `sw.js` with
+   * scope `/preview/`. */
+  serviceWorker?: { url: string; scope: string };
 }
 
 /** Resolves when the kernel is up, the image is mounted and the persisted overlay is
@@ -77,9 +83,11 @@ export interface RuntimeProcess {
 
 export interface RuntimeEndpoint {
   /** Same-origin URL prefix that reaches the guest listener from a browser frame, ending
-   * in `/` (`https://app.example/preview/5173/`). The request path below the prefix is
+   * in `/` (`https://app.example/preview/5173/`; below the page's own directory when the
+   * runtime was booted with a service-worker scope). The request path below the prefix is
    * passed to the guest together with the prefix, i.e. the guest server sees
-   * `/preview/5173/...` and is configured with that base (see ./vite). WebSocket
+   * `/preview/5173/...` and is configured with that base (see ./vite: `BROWSER_AGENT_BASE`
+   * is the URL's path when it is not the default). WebSocket
    * upgrades and EventSource under the prefix reach the same listener. */
   readonly url: string;
   /** Direct request from the page to the guest listener, without the prefix: `path` is
@@ -106,6 +114,11 @@ export interface RuntimeHost {
    * of these root-absolute prefixes go to the page's real server instead of the guest
    * (`['/api']`). Routing only. Replaces the previous list for that port. */
   setHostPaths(port: number, prefixes: readonly string[]): void;
+  /** Optional. Root-absolute prefixes that the frame of `endpoint(port)` requests
+   * (`{ '/api': 3001 }`: its app calls `/api/…` as if it were at the root of its own
+   * server), each answered by the guest listener on the given port, which sees the path as
+   * asked. For an app whose backend runs in the guest too. Replaces the previous routes. */
+  setGuestPaths?(port: number, routes: Readonly<Record<string, number>>): void;
   /** Optional. Called once the preview and the agent are up (or have failed): the runtime may
    * now use the network for what it held back for them (the rest of the image download). */
   started?(): void;

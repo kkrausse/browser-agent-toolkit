@@ -1,15 +1,16 @@
 // What this page sees, sent to a collector so a failure on someone else's device can be read
 // afterwards: start-up stages, errors, the OpenCode server's output and the terminal's screen.
-// `?diag=<url>` names the collector (default: this host, port 4311, mock-model.ts); `?diag=0` turns it off.
+// `?diag=<url>` names the collector (default: the one the page was built with, else this host,
+// port 4311, mock-model.ts); `?diag=0` turns it off.
 export interface Diag {
   event(kind: string, data?: unknown): void
   /** Sends the screen whenever it has changed. */
   watchScreen(screen: () => string[]): void
 }
 
-export function installDiag(params: URLSearchParams): Diag {
+export function installDiag(params: URLSearchParams, built?: string): Diag {
   const given = params.get('diag')
-  const url = given === '0' ? null : given ?? `${location.protocol}//${location.hostname}:4311/diag`
+  const url = given === '0' ? null : given ?? built ?? `${location.protocol}//${location.hostname}:4311/diag`
   const id = Math.random().toString(36).slice(2, 8)
   let queue: unknown[] = [], timer: ReturnType<typeof setTimeout> | undefined
   const flush = () => {
