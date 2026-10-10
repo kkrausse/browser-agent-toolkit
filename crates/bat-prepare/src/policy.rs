@@ -20,7 +20,8 @@ pub struct Policy {
     pub programs: Vec<ProgramSpec>,
     #[serde(default)]
     pub launch: Map<String, Value>,
-    /// Directory `dir:` substitutions are relative to (the policy file's directory).
+    /// Directory `dir:` paths are relative to: the policy file's directory; for the
+    /// embedded policy `$BAT_POLICY_BASE`, else `data/` of the crate the tool was built from.
     #[serde(skip)]
     pub base: Option<PathBuf>,
 }
@@ -34,6 +35,19 @@ pub struct Substitution {
     pub with: String,
     /// File that must exist in the installed replacement, relative to its package root.
     pub expect: Option<String>,
+    /// `dir:<path>`: files laid over the installed replacement (a shim in front of the
+    /// package it falls back to). `package.overlay.json` is merged into the installed
+    /// `package.json` (top-level keys replace); the directory's own `package.json`,
+    /// `node_modules` and `.git` are not copied.
+    pub overlay: Option<String>,
+}
+
+impl Policy {
+    /// The local directory a `dir:<path>` value names.
+    pub fn local_dir(&self, value: &str) -> Option<PathBuf> {
+        let dir = value.strip_prefix("dir:")?;
+        Some(self.base.as_deref().unwrap_or(Path::new(".")).join(dir))
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -103,7 +117,10 @@ pub fn load(path: Option<&Path>) -> Result<(Policy, String)> {
             std::fs::read_to_string(path).with_context(|| format!("read policy {}", path.display()))?,
             path.canonicalize()?.parent().map(Path::to_path_buf),
         ),
-        None => (DEFAULT_POLICY.to_string(), None),
+        None => (
+            DEFAULT_POLICY.to_string(),
+            Some(std::env::var_os("BAT_POLICY_BASE").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/data")))),
+        ),
     };
     let mut policy: Policy = serde_json::from_str(&text).context("parse policy")?;
     policy.base = base;

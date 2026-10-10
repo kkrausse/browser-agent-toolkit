@@ -246,8 +246,10 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
         }
     }
     for sub in &policy.substitutions {
-        if let Some(dir) = sub.with.strip_prefix("dir:") {
-            fp.tree(&format!("shim:{dir}"), &policy.base.as_deref().unwrap_or(Path::new(".")).join(dir))?;
+        for value in [Some(&sub.with), sub.overlay.as_ref()].into_iter().flatten() {
+            if let Some(dir) = policy.local_dir(value) {
+                fp.tree(&format!("shim:{value}"), &dir)?;
+            }
         }
     }
     if let Some(dir) = application_dir {

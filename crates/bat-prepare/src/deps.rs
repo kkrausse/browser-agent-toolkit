@@ -181,6 +181,41 @@ pub fn copy_tree(from: &Path, to: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Lay a shim directory over an installed package. Existing files are replaced, never
+/// written through: the installed file may be a hard link into Bun's cache.
+fn overlay_package(from: &Path, package: &Path) -> Result<()> {
+    fn lay(from: &Path, to: &Path, top: bool) -> Result<()> {
+        fs::create_dir_all(to)?;
+        for entry in fs::read_dir(from).with_context(|| format!("read {}", from.display()))? {
+            let entry = entry?;
+            let name = entry.file_name();
+            if name == "node_modules" || name == ".git" || (top && (name == "package.json" || name == "package.overlay.json")) {
+                continue;
+            }
+            let (source, target) = (entry.path(), to.join(&name));
+            if fs::metadata(&source)?.is_dir() {
+                lay(&source, &target, false)?;
+            } else {
+                if fs::symlink_metadata(&target).is_ok() {
+                    fs::remove_file(&target)?;
+                }
+                fs::copy(&source, &target).with_context(|| format!("copy {}", source.display()))?;
+            }
+        }
+        Ok(())
+    }
+    lay(from, package, true)?;
+    if let Ok(text) = fs::read_to_string(from.join("package.overlay.json")) {
+        let over: Map<String, Value> = serde_json::from_str(&text).context("parse package.overlay.json")?;
+        let manifest_path = package.join("package.json");
+        let mut manifest: Map<String, Value> = serde_json::from_str(&fs::read_to_string(&manifest_path)?).context("parse installed package.json")?;
+        manifest.extend(over);
+        fs::remove_file(&manifest_path)?;
+        fs::write(&manifest_path, serde_json::to_string_pretty(&manifest)? + "\n")?;
+    }
+    Ok(())
+}
+
 fn all_dependencies(pkg: &Value) -> impl Iterator<Item = (&String, &Value)> {
     ["dependencies", "devDependencies", "optionalDependencies"]
         .into_iter()
@@ -669,8 +704,7 @@ pub fn prepare(options: DepsOptions) -> Result<Deps> {
         if !is_plain_version(&version) {
             bail!("unsupported locked version {}@{version}", sub.package);
         }
-        let value = if let Some(dir) = sub.with.strip_prefix("dir:") {
-            let source = policy.base.as_deref().unwrap_or(Path::new(".")).join(dir);
+        let value = if let Some(source) = policy.local_dir(&sub.with) {
             let name = sub.package.replace(['/', '@'], "_");
             copy_tree(&source, &stage.join(".bat-shims").join(&name))
                 .with_context(|| format!("shim package for {}", sub.package))?;
@@ -727,6 +761,10 @@ pub fn prepare(options: DepsOptions) -> Result<Deps> {
                 sub.expect.as_ref().map(|f| format!(" with {f}")).unwrap_or_default());
         };
         applied.installed = Some(root.strip_prefix(&node_modules)?.to_string_lossy().into_owned());
+        if let Some(overlay) = sub.overlay.as_deref() {
+            let source = policy.local_dir(overlay).ok_or_else(|| anyhow!("overlay for {} must be dir:<path>", sub.package))?;
+            overlay_package(&source, root).with_context(|| format!("overlay for {}", sub.package))?;
+        }
     }
 
     // 3. Prune.
