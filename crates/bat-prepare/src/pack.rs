@@ -5,6 +5,7 @@ use anyhow::{anyhow, Context, Result};
 use bat_image::writer::{Builder, FileId};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::Read;
 use std::os::unix::fs::FileExt;
@@ -15,12 +16,17 @@ use std::time::Instant;
 pub const IMAGE_MTIME: u64 = 1_767_225_600;
 
 pub struct Compiled {
+    /// Loader-format function text. Empty = store facts only (failed, JSON, or the
+    /// compiled text is byte-identical to the source).
     pub code: Vec<u8>,
+    /// Facts word as stored in the image.
     pub facts: u32,
+    /// Facts blob (import/export lists), opaque here.
+    pub blob: Vec<u8>,
 }
 
 /// Module precompilation hook: `(guest absolute path, source bytes)` → compiled body and
-/// facts, or `None` when the file is not a module. A returned empty `code` stores facts only.
+/// facts, or `None` when the file is not a module.
 pub type Transform<'a> = dyn Fn(&str, &[u8]) -> Option<Compiled> + Sync + 'a;
 
 pub struct PackOptions<'a> {
@@ -30,9 +36,19 @@ pub struct PackOptions<'a> {
     /// Extra in-head sections `(id, payload)`.
     pub sections: Vec<(u32, Vec<u8>)>,
     pub align_log2: u32,
+    /// Guest paths whose compiled code goes to a program script instead of the image:
+    /// the entry keeps facts and blob, gets `IN_PROGRAM`, and the code is returned.
+    pub program_modules: HashSet<String>,
+}
+
+pub struct PackOutput {
+    pub stats: PackStats,
+    /// `(guest path, compiled)` for every path in `program_modules` that compiled.
+    pub program_code: Vec<(String, Compiled)>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PackStats {
     pub entries: u64,
     pub files: u64,
@@ -42,6 +58,10 @@ pub struct PackStats {
     pub compiled_modules: u64,
     pub compiled_bytes: u64,
     pub failed_modules: u64,
+    /// Modules with facts but no second body (compiled text equals the source, or JSON).
+    pub facts_only_modules: u64,
+    pub program_modules: u64,
+    pub facts_bytes: u64,
     pub head_bytes: u64,
     pub image_bytes: u64,
     pub sha256: String,
@@ -100,10 +120,10 @@ pub fn sha256_file(path: &Path) -> Result<String> {
 }
 
 /// Write `items` as an image at `out` (a temporary sibling is written and renamed).
-pub fn write_image(items: &[Item], options: PackOptions, out: &Path) -> Result<PackStats> {
+pub fn write_image(items: &[Item], options: PackOptions, out: &Path) -> Result<PackOutput> {
     let started = Instant::now();
     // Phase 1: transform module files (reads them; the bytes are kept for the write).
-    let prepared: Vec<Prepared> = items
+    let mut prepared: Vec<Prepared> = items
         .par_iter()
         .map(|item| -> Result<Prepared> {
             let Some(transform) = options.transform else { return Ok(Prepared { original: None, compiled: None }) };
@@ -124,13 +144,31 @@ pub fn write_image(items: &[Item], options: PackOptions, out: &Path) -> Result<P
         .collect::<Result<_>>()?;
     let transform_ms = started.elapsed().as_millis() as u64;
 
+    // Modules destined for a program script: keep facts in the image, move the code out.
+    let mut program_code = Vec::new();
+    if !options.program_modules.is_empty() {
+        for (item, prep) in items.iter().zip(prepared.iter_mut()) {
+            let guest = guest_path(&options.root, &item.path);
+            if !options.program_modules.contains(&guest) {
+                continue;
+            }
+            if let Some(compiled) = &mut prep.compiled {
+                if !compiled.code.is_empty() {
+                    compiled.facts |= bat_image::facts::IN_PROGRAM;
+                    let code = std::mem::take(&mut compiled.code);
+                    program_code.push((guest, Compiled { code, facts: compiled.facts, blob: compiled.blob.clone() }));
+                }
+            }
+        }
+    }
+
     // Phase 2: layout.
     let mut builder = Builder::new();
     builder.align_log2(options.align_log2).mtime(IMAGE_MTIME);
     let mut ids: Vec<Option<FileId>> = Vec::with_capacity(items.len());
     let mut stats = PackStats {
         entries: 0, files: 0, dirs: 0, symlinks: 0, body_bytes: 0, compiled_modules: 0, compiled_bytes: 0,
-        failed_modules: 0, head_bytes: 0, image_bytes: 0, sha256: String::new(), transform_ms, write_ms: 0, hash_ms: 0,
+        failed_modules: 0, facts_only_modules: 0, program_modules: 0, facts_bytes: 0, head_bytes: 0, image_bytes: 0, sha256: String::new(), transform_ms, write_ms: 0, hash_ms: 0,
     };
     for (item, prep) in items.iter().zip(&prepared) {
         let err = |e| anyhow!("{}: {e}", item.path);
@@ -148,11 +186,14 @@ pub fn write_image(items: &[Item], options: PackOptions, out: &Path) -> Result<P
                 let len = prep.original.as_ref().map(|b| b.len() as u64).unwrap_or(item.len());
                 let id = builder.file(&item.path, item.mode, len).map_err(err)?;
                 if let Some(c) = &prep.compiled {
-                    builder.set_compiled(id, c.code.len() as u64, c.facts).map_err(err)?;
-                    if c.code.is_empty() {
-                        if c.facts & bat_image::facts::FAILED != 0 {
-                            stats.failed_modules += 1;
-                        }
+                    builder.set_module(id, c.code.len() as u64, c.facts, c.blob.len() as u64).map_err(err)?;
+                    stats.facts_bytes += c.blob.len() as u64;
+                    if c.facts & bat_image::facts::FAILED != 0 {
+                        stats.failed_modules += 1;
+                    } else if c.facts & bat_image::facts::IN_PROGRAM != 0 {
+                        stats.program_modules += 1;
+                    } else if c.code.is_empty() {
+                        stats.facts_only_modules += 1;
                     } else {
                         stats.compiled_modules += 1;
                         stats.compiled_bytes += c.code.len() as u64;
@@ -205,6 +246,9 @@ pub fn write_image(items: &[Item], options: PackOptions, out: &Path) -> Result<P
         if let (Some(extent), Some(compiled)) = (extents.compiled, &prep.compiled) {
             file.write_all_at(&compiled.code, extent.offset)?;
         }
+        if let (Some(extent), Some(compiled)) = (extents.facts_blob, &prep.compiled) {
+            file.write_all_at(&compiled.blob, extent.offset)?;
+        }
         Ok(())
     })?;
     drop(file);
@@ -214,7 +258,7 @@ pub fn write_image(items: &[Item], options: PackOptions, out: &Path) -> Result<P
     stats.sha256 = sha256_file(&tmp)?;
     stats.hash_ms = hash_started.elapsed().as_millis() as u64;
     fs::rename(&tmp, out).with_context(|| format!("rename to {}", out.display()))?;
-    Ok(stats)
+    Ok(PackOutput { stats, program_code })
 }
 
 fn tmp_path(out: &Path) -> PathBuf {

@@ -32,7 +32,7 @@ impl std::error::Error for BuildError {}
 
 #[derive(Debug, Clone)]
 enum Node {
-    File { len: u32, compiled_len: u32, facts: u32 },
+    File { len: u32, compiled_len: u32, facts: u32, facts_len: u32 },
     Dir,
     Symlink { target: Vec<u8> },
 }
@@ -62,6 +62,8 @@ pub struct Builder {
 pub struct FileExtents {
     pub body: Extent,
     pub compiled: Option<Extent>,
+    /// Directly follows the compiled body.
+    pub facts_blob: Option<Extent>,
     /// Index of the entry in the finished image.
     pub index: u32,
 }
@@ -137,19 +139,23 @@ impl Builder {
     /// Add a regular file of `len` bytes. Paths are relative to the image root, `/`-separated.
     pub fn file(&mut self, path: &str, mode: u16, len: u64) -> Result<FileId, BuildError> {
         let len = u32::try_from(len).map_err(|_| BuildError::FileTooLarge(path.to_string()))?;
-        let i = self.add(path, mode, Node::File { len, compiled_len: 0, facts: 0 })?;
+        let i = self.add(path, mode, Node::File { len, compiled_len: 0, facts: 0, facts_len: 0 })?;
         self.files.push(i);
         Ok(FileId(self.files.len() - 1))
     }
 
-    /// Record a compiled body length (0 for none) and the facts word for a file.
-    pub fn set_compiled(&mut self, id: FileId, compiled_len: u64, facts: u32) -> Result<(), BuildError> {
+    /// Record the module record of a file: compiled body length (0 for none), the facts
+    /// word, and the facts blob length (0 for none).
+    pub fn set_module(&mut self, id: FileId, compiled_len: u64, facts: u32, blob_len: u64) -> Result<(), BuildError> {
         let entry = &mut self.entries[self.files[id.0]];
-        let new_len = u32::try_from(compiled_len)
-            .map_err(|_| BuildError::FileTooLarge(String::from_utf8_lossy(&entry.path).into_owned()))?;
-        if let Node::File { compiled_len, facts: f, .. } = &mut entry.node {
+        let too_large = || BuildError::FileTooLarge(String::from_utf8_lossy(&entry.path).into_owned());
+        let new_len = u32::try_from(compiled_len).map_err(|_| too_large())?;
+        let new_blob = u32::try_from(blob_len).map_err(|_| too_large())?;
+        new_len.checked_add(new_blob).ok_or_else(too_large)?;
+        if let Node::File { compiled_len, facts: f, facts_len, .. } = &mut entry.node {
             *compiled_len = new_len;
             *f = facts;
+            *facts_len = new_blob;
         }
         Ok(())
     }
@@ -274,10 +280,10 @@ impl Builder {
             }
         }
         for pos in 0..n {
-            if let Node::File { compiled_len, .. } = self.entries[order[pos]].node {
-                if compiled_len != 0 {
+            if let Node::File { compiled_len, facts_len, .. } = self.entries[order[pos]].node {
+                if compiled_len + facts_len != 0 {
                     compiled_off[pos] = cursor;
-                    cursor = round(cursor + compiled_len as u64);
+                    cursor = round(cursor + compiled_len as u64 + facts_len as u64);
                 }
             }
         }
@@ -310,13 +316,14 @@ impl Builder {
             put16(&mut head, o + 10, e.mode & 0o7777);
             put32(&mut head, o + 12, parent[pos]);
             match &e.node {
-                Node::File { len, compiled_len, facts } => {
+                Node::File { len, compiled_len, facts, facts_len } => {
                     head[o + 8] = KIND_FILE;
                     put64(&mut head, o + 16, body_off[pos]);
                     put32(&mut head, o + 24, *len);
                     put32(&mut head, o + 28, *compiled_len);
                     put64(&mut head, o + 32, compiled_off[pos]);
                     put32(&mut head, o + 40, *facts);
+                    put32(&mut head, o + 44, *facts_len);
                 }
                 Node::Dir => {
                     head[o + 8] = KIND_DIR;
@@ -348,10 +355,12 @@ impl Builder {
             .iter()
             .map(|&old| {
                 let pos = new_index[old] as usize;
-                let Node::File { len, compiled_len, .. } = self.entries[old].node else { unreachable!() };
+                let Node::File { len, compiled_len, facts_len, .. } = self.entries[old].node else { unreachable!() };
                 FileExtents {
                     body: Extent { offset: body_off[pos], len },
                     compiled: (compiled_len != 0).then_some(Extent { offset: compiled_off[pos], len: compiled_len }),
+                    facts_blob: (facts_len != 0)
+                        .then_some(Extent { offset: compiled_off[pos] + compiled_len as u64, len: facts_len }),
                     index: pos as u32,
                 }
             })
@@ -412,6 +421,10 @@ impl ImageFile {
     pub fn read_body(&self, index: u32) -> io::Result<Vec<u8>> {
         let extent = self.image().entry(index).body().ok_or_else(|| invalid(ImageError::NoBody))?;
         self.read_extent(extent)
+    }
+
+    pub fn read_facts_blob(&self, index: u32) -> io::Result<Option<Vec<u8>>> {
+        self.image().entry(index).facts_blob().map(|e| self.read_extent(e)).transpose()
     }
 
     pub fn read_compiled(&self, index: u32) -> io::Result<Option<Vec<u8>>> {

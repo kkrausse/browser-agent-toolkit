@@ -1,4 +1,9 @@
+mod app;
+mod deps;
+mod modules;
 mod pack;
+mod policy;
+mod program;
 mod tree;
 
 use anyhow::{bail, Result};
@@ -32,6 +37,51 @@ enum Command {
         #[arg(long, default_value_t = 4)]
         align_log2: u32,
     },
+    /// Prepare an app end to end: guest dependencies + application → image, program
+    /// scripts and manifest.json in `--out`. Unchanged inputs reuse the image.
+    App {
+        /// App directory containing package.json and bun.lock.
+        app: PathBuf,
+        #[arg(short, long)]
+        out: PathBuf,
+        /// Scratch and cache directory (default: `<out>.work`).
+        #[arg(long)]
+        work: Option<PathBuf>,
+        /// App-relative file or directory delivered as editable source (repeatable).
+        #[arg(long)]
+        source: Vec<String>,
+        /// Extra project file `<workspace-relative guest path>=<host file>` (repeatable).
+        #[arg(long)]
+        file: Vec<String>,
+        /// Guest policy JSON (default: the embedded data/guest-policy.json).
+        #[arg(long)]
+        policy: Option<PathBuf>,
+        /// Directory with the application files the policy pins (OpenCode `server.js`, wasm).
+        #[arg(long, env = "BAT_OPENCODE_DIR")]
+        opencode: Option<PathBuf>,
+        #[arg(long, default_value = "/workspace")]
+        workspace: String,
+        #[arg(long, default_value = "bun", env = "BAT_BUN")]
+        bun: String,
+        /// Rebuild the image even if the inputs are unchanged.
+        #[arg(long)]
+        force: bool,
+        /// JSON merged over the policy's preview launch description.
+        #[arg(long)]
+        preview: Option<String>,
+    },
+    /// Produce only the pruned guest node_modules tree in `--work` and report sizes.
+    Deps {
+        app: PathBuf,
+        #[arg(long)]
+        work: PathBuf,
+        #[arg(long)]
+        policy: Option<PathBuf>,
+        #[arg(long, default_value = "bun", env = "BAT_BUN")]
+        bun: String,
+    },
+    /// Print the embedded guest policy.
+    Policy,
     /// Print the header and, with a path, list a directory or describe an entry.
     Info {
         image: PathBuf,
@@ -53,7 +103,7 @@ fn main() -> Result<()> {
                 tree::walk(dir.as_ref(), prefix, &mut items)?;
             }
             let walk_ms = started.elapsed().as_millis();
-            let stats = pack::write_image(&items, pack::PackOptions { root, transform: None, sections: vec![], align_log2 }, &out)?;
+            let stats = pack::write_image(&items, pack::PackOptions { root, transform: None, sections: vec![], align_log2, program_modules: Default::default() }, &out)?.stats;
             let total_ms = started.elapsed().as_millis();
             println!("{}", serde_json::to_string_pretty(&stats)?);
             eprintln!("packed {} entries, {} bytes in {total_ms} ms (walk {walk_ms} ms)", stats.entries, stats.image_bytes);
@@ -65,6 +115,36 @@ fn main() -> Result<()> {
             Ok(())
         }
         Command::Info { image, path } => info(&image, path.as_deref()),
+        Command::Policy => {
+            print!("{}", policy::DEFAULT_POLICY);
+            Ok(())
+        }
+        Command::Deps { app, work, policy, bun } => {
+            let (policy, _) = policy::load(policy.as_deref())?;
+            let pinned = match &policy.application {
+                Some(application) => application.pinned()?,
+                None => vec![],
+            };
+            std::fs::create_dir_all(&work)?;
+            let deps = deps::prepare(deps::DepsOptions { app: &app, work: &work, policy: &policy, bun: &bun, application_files: &pinned })?;
+            println!("{}", serde_json::to_string_pretty(&serde_json::json!({ "nodeModules": deps.node_modules, "report": deps.report }))?);
+            Ok(())
+        }
+        Command::App { app, out, work, source, file, policy, opencode, workspace, bun, force, preview } => {
+            let work = work.unwrap_or_else(|| {
+                let mut name = out.file_name().unwrap_or_default().to_os_string();
+                name.push(".work");
+                out.with_file_name(name)
+            });
+            let files = file
+                .iter()
+                .map(|spec| spec.split_once('=').map(|(guest, host)| (guest.to_string(), PathBuf::from(host))).ok_or_else(|| anyhow::anyhow!("--file expects <guest path>=<host file>: {spec}")))
+                .collect::<Result<Vec<_>>>()?;
+            let preview = preview.map(|text| serde_json::from_str(&text)).transpose()?;
+            let summary = app::prepare_app(app::AppOptions { app, out, work, source, files, policy, application_dir: opencode, workspace, bun, force, preview })?;
+            println!("{}", serde_json::to_string_pretty(&summary)?);
+            Ok(())
+        }
     }
 }
 

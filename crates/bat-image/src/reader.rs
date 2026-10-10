@@ -17,20 +17,17 @@ pub const SECTION_RESOLUTION: u32 = 1;
 pub const SECTION_PROGRAMS: u32 = 2;
 pub const SECTION_META: u32 = 3;
 
-/// Facts word. Zero means "no facts recorded"; `FACT_KNOWN` is set whenever the
-/// module transform ran over the entry. Bits 8.. are reserved for `bat-modules`.
+/// Facts word. Bits 0..=23 are defined by `bat-modules` (module kind in bits 0..=2,
+/// zero = the transform did not classify the entry; see `docs/design/module-format.md`)
+/// and are stored verbatim. The top bits are set by `bat-prepare`.
 pub mod facts {
-    pub const KNOWN: u32 = 1 << 0;
-    /// Source is an ES module (otherwise CommonJS or not a module).
-    pub const ESM: u32 = 1 << 1;
-    /// Module has top-level await; the compiled body is an async function.
-    pub const TLA: u32 = 1 << 2;
-    /// Entry is JSON (`require` parses the original body; no compiled body).
-    pub const JSON: u32 = 1 << 3;
-    /// Transform failed; the loader must fall back to transforming at run time.
-    pub const FAILED: u32 = 1 << 4;
-    /// Compiled body is also present in a program script (see section 2).
-    pub const IN_PROGRAM: u32 = 1 << 5;
+    /// Mask of the bits owned by `bat-modules`.
+    pub const MODULE_MASK: u32 = 0x00ff_ffff;
+    /// The transform was attempted and failed; the loader transforms at run time.
+    pub const FAILED: u32 = 1 << 30;
+    /// The compiled body lives in a program script, not in the image (section 2
+    /// names the script). Without the script the loader transforms at run time.
+    pub const IN_PROGRAM: u32 = 1 << 31;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -81,6 +78,7 @@ pub struct Entry<'a> {
     compiled_len: u32,
     /// Module facts, see [`facts`].
     pub facts: u32,
+    facts_len: u32,
     target: &'a [u8],
 }
 
@@ -109,6 +107,18 @@ impl<'a> Entry<'a> {
     pub fn compiled(&self) -> Option<Extent> {
         (self.kind == Kind::File && self.compiled_len != 0)
             .then_some(Extent { offset: self.compiled_off, len: self.compiled_len })
+    }
+    /// Extent of the facts blob (import/export lists, format owned by `bat-modules`),
+    /// if any. It is stored directly after the compiled body.
+    pub fn facts_blob(&self) -> Option<Extent> {
+        (self.kind == Kind::File && self.facts_len != 0)
+            .then_some(Extent { offset: self.compiled_off + self.compiled_len as u64, len: self.facts_len })
+    }
+    /// Compiled body and facts blob as one extent, so one read returns both: the
+    /// first `compiled().len` bytes are code, the rest is the blob.
+    pub fn module_record(&self) -> Option<Extent> {
+        let len = self.compiled_len.checked_add(self.facts_len)?;
+        (self.kind == Kind::File && len != 0).then_some(Extent { offset: self.compiled_off, len })
     }
     /// Indices of this directory's children (sorted by name). Empty for non-directories.
     pub fn children(&self) -> Range<u32> {
@@ -336,6 +346,7 @@ impl<'a> Image<'a> {
             compiled_len: u32_at(r, 28),
             compiled_off: u64_at(r, 32),
             facts: u32_at(r, 40),
+            facts_len: u32_at(r, 44),
             target,
         }
     }

@@ -1,0 +1,79 @@
+{
+  "comment": "Guest preparation policy. Data, not code: later work replaces substitution entries with Rust-backed shim packages by changing `with` (e.g. to `dir:<path to shim package>`). See docs/design/image-format.md, 'Guest policy'.",
+  "substitutions": [
+    { "package": "esbuild", "with": "npm:esbuild-wasm@{version}", "expect": "esbuild.wasm" },
+    { "package": "rollup", "with": "npm:@rollup/wasm-node@{version}", "expect": "dist/wasm-node/bindings_wasm_bg.wasm" },
+    { "package": "lightningcss", "with": "npm:lightningcss-wasm@{version}", "expect": "lightningcss_node.wasm" },
+    {
+      "package": "@tailwindcss/oxide-wasm32-wasi",
+      "with": "https://registry.npmjs.org/@tailwindcss/oxide-wasm32-wasi/-/oxide-wasm32-wasi-{version}.tgz",
+      "expect": "tailwindcss-oxide.wasm32-wasi.wasm"
+    }
+  ],
+  "prune": {
+    "packages": ["@types/*", "bun-types"],
+    "nativePackages": true,
+    "extensions": [".node"],
+    "paths": [],
+    "duplicatesOfApplication": true
+  },
+  "application": {
+    "id": "opencode-server-process-2.0.3",
+    "guestDirectory": "/app",
+    "files": {
+      "server.js": { "bytes": 27721680, "sha256": "648140f53c48820106d4727fd29f1914f8f86a4e2c3f3430551eb9dd41a806b5" },
+      "tree-sitter-bash.wasm": { "bytes": 1380769, "sha256": "364f0a2cd385c792239423026ef442dbd073d34c396b7bc9e5932426b8e4aa5d" },
+      "tree-sitter-powershell.wasm": { "bytes": 983236, "sha256": "1d30b5a21866354aa2eb94845556f1e19126ff00e3335048719a0e6435b1c154" },
+      "tree-sitter.wasm": { "bytes": 205488, "sha256": "f38dcc4b43b818f9a0785bc1c6d5611a75ac4cdd428ff3f02757c34ca4e46d7f" }
+    },
+    "support": {
+      "guestDirectory": "/app/node_modules",
+      "manifest": { "name": "bat-opencode-support", "private": true, "dependencies": { "ripgrep": "0.3.1" } },
+      "lock": {
+        "lockfileVersion": 1,
+        "workspaces": { "": { "name": "bat-opencode-support", "dependencies": { "ripgrep": "0.3.1" } } },
+        "packages": {
+          "ripgrep": [
+            "ripgrep@0.3.1",
+            "",
+            { "bin": { "rg": "lib/rg.mjs", "ripgrep": "lib/rg.mjs" } },
+            "sha512-6bDtNIBh1qPviVIU685/4uv0Ap5t8eS4wiJhy/tR2LdIeIey9CVasENlGS+ul3HnTmGANIp7AjnfsztsRmALfQ=="
+          ]
+        }
+      },
+      "expect": [".bin/rg", "ripgrep/package.json"]
+    }
+  },
+  "programs": [{ "name": "opencode-server", "modules": ["/app/server.js"] }],
+  "launch": {
+    "preview": {
+      "entry": "/workspace/node_modules/vite/bin/vite.js",
+      "args": ["--configLoader", "native", "--host", "0.0.0.0", "--port", "5173", "--strictPort"],
+      "cwd": "/workspace",
+      "env": { "BROWSER_AGENT_GUEST": "1", "NODE_ENV": "development" },
+      "port": 5173,
+      "programs": []
+    },
+    "agent": {
+      "entry": "/app/server.js",
+      "args": [],
+      "cwd": "/app",
+      "env": {
+        "PATH": "/app/node_modules/.bin:/bin",
+        "RIPGREP_NODE_WASI": "0",
+        "HOME": "/workspace/.server/home",
+        "OPENCODE_TEST_HOME": "/workspace/.server/home",
+        "XDG_CONFIG_HOME": "/workspace/.server/config",
+        "XDG_STATE_HOME": "/workspace/.server/state",
+        "XDG_DATA_HOME": "/workspace/.server/data",
+        "XDG_CACHE_HOME": "/workspace/.server/cache",
+        "TMPDIR": "/workspace/.server/tmp",
+        "OPENCODE_TREE_SITTER_WASM_PATH": "/app/tree-sitter.wasm",
+        "OPENCODE_TREE_SITTER_BASH_WASM_PATH": "/app/tree-sitter-bash.wasm",
+        "OPENCODE_TREE_SITTER_POWERSHELL_WASM_PATH": "/app/tree-sitter-powershell.wasm"
+      },
+      "port": 4096,
+      "programs": ["opencode-server"]
+    }
+  }
+}

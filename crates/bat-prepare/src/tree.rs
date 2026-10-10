@@ -10,6 +10,7 @@ pub enum Source {
     /// Regular file read from the host when the image is written.
     Host { path: PathBuf, len: u64 },
     /// Bytes produced by prepare itself.
+    #[allow(dead_code)]
     Bytes(Vec<u8>),
     Dir,
     Symlink { target: String },

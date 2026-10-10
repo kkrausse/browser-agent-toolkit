@@ -1,0 +1,142 @@
+//! Guest preparation policy: substitutions, prune rules, application pins, launch
+//! descriptions. Loaded from `data/guest-policy.json` (embedded) or `--policy <file>`.
+
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+use std::path::{Path, PathBuf};
+
+pub const DEFAULT_POLICY: &str = include_str!("../data/guest-policy.json");
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Policy {
+    #[serde(default)]
+    pub substitutions: Vec<Substitution>,
+    #[serde(default)]
+    pub prune: Prune,
+    pub application: Option<Application>,
+    #[serde(default)]
+    pub programs: Vec<ProgramSpec>,
+    #[serde(default)]
+    pub launch: Map<String, Value>,
+    /// Directory `dir:` substitutions are relative to (the policy file's directory).
+    #[serde(skip)]
+    pub base: Option<PathBuf>,
+}
+
+/// If `package` is locked (at exactly one version), override it with `with`, where
+/// `{version}` is the locked version. `with` is an npm alias (`npm:name@{version}`), a
+/// tarball URL, or `dir:<path>` naming a local package directory (a shim).
+#[derive(Debug, Clone, Deserialize)]
+pub struct Substitution {
+    pub package: String,
+    pub with: String,
+    /// File that must exist in the installed replacement, relative to its package root.
+    pub expect: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Prune {
+    /// Package names, `*` allowed as a trailing wildcard.
+    #[serde(default)]
+    pub packages: Vec<String>,
+    /// Remove packages whose package.json restricts `os` or `cpu` (except `wasm32`).
+    #[serde(default)]
+    pub native_packages: bool,
+    /// File name suffixes removed anywhere in the tree.
+    #[serde(default)]
+    pub extensions: Vec<String>,
+    /// Paths relative to node_modules, `*` matches within one component, `**` any depth.
+    #[serde(default)]
+    pub paths: Vec<String>,
+    /// Remove files byte-identical to an application file (toolkit packages ship copies).
+    #[serde(default)]
+    pub duplicates_of_application: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Application {
+    pub id: String,
+    pub guest_directory: String,
+    pub files: Map<String, Value>,
+    pub support: Option<Support>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Pinned {
+    pub bytes: u64,
+    pub sha256: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Support {
+    pub guest_directory: String,
+    pub manifest: Value,
+    pub lock: Value,
+    #[serde(default)]
+    pub expect: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ProgramSpec {
+    pub name: String,
+    /// Guest absolute paths of the modules to emit, in registration order.
+    pub modules: Vec<String>,
+}
+
+impl Application {
+    pub fn pinned(&self) -> Result<Vec<(String, Pinned)>> {
+        self.files
+            .iter()
+            .map(|(name, value)| Ok((name.clone(), serde_json::from_value(value.clone()).with_context(|| format!("application file {name}"))?)))
+            .collect()
+    }
+}
+
+pub fn load(path: Option<&Path>) -> Result<(Policy, String)> {
+    let (text, base) = match path {
+        Some(path) => (
+            std::fs::read_to_string(path).with_context(|| format!("read policy {}", path.display()))?,
+            path.canonicalize()?.parent().map(Path::to_path_buf),
+        ),
+        None => (DEFAULT_POLICY.to_string(), None),
+    };
+    let mut policy: Policy = serde_json::from_str(&text).context("parse policy")?;
+    policy.base = base;
+    Ok((policy, text))
+}
+
+/// `pattern` with an optional trailing `*`.
+pub fn name_matches(pattern: &str, name: &str) -> bool {
+    match pattern.strip_suffix('*') {
+        Some(prefix) => name.starts_with(prefix),
+        None => pattern == name,
+    }
+}
+
+/// Glob over `/`-separated paths: `*` within a component, `**` across components.
+pub fn path_matches(pattern: &str, path: &str) -> bool {
+    fn component(p: &[u8], s: &[u8]) -> bool {
+        match (p.first(), s.first()) {
+            (None, None) => true,
+            (Some(b'*'), _) => component(&p[1..], s) || (!s.is_empty() && component(p, &s[1..])),
+            (Some(a), Some(b)) if a == b => component(&p[1..], &s[1..]),
+            _ => false,
+        }
+    }
+    fn parts(p: &[&str], s: &[&str]) -> bool {
+        match (p.first(), s.first()) {
+            (None, None) => true,
+            (Some(&"**"), _) => parts(&p[1..], s) || (!s.is_empty() && parts(p, &s[1..])),
+            (Some(a), Some(b)) if component(a.as_bytes(), b.as_bytes()) => parts(&p[1..], &s[1..]),
+            _ => false,
+        }
+    }
+    let p: Vec<&str> = pattern.split('/').collect();
+    let s: Vec<&str> = path.split('/').collect();
+    parts(&p, &s)
+}
