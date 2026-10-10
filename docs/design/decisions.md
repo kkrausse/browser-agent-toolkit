@@ -101,3 +101,58 @@
   (native Vite 7.3.6 and OpenCode 2.0.3, machine otherwise busy): preview listening 1.0 s
   after spawn, app visible 3.6 s after Open, agent verified 3.7 s after its spawn, chat
   attached 6.1 s after Open. These are native floors under load, not runtime numbers.
+
+## 2026-10-09 kernel: Wasm target and threading model (bat-kernel)
+
+- **Target `wasm32-wasip1-threads`, stable Rust, no wasm-bindgen, no nightly.** On stable,
+  `wasm32-unknown-unknown` cannot link a shared memory (std is built without atomics and
+  `-Zbuild-std` is nightly). `wasm32-wasip1-threads` ships std with atomics, imports a
+  shared memory and has real TLS. The price is five WASI imports std pulls in, stubbed in
+  `runtime/src/kernel/attach.ts`. Link arguments live in the crate's `build.rs`.
+- **Per-instance stack and TLS are installed by the host binding**, not by wasi-threads'
+  `wasi_thread_start`: the binding takes a boot lock word, calls `bat_thread_alloc` on the
+  module's boot stack, then sets the exported `__stack_pointer` and calls
+  `__wasm_init_tls`. This lets the page and any worker attach by themselves.
+- **Futex wait/notify are host imports** (`Atomics.wait`/`notify`): the wasm intrinsics are
+  unstable in Rust (`stdarch_wasm_atomic_wait`). They are reached only under contention or
+  when blocking, so the import cost is off the fast path (uncontended lock+unlock measured
+  at ~60 ns with five instances fighting over one lock).
+- **Own locks and own allocator.** std's `Mutex` and wasi-libc's malloc lock futex-wait,
+  which traps on the page. Kernel locks spin on threads that may not block; the heap is
+  the `dlmalloc` crate over `memory.grow` behind such a lock.
+- **Kill gate.** `worker.terminate()` can stop a worker inside a critical section and
+  leave a kernel lock held forever. Each thread counts held locks in shared memory; kerneld
+  marks the thread dying, waits for the count to reach zero (a dying thread parks at its
+  next acquisition), then terminates. Costs one store and one load per lock acquisition.
+- **Growth and views.** Any instance may grow the memory; `BAT_MEM_GEN` tells bindings to
+  re-create their views. The heap grows in ≥ 1 MiB steps to keep that rare.
+
+## 2026-10-09 kernel: filesystem and persistence choices (bat-kernel)
+
+- **Renaming a directory that is in an image returns `EXDEV`** (overlayfs behaviour
+  without redirect_dir). Moving it for real means copying the subtree; callers that hit
+  `EXDEV` already fall back to copy + delete. Image *files* are copied up on rename.
+- **Path normalization is lexical** before resolution (`a/link/..` is `a`). Symlink targets
+  are resolved against the real containing directory. Node normalizes paths itself before
+  calling the OS, so guests do not see the difference; the walk stays allocation-free.
+- **Image body cache: 128 KiB chunks, lock-free once loaded, no eviction yet.** Chunks
+  (not whole bodies) so neighbouring small files share one OPFS read and large files are
+  read incrementally. Worst case is the image size in memory (197 MB for the TODO tree).
+  Eviction needs a pin protocol with readers; deferred until memory pressure is measured.
+- **The page has no image handle** (`FileSystemSyncAccessHandle` is worker-only): a miss on
+  the page returns `EAGAIN`, kerneld loads the chunk, the page retries after
+  `BAT_FAULT_WORD` changes (`kernel.retrying`). The same proxy serves workers that started
+  before a mount.
+- **Journal is physical, not logical**: records name overlay nodes by number (node, link,
+  unlink, write, truncate, meta), so replay needs neither path resolution nor the images
+  and a snapshot is just a compacted journal in the same format. Mount points are ordinary
+  journaled directories; mounts themselves are re-applied by the host at each boot.
+- **Snapshots alternate between two OPFS files**, header written after the payload is
+  flushed; the journal is truncated only after the snapshot is durable. Journal frames carry
+  an FNV-1a checksum and the end sequence; a torn tail is truncated at restore.
+- **Spawn is a request to the supervisor, the executable format is the runner's business.**
+  The kernel records argv/env/cwd/stdio and queues the pid; kerneld hands it to the warm
+  spare worker, which runs a configured runner module. The kernel has no notion of node vs
+  WASI.
+- **bat-image needed nothing extra**: the kernel reads the head with one host call and uses
+  `Image<'static>` over it.
