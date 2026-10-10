@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Fri, 9 Oct 2026 22:20:50 -0700
+Subject: [PATCH] wasi: wasm-term port
+
+---
+ src/capabilities.rs | 2 +-
+ src/symlink.rs      | 8 +++++++-
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/src/capabilities.rs b/src/capabilities.rs
+index ec7c4c7..7d3b760 100644
+--- a/src/capabilities.rs
++++ b/src/capabilities.rs
+@@ -27,7 +27,7 @@ impl Default for Capabilities {
+     }
+ }
+ 
+-#[cfg(all(unix, not(target_os = "macos")))]
++#[cfg(any(all(unix, not(target_os = "macos")), target_os = "wasi"))]
+ impl Default for Capabilities {
+     fn default() -> Self {
+         Capabilities {
+diff --git a/src/symlink.rs b/src/symlink.rs
+index 5022332..e75b78a 100644
+--- a/src/symlink.rs
++++ b/src/symlink.rs
+@@ -3,11 +3,17 @@ use std::{io, io::ErrorKind::AlreadyExists, path::Path};
+ /// Create a new symlink at `link` which points to `original`.
+ ///
+ /// Note that `original` doesn't have to exist.
+-#[cfg(not(windows))]
++#[cfg(unix)]
+ pub fn create(original: &Path, link: &Path) -> io::Result<()> {
+     std::os::unix::fs::symlink(original, link)
+ }
+ 
++/// Create a new symlink at `link` which points to `original` (wasm-term port: WASI).
++#[cfg(target_os = "wasi")]
++pub fn create(original: &Path, link: &Path) -> io::Result<()> {
++    std::os::wasi::fs::symlink_path(original, link)
++}
++
+ /// Remove a symlink.
+ ///
+ /// Note that on only on windows this is special.

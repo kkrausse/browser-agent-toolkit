@@ -1,0 +1,359 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Fri, 9 Oct 2026 22:18:03 -0700
+Subject: [PATCH] wasi: process/signal stand-ins, inline blocking pool without
+ threads
+
+---
+ src/lib.rs                   |   8 ++
+ src/runtime/blocking/pool.rs |  14 ++
+ src/wasi_stubs/mod.rs        |   7 +
+ src/wasi_stubs/process.rs    | 263 +++++++++++++++++++++++++++++++++++
+ src/wasi_stubs/signal.rs     |  10 ++
+ 5 files changed, 302 insertions(+)
+ create mode 100644 src/wasi_stubs/mod.rs
+ create mode 100644 src/wasi_stubs/process.rs
+ create mode 100644 src/wasi_stubs/signal.rs
+
+diff --git a/src/lib.rs b/src/lib.rs
+index 7da7e21..a27849f 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -519,6 +519,14 @@ cfg_process! {
+     pub mod process;
+ }
+ 
++// wasm-term port: API-compatible stand-ins where WASI has no backend.
++#[cfg(target_os = "wasi")]
++mod wasi_stubs;
++#[cfg(all(target_os = "wasi", feature = "process"))]
++pub use wasi_stubs::process;
++#[cfg(all(target_os = "wasi", feature = "signal"))]
++pub use wasi_stubs::signal;
++
+ #[cfg(any(
+     feature = "fs",
+     feature = "io-std",
+diff --git a/src/runtime/blocking/pool.rs b/src/runtime/blocking/pool.rs
+index dae98bc..3059f1e 100644
+--- a/src/runtime/blocking/pool.rs
++++ b/src/runtime/blocking/pool.rs
+@@ -432,6 +432,20 @@ impl Spawner {
+                             // The task will be picked up eventually by a currently
+                             // busy thread.
+                         }
++                        // wasm-term port: plain wasm32-wasip1 has no threads at
++                        // all, so run the blocking closure right here instead
++                        // of failing every `spawn_blocking` / `tokio::fs` call.
++                        #[cfg(all(target_os = "wasi", not(target_feature = "atomics")))]
++                        Err(_) => {
++                            let task = shared.queue.pop_back();
++                            self.inner.metrics.dec_queue_depth();
++                            drop(shared);
++                            if let Some(task) = task {
++                                task.run();
++                            }
++                            return Ok(());
++                        }
++                        #[cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))]
+                         Err(e) => {
+                             // The OS refused to spawn the thread and there is no thread
+                             // to pick up the task that has just been pushed to the queue.
+diff --git a/src/wasi_stubs/mod.rs b/src/wasi_stubs/mod.rs
+new file mode 100644
+index 0000000..7eb67d1
+--- /dev/null
++++ b/src/wasi_stubs/mod.rs
+@@ -0,0 +1,7 @@
++//! Stand-ins for the parts of tokio that have no WASI preview1 backend.
++//! Part of the wasm-term port; not upstream tokio.
++
++#[cfg(feature = "process")]
++pub mod process;
++#[cfg(feature = "signal")]
++pub mod signal;
+diff --git a/src/wasi_stubs/process.rs b/src/wasi_stubs/process.rs
+new file mode 100644
+index 0000000..f11dc1a
+--- /dev/null
++++ b/src/wasi_stubs/process.rs
+@@ -0,0 +1,263 @@
++//! `tokio::process` for `wasm32-wasip1`: the API surface, with no way to
++//! start a process. WASI preview1 has no fork/exec, and `std::process` on the
++//! target fails every spawn with `ErrorKind::Unsupported`; this module does
++//! the same so that crates written against `tokio::process` keep compiling and
++//! see an ordinary I/O error at run time.
++
++use crate::io::{AsyncRead, AsyncWrite, ReadBuf};
++use std::ffi::OsStr;
++use std::future::Future;
++use std::io;
++use std::path::Path;
++use std::pin::Pin;
++use std::process::{Command as StdCommand, ExitStatus, Output, Stdio};
++use std::task::{Context, Poll};
++
++fn unsupported<T>() -> io::Result<T> {
++    Err(io::Error::new(
++        io::ErrorKind::Unsupported,
++        "processes cannot be spawned on this target (wasm32-wasip1)",
++    ))
++}
++
++/// See the native `tokio::process::Command`.
++#[derive(Debug)]
++pub struct Command {
++    std: StdCommand,
++    kill_on_drop: bool,
++}
++
++impl Command {
++    /// Constructs a new `Command` for launching `program`.
++    pub fn new<S: AsRef<OsStr>>(program: S) -> Command {
++        Command {
++            std: StdCommand::new(program),
++            kill_on_drop: false,
++        }
++    }
++
++    /// Borrows the underlying `std::process::Command`.
++    pub fn as_std(&self) -> &StdCommand {
++        &self.std
++    }
++
++    /// Mutably borrows the underlying `std::process::Command`.
++    pub fn as_std_mut(&mut self) -> &mut StdCommand {
++        &mut self.std
++    }
++
++    /// Unwraps the underlying `std::process::Command`.
++    pub fn into_std(self) -> StdCommand {
++        self.std
++    }
++
++    /// Adds an argument.
++    pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> &mut Command {
++        self.std.arg(arg);
++        self
++    }
++
++    /// Adds arguments.
++    pub fn args<I, S>(&mut self, args: I) -> &mut Command
++    where
++        I: IntoIterator<Item = S>,
++        S: AsRef<OsStr>,
++    {
++        self.std.args(args);
++        self
++    }
++
++    /// Sets an environment variable.
++    pub fn env<K, V>(&mut self, key: K, val: V) -> &mut Command
++    where
++        K: AsRef<OsStr>,
++        V: AsRef<OsStr>,
++    {
++        self.std.env(key, val);
++        self
++    }
++
++    /// Sets environment variables.
++    pub fn envs<I, K, V>(&mut self, vars: I) -> &mut Command
++    where
++        I: IntoIterator<Item = (K, V)>,
++        K: AsRef<OsStr>,
++        V: AsRef<OsStr>,
++    {
++        self.std.envs(vars);
++        self
++    }
++
++    /// Removes an environment variable.
++    pub fn env_remove<K: AsRef<OsStr>>(&mut self, key: K) -> &mut Command {
++        self.std.env_remove(key);
++        self
++    }
++
++    /// Clears the environment.
++    pub fn env_clear(&mut self) -> &mut Command {
++        self.std.env_clear();
++        self
++    }
++
++    /// Sets the working directory.
++    pub fn current_dir<P: AsRef<Path>>(&mut self, dir: P) -> &mut Command {
++        self.std.current_dir(dir);
++        self
++    }
++
++    /// Configures stdin.
++    pub fn stdin<T: Into<Stdio>>(&mut self, cfg: T) -> &mut Command {
++        self.std.stdin(cfg);
++        self
++    }
++
++    /// Configures stdout.
++    pub fn stdout<T: Into<Stdio>>(&mut self, cfg: T) -> &mut Command {
++        self.std.stdout(cfg);
++        self
++    }
++
++    /// Configures stderr.
++    pub fn stderr<T: Into<Stdio>>(&mut self, cfg: T) -> &mut Command {
++        self.std.stderr(cfg);
++        self
++    }
++
++    /// Records the kill-on-drop preference (no effect: nothing can be spawned).
++    pub fn kill_on_drop(&mut self, kill_on_drop: bool) -> &mut Command {
++        self.kill_on_drop = kill_on_drop;
++        self
++    }
++
++    /// Returns the kill-on-drop preference.
++    pub fn get_kill_on_drop(&self) -> bool {
++        self.kill_on_drop
++    }
++
++    /// Always fails with `ErrorKind::Unsupported`.
++    pub fn spawn(&mut self) -> io::Result<Child> {
++        unsupported()
++    }
++
++    /// Always fails with `ErrorKind::Unsupported`.
++    pub fn status(&mut self) -> impl Future<Output = io::Result<ExitStatus>> {
++        std::future::ready(unsupported())
++    }
++
++    /// Always fails with `ErrorKind::Unsupported`.
++    pub fn output(&mut self) -> impl Future<Output = io::Result<Output>> {
++        std::future::ready(unsupported())
++    }
++}
++
++impl From<StdCommand> for Command {
++    fn from(std: StdCommand) -> Command {
++        Command {
++            std,
++            kill_on_drop: false,
++        }
++    }
++}
++
++/// See the native `tokio::process::Child`. Never constructed on this target.
++#[derive(Debug)]
++pub struct Child {
++    /// The child's stdin, if piped.
++    pub stdin: Option<ChildStdin>,
++    /// The child's stdout, if piped.
++    pub stdout: Option<ChildStdout>,
++    /// The child's stderr, if piped.
++    pub stderr: Option<ChildStderr>,
++}
++
++impl Child {
++    /// The OS process id.
++    pub fn id(&self) -> Option<u32> {
++        None
++    }
++
++    /// Starts killing the child.
++    pub fn start_kill(&mut self) -> io::Result<()> {
++        unsupported()
++    }
++
++    /// Kills the child and waits for it.
++    pub async fn kill(&mut self) -> io::Result<()> {
++        unsupported()
++    }
++
++    /// Waits for the child to exit.
++    pub async fn wait(&mut self) -> io::Result<ExitStatus> {
++        unsupported()
++    }
++
++    /// Checks whether the child has exited.
++    pub fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
++        unsupported()
++    }
++
++    /// Waits for the child and collects its output.
++    pub async fn wait_with_output(self) -> io::Result<Output> {
++        unsupported()
++    }
++}
++
++macro_rules! child_pipe {
++    ($name:ident) => {
++        /// A child process pipe. Never constructed on this target.
++        #[derive(Debug)]
++        pub struct $name {
++            _private: (),
++        }
++
++        impl $name {
++            /// Always fails with `ErrorKind::Unsupported`.
++            pub fn from_std(_inner: std::process::$name) -> io::Result<Self> {
++                unsupported()
++            }
++        }
++    };
++}
++
++child_pipe!(ChildStdin);
++child_pipe!(ChildStdout);
++child_pipe!(ChildStderr);
++
++impl AsyncWrite for ChildStdin {
++    fn poll_write(
++        self: Pin<&mut Self>,
++        _cx: &mut Context<'_>,
++        _buf: &[u8],
++    ) -> Poll<io::Result<usize>> {
++        Poll::Ready(unsupported())
++    }
++
++    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
++        Poll::Ready(Ok(()))
++    }
++
++    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
++        Poll::Ready(Ok(()))
++    }
++}
++
++impl AsyncRead for ChildStdout {
++    fn poll_read(
++        self: Pin<&mut Self>,
++        _cx: &mut Context<'_>,
++        _buf: &mut ReadBuf<'_>,
++    ) -> Poll<io::Result<()>> {
++        Poll::Ready(Ok(()))
++    }
++}
++
++impl AsyncRead for ChildStderr {
++    fn poll_read(
++        self: Pin<&mut Self>,
++        _cx: &mut Context<'_>,
++        _buf: &mut ReadBuf<'_>,
++    ) -> Poll<io::Result<()>> {
++        Poll::Ready(Ok(()))
++    }
++}
+diff --git a/src/wasi_stubs/signal.rs b/src/wasi_stubs/signal.rs
+new file mode 100644
+index 0000000..88edbc3
+--- /dev/null
++++ b/src/wasi_stubs/signal.rs
+@@ -0,0 +1,10 @@
++//! `tokio::signal` for `wasm32-wasip1`: there are no asynchronous signals, so
++//! `ctrl_c` never completes. (Terminal signals reach a wasm-term guest through
++//! a signalfd-style descriptor instead; see the crossterm WASI backend.)
++
++use std::io;
++
++/// Completes when Ctrl-C is delivered to the process: never, on this target.
++pub async fn ctrl_c() -> io::Result<()> {
++    std::future::pending().await
++}

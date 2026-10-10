@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Fri, 9 Oct 2026 22:20:50 -0700
+Subject: [PATCH] wasi: wasm-term port
+
+---
+ src/lib.rs | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/lib.rs b/src/lib.rs
+index 60045d8..bd494d9 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -56,6 +56,11 @@ pub fn gethostname() -> OsString {
+     {
+         get_computer_physical_dns_hostname()
+     }
++    // wasm-term port: WASI preview1 has no uname/gethostname.
++    #[cfg(not(any(unix, windows)))]
++    {
++        std::env::var_os("HOSTNAME").unwrap_or_else(|| OsString::from("localhost"))
++    }
+ }
+ 
+ #[cfg(windows)]

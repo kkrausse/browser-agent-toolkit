@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Fri, 9 Oct 2026 22:20:50 -0700
+Subject: [PATCH] wasi: wasm-term port
+
+---
+ src/shutdown.rs | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/src/shutdown.rs b/src/shutdown.rs
+index ef2cec7..3f61371 100644
+--- a/src/shutdown.rs
++++ b/src/shutdown.rs
+@@ -485,7 +485,7 @@ impl Shutdown {
+ ///
+ /// [`Future`]: std::future::Future
+ /// [`tokio::time::sleep`]: https://docs.rs/tokio/*/tokio/time/fn.sleep.html
+-#[cfg(all(not(loom), any(unix, windows)))]
++#[cfg(all(not(loom), any(unix, windows, target_os = "wasi")))]
+ pub async fn default_signal() {
+     let ctrl_c = tokio::signal::ctrl_c();
+     #[cfg(all(unix, not(windows)))]
+@@ -501,6 +501,11 @@ pub async fn default_signal() {
+             _ = signal => {}
+         }
+     }
++    // wasm-term port: no OS signals on WASI; ctrl_c never completes there.
++    #[cfg(target_os = "wasi")]
++    {
++        let _ = ctrl_c.await;
++    }
+     #[cfg(all(not(unix), windows))]
+     {
+         let ctrl_close = async {
+@@ -521,7 +526,7 @@ pub async fn default_signal() {
+     }
+ }
+ 
+-#[cfg(all(not(loom), any(unix, windows)))]
++#[cfg(all(not(loom), any(unix, windows, target_os = "wasi")))]
+ impl Default for Shutdown {
+     fn default() -> Self {
+         Self::new(default_signal())

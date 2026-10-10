@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Fri, 9 Oct 2026 22:22:00 -0700
+Subject: [PATCH] wasi: TcpStream::connect stand-in
+
+---
+ src/net/tcp/stream.rs | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/net/tcp/stream.rs b/src/net/tcp/stream.rs
+index 0621edc..b43c2fe 100644
+--- a/src/net/tcp/stream.rs
++++ b/src/net/tcp/stream.rs
+@@ -79,7 +79,7 @@ impl TcpStream {
+     /// wasm-term port: WASI preview1 cannot open sockets; fail like an
+     /// unreachable network so callers written against the native API compile.
+     #[cfg(all(target_os = "wasi", target_env = "p1"))]
+-    pub async fn connect<A: ToSocketAddrs>(_addr: A) -> io::Result<TcpStream> {
++    pub async fn connect<A: crate::net::ToSocketAddrs>(_addr: A) -> io::Result<TcpStream> {
+         Err(io::Error::new(
+             io::ErrorKind::Unsupported,
+             "TCP connections are not available on wasm32-wasip1",
