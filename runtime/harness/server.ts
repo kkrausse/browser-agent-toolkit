@@ -13,7 +13,7 @@
 //   /prepared-revalidate/<tag>/<file>  same bytes, no-cache (ETag revalidation)
 //   /prepared-nocache/<file>  same bytes, no-store
 //   /sw-cache/<tag>/<file>    answered by harness/sw.js from Cache Storage (page query sw=1)
-//   /kernel.wasm           the kernel build (target-runtime if present, else target-kernel)
+//   /kernel.wasm           the kernel build ($BAT_KERNEL_WASM, else target/ from `bun run setup`)
 import { existsSync, statSync } from 'node:fs'
 import { join, normalize } from 'node:path'
 
@@ -21,12 +21,18 @@ const here = import.meta.dir
 const root = normalize(join(here, '../..'))
 const port = Number(process.argv[2] ?? process.env.PORT ?? 4102)
 const dist = join(here, '../dist')
-// The node-runtime agent's own prepare output (built with its bat-modules fix) wins over the prepare agent's.
-const prepared = process.env.BAT_PREPARED ?? [join(root, 'target-runtime/prepared/todo'), join(root, 'target-prepare/out/todo-new')].find((d) => existsSync(join(d, 'manifest.json')))!
+// The example's prepared output after `bun run setup` + `bun run prepare:editor` (or `bun run editor`);
+// the build directories of earlier work are tried after it.
+const preparedDirs = [join(root, 'examples/todo-app/.editor/prepared'), join(root, 'target-runtime/prepared/todo'), join(root, 'target-prepare/out/todo-new')]
+const prepared = process.env.BAT_PREPARED ?? preparedDirs.find((d) => existsSync(join(d, 'manifest.json')))
+if (!prepared) throw Error(`No prepared output: run \`bun run setup\` and \`bun run prepare:editor\` in examples/todo-app, or set BAT_PREPARED (looked in ${preparedDirs.join(', ')})`)
 const kernelWasm = () => {
   if (process.env.BAT_KERNEL_WASM) return process.env.BAT_KERNEL_WASM
-  const candidates = ['target-runtime', 'target-kernel'].map((t) => join(root, t, 'wasm32-wasip1-threads/release/bat_kernel.wasm')).filter(existsSync)
-  return candidates.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]
+  const built = (t: string) => join(root, t, 'wasm32-wasip1-threads/release/bat_kernel.wasm')
+  // The setup's own build wins; else the newest of the older build directories.
+  const own = built(process.env.CARGO_TARGET_DIR ?? 'target')
+  if (existsSync(own)) return own
+  return ['target-runtime', 'target-kernel'].map(built).filter(existsSync).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]
 }
 
 const isolation = {
