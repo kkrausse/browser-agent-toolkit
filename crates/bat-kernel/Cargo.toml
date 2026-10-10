@@ -1,0 +1,11 @@
+[package]
+name = "bat-kernel"
+version = "0.1.0"
+edition = "2021"
+description = "Library kernel: one Wasm module instantiated in every worker over one shared memory"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+dlmalloc = { version = "0.2", default-features = false }
