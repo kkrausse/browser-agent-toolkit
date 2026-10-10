@@ -6,7 +6,7 @@
 #   codex      openai/codex               tag rust-v0.162.0
 #   crossterm  openai-oss-forks/crossterm rev ed1cdab (the rev codex-rs/Cargo.toml patches in)
 #   tokio      crates.io 1.52.3           (the version in codex-rs/Cargo.lock)
-#   forks      crates.io, versions below  (from codex-rs/Cargo.lock)
+#   forks      crates.io, versions in scripts/forks.txt (from codex-rs/Cargo.lock)
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 V="$WASM_TERM_DIR/vendor"
@@ -40,10 +40,10 @@ fork() { # <name> <version> [dest]
   am "$dest" "$patches"
 }
 fork tokio 1.52.3 "$V/tokio"
-fork gethostname 1.1.0
-fork gix-fs 0.19.2
-fork rustls-native-certs 0.8.3
-fork tokio-graceful 0.2.2
+# crates.io leaves with a WASI arm added: "<name> <version>" per line.
+while read -r name version; do
+  [ -n "$name" ] && fork "$name" "$version"
+done < "$PORT_DIR/scripts/forks.txt"
 if [ ! -d "$WASI_SDK_PATH" ]; then
   mkdir -p "$V/tools"
   curl -sL https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz | tar xz -C "$V/tools"

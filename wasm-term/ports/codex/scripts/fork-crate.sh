@@ -17,4 +17,5 @@ git add -A -f
 git -c user.name=port -c user.email=port@local commit -qm "$name $version (crates.io)"
 git branch -m upstream
 git checkout -q -b wasm-term-port
+grep -qx "$name $version" "$PORT_DIR/scripts/forks.txt" || echo "$name $version" >> "$PORT_DIR/scripts/forks.txt"
 echo "forked $name $version -> $dest"

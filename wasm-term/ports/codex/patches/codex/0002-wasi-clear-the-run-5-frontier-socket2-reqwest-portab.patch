@@ -1,0 +1,413 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Fri, 9 Oct 2026 22:39:15 -0700
+Subject: [PATCH] wasi: clear the run-5 frontier (socket2, reqwest,
+ portable-pty, rama, tonic, otel, gates)
+
+---
+ codex-rs/Cargo.lock                            | 18 ------------------
+ codex-rs/Cargo.toml                            |  9 +++++++++
+ codex-rs/core-plugins/Cargo.toml               |  8 +++++++-
+ codex-rs/http-client/Cargo.toml                |  5 ++++-
+ .../http-client/src/route_aware_client_pool.rs |  8 +++++---
+ codex-rs/mxc-sandbox/Cargo.toml                |  3 +++
+ codex-rs/tui/Cargo.toml                        |  2 +-
+ codex-rs/tui/src/app/right_click_paste.rs      |  2 +-
+ .../tui/src/chatwidget/transcript_export.rs    |  2 +-
+ codex-rs/tui/src/clipboard_copy.rs             |  6 +++---
+ codex-rs/tui/src/clipboard_paste.rs            |  8 ++++----
+ codex-rs/tui/src/clipboard_paste/text.rs       |  6 +++---
+ codex-rs/tui/src/clock_format.rs               |  8 ++++----
+ codex-rs/tui/src/ide_context/ipc.rs            |  4 ++--
+ codex-rs/tui/src/slash_command.rs              |  2 +-
+ 15 files changed, 48 insertions(+), 43 deletions(-)
+
+diff --git a/codex-rs/Cargo.lock b/codex-rs/Cargo.lock
+index eacb640..8c8b9fc 100644
+--- a/codex-rs/Cargo.lock
++++ b/codex-rs/Cargo.lock
+@@ -11162,8 +11162,6 @@ dependencies = [
+ [[package]]
+ name = "opentelemetry-http"
+ version = "0.31.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "d7a6d09a73194e6b66df7c8f1b680f156d916a1a942abf2de06823dd02b7855d"
+ dependencies = [
+  "async-trait",
+  "bytes",
+@@ -11748,8 +11746,6 @@ dependencies = [
+ [[package]]
+ name = "portable-pty"
+ version = "0.9.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "b4a596a2b3d2752d94f51fac2d4a96737b8705dddd311a32b9af47211f08671e"
+ dependencies = [
+  "anyhow",
+  "bitflags 1.3.2",
+@@ -12475,8 +12471,6 @@ dependencies = [
+ [[package]]
+ name = "rama-net"
+ version = "0.3.0-alpha.4"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "b28ee9e1e5d39264414b71f5c33e7fbb66b382c3fac456fe0daad39cf5509933"
+ dependencies = [
+  "ahash",
+  "const_format",
+@@ -12518,8 +12512,6 @@ dependencies = [
+ [[package]]
+ name = "rama-tcp"
+ version = "0.3.0-alpha.4"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "fe60cd604f91196b3659a1b28945add2e8b10bd0b4e6373c93d024fb3197704b"
+ dependencies = [
+  "pin-project-lite",
+  "rama-core",
+@@ -12555,8 +12547,6 @@ dependencies = [
+ [[package]]
+ name = "rama-udp"
+ version = "0.3.0-alpha.4"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "36ed05e0ecac73e084e92a3a8b1fbf16fdae8958c506f0f0eada180a2d99eef4"
+ dependencies = [
+  "rama-core",
+  "rama-net",
+@@ -12952,8 +12942,6 @@ dependencies = [
+ [[package]]
+ name = "reqwest"
+ version = "0.12.28"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
+ dependencies = [
+  "base64 0.22.1",
+  "bytes",
+@@ -14420,8 +14408,6 @@ dependencies = [
+ [[package]]
+ name = "socket2"
+ version = "0.6.3"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
+ dependencies = [
+  "libc",
+  "windows-sys 0.60.2",
+@@ -15761,8 +15747,6 @@ dependencies = [
+ [[package]]
+ name = "tokio-util"
+ version = "0.7.18"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "9ae9cec805b01e8fc3fd2fe289f89149a9b66dd16786abd8b19cfa7b48cb0098"
+ dependencies = [
+  "bytes",
+  "futures-core",
+@@ -15874,8 +15858,6 @@ checksum = "ab16f14aed21ee8bfd8ec22513f7287cd4a91aa92e44edfe2c17ddd004e92607"
+ [[package]]
+ name = "tonic"
+ version = "0.14.3"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "a286e33f82f8a1ee2df63f4fa35c0becf4a85a0cb03091a15fd7bf0b402dc94a"
+ dependencies = [
+  "async-trait",
+  "axum",
+diff --git a/codex-rs/Cargo.toml b/codex-rs/Cargo.toml
+index 6e0e123..3dc8e4e 100644
+--- a/codex-rs/Cargo.toml
++++ b/codex-rs/Cargo.toml
+@@ -650,6 +650,15 @@ tokio = { path = "../../tokio" }
+ gethostname = { path = "../../forks/gethostname" }
+ gix-fs = { path = "../../forks/gix-fs" }
+ rustls-native-certs = { path = "../../forks/rustls-native-certs" }
++portable-pty = { path = "../../forks/portable-pty" }
++opentelemetry-http = { path = "../../forks/opentelemetry-http" }
++rama-net = { path = "../../forks/rama-net" }
++rama-tcp = { path = "../../forks/rama-tcp" }
++rama-udp = { path = "../../forks/rama-udp" }
++reqwest = { path = "../../forks/reqwest" }
++socket2 = { path = "../../forks/socket2" }
++tokio-util = { path = "../../forks/tokio-util" }
++tonic = { path = "../../forks/tonic" }
+ tokio-graceful = { path = "../../forks/tokio-graceful" }
+ tokio-tungstenite = { git = "https://github.com/openai-oss-forks/tokio-tungstenite", rev = "0e5b2d73aa18dd9f0a50ee9ff199d5aef7594186" }
+ tungstenite = { git = "https://github.com/openai-oss-forks/tungstenite-rs", rev = "4fffad30fe373adbdcffab9545e9e9bf4f2fc19f" }
+diff --git a/codex-rs/core-plugins/Cargo.toml b/codex-rs/core-plugins/Cargo.toml
+index 668da25..e551dfc 100644
+--- a/codex-rs/core-plugins/Cargo.toml
++++ b/codex-rs/core-plugins/Cargo.toml
+@@ -56,7 +56,6 @@ toml = { workspace = true }
+ tracing = { workspace = true }
+ url = { workspace = true }
+ uuid = { workspace = true, features = ["v4"] }
+-zip = { workspace = true }
+ 
+ [dev-dependencies]
+ codex-exec-server-test-support = { workspace = true }
+@@ -67,3 +66,10 @@ tempfile = { workspace = true }
+ tracing-subscriber = { workspace = true }
+ tracing-test = { workspace = true, features = ["no-env-filter"] }
+ wiremock = { workspace = true }
++
++# wasm-term port: zip's default `xz` feature pulls in lzma-sys (C, needs signals/pthreads).
++[target.'cfg(not(target_os = "wasi"))'.dependencies]
++zip = { workspace = true }
++
++[target.'cfg(target_os = "wasi")'.dependencies]
++zip = { version = "2.4.2", default-features = false, features = ["deflate"] }
+diff --git a/codex-rs/http-client/Cargo.toml b/codex-rs/http-client/Cargo.toml
+index 8583220..5e38ac7 100644
+--- a/codex-rs/http-client/Cargo.toml
++++ b/codex-rs/http-client/Cargo.toml
+@@ -11,7 +11,6 @@ futures = { workspace = true }
+ http = { workspace = true }
+ http-body = "1.0.1"
+ httpdate = { workspace = true }
+-native-tls = "0.2"
+ opentelemetry = { workspace = true }
+ reqwest = { workspace = true, features = ["json", "rustls-tls", "rustls-tls-native-roots", "stream"] }
+ rustls = { workspace = true }
+@@ -51,3 +50,7 @@ tracing-subscriber = { workspace = true }
+ 
+ [lib]
+ doctest = false
++
++# wasm-term port: native-tls needs OpenSSL, which is not built for WASI.
++[target.'cfg(not(target_os = "wasi"))'.dependencies]
++native-tls = "0.2"
+diff --git a/codex-rs/http-client/src/route_aware_client_pool.rs b/codex-rs/http-client/src/route_aware_client_pool.rs
+index 905aaf8..7e3147c 100644
+--- a/codex-rs/http-client/src/route_aware_client_pool.rs
++++ b/codex-rs/http-client/src/route_aware_client_pool.rs
+@@ -119,9 +119,11 @@ impl RouteAwareRequestError {
+ 
+         let mut source: Option<&(dyn std::error::Error + 'static)> = Some(self);
+         while let Some(error) = source {
+-            if error.downcast_ref::<rustls::Error>().is_some()
+-                || error.downcast_ref::<native_tls::Error>().is_some()
+-            {
++            #[cfg(not(target_os = "wasi"))]
++            let is_native_tls_error = error.downcast_ref::<native_tls::Error>().is_some();
++            #[cfg(target_os = "wasi")]
++            let is_native_tls_error = false;
++            if error.downcast_ref::<rustls::Error>().is_some() || is_native_tls_error {
+                 return Some(RouteFailureClass::TlsError);
+             }
+             if error.to_string() == "tunnel error: proxy authorization required" {
+diff --git a/codex-rs/mxc-sandbox/Cargo.toml b/codex-rs/mxc-sandbox/Cargo.toml
+index 49b5c16..43f0a8c 100644
+--- a/codex-rs/mxc-sandbox/Cargo.toml
++++ b/codex-rs/mxc-sandbox/Cargo.toml
+@@ -24,6 +24,9 @@ codex-windows-sandbox = { workspace = true }
+ serde = { workspace = true, features = ["derive"] }
+ serde_json = { workspace = true }
+ thiserror = { workspace = true }
++
++# wasm-term port: wxc_common has no WASI arm and is only used by the Windows policy code.
++[target.'cfg(not(target_os = "wasi"))'.dependencies]
+ wxc_common = { workspace = true }
+ 
+ [target.'cfg(windows)'.dependencies]
+diff --git a/codex-rs/tui/Cargo.toml b/codex-rs/tui/Cargo.toml
+index 45f5866..3cb0d00 100644
+--- a/codex-rs/tui/Cargo.toml
++++ b/codex-rs/tui/Cargo.toml
+@@ -167,7 +167,7 @@ winsplit = "0.1"
+ 
+ # Clipboard support via `arboard` is not available on Android/Termux.
+ # Only include it for non-Android targets so the crate builds on Android.
+-[target.'cfg(not(target_os = "android"))'.dependencies]
++[target.'cfg(not(any(target_os = "android", target_os = "wasi")))'.dependencies]
+ arboard = { workspace = true }
+ 
+ 
+diff --git a/codex-rs/tui/src/app/right_click_paste.rs b/codex-rs/tui/src/app/right_click_paste.rs
+index 53361e8..a83c2de 100644
+--- a/codex-rs/tui/src/app/right_click_paste.rs
++++ b/codex-rs/tui/src/app/right_click_paste.rs
+@@ -42,7 +42,7 @@ impl PasteEnvironment {
+         }
+         match mode {
+             RightClickPaste::Off => false,
+-            RightClickPaste::On => !cfg!(target_os = "android"),
++            RightClickPaste::On => !cfg!(any(target_os = "android", target_os = "wasi")),
+             RightClickPaste::Auto => {
+                 self.platform_default && !(self.wsl && self.vscode == VscodeDetection::Unknown)
+             }
+diff --git a/codex-rs/tui/src/chatwidget/transcript_export.rs b/codex-rs/tui/src/chatwidget/transcript_export.rs
+index 8c58c46..e352d0f 100644
+--- a/codex-rs/tui/src/chatwidget/transcript_export.rs
++++ b/codex-rs/tui/src/chatwidget/transcript_export.rs
+@@ -19,7 +19,7 @@ impl ChatWidget {
+                 SelectionItem {
+                     name: "Copy to clipboard".to_string(),
+                     description: Some("Copy the complete Markdown transcript".to_string()),
+-                    is_disabled: cfg!(target_os = "android"),
++                    is_disabled: cfg!(any(target_os = "android", target_os = "wasi")),
+                     actions: vec![Box::new(|tx| {
+                         tx.send(AppEvent::ExportTranscript {
+                             destination: TranscriptExportDestination::Clipboard,
+diff --git a/codex-rs/tui/src/clipboard_copy.rs b/codex-rs/tui/src/clipboard_copy.rs
+index cedbd5d..b4757c1 100644
+--- a/codex-rs/tui/src/clipboard_copy.rs
++++ b/codex-rs/tui/src/clipboard_copy.rs
+@@ -98,12 +98,12 @@ fn copy_to_clipboard(
+     begin_delivery: impl Fn() -> Result<(), String>,
+     osc52: impl Fn(&str) -> Result<(), String>,
+ ) -> Result<CopyOutcome, String> {
+-    #[cfg(not(target_os = "android"))]
++    #[cfg(not(any(target_os = "android", target_os = "wasi")))]
+     let native_copy = {
+         let clipboard = arboard::Clipboard::new();
+         move |text: &str, html: Option<&str>| arboard_copy(clipboard, text, html)
+     };
+-    #[cfg(target_os = "android")]
++    #[cfg(any(target_os = "android", target_os = "wasi"))]
+     let native_copy = |_text: &str, _html: Option<&str>| {
+         Err("native clipboard unavailable on Android".to_string())
+     };
+@@ -249,7 +249,7 @@ pub(crate) fn is_wsl_session() -> bool {
+ }
+ 
+ /// Write to the native clipboard. The TUI owns any process-wide stderr redirection.
+-#[cfg(not(target_os = "android"))]
++#[cfg(not(any(target_os = "android", target_os = "wasi")))]
+ fn arboard_copy(
+     clipboard: Result<arboard::Clipboard, arboard::Error>,
+     text: &str,
+diff --git a/codex-rs/tui/src/clipboard_paste.rs b/codex-rs/tui/src/clipboard_paste.rs
+index cc5489d..25fecc7 100644
+--- a/codex-rs/tui/src/clipboard_paste.rs
++++ b/codex-rs/tui/src/clipboard_paste.rs
+@@ -51,7 +51,7 @@ pub struct PastedImageInfo {
+ }
+ 
+ /// Capture image from system clipboard, encode to PNG, and return bytes + info.
+-#[cfg(not(target_os = "android"))]
++#[cfg(not(any(target_os = "android", target_os = "wasi")))]
+ pub fn paste_image_as_png() -> Result<(Vec<u8>, PastedImageInfo), PasteImageError> {
+     let _span = tracing::debug_span!("paste_image_as_png").entered();
+     tracing::debug!("attempting clipboard image read");
+@@ -113,7 +113,7 @@ pub fn paste_image_as_png() -> Result<(Vec<u8>, PastedImageInfo), PasteImageErro
+ }
+ 
+ /// Android/Termux does not support arboard; return a clear error.
+-#[cfg(target_os = "android")]
++#[cfg(any(target_os = "android", target_os = "wasi"))]
+ pub fn paste_image_as_png() -> Result<(Vec<u8>, PastedImageInfo), PasteImageError> {
+     Err(PasteImageError::ClipboardUnavailable(
+         "clipboard image paste is unsupported on Android".into(),
+@@ -121,7 +121,7 @@ pub fn paste_image_as_png() -> Result<(Vec<u8>, PastedImageInfo), PasteImageErro
+ }
+ 
+ /// Convenience: write to a temp file and return its path + info.
+-#[cfg(not(target_os = "android"))]
++#[cfg(not(any(target_os = "android", target_os = "wasi")))]
+ pub fn paste_image_to_temp_png() -> Result<(PathBuf, PastedImageInfo), PasteImageError> {
+     // First attempt: read image from system clipboard via arboard (native paths or image data).
+     match paste_image_as_png() {
+@@ -232,7 +232,7 @@ fn try_dump_windows_clipboard_image() -> Option<String> {
+     None
+ }
+ 
+-#[cfg(target_os = "android")]
++#[cfg(any(target_os = "android", target_os = "wasi"))]
+ pub fn paste_image_to_temp_png() -> Result<(PathBuf, PastedImageInfo), PasteImageError> {
+     // Keep error consistent with paste_image_as_png.
+     Err(PasteImageError::ClipboardUnavailable(
+diff --git a/codex-rs/tui/src/clipboard_paste/text.rs b/codex-rs/tui/src/clipboard_paste/text.rs
+index 32fcb1b..15015b9 100644
+--- a/codex-rs/tui/src/clipboard_paste/text.rs
++++ b/codex-rs/tui/src/clipboard_paste/text.rs
+@@ -21,20 +21,20 @@ pub(crate) fn read(deadline: Instant) -> Result<String, String> {
+             .map_err(|_| "could not start clipboard reader")?
+             .block_on(read_command(command, deadline));
+     }
+-    #[cfg(not(target_os = "android"))]
++    #[cfg(not(any(target_os = "android", target_os = "wasi")))]
+     {
+         native_result(
+             arboard::Clipboard::new().and_then(|mut clipboard| clipboard.get_text()),
+             deadline,
+         )
+     }
+-    #[cfg(target_os = "android")]
++    #[cfg(any(target_os = "android", target_os = "wasi"))]
+     {
+         validate(String::new(), deadline)
+     }
+ }
+ 
+-#[cfg(not(target_os = "android"))]
++#[cfg(not(any(target_os = "android", target_os = "wasi")))]
+ pub(crate) fn native_result(
+     result: Result<String, arboard::Error>,
+     deadline: Instant,
+diff --git a/codex-rs/tui/src/clock_format.rs b/codex-rs/tui/src/clock_format.rs
+index 8c4977a..6ebc7f2 100644
+--- a/codex-rs/tui/src/clock_format.rs
++++ b/codex-rs/tui/src/clock_format.rs
+@@ -30,7 +30,7 @@ impl ClockFormat {
+     }
+ }
+ 
+-#[cfg(any(target_os = "linux", target_os = "android", test))]
++#[cfg(any(target_os = "linux", any(target_os = "android", target_os = "wasi"), test))]
+ fn time_locale(
+     mut get: impl FnMut(&str) -> Option<std::ffi::OsString>,
+ ) -> Option<std::ffi::OsString> {
+@@ -39,13 +39,13 @@ fn time_locale(
+         .find_map(|name| get(name).filter(|value| !value.is_empty()))
+ }
+ 
+-#[cfg(any(target_os = "linux", target_os = "android"))]
++#[cfg(any(target_os = "linux", any(target_os = "android", target_os = "wasi")))]
+ fn detect() -> Option<ClockFormat> {
+     let locale = time_locale(|name| std::env::var_os(name))?;
+     detect_time_locale(locale.to_str()?)
+ }
+ 
+-#[cfg(any(target_os = "linux", target_os = "android", test))]
++#[cfg(any(target_os = "linux", any(target_os = "android", target_os = "wasi"), test))]
+ fn detect_time_locale(locale: &str) -> Option<ClockFormat> {
+     if matches!(locale, "C" | "POSIX" | "C.UTF-8" | "C.utf8") {
+         return Some(ClockFormat::TwentyFourHour);
+@@ -185,7 +185,7 @@ fn parse_native_pattern(pattern: &str, hour_symbols: &str) -> Option<ClockFormat
+ 
+ #[cfg(not(any(
+     target_os = "linux",
+-    target_os = "android",
++    any(target_os = "android", target_os = "wasi"),
+     target_os = "macos",
+     windows
+ )))]
+diff --git a/codex-rs/tui/src/ide_context/ipc.rs b/codex-rs/tui/src/ide_context/ipc.rs
+index 5fd76e0..1be98f7 100644
+--- a/codex-rs/tui/src/ide_context/ipc.rs
++++ b/codex-rs/tui/src/ide_context/ipc.rs
+@@ -562,7 +562,7 @@ fn validate_unix_socket_path(socket_path: &Path) -> std::io::Result<()> {
+     Ok(())
+ }
+ 
+-#[cfg(any(target_os = "linux", target_os = "android"))]
++#[cfg(any(target_os = "linux", any(target_os = "android", target_os = "wasi")))]
+ fn validate_unix_peer_owner(stream: &std::os::unix::net::UnixStream) -> std::io::Result<()> {
+     use std::os::fd::AsRawFd;
+ 
+@@ -614,7 +614,7 @@ fn validate_unix_peer_owner(stream: &std::os::unix::net::UnixStream) -> std::io:
+     unix,
+     not(any(
+         target_os = "linux",
+-        target_os = "android",
++        any(target_os = "android", target_os = "wasi"),
+         target_os = "macos",
+         target_os = "freebsd",
+         target_os = "openbsd",
+diff --git a/codex-rs/tui/src/slash_command.rs b/codex-rs/tui/src/slash_command.rs
+index d9ba053..584d25e 100644
+--- a/codex-rs/tui/src/slash_command.rs
++++ b/codex-rs/tui/src/slash_command.rs
+@@ -306,7 +306,7 @@ impl SlashCommand {
+ 
+     fn is_visible(self) -> bool {
+         match self {
+-            SlashCommand::Copy => !cfg!(target_os = "android"),
++            SlashCommand::Copy => !cfg!(any(target_os = "android", target_os = "wasi")),
+             SlashCommand::App => cfg!(any(target_os = "macos", target_os = "windows")),
+             SlashCommand::Voice => true,
+             SlashCommand::Rollout | SlashCommand::TestApproval => cfg!(debug_assertions),

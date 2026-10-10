@@ -1,0 +1,133 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Fri, 9 Oct 2026 22:39:15 -0700
+Subject: [PATCH] wasi: clear the run-5 frontier (socket2, reqwest,
+ portable-pty, rama, tonic, otel, gates)
+
+---
+ src/socket/opts.rs | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
+
+diff --git a/src/socket/opts.rs b/src/socket/opts.rs
+index 2f44140..6c25602 100644
+--- a/src/socket/opts.rs
++++ b/src/socket/opts.rs
+@@ -38,7 +38,10 @@ impl From<Domain> for SocketDomain {
+         match value {
+             Domain::IPv4 => Self::IPV4,
+             Domain::IPv6 => Self::IPV6,
++            #[cfg(not(target_os = "wasi"))]
+             Domain::Unix => Self::UNIX,
++            #[cfg(target_os = "wasi")]
++            Domain::Unix => unreachable!("not available on WASI"),
+         }
+     }
+ }
+@@ -80,8 +83,14 @@ impl Protocol {
+ impl From<Protocol> for SocketProtocol {
+     fn from(value: Protocol) -> Self {
+         match value {
++            #[cfg(not(target_os = "wasi"))]
+             Protocol::ICMPV4 => Self::ICMPV4,
++            #[cfg(target_os = "wasi")]
++            Protocol::ICMPV4 => unreachable!("not available on WASI"),
++            #[cfg(not(target_os = "wasi"))]
+             Protocol::ICMPV6 => Self::ICMPV6,
++            #[cfg(target_os = "wasi")]
++            Protocol::ICMPV6 => unreachable!("not available on WASI"),
+             Protocol::TCP => Self::TCP,
+             Protocol::UDP => Self::UDP,
+             #[cfg(target_os = "linux")]
+@@ -142,10 +151,16 @@ impl From<Type> for SocketType {
+             Type::DCCP => Self::DCCP,
+             #[cfg(not(target_os = "espidf"))]
+             #[cfg_attr(docsrs, doc(cfg(not(target_os = "espidf"))))]
++            #[cfg(not(target_os = "wasi"))]
+             Type::SequencePacket => Self::SEQPACKET,
++            #[cfg(target_os = "wasi")]
++            Type::SequencePacket => unreachable!("not available on WASI"),
+             #[cfg(not(any(target_os = "redox", target_os = "espidf")))]
+             #[cfg_attr(docsrs, doc(cfg(any(target_os = "redox", target_os = "espidf"))))]
++            #[cfg(not(target_os = "wasi"))]
+             Type::Raw => Self::RAW,
++            #[cfg(target_os = "wasi")]
++            Type::Raw => unreachable!("not available on WASI"),
+         }
+     }
+ }
+@@ -1091,6 +1106,7 @@ impl SocketOptions {
+             socket.set_linger(Some(linger))?;
+         }
+         #[cfg(not(target_os = "redox"))]
++        #[cfg(not(target_os = "wasi"))]
+         if let Some(oob) = self.out_of_band_inline {
+             socket.set_out_of_band_inline(oob)?;
+         }
+@@ -1114,6 +1130,7 @@ impl SocketOptions {
+             socket.set_write_timeout(Some(duration))?;
+         }
+         #[cfg(not(any(target_os = "redox", target_os = "espidf")))]
++        #[cfg(not(target_os = "wasi"))]
+         if let Some(header_included) = self.header_included {
+             socket.set_header_included_v4(header_included)?;
+         }
+@@ -1125,6 +1142,7 @@ impl SocketOptions {
+             target_os = "dragonfly",
+             target_os = "netbsd"
+         )))]
++        #[cfg(not(target_os = "wasi"))]
+         if let Some(header_included) = self.header_included {
+             socket.set_header_included_v6(header_included)?;
+         }
+@@ -1142,6 +1160,7 @@ impl SocketOptions {
+             target_os = "illumos",
+             target_os = "haiku",
+         )))]
++        #[cfg(not(target_os = "wasi"))]
+         if let Some(tos) = self.tos {
+             socket.set_tos_v4(tos)?;
+         }
+@@ -1160,6 +1179,7 @@ impl SocketOptions {
+             target_os = "espidf",
+             target_os = "vita",
+         )))]
++        #[cfg(not(target_os = "wasi"))]
+         if let Some(recv_tos) = self.recv_tos {
+             socket.set_recv_tos_v4(recv_tos)?;
+         }
+@@ -1172,6 +1192,7 @@ impl SocketOptions {
+         if let Some(ttl) = self.multicast_ttl_v4 {
+             socket.set_multicast_ttl_v4(ttl)?;
+         }
++        #[cfg(not(target_os = "wasi"))]
+         if let Some(hops) = self.multicast_hops_v6 {
+             socket.set_multicast_hops_v6(hops)?;
+         }
+@@ -1183,9 +1204,11 @@ impl SocketOptions {
+         if let Some(all) = self.multicast_all_v6 {
+             socket.set_multicast_all_v6(all)?;
+         }
++        #[cfg(not(target_os = "wasi"))]
+         if let Some(interface) = self.multicast_interface_v4.as_ref() {
+             socket.set_multicast_if_v4(interface)?;
+         }
++        #[cfg(not(target_os = "wasi"))]
+         if let Some(interface) = self.multicast_interface_v6 {
+             socket.set_multicast_if_v6(interface)?;
+         }
+@@ -1210,6 +1233,7 @@ impl SocketOptions {
+             target_os = "espidf",
+             target_os = "vita",
+         )))]
++        #[cfg(not(target_os = "wasi"))]
+         if let Some(recv) = self.recv_hoplimit_v6 {
+             socket.set_recv_hoplimit_v6(recv)?;
+         }
+@@ -1228,6 +1252,7 @@ impl SocketOptions {
+             target_os = "espidf",
+             target_os = "vita",
+         )))]
++        #[cfg(not(target_os = "wasi"))]
+         if let Some(recv) = self.recv_tclass_v6 {
+             socket.set_recv_tclass_v6(recv)?;
+         }

@@ -1,0 +1,94 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Fri, 9 Oct 2026 22:39:15 -0700
+Subject: [PATCH] wasi: clear the run-5 frontier (socket2, reqwest,
+ portable-pty, rama, tonic, otel, gates)
+
+---
+ Cargo.toml |  6 +++---
+ src/lib.rs | 30 ++++++++++++++++++++++++++++++
+ 2 files changed, 33 insertions(+), 3 deletions(-)
+
+diff --git a/Cargo.toml b/Cargo.toml
+index b8d1123..e1be81f 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -53,7 +53,7 @@ version = "1.0"
+ [dependencies.downcast-rs]
+ version = "1.0"
+ 
+-[dependencies.filedescriptor]
++[target.'cfg(not(target_os = "wasi"))'.dependencies.filedescriptor]
+ version = "0.8.3"
+ 
+ [dependencies.libc]
+@@ -62,7 +62,7 @@ version = "0.2"
+ [dependencies.log]
+ version = "0.4"
+ 
+-[dependencies.nix]
++[target.'cfg(not(target_os = "wasi"))'.dependencies.nix]
+ version = "0.28"
+ features = [
+     "term",
+@@ -77,7 +77,7 @@ optional = true
+ version = "1.0"
+ optional = true
+ 
+-[dependencies.serial2]
++[target.'cfg(not(target_os = "wasi"))'.dependencies.serial2]
+ version = "0.2"
+ 
+ [dependencies.shell-words]
+diff --git a/src/lib.rs b/src/lib.rs
+index 3c04da4..f1189c8 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -55,6 +55,7 @@ pub mod unix;
+ #[cfg(windows)]
+ pub mod win;
+ 
++#[cfg(not(target_os = "wasi"))]
+ pub mod serial;
+ 
+ /// Represents the size of the visible display area in the pty
+@@ -395,6 +396,24 @@ impl ChildKiller for std::process::Child {
+             pid: self.process_id(),
+         })
+     }
++
++    #[cfg(target_os = "wasi")]
++    fn clone_killer(&self) -> Box<dyn ChildKiller + Send + Sync> {
++        Box::new(ProcessSignaller {
++            pid: self.process_id(),
++        })
++    }
++}
++
++#[cfg(target_os = "wasi")]
++impl ChildKiller for ProcessSignaller {
++    fn kill(&mut self) -> IoResult<()> {
++        Ok(())
++    }
++
++    fn clone_killer(&self) -> Box<dyn ChildKiller + Send + Sync> {
++        Box::new(Self { pid: self.pid })
++    }
+ }
+ 
+ pub fn native_pty_system() -> Box<dyn PtySystem + Send> {
+@@ -405,3 +424,14 @@ pub fn native_pty_system() -> Box<dyn PtySystem + Send> {
+ pub type NativePtySystem = unix::UnixPtySystem;
+ #[cfg(windows)]
+ pub type NativePtySystem = win::conpty::ConPtySystem;
++
++/// wasm-term port: there are no ptys or child processes on WASI.
++#[cfg(target_os = "wasi")]
++#[derive(Default)]
++pub struct NativePtySystem {}
++#[cfg(target_os = "wasi")]
++impl PtySystem for NativePtySystem {
++    fn openpty(&self, _size: PtySize) -> anyhow::Result<PtyPair> {
++        anyhow::bail!("ptys are not available on WASI")
++    }
++}

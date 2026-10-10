@@ -1,0 +1,386 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Fri, 9 Oct 2026 22:39:15 -0700
+Subject: [PATCH] wasi: clear the run-5 frontier (socket2, reqwest,
+ portable-pty, rama, tonic, otel, gates)
+
+---
+ src/net/mod.rs          |   3 +
+ src/net/tcp/listener.rs |   9 ++
+ src/wasi_stubs/mod.rs   |   2 +
+ src/wasi_stubs/net.rs   | 322 ++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 336 insertions(+)
+ create mode 100644 src/wasi_stubs/net.rs
+
+diff --git a/src/net/mod.rs b/src/net/mod.rs
+index 868a482..d582fff 100644
+--- a/src/net/mod.rs
++++ b/src/net/mod.rs
+@@ -49,6 +49,9 @@ cfg_net! {
+         #[doc(inline)]
+         pub use udp::UdpSocket;
+     }
++    // wasm-term port: stand-ins, every operation fails `Unsupported`.
++    #[cfg(all(target_os = "wasi", target_env = "p1"))]
++    pub use crate::wasi_stubs::net::{TcpSocket, UdpSocket};
+ }
+ 
+ cfg_net_unix! {
+diff --git a/src/net/tcp/listener.rs b/src/net/tcp/listener.rs
+index 36550d8..cb980f2 100644
+--- a/src/net/tcp/listener.rs
++++ b/src/net/tcp/listener.rs
+@@ -60,6 +60,15 @@ cfg_net! {
+ }
+ 
+ impl TcpListener {
++    /// wasm-term port: WASI preview1 cannot open sockets.
++    #[cfg(all(target_os = "wasi", target_env = "p1"))]
++    pub async fn bind<A: crate::net::ToSocketAddrs>(_addr: A) -> io::Result<TcpListener> {
++        Err(io::Error::new(
++            io::ErrorKind::Unsupported,
++            "TCP listeners are not available on wasm32-wasip1",
++        ))
++    }
++
+     cfg_not_wasip1! {
+         /// Creates a new `TcpListener`, which will be bound to the specified address.
+         ///
+diff --git a/src/wasi_stubs/mod.rs b/src/wasi_stubs/mod.rs
+index 7eb67d1..b9a0b48 100644
+--- a/src/wasi_stubs/mod.rs
++++ b/src/wasi_stubs/mod.rs
+@@ -5,3 +5,5 @@
+ pub mod process;
+ #[cfg(feature = "signal")]
+ pub mod signal;
++#[cfg(all(feature = "net", target_env = "p1"))]
++pub mod net;
+diff --git a/src/wasi_stubs/net.rs b/src/wasi_stubs/net.rs
+new file mode 100644
+index 0000000..367dd2e
+--- /dev/null
++++ b/src/wasi_stubs/net.rs
+@@ -0,0 +1,322 @@
++//! `tokio::net::{TcpSocket, UdpSocket}` stand-ins for wasm32-wasip1, which has
++//! no way to create sockets. The types exist so callers written against the
++//! native API compile; every operation fails with `Unsupported`.
++#![allow(missing_docs, clippy::unused_async)]
++
++use crate::io::{Interest, ReadBuf, Ready};
++use crate::net::{TcpListener, TcpStream, ToSocketAddrs};
++use std::io;
++use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
++use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, RawFd};
++use std::task::{Context, Poll};
++use std::time::Duration;
++
++fn unsupported() -> io::Error {
++    io::Error::new(
++        io::ErrorKind::Unsupported,
++        "sockets are not available on wasm32-wasip1",
++    )
++}
++
++#[derive(Debug)]
++pub struct TcpSocket {
++    fd: RawFd,
++}
++
++impl TcpSocket {
++    pub fn new_v4() -> io::Result<TcpSocket> {
++        Err(unsupported())
++    }
++    pub fn new_v6() -> io::Result<TcpSocket> {
++        Err(unsupported())
++    }
++    pub fn set_keepalive(&self, _keepalive: bool) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn keepalive(&self) -> io::Result<bool> {
++        Err(unsupported())
++    }
++    pub fn set_reuseaddr(&self, _reuseaddr: bool) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn reuseaddr(&self) -> io::Result<bool> {
++        Err(unsupported())
++    }
++    pub fn set_reuseport(&self, _reuseport: bool) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn reuseport(&self) -> io::Result<bool> {
++        Err(unsupported())
++    }
++    pub fn set_send_buffer_size(&self, _size: u32) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn send_buffer_size(&self) -> io::Result<u32> {
++        Err(unsupported())
++    }
++    pub fn set_recv_buffer_size(&self, _size: u32) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn recv_buffer_size(&self) -> io::Result<u32> {
++        Err(unsupported())
++    }
++    pub fn set_linger(&self, _dur: Option<Duration>) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn linger(&self) -> io::Result<Option<Duration>> {
++        Err(unsupported())
++    }
++    pub fn set_nodelay(&self, _nodelay: bool) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn nodelay(&self) -> io::Result<bool> {
++        Err(unsupported())
++    }
++    pub fn tos(&self) -> io::Result<u32> {
++        Err(unsupported())
++    }
++    pub fn set_tos(&self, _tos: u32) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn tos_v4(&self) -> io::Result<u32> {
++        Err(unsupported())
++    }
++    pub fn set_tos_v4(&self, _tos: u32) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn device(&self) -> io::Result<Option<Vec<u8>>> {
++        Err(unsupported())
++    }
++    pub fn bind_device(&self, _interface: Option<&[u8]>) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn local_addr(&self) -> io::Result<SocketAddr> {
++        Err(unsupported())
++    }
++    pub fn take_error(&self) -> io::Result<Option<io::Error>> {
++        Err(unsupported())
++    }
++    pub fn bind(&self, _addr: SocketAddr) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub async fn connect(self, _addr: SocketAddr) -> io::Result<TcpStream> {
++        Err(unsupported())
++    }
++    pub fn listen(self, _backlog: u32) -> io::Result<TcpListener> {
++        Err(unsupported())
++    }
++    pub fn from_std_stream(std_stream: std::net::TcpStream) -> TcpSocket {
++        TcpSocket {
++            fd: std_stream.into_raw_fd(),
++        }
++    }
++}
++
++impl AsRawFd for TcpSocket {
++    fn as_raw_fd(&self) -> RawFd {
++        self.fd
++    }
++}
++impl AsFd for TcpSocket {
++    fn as_fd(&self) -> BorrowedFd<'_> {
++        unsafe { BorrowedFd::borrow_raw(self.fd) }
++    }
++}
++impl FromRawFd for TcpSocket {
++    unsafe fn from_raw_fd(fd: RawFd) -> TcpSocket {
++        TcpSocket { fd }
++    }
++}
++impl IntoRawFd for TcpSocket {
++    fn into_raw_fd(self) -> RawFd {
++        self.fd
++    }
++}
++
++#[derive(Debug)]
++pub struct UdpSocket {
++    fd: RawFd,
++}
++
++impl UdpSocket {
++    pub async fn bind<A: ToSocketAddrs>(_addr: A) -> io::Result<UdpSocket> {
++        Err(unsupported())
++    }
++    pub fn from_std(socket: std::net::UdpSocket) -> io::Result<UdpSocket> {
++        Ok(UdpSocket {
++            fd: socket.into_raw_fd(),
++        })
++    }
++    pub fn into_std(self) -> io::Result<std::net::UdpSocket> {
++        Ok(unsafe { std::net::UdpSocket::from_raw_fd(self.fd) })
++    }
++    pub fn local_addr(&self) -> io::Result<SocketAddr> {
++        Err(unsupported())
++    }
++    pub fn peer_addr(&self) -> io::Result<SocketAddr> {
++        Err(unsupported())
++    }
++    pub async fn connect<A: ToSocketAddrs>(&self, _addr: A) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub async fn ready(&self, _interest: Interest) -> io::Result<Ready> {
++        Err(unsupported())
++    }
++    pub async fn writable(&self) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn poll_send_ready(&self, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
++        Poll::Ready(Err(unsupported()))
++    }
++    pub async fn send(&self, _buf: &[u8]) -> io::Result<usize> {
++        Err(unsupported())
++    }
++    pub fn poll_send(&self, _cx: &mut Context<'_>, _buf: &[u8]) -> Poll<io::Result<usize>> {
++        Poll::Ready(Err(unsupported()))
++    }
++    pub fn try_send(&self, _buf: &[u8]) -> io::Result<usize> {
++        Err(unsupported())
++    }
++    pub async fn readable(&self) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn poll_recv_ready(&self, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
++        Poll::Ready(Err(unsupported()))
++    }
++    pub async fn recv(&self, _buf: &mut [u8]) -> io::Result<usize> {
++        Err(unsupported())
++    }
++    pub fn poll_recv(&self, _cx: &mut Context<'_>, _buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
++        Poll::Ready(Err(unsupported()))
++    }
++    pub fn try_recv(&self, _buf: &mut [u8]) -> io::Result<usize> {
++        Err(unsupported())
++    }
++    pub async fn send_to<A: ToSocketAddrs>(&self, _buf: &[u8], _target: A) -> io::Result<usize> {
++        Err(unsupported())
++    }
++    pub fn poll_send_to(
++        &self,
++        _cx: &mut Context<'_>,
++        _buf: &[u8],
++        _target: SocketAddr,
++    ) -> Poll<io::Result<usize>> {
++        Poll::Ready(Err(unsupported()))
++    }
++    pub fn try_send_to(&self, _buf: &[u8], _target: SocketAddr) -> io::Result<usize> {
++        Err(unsupported())
++    }
++    pub async fn recv_from(&self, _buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
++        Err(unsupported())
++    }
++    pub fn poll_recv_from(
++        &self,
++        _cx: &mut Context<'_>,
++        _buf: &mut ReadBuf<'_>,
++    ) -> Poll<io::Result<SocketAddr>> {
++        Poll::Ready(Err(unsupported()))
++    }
++    pub fn try_recv_from(&self, _buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
++        Err(unsupported())
++    }
++    pub fn try_io<R>(&self, _interest: Interest, _f: impl FnOnce() -> io::Result<R>) -> io::Result<R> {
++        Err(unsupported())
++    }
++    pub async fn async_io<R>(
++        &self,
++        _interest: Interest,
++        _f: impl FnMut() -> io::Result<R>,
++    ) -> io::Result<R> {
++        Err(unsupported())
++    }
++    pub async fn peek_from(&self, _buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
++        Err(unsupported())
++    }
++    pub fn poll_peek_from(
++        &self,
++        _cx: &mut Context<'_>,
++        _buf: &mut ReadBuf<'_>,
++    ) -> Poll<io::Result<SocketAddr>> {
++        Poll::Ready(Err(unsupported()))
++    }
++    pub fn try_peek_from(&self, _buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
++        Err(unsupported())
++    }
++    pub async fn peek_sender(&self) -> io::Result<SocketAddr> {
++        Err(unsupported())
++    }
++    pub fn poll_peek_sender(&self, _cx: &mut Context<'_>) -> Poll<io::Result<SocketAddr>> {
++        Poll::Ready(Err(unsupported()))
++    }
++    pub fn try_peek_sender(&self) -> io::Result<SocketAddr> {
++        Err(unsupported())
++    }
++    pub fn broadcast(&self) -> io::Result<bool> {
++        Err(unsupported())
++    }
++    pub fn set_broadcast(&self, _on: bool) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn multicast_loop_v4(&self) -> io::Result<bool> {
++        Err(unsupported())
++    }
++    pub fn set_multicast_loop_v4(&self, _on: bool) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn multicast_ttl_v4(&self) -> io::Result<u32> {
++        Err(unsupported())
++    }
++    pub fn set_multicast_ttl_v4(&self, _ttl: u32) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn multicast_loop_v6(&self) -> io::Result<bool> {
++        Err(unsupported())
++    }
++    pub fn set_multicast_loop_v6(&self, _on: bool) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn ttl(&self) -> io::Result<u32> {
++        Err(unsupported())
++    }
++    pub fn set_ttl(&self, _ttl: u32) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn tos(&self) -> io::Result<u32> {
++        Err(unsupported())
++    }
++    pub fn set_tos(&self, _tos: u32) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn join_multicast_v4(&self, _multiaddr: Ipv4Addr, _interface: Ipv4Addr) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn join_multicast_v6(&self, _multiaddr: &Ipv6Addr, _interface: u32) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn leave_multicast_v4(&self, _multiaddr: Ipv4Addr, _interface: Ipv4Addr) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn leave_multicast_v6(&self, _multiaddr: &Ipv6Addr, _interface: u32) -> io::Result<()> {
++        Err(unsupported())
++    }
++    pub fn take_error(&self) -> io::Result<Option<io::Error>> {
++        Err(unsupported())
++    }
++}
++
++impl TryFrom<std::net::UdpSocket> for UdpSocket {
++    type Error = io::Error;
++    fn try_from(socket: std::net::UdpSocket) -> Result<Self, Self::Error> {
++        Self::from_std(socket)
++    }
++}
++impl AsRawFd for UdpSocket {
++    fn as_raw_fd(&self) -> RawFd {
++        self.fd
++    }
++}
++impl AsFd for UdpSocket {
++    fn as_fd(&self) -> BorrowedFd<'_> {
++        unsafe { BorrowedFd::borrow_raw(self.fd) }
++    }
++}
