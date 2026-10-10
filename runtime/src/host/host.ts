@@ -13,7 +13,7 @@ import { processWorkerUrl } from '../process/config'
 import { DEFAULT_CONFIG } from '../process/runtime'
 import type { ToServiceWorker } from './bridge-protocol'
 import { createEndpoints } from './endpoint'
-import type { StoreImageResult } from './image'
+import type { StoreImageProgress, StoreImageResult } from './image'
 import { createReactor } from './reactor'
 import { trace, traceCollect } from '../trace'
 
@@ -86,8 +86,18 @@ export interface RuntimeHost {
   readonly kernel: Kernel
 }
 
+interface ManifestImage {
+  file: string
+  bytes?: number
+  sha256?: string
+  mount?: string
+  headBytes?: number
+  sums?: { file: string; blockBytes: number; sha256: string }
+}
 interface Manifest {
-  image?: { file: string; bytes?: number; sha256?: string; mount?: string }
+  image?: ManifestImage
+  /** Images mounted after `image`, in order (packages that are not from the lockfile). */
+  layers?: ManifestImage[]
   programs?: { name: string; file: string }[]
 }
 
@@ -221,13 +231,41 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
   const netdWorker = new Worker(asset('bat-netd.js'), { type: 'module', name: 'bat-netd' })
   const netd = rpc(netdWorker)
   progress({ phase: 'image' })
-  const download = netd.call<StoreImageResult>(
-    'storeImage',
-    { namespace, name: image.file, url: prepared(image.file), bytes: image.bytes, sha256: image.sha256, nativeWasmUrl: asset('bat_node_native.wasm') },
-    [],
-    (p) => progress({ phase: 'image', loaded: p.loaded, total: p.total, cached: false }),
-  )
-  download.catch(() => {})
+  // Every image is fetched at once. One is usable as soon as its head is in its file
+  // (at once when it is stored already); the rest of it may still be arriving then.
+  const images = [image, ...(manifest.layers ?? [])]
+  const kernelReady: { kernel?: Kernel } = {}
+  const stores = images.map((img, index) => {
+    let usable!: (u: NonNullable<StoreImageProgress['usable']>) => void
+    const ready = new Promise<NonNullable<StoreImageProgress['usable']>>((resolve) => (usable = resolve))
+    const state = { id: -1 }
+    const done = netd.call<StoreImageResult>(
+      'storeImage',
+      {
+        namespace,
+        name: img.file,
+        url: prepared(img.file),
+        bytes: img.bytes,
+        sha256: img.sha256,
+        headBytes: img.headBytes,
+        sums: img.sums && { url: prepared(img.sums.file), blockBytes: img.sums.blockBytes, sha256: img.sums.sha256 },
+        nativeWasmUrl: asset('bat_node_native.wasm'),
+      },
+      [],
+      (p: StoreImageProgress) => {
+        if (p.usable) usable(p.usable)
+        if (p.loaded === undefined) return
+        // Readers waiting for a range of an arriving image look again.
+        if (state.id >= 0) kernelReady.kernel?.x.bat_image_progress(state.id)
+        if (index === 0) progress({ phase: 'image', loaded: p.loaded, total: p.total, cached: false })
+      },
+    )
+    done.catch(() => {})
+    return { img, ready: Promise.race([ready, done.then((r) => ({ file: r.file, arriving: false }))]), done, state }
+  })
+  const cancelDownloads = () => {
+    for (const s of stores) void netd.call('cancel', { id: s.done.id })
+  }
 
   const programs: Record<string, string> = {}
   for (const p of manifest.programs ?? []) programs[p.name] = prepared(p.file)
@@ -252,11 +290,11 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
       warmSpare: true,
       // The preview and the agent start together: one warm worker each.
       spares: 2,
-      images: [image.file],
+      images: images.map((i) => i.file),
       trace: tracing,
     } as Parameters<typeof bootKernel>[0])
   } catch (e) {
-    void netd.call('cancel', { id: download.id })
+    cancelDownloads()
     netdWorker.terminate()
     if ((e as any)?.code === 'EBUSY') throw busy(e)
     throw new Error(`kernel boot failed: ${(e as Error).message}`, { cause: e })
@@ -276,27 +314,84 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
   }
   let kernel: Kernel
   try {
-    const stored = await Promise.race([
-      download,
-      new Promise<never>((_, reject) => options.signal?.addEventListener('abort', () => reject(options.signal!.reason), { once: true })),
-    ])
-    timings.image = performance.now() - t0
-    trace('boot.image')
-    timed('image')
-    timings.imageCached = stored.cached
-    progress({ phase: 'image', loaded: stored.bytes, total: stored.bytes, cached: stored.cached })
-    const mounted = await booted.mountImage(image.file, image.mount ?? '/').catch((e) => {
-      throw new Error(`mounting ${image.file} failed: ${e.message}`, { cause: e })
-    })
-    timings.mount = mounted.ms
+    const aborted = new Promise<never>((_, reject) => options.signal?.addEventListener('abort', () => reject(options.signal!.reason), { once: true }))
+    let imageTrace = false
+    try {
+      imageTrace = localStorage.getItem('bat-image-trace') === '1'
+    } catch {
+      // storage unavailable
+    }
+    // For a start-up order (`bat-prepare order`): every image read from the first one on.
+    if (imageTrace) booted.kernel.x.bat_image_trace(1)
+    timings.mount = 0
+    for (const [index, store] of stores.entries()) {
+      const usable = await Promise.race([store.ready, aborted])
+      if (index === 0) {
+        // `image`: when the image could be mounted. `imageComplete` follows when a download finishes.
+        timings.image = performance.now() - t0
+        timings.imageCached = !usable.arriving && (await Promise.race([store.done, aborted])).cached
+        timings.imageArriving = usable.arriving
+        trace('boot.image')
+        timed('image')
+        if (!usable.arriving) progress({ phase: 'image', loaded: image.bytes, total: image.bytes, cached: timings.imageCached as boolean })
+      }
+      const mounted = await booted.mountImage(usable.file, store.img.mount ?? '/', usable.arriving).catch((e) => {
+        throw new Error(`mounting ${store.img.file} failed: ${e.message}`, { cause: e })
+      })
+      timings.mount += mounted.ms
+      store.state.id = mounted.id
+      if (usable.arriving) {
+        const settle = (state: 0 | 2) => {
+          if (!lifetime.signal.aborted) booted.kernel.x.bat_image_arriving(mounted.id, state)
+        }
+        store.done.then(
+          () => {
+            settle(0)
+            if (index === 0) {
+              timings.imageComplete = performance.now() - t0
+              timings.imageArriving = false
+              timed('image-complete')
+              progress({ phase: 'image', loaded: image.bytes, total: image.bytes, cached: false })
+            }
+          },
+          (e) => {
+            // Reads of what never arrived fail from here on; the guests die of them.
+            settle(2)
+            if (!lifetime.signal.aborted) console.error(`The download of ${store.img.file} failed while it was in use:`, e)
+          },
+        )
+      }
+    }
     kernel = booted.kernel
+    kernelReady.kernel = kernel
+    if (imageTrace) {
+      ;(globalThis as any).__batImageTrace = (id = 0) => {
+        const cap = 1 << 17
+        const ptr = kernel.x.bat_alloc(cap * 8) >>> 0
+        const out: number[][] = []
+        for (;;) {
+          const n: number = kernel.x.bat_image_trace_read(id, out.length, ptr, cap)
+          const view = new Float64Array(booted.memory.buffer, ptr, n * 2)
+          for (let i = 0; i < n; i++) out.push([view[i * 2], view[i * 2 + 1]])
+          if (n < cap / 2) break
+        }
+        kernel.x.bat_free(ptr, cap * 8)
+        return out
+      }
+    }
     for (const dir of ['/tmp', '/workspace', '/bin', '/usr/local/bin', '/home/user', '/.bat']) kernel.mkdir(dir, { recursive: true })
     progress({ phase: 'mount' })
     await netd.call('attach', { module: booted.module, memory: booted.memory })
-    // Images of other hashes are dead weight once this one is mounted.
-    void netd.call('collectImages', { namespace, keep: image.file }).catch(() => {})
+    // Images of other hashes are dead weight once these are mounted (and complete: a
+    // collection must not meet a download's files half made).
+    void Promise.all(stores.map((s) => s.done))
+      .then(() => netd.call<string[]>('collectImages', { namespace, keep: images.map((i) => i.file) }))
+      .then((removed) => {
+        if (removed.length) trace('boot.images-collected', { removed })
+      })
+      .catch(() => {})
   } catch (e) {
-    void netd.call('cancel', { id: download.id })
+    cancelDownloads()
     teardown()
     throw e
   }

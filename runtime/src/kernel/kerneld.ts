@@ -145,9 +145,11 @@ function kill(pid: number, sig: number) {
 
 // ---- images ----
 
-async function mount(name: string, path: string) {
+async function mount(name: string, path: string, arriving = false) {
   const t0 = performance.now()
   const id: number = k.x.bat_image_reserve()
+  // Before the mount: from its first read on, a range that is not in the file yet is waited for.
+  if (arriving) k.x.bat_image_arriving(id, 1)
   handles[id] = await openImageHandle(cfg.namespace, name)
   const tOpen = performance.now()
   const u8 = inst.u8()
@@ -443,7 +445,7 @@ async function init(args: InitArgs) {
 
 const ops: Record<string, (a: any) => unknown> = {
   init,
-  mount: (a: { name: string; path: string }) => mount(a.name, a.path),
+  mount: (a: { name: string; path: string; arriving?: boolean }) => mount(a.name, a.path, a.arriving),
   hasImage: (a: { name: string }) => imageExists(cfg.namespace, a.name),
   storeImage: async (a: { name: string; url: string }) => {
     const have = await imageExists(cfg.namespace, a.name)

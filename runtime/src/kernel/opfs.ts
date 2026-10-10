@@ -34,7 +34,14 @@ export async function imageExists(namespace: string, name: string): Promise<numb
 async function openImage(namespace: string, name: string): Promise<SyncHandle> {
   const dir = await opfsDir(namespace, 'images')
   const h = await dir.getFileHandle(name)
-  return (await (h as any).createSyncAccessHandle({ mode: 'read-only' })) as SyncHandle
+  try {
+    return (await (h as any).createSyncAccessHandle({ mode: 'read-only' })) as SyncHandle
+  } catch (e) {
+    // An image that is still being downloaded (`<name>.partial`) is held by its writer
+    // in the shared read-write mode, which excludes read-only handles: join that mode.
+    if ((e as DOMException)?.name !== 'NoModificationAllowedError') throw e
+    return (await (h as any).createSyncAccessHandle({ mode: 'readwrite-unsafe' })) as SyncHandle
+  }
 }
 const early = new Map<string, Promise<SyncHandle>>()
 /**

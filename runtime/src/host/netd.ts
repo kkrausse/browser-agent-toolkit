@@ -110,7 +110,7 @@ const ops: Record<string, (a: any, id: number) => unknown> = {
     const abort = new AbortController()
     downloads.set(id, abort)
     try {
-      return await storeImage(a, (loaded, total) => postMessage({ id, progress: { loaded, total } }), abort.signal)
+      return await storeImage(a, (progress) => postMessage({ id, progress }), abort.signal)
     } finally {
       downloads.delete(id)
     }
@@ -118,7 +118,7 @@ const ops: Record<string, (a: any, id: number) => unknown> = {
   cancel(a: { id: number }) {
     downloads.get(a.id)?.abort()
   },
-  collectImages: (a: { namespace: string; keep: string }) => collectImages(a.namespace, a.keep),
+  collectImages: (a: { namespace: string; keep: string | string[] }) => collectImages(a.namespace, a.keep),
   async attach(a: { module: WebAssembly.Module; memory: WebAssembly.Memory }) {
     const inst = await attachKernel({ module: a.module, memory: a.memory, canBlock: true })
     kernel = createKernel(inst)
