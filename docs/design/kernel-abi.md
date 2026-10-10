@@ -415,10 +415,8 @@ kerneld RPC ops (`booted.kerneld(op, args)`): `storeImage { name, url }`,
 
 Shapes are fixed here so callers can be designed for them; names may still gain parameters.
 
-- **Resolver**: owned by the node-runtime agent, in `crates/bat-kernel/src/resolve.rs` with
-  its binding in `runtime/src/loader/resolve.ts`; its exports (`bat_resolve`,
-  `bat_package_scope`, `bat_resolve_stats`) are specified by that agent, not here. It reads
-  through the path functions of section 4 and keys its caches on `BAT_OVERLAY_GEN`.
+- **Resolver**: implemented; see section 14 (owned by the node-runtime agent, in
+  `crates/bat-kernel/src/resolve.rs`, binding in `runtime/src/loader/resolve.ts`).
 - **HTTP/1.1 codec**: incremental, over caller buffers, no fds:
   `bat_http_parser_new(kind) -> handle`, `bat_http_feed(handle, ptr, len, out, cap)` (events:
   head with method/target/status/headers, body chunk ranges, message end),
@@ -426,3 +424,128 @@ Shapes are fixed here so callers can be designed for them; names may still gain 
   guest `http` module and by the page for endpoint fetch.
 - **WebSocket**: `bat_ws_accept_key(key, len, out)`, `bat_ws_frame_header(opcode, len, mask, out) -> n`,
   `bat_ws_parse(ptr, len, out) -> consumed`.
+
+## 14. Resolver
+
+Node's module resolution, done in one call. Owned by the node-runtime agent; the whole
+implementation and its exports are in `crates/bat-kernel/src/resolve.rs` (`abi.rs` does not
+change). It reads through the path functions of section 4 and never holds one of its own
+locks across a VFS call.
+
+```
+bat_resolve(spec, slen, importer, ilen, flags, conds, clen, out, cap) -> i32
+bat_package_scope(path, plen, out, cap) -> i32
+bat_resolve_stats(out) -> 0
+```
+
+### `bat_resolve`
+
+- `spec`: the specifier. Relative (`./x`, `../x`, `.`, `..`), absolute (`/x`), a `file://` URL
+  (query and fragment dropped, percent-escapes decoded; an escaped `/` or a host other than
+  `localhost` is `EINVAL`), `#name` (package `imports`), or bare (`pkg`, `pkg/sub`,
+  `@scope/pkg`, `@scope/pkg/sub`). Builtins (`node:fs`, `fs`) are the caller's business and
+  must be filtered before the call.
+- `importer`: absolute path of the importing **file**, or of a **directory** when flags bit 1
+  is set. It is taken as already real: the `node_modules` walk starts from it as written.
+  Unused when `spec` is absolute or a `file://` URL.
+- `flags`: bit 0 = ESM `import` (conditions `node`, `import`, the extras, `default`); clear =
+  `require` (`node`, `require`, the extras, `default`). Bit 1 = `importer` is a directory.
+  Bit 2 = do not realpath the result.
+- `conds`: extra condition names, comma separated, may be empty (`"development,browser"`).
+  `module-sync` is **not** built in: Node 22.12+ enables it for both `require` and `import`,
+  so a caller that wants that Node's answers passes it here (in the TODO app's tree it changes
+  `react-router`, `@react-router/node` and two more).
+- `out`: byte 0 = package scope type of the resolved file: `0` no `type` field (or no
+  package.json), `1` `"commonjs"`, `2` `"module"`, from the nearest package.json at or above
+  the resolved file's directory, not looking above a directory named `node_modules`.
+  Bytes 1.. = the resolved absolute path, realpath'd unless bit 2.
+  One exception: an `imports` entry whose target is a `node:` builtin returns that target
+  verbatim (`node:fs`; it does not start with `/`) with type byte 0.
+- Returns `1 + path length`, or
+  - `-ENOENT` module not found (also: a package was found but the file its `exports` names
+    does not exist);
+  - `-EACCES` the package has `exports` and the subpath or condition is not exported
+    (`ERR_PACKAGE_PATH_NOT_EXPORTED`), or a `#name` is not defined by `imports`
+    (`ERR_PACKAGE_IMPORT_NOT_DEFINED`);
+  - `-EINVAL` invalid specifier, or an invalid `exports`/`imports` target or map;
+  - `-ERANGE` `out` too small (nothing is written; the result is cached, retry is cheap);
+  - `-ENAMETOOLONG` an argument over 65535 bytes;
+  - `-EAGAIN` a package.json lies in an image this thread has no handle for yet (section 8:
+    wait on the fault word and retry). `-EAGAIN`, `-EIO` and `-ENOMEM` are never cached.
+
+Algorithm (checked against Node 24 on the TODO app's real dependency tree, see below):
+
+- **Path requests** (relative, absolute, `file://`): the exact file; else, for a name ending in
+  `.js` try `.ts` then `.tsx`, `.mjs` → `.mts`, `.cjs` → `.cts`, `.jsx` → `.tsx`; else append
+  `.js .json .node .mjs .cjs .ts .tsx .mts .cts .jsx` in that order; else as a directory:
+  package.json `main` (same file probing, then its index), then
+  `index.js index.json index.node index.mjs index.cjs index.ts index.tsx`. A request ending
+  in `/` (or `.`/`..`) is directory-only. The probing is the same in `import` mode (real Node
+  refuses extensionless and directory imports; real `require` appends only
+  `.js .json .node`). A `main` that resolves to nothing falls back to the index, and if that
+  is missing too the lookup ends with `-ENOENT`.
+- **Bare**: first self-reference (the importer's own package scope, if its `name` is the
+  requested package and it has `exports`), then `<dir>/node_modules/<name>` for the
+  importer's directory and each parent, skipping directories themselves named
+  `node_modules`. In a package directory with `exports` the subpath goes through the map and
+  the result must exist as written (no probing); a missing entry is `-EACCES`. Without
+  `exports`: `main`/index for the package itself, path probing for a subpath; `module` and
+  `browser` fields are ignored. If that finds nothing, `require` goes on to the next
+  `node_modules` up, `import` stops with `-ENOENT`, as Node does.
+- **`exports` / `imports` maps**: string, array (first valid entry), nested condition objects
+  (key order decides), `null` excludes, exact subpath keys before patterns, one `*` per key
+  with Node's precedence (longest prefix before the `*`, then longest key), every `*` in the
+  target replaced by the match. Targets must start with `./`; `.`, `..` and `node_modules`
+  segments in a target or a match are `-EINVAL`. An `exports` key ending in `/` matches
+  nothing (Node dropped folder mappings). An `imports` target that is not `./` is resolved as
+  a bare specifier from that package's directory.
+- **`#name`**: the nearest package.json's `imports`. In `require` mode a scope without an
+  `imports` field gives `-ENOENT`, in `import` mode `-EACCES`; a lone `#` is `-EINVAL`.
+- A malformed package name (`@scope` without a name) is `-EINVAL` for `import` and `-ENOENT`
+  for `require`. A package.json that does not parse counts as an empty one.
+
+### `bat_package_scope`
+
+`path` is a file or directory (absolute, or relative to the working directory; it need not
+exist, in which case it is taken as a file). Finds the nearest package.json at or above the
+directory (for a directory: starting with the directory itself), not looking above a
+directory named `node_modules`. `out` byte 0 = type as above, bytes 1.. = the absolute path
+of that package.json (not realpath'd). Returns `1 + path length`, `-ENOENT` if there is none,
+`-ERANGE` if `out` is too small.
+
+### `bat_resolve_stats`
+
+`out`: 8 × `f64`: resolve calls; result-cache hits; VFS stat calls made by the resolver;
+package.json files read and parsed; package.json cache hits; nanoseconds spent in resolutions
+that missed the result cache (`host_now_ms` deltas, so the resolution is whatever the host
+clock gives; two host calls per miss, none per hit); result-cache entries; package-cache
+entries. Counters are process-wide and never reset.
+
+### Caches
+
+Both are kernel statics shared by every process, behind kernel `RwLock`s.
+
+- **Packages**: per directory, the parsed summary of its package.json (`name`, `main`,
+  `type`, the `exports` and `imports` trees) or "none here". An entry is valid for the
+  `BAT_OVERLAY_GEN` it was filled at. After a generation change an entry that came from an
+  image (`Stat.dev != 0`) is revalidated with one stat (same `dev` and `ino`) instead of being
+  read again; overlay entries and negatives are re-read.
+- **Results**: keyed by (flags, `conds`, importer directory, `spec`), holding the answer or
+  the errno (`ENOENT`, `EACCES`, `EINVAL`). Dropped whole when `BAT_OVERLAY_GEN` changes or at
+  65536 entries. A hit takes one read lock, one hash and one copy.
+
+Limit: `BAT_OVERLAY_GEN` counts namespace changes only. Rewriting an existing overlay
+package.json **in place** (same name, new contents) does not bump it, so its cached summary
+and the results derived from it stay until the next create, remove, rename or mount anywhere
+in the overlay.
+
+### Verification
+
+`resolve.rs` has table tests for the JSON parser and the map matching, and an opt-in test
+(`resolve::tests::real_tree`, `--ignored`) that mounts an image natively and replays a case
+file produced by asking real Node (`require.resolve` through `createRequire`, and
+`import.meta.resolve`). Last run: 9143 cases over the TODO app's real `node_modules` (every
+package's self-reference, own `exports` and `imports` keys, each dependency and its exported
+subpaths, from the package root and from a nested directory) plus a small fixture tree; all
+agree with Node 24.18, including the type byte and the nearest package.json, with
+`module-sync` passed in `conds`.

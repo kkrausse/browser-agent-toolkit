@@ -10,6 +10,7 @@ pub mod lock;
 pub mod path;
 pub mod persist;
 pub mod proc;
+pub mod resolve;
 pub mod spike;
 pub mod sys;
 pub mod thread;
