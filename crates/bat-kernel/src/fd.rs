@@ -204,12 +204,15 @@ struct ListenInner {
 }
 pub struct Listener {
     pub port: u32,
+    /// Identity of this listener (ports are reused, identities are not).
+    pub id: u32,
     inner: Mutex<ListenInner>,
     wq: WaitQ,
 }
 
 static PORTS: Mutex<BTreeMap<u32, Arc<Listener>>> = Mutex::new(BTreeMap::new());
 static NEXT_EPHEMERAL: AtomicU32 = AtomicU32::new(49152);
+static NEXT_LISTENER: AtomicU32 = AtomicU32::new(1);
 
 pub enum OfKind {
     Ov { ino: u32 },
@@ -258,6 +261,7 @@ impl Drop for OpenFile {
                 }
                 drop(pending);
                 l.wq.wake_all();
+                ports_changed();
             }
             _ => {}
         }
@@ -290,10 +294,13 @@ pub fn listen(port: u32) -> R<Arc<OpenFile>> {
     };
     let l = Arc::new(Listener {
         port,
+        id: NEXT_LISTENER.fetch_add(1, Relaxed),
         inner: Mutex::new(ListenInner { queue: VecDeque::new(), closed: false, subs: Vec::new() }),
         wq: WaitQ::new(),
     });
     ports.insert(port, l.clone());
+    drop(ports);
+    ports_changed();
     Ok(file(OfKind::Listener(l), vfs::O_RDWR, b""))
 }
 
@@ -524,6 +531,109 @@ impl OpenFile {
             OfKind::Sock { local, peer, .. } => (*local, *peer),
             OfKind::Listener(l) => (l.port, 0),
             _ => (0, 0),
+        }
+    }
+}
+
+// ---- direct ring access for the HTTP/WebSocket codecs (http.rs, ws.rs) ----
+//
+// A socket has one reader and one writer per direction, so the codecs parse
+// and frame in place: the reader is shown the readable part of the ring (and
+// may hand ranges of it to JS before consuming them), the writer is shown the
+// free part and commits what it filled. Bytes cross between JS and the ring
+// exactly once.
+
+/// Bumped whenever a port starts or stops being listened on (`bat_port_listener`).
+#[no_mangle]
+pub static BAT_PORTS_WORD: AtomicU32 = AtomicU32::new(0);
+
+pub fn ports_changed() {
+    BAT_PORTS_WORD.fetch_add(1, SeqCst);
+    crate::sys::notify(BAT_PORTS_WORD.as_ptr(), u32::MAX);
+}
+
+/// Identity of whatever listens on `port` now (never 0, never reused), or 0.
+pub fn port_listener(port: u32) -> u32 {
+    PORTS.lock().get(&port).map(|l| l.id).unwrap_or(0)
+}
+
+impl Pipe {
+    /// Show the readable bytes as two slices (the second is the wrapped part)
+    /// plus "no writer left". `f` returns how many bytes to consume.
+    pub fn with_rx<T>(&self, f: impl FnOnce(&mut [u8], &mut [u8], bool) -> (usize, T)) -> T {
+        let (n, out);
+        {
+            let mut p = self.inner.lock();
+            let p = &mut *p;
+            let cap = p.buf.len();
+            let first = p.len.min(cap - p.head);
+            let second = p.len - first;
+            let eof = p.writers == 0;
+            let (lo, hi) = p.buf.split_at_mut(p.head);
+            (n, out) = f(&mut hi[..first], &mut lo[..second], eof);
+            let n = n.min(p.len);
+            if n > 0 {
+                p.head = (p.head + n) % cap;
+                p.len -= n;
+                post(&p.subs, POLLOUT);
+            }
+        }
+        if n > 0 {
+            self.wq.wake_all();
+        }
+        out
+    }
+    /// Show the free bytes as two slices starting at the write position. `f`
+    /// returns how many bytes it filled and wants committed.
+    pub fn with_tx<T>(&self, f: impl FnOnce(&mut [u8], &mut [u8]) -> (usize, T)) -> R<T> {
+        let (n, out);
+        {
+            let mut p = self.inner.lock();
+            let p = &mut *p;
+            if p.readers == 0 {
+                return Err(EPIPE);
+            }
+            let cap = p.buf.len();
+            let free = cap - p.len;
+            let tail = (p.head + p.len) % cap;
+            let first = free.min(cap - tail);
+            let second = free - first;
+            let (lo, hi) = p.buf.split_at_mut(tail);
+            (n, out) = f(&mut hi[..first], &mut lo[..second]);
+            let n = n.min(free);
+            if n > 0 {
+                p.len += n;
+                post(&p.subs, POLLIN);
+            }
+        }
+        if n > 0 {
+            self.rq.wake_all();
+        }
+        Ok(out)
+    }
+}
+
+impl OpenFile {
+    /// The receive ring of a socket (or the ring of a pipe's read end).
+    pub fn rx_ring(&self) -> R<&Arc<Pipe>> {
+        match &self.kind {
+            OfKind::Sock { rx, .. } => Ok(rx),
+            OfKind::PipeR(p) => Ok(p),
+            _ => Err(ENOTSOCK),
+        }
+    }
+    /// The send ring of a socket (or the ring of a pipe's write end).
+    pub fn tx_ring(&self) -> R<&Arc<Pipe>> {
+        match &self.kind {
+            OfKind::Sock { tx, wr_shut, .. } => {
+                if wr_shut.load(SeqCst) {
+                    Err(EPIPE)
+                } else {
+                    Ok(tx)
+                }
+            }
+            OfKind::PipeW(p) => Ok(p),
+            _ => Err(ENOTSOCK),
         }
     }
 }

@@ -5,6 +5,7 @@
 pub mod abi;
 pub mod errno;
 pub mod fd;
+pub mod http;
 pub mod image;
 pub mod lock;
 pub mod path;
@@ -15,6 +16,7 @@ pub mod spike;
 pub mod sys;
 pub mod thread;
 pub mod vfs;
+pub mod ws;
 
 #[cfg(target_arch = "wasm32")]
 mod alloc;
