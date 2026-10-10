@@ -1,0 +1,885 @@
+{
+ "meta": {
+  "label": "before-local",
+  "port": "4130",
+  "date": "2026-10-10T07:29:02.467Z",
+  "commit": "538ec89",
+  "chrome": "headed on Xvfb, browser-control"
+ },
+ "summary": {
+  "first": {
+   "n": 3,
+   "load1": {
+    "n": 3,
+    "median": 37,
+    "min": 32,
+    "max": 39
+   },
+   "whole": {
+    "n": 3,
+    "median": 20413,
+    "min": 15054,
+    "max": 27158
+   },
+   "steps": {
+    "open": {
+     "n": 3,
+     "median": 311,
+     "min": 308,
+     "max": 319
+    },
+    "manifest": {
+     "n": 3,
+     "median": 372,
+     "min": 323,
+     "max": 386
+    },
+    "boot": {
+     "n": 3,
+     "median": 11172,
+     "min": 8391,
+     "max": 16666
+    },
+    "source.project": {
+     "n": 3,
+     "median": 11179,
+     "min": 8401,
+     "max": 16671
+    },
+    "source.derived": {
+     "n": 3,
+     "median": 11550,
+     "min": 8536,
+     "max": 16964
+    },
+    "source": {
+     "n": 3,
+     "median": 11552,
+     "min": 8538,
+     "max": 16966
+    },
+    "preview.spawn": {
+     "n": 3,
+     "median": 11555,
+     "min": 8543,
+     "max": 16974
+    },
+    "preview.listening": {
+     "n": 3,
+     "median": 12433,
+     "min": 9307,
+     "max": 18387
+    },
+    "agent.spawn": {
+     "n": 3,
+     "median": 12435,
+     "min": 9310,
+     "max": 18392
+    },
+    "preview.ready": {
+     "n": 3,
+     "median": 13497,
+     "min": 10138,
+     "max": 19529
+    },
+    "preview.visible": {
+     "n": 3,
+     "median": 15765,
+     "min": 12160,
+     "max": 24056
+    },
+    "agent.listening": {
+     "n": 3,
+     "median": 17138,
+     "min": 13103,
+     "max": 23987
+    },
+    "agent.health": {
+     "n": 3,
+     "median": 17431,
+     "min": 13350,
+     "max": 24380
+    },
+    "agent.activated": {
+     "n": 3,
+     "median": 18819,
+     "min": 14191,
+     "max": 25798
+    },
+    "agent.plugins": {
+     "n": 3,
+     "median": 19852,
+     "min": 14237,
+     "max": 25819
+    },
+    "agent.config": {
+     "n": 3,
+     "median": 19886,
+     "min": 14251,
+     "max": 25828
+    },
+    "agent.ready": {
+     "n": 3,
+     "median": 19905,
+     "min": 14944,
+     "max": 25844
+    },
+    "chat.ready": {
+     "n": 3,
+     "median": 20413,
+     "min": 15054,
+     "max": 27158
+    }
+   },
+   "boot": {
+    "kernel": {
+     "n": 3,
+     "median": 197,
+     "min": 133,
+     "max": 301
+    },
+    "image": {
+     "n": 3,
+     "median": 10630,
+     "min": 7915,
+     "max": 16045
+    },
+    "mounted": {
+     "n": 3,
+     "median": 10648,
+     "min": 7935,
+     "max": 16059
+    },
+    "total": {
+     "n": 3,
+     "median": 10732,
+     "min": 7971,
+     "max": 16151
+    }
+   }
+  },
+  "reopen": {
+   "n": 3,
+   "load1": {
+    "n": 3,
+    "median": 36,
+    "min": 34,
+    "max": 39
+   },
+   "whole": {
+    "n": 3,
+    "median": 8532,
+    "min": 5759,
+    "max": 10984
+   },
+   "steps": {
+    "open": {
+     "n": 3,
+     "median": 308,
+     "min": 302,
+     "max": 339
+    },
+    "manifest": {
+     "n": 3,
+     "median": 315,
+     "min": 314,
+     "max": 588
+    },
+    "boot": {
+     "n": 3,
+     "median": 715,
+     "min": 521,
+     "max": 1243
+    },
+    "source.project": {
+     "n": 3,
+     "median": 715,
+     "min": 522,
+     "max": 1245
+    },
+    "source.derived": {
+     "n": 3,
+     "median": 716,
+     "min": 522,
+     "max": 1245
+    },
+    "source": {
+     "n": 3,
+     "median": 717,
+     "min": 523,
+     "max": 1246
+    },
+    "preview.spawn": {
+     "n": 3,
+     "median": 717,
+     "min": 525,
+     "max": 1247
+    },
+    "preview.listening": {
+     "n": 3,
+     "median": 1947,
+     "min": 1413,
+     "max": 2877
+    },
+    "agent.spawn": {
+     "n": 3,
+     "median": 1947,
+     "min": 1421,
+     "max": 2879
+    },
+    "preview.ready": {
+     "n": 3,
+     "median": 3442,
+     "min": 2251,
+     "max": 4696
+    },
+    "agent.listening": {
+     "n": 3,
+     "median": 6443,
+     "min": 4103,
+     "max": 8670
+    },
+    "agent.health": {
+     "n": 3,
+     "median": 7132,
+     "min": 4465,
+     "max": 9305
+    },
+    "preview.visible": {
+     "n": 3,
+     "median": 7353,
+     "min": 3334,
+     "max": 7524
+    },
+    "agent.activated": {
+     "n": 3,
+     "median": 8436,
+     "min": 5608,
+     "max": 10788
+    },
+    "agent.plugins": {
+     "n": 3,
+     "median": 8445,
+     "min": 5622,
+     "max": 10868
+    },
+    "agent.config": {
+     "n": 3,
+     "median": 8457,
+     "min": 5643,
+     "max": 10881
+    },
+    "agent.ready": {
+     "n": 3,
+     "median": 8478,
+     "min": 5674,
+     "max": 10899
+    },
+    "chat.ready": {
+     "n": 3,
+     "median": 8532,
+     "min": 5759,
+     "max": 10984
+    }
+   },
+   "boot": {
+    "kernel": {
+     "n": 3,
+     "median": 374,
+     "min": 157,
+     "max": 488
+    },
+    "image": {
+     "n": 3,
+     "median": 374,
+     "min": 157,
+     "max": 489
+    },
+    "mounted": {
+     "n": 3,
+     "median": 385,
+     "min": 191,
+     "max": 544
+    },
+    "total": {
+     "n": 3,
+     "median": 388,
+     "min": 195,
+     "max": 548
+    }
+   }
+  }
+ },
+ "samples": [
+  {
+   "kind": "first",
+   "origin": "http://fo-mv22muwi-0.localhost:4130",
+   "load": [
+    31.81,
+    21.58,
+    15.51
+   ],
+   "whole": 20412.9,
+   "outcome": "ok",
+   "steps": {
+    "open": 311.2,
+    "manifest": 385.6,
+    "boot": 11171.8,
+    "source.project": 11179.1,
+    "source.derived": 11549.5,
+    "source": 11551.5,
+    "preview.spawn": 11555.4,
+    "preview.listening": 12433.1,
+    "agent.spawn": 12434.8,
+    "preview.ready": 13497.1,
+    "preview.visible": 15764.5,
+    "agent.listening": 17138.3,
+    "agent.health": 17430.5,
+    "agent.activated": 18818.5,
+    "agent.plugins": 19851.9,
+    "agent.config": 19885.8,
+    "agent.ready": 19904.6,
+    "chat.ready": 20412.9
+   },
+   "boot": {
+    "kernel": 196.8,
+    "kernelCompile": 90.5,
+    "kernelAttach": 2.5,
+    "kerneldInit": 102.7,
+    "restore": 12.3,
+    "image": 10629.7,
+    "imageCached": false,
+    "mount": 10.1,
+    "mounted": 10647.9,
+    "serviceWorker": 10732.1,
+    "total": 10732.3
+   },
+   "isolated": true,
+   "log": [
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [00:27:22.658] INFO (#448) http.span=1083ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124b59622001KChSus9OFlI2je',",
+    "[agent]     created: 1791617242658,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [00:27:22.735] INFO (#448) http.span=1160ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124b5966f0012B25k42gXEv6jN',",
+    "[agent]     created: 1791617242735,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [00:27:23.983] INFO (#525): event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124b59b4f001BkG1yiUfDUkALc',",
+    "[agent]     created: 1791617243983,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stored": [
+    [
+     "bat/editor/overlay/snap-b",
+     0
+    ],
+    [
+     "bat/editor/overlay/snap-a",
+     0
+    ],
+    [
+     "bat/editor/overlay/journal",
+     15189851
+    ],
+    [
+     "bat/editor/images/image-3ada644862276ad1.batimg",
+     245457776
+    ]
+   ]
+  },
+  {
+   "kind": "reopen",
+   "origin": "http://fo-mv22muwi-0.localhost:4130",
+   "load": [
+    35.8,
+    23.32,
+    16.25
+   ],
+   "whole": 8532.1,
+   "outcome": "ok",
+   "steps": {
+    "open": 301.6,
+    "manifest": 314.5,
+    "boot": 714.9,
+    "source.project": 715.1,
+    "source.derived": 715.7,
+    "source": 716.5,
+    "preview.spawn": 717.4,
+    "preview.listening": 1946.6,
+    "agent.spawn": 1947.4,
+    "preview.ready": 3441.6,
+    "agent.listening": 6442.7,
+    "agent.health": 7132,
+    "preview.visible": 7353,
+    "agent.activated": 8436.3,
+    "agent.plugins": 8444.8,
+    "agent.config": 8457.2,
+    "agent.ready": 8477.7,
+    "chat.ready": 8532.1
+   },
+   "boot": {
+    "kernel": 374.4,
+    "kernelCompile": 30.8,
+    "kernelAttach": 2.4,
+    "kerneldInit": 340.5,
+    "restore": 79.7,
+    "image": 374.4,
+    "imageCached": true,
+    "mount": 8.5,
+    "mounted": 385.4,
+    "serviceWorker": 387.8,
+    "total": 387.9
+   },
+   "isolated": true,
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [00:27:37.626] INFO (#447) http.span=1156ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124b5d0990013dotOmDgmBWmBC',",
+    "[agent]     created: 1791617257625,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [00:27:37.629] INFO (#447) http.span=1159ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124b5d09d001MtusBcIGDklUd1',",
+    "[agent]     created: 1791617257629,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [00:27:37.718] INFO (#447) http.span=1248ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124b5d0f6001Rfmq1JopNFrAHX',",
+    "[agent]     created: 1791617257718,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stored": [
+    [
+     "bat/editor/overlay/snap-b",
+     0
+    ],
+    [
+     "bat/editor/overlay/snap-a",
+     0
+    ],
+    [
+     "bat/editor/overlay/journal",
+     15189851
+    ],
+    [
+     "bat/editor/images/image-3ada644862276ad1.batimg",
+     245457776
+    ]
+   ]
+  },
+  {
+   "kind": "first",
+   "origin": "http://fo-mv22muwi-1.localhost:4130",
+   "load": [
+    39.02,
+    24.66,
+    16.8
+   ],
+   "whole": 27157.8,
+   "outcome": "ok",
+   "steps": {
+    "open": 318.6,
+    "manifest": 372.4,
+    "boot": 16665.9,
+    "source.project": 16671.4,
+    "source.derived": 16964,
+    "source": 16965.8,
+    "preview.spawn": 16973.7,
+    "preview.listening": 18387.1,
+    "agent.spawn": 18391.6,
+    "preview.ready": 19528.9,
+    "agent.listening": 23987.4,
+    "preview.visible": 24056.1,
+    "agent.health": 24380,
+    "agent.activated": 25797.9,
+    "agent.plugins": 25819,
+    "agent.config": 25828.1,
+    "agent.ready": 25844.1,
+    "chat.ready": 27157.8
+   },
+   "boot": {
+    "kernel": 300.9,
+    "kernelCompile": 64.4,
+    "kernelAttach": 2.3,
+    "kerneldInit": 233.1,
+    "restore": 63.8,
+    "image": 16045.3,
+    "imageCached": false,
+    "mount": 8.8,
+    "mounted": 16058.6,
+    "serviceWorker": 16150.8,
+    "total": 16150.9
+   },
+   "isolated": true,
+   "log": [
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [00:28:10.207] INFO (#448) http.span=1074ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124b64fde00154aSfgIIp4vXkl',",
+    "[agent]     created: 1791617290206,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [00:28:10.445] INFO (#448) http.span=1312ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124b650cd001WlHzi4ymgXr4sz',",
+    "[agent]     created: 1791617290445,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [00:28:11.514] INFO (#525): event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124b654fa001BIg74PlWQJP5ov',",
+    "[agent]     created: 1791617291514,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stored": [
+    [
+     "bat/editor/overlay/snap-b",
+     0
+    ],
+    [
+     "bat/editor/overlay/snap-a",
+     0
+    ],
+    [
+     "bat/editor/overlay/journal",
+     15189829
+    ],
+    [
+     "bat/editor/images/image-3ada644862276ad1.batimg",
+     245457776
+    ]
+   ]
+  },
+  {
+   "kind": "reopen",
+   "origin": "http://fo-mv22muwi-1.localhost:4130",
+   "load": [
+    38.71,
+    26.31,
+    17.65
+   ],
+   "whole": 10983.8,
+   "outcome": "ok",
+   "steps": {
+    "open": 338.5,
+    "manifest": 587.5,
+    "boot": 1243.3,
+    "source.project": 1244.5,
+    "source.derived": 1244.7,
+    "source": 1246.1,
+    "preview.spawn": 1246.7,
+    "preview.listening": 2877,
+    "agent.spawn": 2878.7,
+    "preview.ready": 4696.3,
+    "preview.visible": 7524,
+    "agent.listening": 8669.9,
+    "agent.health": 9305.1,
+    "agent.activated": 10787.7,
+    "agent.plugins": 10867.9,
+    "agent.config": 10880.9,
+    "agent.ready": 10899.4,
+    "chat.ready": 10983.8
+   },
+   "boot": {
+    "kernel": 488.3,
+    "kernelCompile": 162.5,
+    "kernelAttach": 2.6,
+    "kerneldInit": 319.1,
+    "restore": 174.6,
+    "image": 488.5,
+    "imageCached": true,
+    "mount": 50.6,
+    "mounted": 543.6,
+    "serviceWorker": 547.4,
+    "total": 547.5
+   },
+   "isolated": true,
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [00:28:29.289] INFO (#447) http.span=1326ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124b69a69001YjfTD3V5BMp97h',",
+    "[agent]     created: 1791617309289,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [00:28:29.290] INFO (#447) http.span=1327ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124b69a6a001XunmDpYeX3RrTA',",
+    "[agent]     created: 1791617309290,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [00:28:29.392] INFO (#447) http.span=1429ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124b69ad0001H3dht1tFzgOcQK',",
+    "[agent]     created: 1791617309392,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stored": [
+    [
+     "bat/editor/overlay/snap-b",
+     0
+    ],
+    [
+     "bat/editor/overlay/snap-a",
+     0
+    ],
+    [
+     "bat/editor/overlay/journal",
+     15189829
+    ],
+    [
+     "bat/editor/images/image-3ada644862276ad1.batimg",
+     245457776
+    ]
+   ]
+  },
+  {
+   "kind": "first",
+   "origin": "http://fo-mv22muwi-2.localhost:4130",
+   "load": [
+    37.49,
+    26.86,
+    18.02
+   ],
+   "whole": 15053.5,
+   "outcome": "ok",
+   "steps": {
+    "open": 307.6,
+    "manifest": 322.7,
+    "boot": 8391.4,
+    "source.project": 8400.8,
+    "source.derived": 8536.2,
+    "source": 8537.6,
+    "preview.spawn": 8542.5,
+    "preview.listening": 9306.5,
+    "agent.spawn": 9310,
+    "preview.ready": 10137.5,
+    "preview.visible": 12159.9,
+    "agent.listening": 13102.6,
+    "agent.health": 13350,
+    "agent.activated": 14190.8,
+    "agent.plugins": 14236.6,
+    "agent.config": 14250.9,
+    "agent.ready": 14944.1,
+    "chat.ready": 15053.5
+   },
+   "boot": {
+    "kernel": 132.6,
+    "kernelCompile": 37.1,
+    "kernelAttach": 2.1,
+    "kerneldInit": 92.4,
+    "restore": 37.8,
+    "image": 7914.8,
+    "imageCached": false,
+    "mount": 15.5,
+    "mounted": 7935.2,
+    "serviceWorker": 7970.6,
+    "total": 7970.7
+   },
+   "isolated": true,
+   "log": [
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [00:28:50.583] INFO (#448) http.span=734ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124b6ed960010Dwd7EQLEM8sWt',",
+    "[agent]     created: 1791617330583,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [00:28:50.657] INFO (#448) http.span=808ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124b6ede1001Xnxps82GS5ov1t',",
+    "[agent]     created: 1791617330657,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [00:28:51.376] INFO (#525): event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124b6f0af001EHJwX2pbU6IOF7',",
+    "[agent]     created: 1791617331375,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stored": [
+    [
+     "bat/editor/overlay/snap-b",
+     0
+    ],
+    [
+     "bat/editor/overlay/snap-a",
+     0
+    ],
+    [
+     "bat/editor/overlay/journal",
+     15189807
+    ],
+    [
+     "bat/editor/images/image-3ada644862276ad1.batimg",
+     245457776
+    ]
+   ]
+  },
+  {
+   "kind": "reopen",
+   "origin": "http://fo-mv22muwi-2.localhost:4130",
+   "load": [
+    33.94,
+    26.61,
+    18.08
+   ],
+   "whole": 5759.3,
+   "outcome": "ok",
+   "steps": {
+    "open": 307.5,
+    "manifest": 313.5,
+    "boot": 521.1,
+    "source.project": 521.5,
+    "source.derived": 521.6,
+    "source": 522.7,
+    "preview.spawn": 524.5,
+    "preview.listening": 1413.4,
+    "agent.spawn": 1420.7,
+    "preview.ready": 2250.8,
+    "preview.visible": 3334.1,
+    "agent.listening": 4102.5,
+    "agent.health": 4464.7,
+    "agent.activated": 5607.7,
+    "agent.plugins": 5621.5,
+    "agent.config": 5643,
+    "agent.ready": 5673.7,
+    "chat.ready": 5759.3
+   },
+   "boot": {
+    "kernel": 156.6,
+    "kernelCompile": 33.7,
+    "kernelAttach": 6.7,
+    "kerneldInit": 115.4,
+    "restore": 72.9,
+    "image": 156.7,
+    "imageCached": true,
+    "mount": 28.3,
+    "mounted": 191.1,
+    "serviceWorker": 194.9,
+    "total": 195
+   },
+   "isolated": true,
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [00:28:59.792] INFO (#447) http.span=1038ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124b71190001wn81Eq4Z1dkYUW',",
+    "[agent]     created: 1791617339792,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [00:28:59.794] INFO (#447) http.span=1040ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124b71192001AQQikEMw1adhdq',",
+    "[agent]     created: 1791617339794,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [00:28:59.880] INFO (#447) http.span=1126ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124b711e70019HEVoYKTqxBmIF',",
+    "[agent]     created: 1791617339879,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stored": [
+    [
+     "bat/editor/overlay/snap-b",
+     0
+    ],
+    [
+     "bat/editor/overlay/snap-a",
+     0
+    ],
+    [
+     "bat/editor/overlay/journal",
+     15189807
+    ],
+    [
+     "bat/editor/images/image-3ada644862276ad1.batimg",
+     245457776
+    ]
+   ]
+  }
+ ]
+}
