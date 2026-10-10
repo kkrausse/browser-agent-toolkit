@@ -35,7 +35,7 @@ in `target/release` of this checkout.
 
 ```sh
 # in examples/terminal-app, after a setup: only the page's own steps
-MODEL_URL=https://<mock host>:4311/v1 bun run build     # → dist/
+MODEL_URL=https://<mock host>:4311/v1 OUT_DIR=dist-published bun run build
 ```
 
 `dist/` is everything a visitor needs and nothing else (57 MB, of which the dependency image

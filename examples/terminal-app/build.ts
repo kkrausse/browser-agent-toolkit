@@ -12,6 +12,7 @@
 // 240 MB dependency image is 45 MB (zstd: 32 MB, which Chrome 154 can only decode in its
 // network stack, i.e. with a server that sets `Content-Encoding`).
 //
+//   OUT_DIR     another output directory (default dist/)
 //   MODEL_URL   the default `?model=` (and its `/diag` collector) of the built page,
 //               for a page that is not published beside its mock
 import { copyFileSync, createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
@@ -20,7 +21,7 @@ import { pipeline } from 'node:stream/promises'
 import { createGzip } from 'node:zlib'
 
 const here = import.meta.dirname
-const out = resolve(here, 'dist')
+const out = resolve(here, process.env.OUT_DIR ?? 'dist')
 for (const [path, how] of [['.wasm-term/embed.js', 'bun run wasm-term'], ['.editor/prepared/manifest.json', 'bun run prepare:editor']] as const) {
   if (!existsSync(resolve(here, path))) throw Error(`Missing ${path}: run \`${how}\` in examples/terminal-app (or \`bun run terminal\` in the repository root).`)
 }
