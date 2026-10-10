@@ -6,6 +6,7 @@
 //  - restores the overlay from OPFS at boot and drains the journal to it.
 import { attachKernel, type KernelInstance } from './attach'
 import { createKernel, type Kernel } from './kernel'
+import { trace, traceEnable } from '../trace'
 import { fnv1a32, imageExists, openImageHandle, opfsDir, removeImage, storeImage, type SyncHandle } from './opfs'
 
 interface InitArgs {
@@ -18,6 +19,7 @@ interface InitArgs {
   processWorkerType?: 'module' | 'classic'
   runnerUrl: string
   warmSpare: boolean
+  trace?: boolean
 }
 interface Proc {
   worker: Worker
@@ -53,6 +55,7 @@ function createProcessWorker(): Promise<Proc> {
       const m = e.data
       if (m.type === 'ready') {
         proc.thread = m.thread
+        trace('worker.ready', { thread: m.thread })
         resolve(proc)
       } else if (m.type === 'exited') {
         retire(proc, 0)
@@ -77,6 +80,7 @@ function ensureSpare() {
 }
 async function spawn(pid: number) {
   stats.spawns++
+  trace('spawn.request', { pid, spare: !!spare })
   const taken = spare ?? createProcessWorker()
   spare = undefined
   let proc: Proc
@@ -89,6 +93,7 @@ async function spawn(pid: number) {
   }
   proc.pid = pid
   procs.set(pid, proc)
+  trace('spawn.run', { pid })
   proc.worker.postMessage({ type: 'run', pid, runnerUrl: cfg.runnerUrl })
   ensureSpare()
 }
@@ -372,6 +377,8 @@ async function supervise() {
 
 async function init(args: InitArgs) {
   cfg = args
+  if (args.trace) traceEnable('kerneld')
+  trace('kerneld.init')
   if (args.persist) {
     // One writer per origin and namespace.
     const tryLock = () =>
@@ -393,6 +400,7 @@ async function init(args: InitArgs) {
       e.code = 'EBUSY'
       throw e
     }
+    trace('kerneld.locked')
   }
   inst = await attachKernel({
     module: args.module,
@@ -406,9 +414,11 @@ async function init(args: InitArgs) {
     },
   })
   k = createKernel(inst)
+  trace('kerneld.attached')
   const pid: number = k.x.bat_host_proc_new()
   outP = k.x.bat_alloc(64) >>> 0
   const restored = args.persist ? await restore() : undefined
+  trace('kerneld.restored', restored)
   if (!args.persist) for (const path of args.noPersist) excludePath(path)
   void supervise()
   ensureSpare()

@@ -24,6 +24,7 @@ import { parseConfig } from './config'
 import { installGlobals } from './globals'
 import { createLoop, type LoopInternals } from './loop'
 import type { Runtime } from './runtime'
+import { trace, traceEnable } from '../trace'
 
 const g: any = globalThis
 // Everything the runtime needs from the worker scope, taken before the guest can see or change it.
@@ -42,6 +43,7 @@ const host = {
   location: { href: String(g.location.href), origin: String(g.location.origin) },
 }
 const config = parseConfig(host.location.href)
+if (config.trace) traceEnable('process')
 
 let inst: KernelInstance
 let kernel: Kernel
@@ -132,7 +134,10 @@ function warmUp() {
     require: (id: string) => builtins.require(id),
     wasmModule,
     host: { ...host, global: g },
-    mark: (name: string) => marks.push([name, performance.now() - runAt]),
+    mark: (name: string) => {
+      marks.push([name, performance.now() - runAt])
+      trace(name, { pid })
+    },
     marks,
   }
   builtins = createBuiltins(rt)
@@ -341,6 +346,7 @@ host.addEventListener('message', (async (e: MessageEvent) => {
         },
       })
       kernel = createKernel(inst)
+      trace('worker.attached')
       await openImages()
       host.postMessage({ type: 'ready', thread: inst.thread, tid: inst.tid })
       // After `ready`, so a spawn that is already waiting is not held up by more than this one step.
@@ -349,6 +355,7 @@ host.addEventListener('message', (async (e: MessageEvent) => {
       } catch (err) {
         console.error('process worker warm-up failed (will retry at spawn):', err)
       }
+      trace('worker.warm')
     } else if (m.type === 'images') {
       e.stopImmediatePropagation()
       await openImages()

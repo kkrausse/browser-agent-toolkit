@@ -1,0 +1,654 @@
+{
+ "meta": {
+  "label": "smoke",
+  "date": "2026-10-10T07:05:48.301Z",
+  "commit": "b9c32ea",
+  "origin": "http://127.0.0.1:4120",
+  "trace": true,
+  "settleMs": 800,
+  "chrome": "headed on Xvfb, driven by browser-control"
+ },
+ "summary": {
+  "fresh": {
+   "n": 0,
+   "stages": {},
+   "steps": {},
+   "boot": {}
+  },
+  "reopen": {
+   "n": 0,
+   "stages": {},
+   "steps": {},
+   "boot": {}
+  }
+ },
+ "samples": [
+  {
+   "kind": "fresh",
+   "load": [
+    18.44,
+    13.85,
+    12.21
+   ],
+   "outcome": "failed",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 306.7,
+    "manifest": 312,
+    "boot": 5398.9,
+    "source.project": 5401.8,
+    "source.derived": 5402.1,
+    "source": 5403.9,
+    "preview.spawn": 5407.2
+   },
+   "trace": [
+    {
+     "src": "page",
+     "name": "boot.start",
+     "ms": 325.1
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.init",
+     "ms": 367
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.locked",
+     "ms": 368
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.attached",
+     "ms": 368.7
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.restored",
+     "ms": 383.1,
+     "data": {
+      "snapshotSeq": 0,
+      "seq": 0,
+      "journalFrames": 0,
+      "journalBytes": 0,
+      "ms": 14.15499997138977
+     }
+    },
+    {
+     "src": "page",
+     "name": "boot.kernel",
+     "ms": 384.4
+    },
+    {
+     "src": "process",
+     "name": "worker.attached",
+     "ms": 412.5
+    },
+    {
+     "src": "kerneld",
+     "name": "worker.ready",
+     "ms": 412.9,
+     "data": {
+      "thread": 6817424
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.warm",
+     "ms": 451.4
+    },
+    {
+     "src": "page",
+     "name": "boot.image",
+     "ms": 5371
+    },
+    {
+     "src": "page",
+     "name": "boot.mounted",
+     "ms": 5380.7
+    },
+    {
+     "src": "page",
+     "name": "boot.service-worker",
+     "ms": 5398.8
+    },
+    {
+     "src": "page",
+     "name": "boot.done",
+     "ms": 5398.9
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.request",
+     "ms": 5409.5,
+     "data": {
+      "pid": 4,
+      "spare": true
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.run",
+     "ms": 5409.6,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "runtime",
+     "ms": 5411,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "adopted",
+     "ms": 5411.6,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry",
+     "ms": 5412.2,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry-returned",
+     "ms": 5416.6,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.attached",
+     "ms": 5452.6
+    },
+    {
+     "src": "kerneld",
+     "name": "worker.ready",
+     "ms": 5463,
+     "data": {
+      "thread": 12125424
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.warm",
+     "ms": 5501.8
+    }
+   ],
+   "boot": {
+    "kernel": 59.3,
+    "kernelCompile": 18.7,
+    "kernelAttach": 3.5,
+    "kerneldInit": 36.1,
+    "restore": 14.2,
+    "image": 5045.9,
+    "imageCached": false,
+    "mount": 7.5,
+    "mounted": 5055.6,
+    "serviceWorker": 5073.7,
+    "total": 5073.7
+   },
+   "error": "The agent was not started: preview exited with code 1 before it was readyDismiss",
+   "log": [
+    "[editor] Installed 18 source files",
+    "[preview] failed to load config from /workspace/vite.config.ts",
+    "[preview] error when starting dev server:",
+    "[preview] Error: Cannot find native binding. npm has a bug related to optional dependencies (https://github.com/npm/cli/issues/4828). Please try `npm i` again after removing both package-lock.json and node_modules directory.",
+    "[preview]     at Object.eval (/workspace/node_modules/.bun/@tailwindcss+oxide@4.3.3/node_modules/@tailwindcss/oxide/index.js:573:11)",
+    "[preview]     at runCjs (bat:///bat-process.js:5942:21)",
+    "[preview]     at evaluate (bat:///bat-process.js:5879:21)",
+    "[preview]     at evaluate (bat:///bat-process.js:5894:24)",
+    "[preview]     at evaluate (bat:///bat-process.js:5894:24)",
+    "[preview]     at importNow (bat:///bat-process.js:6039:22)",
+    "[preview]     at importFrom (bat:///bat-process.js:6033:14)",
+    "[preview]     at async nativeImportConfigFile (/workspace/node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/dist/node/chunks/config.js:35869:18)",
+    "[preview]     at async loadConfigFromFile (/workspace/node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/dist/node/chunks/config.js:35851:42)",
+    "[preview]     at async resolveConfig (/workspace/node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/dist/node/chunks/config.js:35500:22)",
+    "[preview] [bat-trace] {\"pid\":4,\"marks\":[[\"warm\",1],[\"runtime\",0.13],[\"adopted\",0.77],[\"entry\",1.35],[\"entry-returned\",5.74]],\"loader\":{\"modules\":589,\"cjs\":511,\"esm\":47,\"json\":2,\"builtin\":29,\"compiled\":48,\"sourceAsCode\":509,\"transformed\":1,\"fromProgram\":0,\"readMs\":55.73,\"compileMs\":158.31,\"programMs\":0,\"programs\":0,\"bytes\":6603748},\"resolve\":{\"calls\":1136,\"hits\":405,\"ms\":24.77,\"failures\":4},\"resolveKernel\":{\"calls\":731,\"cacheHits\":0,\"stats\":1806,\"packageReads\":153,\"packageCacheHits\":1870,\"ns\":19555403,\"resultEntries\":698,\"packageEntries\":256},\"transform\":{\"transforms\":1,\"cacheHits\":0,\"ms\":15.06,\"bytes\":1504,\"instantiateMs\":0.24},\"loop\":{\"turns\":5,\"timers\":0,\"immediates\":3,\"ticks\":0,\"events\":0,\"wakeTimer\":0,\"wakeKernel\":0,\"wakePing\":5}}",
+    "[editor] preview exited (code 1, signal none)",
+    "[editor] preview failed: preview exited with code 1 before it was ready"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 5398.9,
+    "boot + mount (bootRuntime alone)": 5086.9,
+    "vite spawn → listening": null,
+    "vite spawn → app visible": null,
+    "opencode spawn → attached": null,
+    "opencode spawn → chat ready": null,
+    "whole open (click → app visible and chat ready)": null
+   }
+  },
+  {
+   "kind": "reopen",
+   "load": [
+    18.25,
+    13.89,
+    12.23
+   ],
+   "outcome": "failed",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 302,
+    "manifest": 306.3,
+    "boot": 386.5,
+    "source.project": 386.7,
+    "source.derived": 386.7,
+    "source": 387.7,
+    "preview.spawn": 389
+   },
+   "trace": [
+    {
+     "src": "page",
+     "name": "boot.start",
+     "ms": 311.3
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.init",
+     "ms": 349.9
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.locked",
+     "ms": 352.6
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.attached",
+     "ms": 353.6
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.restored",
+     "ms": 364.3,
+     "data": {
+      "snapshotSeq": 0,
+      "seq": 124335,
+      "journalFrames": 3,
+      "journalBytes": 124407,
+      "ms": 10.605000019073486
+     }
+    },
+    {
+     "src": "page",
+     "name": "boot.kernel",
+     "ms": 364.9
+    },
+    {
+     "src": "page",
+     "name": "boot.image",
+     "ms": 365
+    },
+    {
+     "src": "page",
+     "name": "boot.mounted",
+     "ms": 384.6
+    },
+    {
+     "src": "page",
+     "name": "boot.service-worker",
+     "ms": 386.4
+    },
+    {
+     "src": "page",
+     "name": "boot.done",
+     "ms": 386.4
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.request",
+     "ms": 396.4,
+     "data": {
+      "pid": 4,
+      "spare": true
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.attached",
+     "ms": 398.1
+    },
+    {
+     "src": "kerneld",
+     "name": "worker.ready",
+     "ms": 406.8,
+     "data": {
+      "thread": 6911144
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.run",
+     "ms": 406.9,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.attached",
+     "ms": 431.1
+    },
+    {
+     "src": "kerneld",
+     "name": "worker.ready",
+     "ms": 434.3,
+     "data": {
+      "thread": 6911368
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.warm",
+     "ms": 439.1
+    },
+    {
+     "src": "process",
+     "name": "runtime",
+     "ms": 439.3,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "adopted",
+     "ms": 439.9,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry",
+     "ms": 440.4,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry-returned",
+     "ms": 443,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.warm",
+     "ms": 464.8
+    }
+   ],
+   "boot": {
+    "kernel": 53.5,
+    "kernelCompile": 10.1,
+    "kernelAttach": 1.5,
+    "kerneldInit": 41.2,
+    "restore": 10.6,
+    "image": 53.6,
+    "imageCached": true,
+    "mount": 16.7,
+    "mounted": 73.3,
+    "serviceWorker": 75,
+    "total": 75.1
+   },
+   "error": "The agent was not started: preview exited with code 1 before it was readyDismiss",
+   "log": [
+    "[editor] Kept the workspace already in this browser",
+    "[preview] failed to load config from /workspace/vite.config.ts",
+    "[preview] error when starting dev server:",
+    "[preview] Error: Cannot find native binding. npm has a bug related to optional dependencies (https://github.com/npm/cli/issues/4828). Please try `npm i` again after removing both package-lock.json and node_modules directory.",
+    "[preview]     at Object.eval (/workspace/node_modules/.bun/@tailwindcss+oxide@4.3.3/node_modules/@tailwindcss/oxide/index.js:573:11)",
+    "[preview]     at runCjs (bat:///bat-process.js:5942:21)",
+    "[preview]     at evaluate (bat:///bat-process.js:5879:21)",
+    "[preview]     at evaluate (bat:///bat-process.js:5894:24)",
+    "[preview]     at evaluate (bat:///bat-process.js:5894:24)",
+    "[preview]     at importNow (bat:///bat-process.js:6039:22)",
+    "[preview]     at importFrom (bat:///bat-process.js:6033:14)",
+    "[preview]     at async nativeImportConfigFile (/workspace/node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/dist/node/chunks/config.js:35869:18)",
+    "[preview]     at async loadConfigFromFile (/workspace/node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/dist/node/chunks/config.js:35851:42)",
+    "[preview]     at async resolveConfig (/workspace/node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/dist/node/chunks/config.js:35500:22)",
+    "[editor] preview exited (code 1, signal none)",
+    "[preview] [bat-trace] {\"pid\":4,\"marks\":[[\"warm\",1],[\"runtime\",0.03],[\"adopted\",0.56],[\"entry\",1.12],[\"entry-returned\",3.74]],\"loader\":{\"modules\":589,\"cjs\":511,\"esm\":47,\"json\":2,\"builtin\":29,\"compiled\":48,\"sourceAsCode\":509,\"transformed\":1,\"fromProgram\":0,\"readMs\":57.2,\"compileMs\":139.69,\"programMs\":0,\"programs\":0,\"bytes\":6603748},\"resolve\":{\"calls\":1136,\"hits\":405,\"ms\":26.2,\"failures\":4},\"resolveKernel\":{\"calls\":731,\"cacheHits\":0,\"stats\":1806,\"packageReads\":153,\"packageCacheHits\":1870,\"ns\":22250517,\"resultEntries\":698,\"packageEntries\":256},\"transform\":{\"transforms\":1,\"cacheHits\":0,\"ms\":22.83,\"bytes\":1504,\"instantiateMs\":12.23},\"loop\":{\"turns\":0,\"timers\":0,\"immediates\":0,\"ticks\":0,\"events\":0,\"wakeTimer\":0,\"wakeKernel\":0,\"wakePing\":0}}",
+    "[editor] preview failed: preview exited with code 1 before it was ready"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 386.5,
+    "boot + mount (bootRuntime alone)": 80.2,
+    "vite spawn → listening": null,
+    "vite spawn → app visible": null,
+    "opencode spawn → attached": null,
+    "opencode spawn → chat ready": null,
+    "whole open (click → app visible and chat ready)": null
+   }
+  },
+  {
+   "kind": "reopen",
+   "load": [
+    17.43,
+    13.79,
+    12.21
+   ],
+   "outcome": "failed",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 301.6,
+    "manifest": 308.1,
+    "boot": 378.5,
+    "source.project": 378.8,
+    "source.derived": 378.9,
+    "source": 380.1,
+    "preview.spawn": 381.1
+   },
+   "trace": [
+    {
+     "src": "page",
+     "name": "boot.start",
+     "ms": 314.9
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.init",
+     "ms": 344
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.locked",
+     "ms": 345.5
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.attached",
+     "ms": 346.5
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.restored",
+     "ms": 358.1,
+     "data": {
+      "snapshotSeq": 0,
+      "seq": 224915,
+      "journalFrames": 4,
+      "journalBytes": 225011,
+      "ms": 11.34499990940094
+     }
+    },
+    {
+     "src": "page",
+     "name": "boot.kernel",
+     "ms": 358.8
+    },
+    {
+     "src": "page",
+     "name": "boot.image",
+     "ms": 358.9
+    },
+    {
+     "src": "page",
+     "name": "boot.mounted",
+     "ms": 376.9
+    },
+    {
+     "src": "page",
+     "name": "boot.service-worker",
+     "ms": 378.4
+    },
+    {
+     "src": "page",
+     "name": "boot.done",
+     "ms": 378.5
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.request",
+     "ms": 391.7,
+     "data": {
+      "pid": 4,
+      "spare": true
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.attached",
+     "ms": 392.9
+    },
+    {
+     "src": "kerneld",
+     "name": "worker.ready",
+     "ms": 400.9,
+     "data": {
+      "thread": 6911144
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.run",
+     "ms": 401,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.attached",
+     "ms": 424.6
+    },
+    {
+     "src": "kerneld",
+     "name": "worker.ready",
+     "ms": 427.3,
+     "data": {
+      "thread": 6936240
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.warm",
+     "ms": 429.7
+    },
+    {
+     "src": "process",
+     "name": "runtime",
+     "ms": 430,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "adopted",
+     "ms": 430.5,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry",
+     "ms": 431,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry-returned",
+     "ms": 434.3,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.warm",
+     "ms": 454.2
+    }
+   ],
+   "boot": {
+    "kernel": 43.9,
+    "kernelCompile": 10.9,
+    "kernelAttach": 1.3,
+    "kerneldInit": 30.9,
+    "restore": 11.3,
+    "image": 44,
+    "imageCached": true,
+    "mount": 15.8,
+    "mounted": 62,
+    "serviceWorker": 63.5,
+    "total": 63.6
+   },
+   "error": "The agent was not started: preview exited with code 1 before it was readyDismiss",
+   "log": [
+    "[editor] Kept the workspace already in this browser",
+    "[preview] failed to load config from /workspace/vite.config.ts",
+    "[editor] preview exited (code 1, signal none)",
+    "[preview] error when starting dev server:",
+    "[preview] Error: Cannot find native binding. npm has a bug related to optional dependencies (https://github.com/npm/cli/issues/4828). Please try `npm i` again after removing both package-lock.json and node_modules directory.",
+    "[preview]     at Object.eval (/workspace/node_modules/.bun/@tailwindcss+oxide@4.3.3/node_modules/@tailwindcss/oxide/index.js:573:11)",
+    "[preview]     at runCjs (bat:///bat-process.js:5942:21)",
+    "[preview]     at evaluate (bat:///bat-process.js:5879:21)",
+    "[preview]     at evaluate (bat:///bat-process.js:5894:24)",
+    "[preview]     at evaluate (bat:///bat-process.js:5894:24)",
+    "[preview]     at importNow (bat:///bat-process.js:6039:22)",
+    "[preview]     at importFrom (bat:///bat-process.js:6033:14)",
+    "[preview]     at async nativeImportConfigFile (/workspace/node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/dist/node/chunks/config.js:35869:18)",
+    "[preview]     at async loadConfigFromFile (/workspace/node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/dist/node/chunks/config.js:35851:42)",
+    "[preview]     at async resolveConfig (/workspace/node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/dist/node/chunks/config.js:35500:22)",
+    "[preview] [bat-trace] {\"pid\":4,\"marks\":[[\"warm\",1],[\"runtime\",0.08],[\"adopted\",0.59],[\"entry\",1.14],[\"entry-returned\",4.43]],\"loader\":{\"modules\":589,\"cjs\":511,\"esm\":47,\"json\":2,\"builtin\":29,\"compiled\":48,\"sourceAsCode\":509,\"transformed\":1,\"fromProgram\":0,\"readMs\":68.27,\"compileMs\":154.14,\"programMs\":0,\"programs\":0,\"bytes\":6603748},\"resolve\":{\"calls\":1136,\"hits\":405,\"ms\":34.72,\"failures\":4},\"resolveKernel\":{\"calls\":731,\"cacheHits\":0,\"stats\":1806,\"packageReads\":153,\"packageCacheHits\":1870,\"ns\":29095683,\"resultEntries\":698,\"packageEntries\":256},\"transform\":{\"transforms\":1,\"cacheHits\":0,\"ms\":27.83,\"bytes\":1504,\"instantiateMs\":17.2},\"loop\":{\"turns\":0,\"timers\":0,\"immediates\":0,\"ticks\":0,\"events\":0,\"wakeTimer\":0,\"wakeKernel\":0,\"wakePing\":0}}",
+    "[editor] preview failed: preview exited with code 1 before it was ready"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 378.5,
+    "boot + mount (bootRuntime alone)": 70.4,
+    "vite spawn → listening": null,
+    "vite spawn → app visible": null,
+    "opencode spawn → attached": null,
+    "opencode spawn → chat ready": null,
+    "whole open (click → app visible and chat ready)": null
+   }
+  }
+ ]
+}

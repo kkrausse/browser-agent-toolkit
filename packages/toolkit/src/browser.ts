@@ -208,6 +208,9 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
   const base = options.base ?? '/editor/';
   if (!base.startsWith('/') || !base.endsWith('/')) throw Error('Editor base must start and end with "/"');
   const started = performance.now();
+  // User-timing marks (`bat:<step>`) for measuring scripts; a mark costs microseconds.
+  const timed = (name: string) => { try { performance.mark(`bat:${name}`); } catch { /* no user timing */ } };
+  timed('open');
   const listeners = new Set<() => void>();
   let state: EditorSnapshot = { status: 'opening', message: 'Loading editor…', timings: {}, preview: 'stopped', agent: 'stopped', log: [] };
   const emit = (event: EditorEvent) => { try { options.onEvent?.(event); } catch { /* observer failure */ } };
@@ -220,6 +223,7 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
   const mark = (step: string) => {
     if (step in state.timings) return;
     const ms = Math.round(performance.now() - started);
+    timed(step);
     emit({ type: 'step', step, ms });
     publish({ timings: { ...state.timings, [step]: ms } });
   };
@@ -249,8 +253,10 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
     mark('boot');
     publish({ message: 'Installing project source…' });
     const source = await installSource(runtime.fs, manifest.project);
+    timed('source.project');
     log('editor', source.preserved ? 'Kept the workspace already in this browser' : `Installed ${source.installed} source files`);
     const derived = await installDerived(runtime.fs, manifest, manifestUrl, options.signal);
+    timed('source.derived');
     if (derived.installed) log('editor', `Installed ${derived.installed} prepared cache files`);
     await installAgentConfig(runtime.fs, {
       modelBaseURL: `${runtime.hostOrigin}${base}model/opencode/`,

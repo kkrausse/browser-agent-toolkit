@@ -22,6 +22,8 @@ export interface BootOptions {
   /** Directories whose contents are never persisted (caches). */
   noPersist?: string[]
   warmSpare?: boolean
+  /** Startup tracing in kerneld (runtime/src/trace.ts). */
+  trace?: boolean
 }
 
 export interface BootedKernel {
@@ -80,6 +82,7 @@ export async function bootKernel(opts: BootOptions): Promise<BootedKernel> {
     processWorkerType: opts.processWorkerType ?? 'module',
     runnerUrl: opts.runnerUrl ? new URL(opts.runnerUrl, location.href).href : '',
     warmSpare: opts.warmSpare ?? true,
+    trace: opts.trace ?? false,
   })
   const t3 = performance.now()
   // Release the one-writer lock promptly on reload/navigation instead of

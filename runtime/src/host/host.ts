@@ -15,6 +15,7 @@ import type { ToServiceWorker } from './bridge-protocol'
 import { createEndpoints } from './endpoint'
 import type { StoreImageResult } from './image'
 import { createReactor } from './reactor'
+import { trace, traceCollect } from '../trace'
 
 export interface Launch {
   argv: string[]
@@ -175,6 +176,17 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
   const namespace = options.namespace ?? namespaceOf(options.manifestUrl)
   const image = manifest.image
   const timings: Record<string, number | boolean> = {}
+  let tracing = options.trace
+  try {
+    tracing ??= localStorage.getItem('bat-trace') === '1'
+  } catch {
+    // storage unavailable
+  }
+  if (tracing) {
+    traceCollect('page')
+    ;(globalThis as any).__batBoot = timings
+    trace('boot.start', undefined, t0)
+  }
 
   // The bridge worker starts first: it downloads the image while the kernel boots.
   const netdWorker = new Worker(asset('bat-netd.js'), { type: 'module', name: 'bat-netd' })
@@ -201,13 +213,14 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
         programs,
         // The routed global `fetch` exists in every process before guest code runs.
         prewarm: [...DEFAULT_CONFIG.prewarm, 'bat:net-globals'],
-        trace: options.trace,
+        trace: tracing,
       }),
       processWorkerType: 'classic',
       namespace,
       persist: options.persist ?? true,
       noPersist: ['/.bat', '/tmp'],
       warmSpare: true,
+      trace: tracing,
     } as Parameters<typeof bootKernel>[0])
   } catch (e) {
     void netd.call('cancel', { id: download.id })
@@ -216,6 +229,8 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
     throw new Error(`kernel boot failed: ${(e as Error).message}`, { cause: e })
   }
   timings.kernel = performance.now() - t0
+  Object.assign(timings, { kernelCompile: booted.timings.compileMs, kernelAttach: booted.timings.attachMs, kerneldInit: booted.timings.kerneldMs, restore: booted.restored?.ms ?? 0 })
+  trace('boot.kernel')
   progress({ phase: 'kernel' })
 
   const lifetime = new AbortController()
@@ -232,6 +247,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
       new Promise<never>((_, reject) => options.signal?.addEventListener('abort', () => reject(options.signal!.reason), { once: true })),
     ])
     timings.image = performance.now() - t0
+    trace('boot.image')
     timings.imageCached = stored.cached
     progress({ phase: 'image', loaded: stored.bytes, total: stored.bytes, cached: stored.cached })
     const mounted = await booted.mountImage(image.file, image.mount ?? '/').catch((e) => {
@@ -250,6 +266,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
     throw e
   }
   timings.mounted = performance.now() - t0
+  trace('boot.mounted')
 
   const reactor = createReactor(kernel)
   const codec = getCodec(kernel)
@@ -302,6 +319,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
       throw new Error(`The preview service worker could not be registered: ${(e as Error).message}`, { cause: e })
     }
     timings.serviceWorker = performance.now() - t0
+    trace('boot.service-worker')
     progress({ phase: 'service-worker' })
   }
 
@@ -524,6 +542,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
   // Leaving the page releases the workspace for the next tab at once.
   addEventListener('pagehide', () => toWorker({ t: 'bat-closed' }))
   timings.total = performance.now() - t0
+  trace('boot.done')
   progress({ phase: 'ready' })
   return host
 }
