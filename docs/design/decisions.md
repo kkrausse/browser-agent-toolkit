@@ -698,11 +698,19 @@ Numbers: `docs/experiments/2026-10-10-first-open-and-shell.md`.
 - **`EditorPreview` navigates when the server listens**, not after the editor's own
   readiness request.
 - **OpenCode's models.dev document is reduced to provider `opencode` by a `--require`
-  preload** in the agent process (`modelSourcePreloadSource`). The server's `/api/model`
-  is byte-identical with and without it for the example (it lists usable providers only);
-  what changes is what the server stores and copies at each start. Not verified: a chat
-  turn after the change (no messages were sent while measuring); a workspace that had other
-  providers configured through OpenCode itself would lose their catalog entries.
+  preload** in the agent process (`modelSourcePreloadSource`), at `JSON.parse`: a text over
+  1 MB whose value is an object of at least 20 providers (each with its `id` and `models`)
+  is returned with only the kept providers. First attempt, withdrawn: answering the
+  server's request for `models.opencode.ai/api.json` through a wrapped global `fetch`.
+  Measured: the wrapper was never called (the request does not go through `globalThis.fetch`
+  in the guest; not traced further), and the catalog bundled in the server, which is what a
+  start builds from, never passes through a request at all. The server's `/api/model` is
+  byte-identical with and without the preload for the example (it lists usable providers
+  only). The stored document is still the full one (a 5.4 MB row, parsed at each start,
+  then reduced). Not verified: a chat turn after the change (no messages were sent while
+  measuring); a workspace that had other providers configured through OpenCode itself
+  would lose their catalog entries. It depends on the pinned server's internals: if a later
+  server does not parse the document with `JSON.parse`, nothing is reduced.
 - **Optimized dependencies are transformed to `map: { mappings: '' }`** by the toolkit's
   Vite plugin in the guest, so Vite does not inject its fallback source map (6.1 MB for
   react-dom's 1.1 MB chunk, generated per response).

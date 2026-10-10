@@ -112,8 +112,17 @@ function takeSpare(pid: number): Promise<Proc> | undefined {
     // the process is already gone; any worker will find that out
   }
   let i = want ? spares.findIndex((s) => s.hint === want) : -1
-  if (i < 0) i = spares.findIndex((s) => s.hint === '')
+  // A launch's own spare was taken: this is the start-up, and the cores belong to it. The
+  // general-purpose spare is made a moment later instead of beside it.
+  if (i >= 0) refillAt = performance.now() + 1500
+  else i = spares.findIndex((s) => s.hint === '')
   return i < 0 ? undefined : spares.splice(i, 1)[0].ready
+}
+let refillAt = 0
+function refillSpare() {
+  const wait = refillAt - performance.now()
+  if (wait > 0) setTimeout(refillSpare, wait)
+  else ensureSpare()
 }
 async function spawn(pid: number) {
   stats.spawns++
@@ -131,7 +140,7 @@ async function spawn(pid: number) {
   procs.set(pid, proc)
   trace('spawn.run', { pid })
   proc.worker.postMessage({ type: 'run', pid, runnerUrl: cfg.runnerUrl })
-  ensureSpare()
+  refillSpare()
 }
 /**
  * Stop a worker without leaving a kernel lock held: mark its thread dying

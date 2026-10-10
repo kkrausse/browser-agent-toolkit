@@ -96,33 +96,34 @@ export function modelCatalogPluginSource(modelIDs: string[]): string {
 const modelSourcePreload = `${server}/editor-model-source.cjs`;
 /**
  * OpenCode builds its catalog from the models.dev document: 226 providers and about 4,000
- * models, 5.4 MB, fetched at every start older than five minutes, stored as one database
- * row and copied model by model into the catalog while plugins activate. The editor has one
- * provider (the host's proxy, id `opencode`), and the server's own `/api/model` lists only
- * that provider's models either way. This preload (`node --require`) answers the server's
- * catalog request with the upstream document reduced to that provider, so the stored row is
- * about 2% of the size and a start no longer normalizes and copies models nobody can use.
- * A workspace's first start still builds from the catalog bundled in the server; the
- * reduced document replaces it at the first refresh. Measured in
- * docs/experiments/2026-10-09-startup.md.
+ * models. The pinned server carries it as a 3.6 MB JSON string (and refreshes it from
+ * models.opencode.ai); at every start it is parsed, schema-decoded, normalized and written
+ * model by model into the catalog while plugins activate. The editor has one provider (the
+ * host's proxy, id `opencode`), and the server's own `/api/model` lists only that provider's
+ * models either way.
+ *
+ * The server has no setting for this, so this preload (`node --require`) does it where the
+ * document enters the program: `JSON.parse` of a text over a megabyte whose value has the
+ * document's shape (an object of providers, each with `id` and `models`) returns only the
+ * providers kept. Every other parse pays one length comparison. Measured in
+ * docs/experiments/2026-10-09-startup.md. It depends on the pinned 2.0.3 server parsing the
+ * document with `JSON.parse`; if that changes, nothing is reduced and nothing breaks.
  */
 export function modelSourcePreloadSource(providers: string[] = ['opencode']): string {
   return `'use strict';
-const source = 'https://models.opencode.ai/api.json';
 const keep = ${JSON.stringify(providers)};
-const upstream = globalThis.fetch;
+const parse = JSON.parse;
 let said = false;
-globalThis.fetch = async function (input, init) {
-  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input && input.url;
-  if (url !== source) return upstream.call(this, input, init);
-  const response = await upstream.call(this, input, init);
-  if (!response.ok) return response;
-  const catalog = await response.json();
+JSON.parse = function (text, reviver) {
+  const value = parse(text, reviver);
+  if (typeof text !== 'string' || text.length < 1000000 || value === null || typeof value !== 'object' || Array.isArray(value)) return value;
+  const ids = Object.keys(value);
+  if (ids.length < 20 || !keep.every(id => Object.hasOwn(value, id))) return value;
+  for (const id of ids) { const provider = value[id]; if (provider === null || typeof provider !== 'object' || provider.id !== id || typeof provider.models !== 'object') return value; }
   const reduced = {};
-  for (const id of keep) if (Object.hasOwn(catalog, id)) reduced[id] = catalog[id];
-  const text = JSON.stringify(reduced);
-  if (!said) { said = true; console.error('[editor] model catalog source reduced to ' + Object.keys(reduced).length + ' of ' + Object.keys(catalog).length + ' providers, ' + text.length + ' bytes'); }
-  return new Response(text, { status: 200, headers: { 'content-type': 'application/json' } });
+  for (const id of keep) reduced[id] = value[id];
+  if (!said) { said = true; console.error('[editor] model catalog document reduced to ' + keep.length + ' of ' + ids.length + ' providers'); }
+  return reduced;
 };
 `;
 }
