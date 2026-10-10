@@ -163,6 +163,9 @@ impl Process {
             st.fds.get_mut(fd as usize).and_then(|f| f.take()).ok_or(EBADF)?
         };
         f.unsubscribe(self.pid, fd as u32, true);
+        // The number will be reused: an event still queued for this fd must not
+        // be delivered to whatever is opened next.
+        self.evq.lock().ready.retain(|e| e.0 != fd as u32);
         drop(f);
         Ok(())
     }
