@@ -28,7 +28,8 @@ const exited = () => page.evaluate(() => window.wasmTerm.exit);
 const focus = () => page.evaluate(() => window.wasmTerm.terminal.focus());
 const metrics = () => page.evaluate(() => { const m = window.wasmTerm.terminal.renderer.getMetrics(); return [m.width, m.height]; });
 const cell = async (col, row) => { const [w, h] = await metrics(); return [col * w + w / 2, row * h + h / 2]; };
-const shot = (name) => page.screenshot({ path: `${SHOTS}/${name}.png` });
+// In front first: a tab behind another one in the shared browser produces no frames, and a screenshot of a static page then never completes.
+const shot = async (name) => { await page.bringToFront(); return page.screenshot({ path: `${SHOTS}/${name}.png` }); };
 const size = () => page.evaluate(() => [window.wasmTerm.terminal.cols, window.wasmTerm.terminal.rows]);
 const setTerminalSize = async (cols, rows) => {
   const [w, h] = await metrics();

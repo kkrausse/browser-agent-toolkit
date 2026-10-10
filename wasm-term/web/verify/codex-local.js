@@ -23,7 +23,8 @@ const waitFor = (needle, timeout = 20000) =>
   page.waitForFunction((value) => window.wasmTerm?.screen().join("\n").includes(value), needle, { timeout });
 const exited = () => page.evaluate(() => window.wasmTerm.exit);
 const focus = () => page.evaluate(() => window.wasmTerm.terminal.focus());
-const shot = (name) => page.screenshot({ path: `${SHOTS}/${name}.png` });
+// In front first: a tab behind another one in the shared browser produces no frames, and a screenshot of a static page then never completes.
+const shot = async (name) => { await page.bringToFront(); return page.screenshot({ path: `${SHOTS}/${name}.png` }); };
 const readFile = (path) => page.evaluate((path) => window.wasmTerm.readFile(path), path);
 const listFiles = (dir) => page.evaluate((dir) => window.wasmTerm.listFiles(dir), dir);
 const prompt = async (value) => { await type(value); await press("Enter"); };

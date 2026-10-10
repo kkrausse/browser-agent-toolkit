@@ -173,6 +173,7 @@ The mock picks a script from the last real user message (injected
 | --- | --- | --- |
 | `mock-error` | error | HTTP 400 with an OpenAI-style error body (5xx would make both clients retry) |
 | `multi-tool` | multi-tool | shell call, then a file write, then a final answer |
+| `change` | change | rewrites the first line of `hello.txt` in place: the prompt quotes the line (`change hello.txt "<its first line>"`) and the model appends ` (changed by mock-llm)` with an `apply_patch` "Update File". Without `apply_patch` or a quoted line it overwrites the file |
 | `edit`, `write`, `patch` | write | writes `mock-output.txt`, then answers |
 | `read` | read | reads `hello.txt`, then answers |
 | `escalate`, `approval`, `permission` | escalate | shell call asking to leave the sandbox (codex approval prompt), then answers |
@@ -191,6 +192,9 @@ for opencode, and for codex (which offers no file tool with an unknown model)
 results follow the last user message, so the server keeps no per-conversation
 state. Requests that ask for a session title (no tools, "title" in the
 instructions) always get `Mock session`.
+
+Request bodies may be zstd-compressed (`content-encoding: zstd`), which is what codex sends
+when it is signed in with ChatGPT.
 
 Endpoints: `POST /v1/chat/completions` (what opencode uses here),
 `POST /v1/responses` (what codex uses), `POST /v1/messages` (Anthropic; streaming
@@ -215,6 +219,33 @@ Request log, one pair of lines per request:
 05:06:18.975 #7 POST /v1/responses model=mock-model stream=true items=6 tools=7[exec_command,write_stdin,...] results=0 user="please use a tool" ua="codex-tui/0.162.0 ..."
 05:06:18.975 #7   -> scenario=shell step=0 text=27ch tool=exec_command({"cmd":"echo mock-llm-tool-ok && pwd"})
 ```
+
+## Fake sign-in
+
+For clients that run codex's own sign-in (the `codex-local` guest with `backend=mock-auth`):
+the endpoints of the device-code login, token refresh, logout and the post-login account check,
+on the same port. Nothing in it is a secret; every token says `mock`.
+
+| Endpoint | |
+| --- | --- |
+| `POST /auth/api/accounts/deviceauth/usercode` | `{ device_auth_id, user_code: "MOCK-1001", interval: "1" }` |
+| `GET /auth/codex/device?user_code=CODE` | the "verification page": approves that code (what the user does in the real flow). Without a code it lists the pending ones |
+| `POST /auth/api/accounts/deviceauth/token` | `403` until approved, then `{ authorization_code, code_challenge, code_verifier }` |
+| `POST /auth/oauth/token` | form `grant_type=authorization_code` -> `{ id_token, access_token, refresh_token }`; JSON `grant_type=refresh_token` -> the next generation. Only the latest refresh token is accepted |
+| `POST /auth/oauth/revoke` | records the token |
+| `GET /backend-api/wham/accounts/check` | one account, if the request carries the current access token; `401` otherwise |
+| `GET /auth/state` | all of the above as JSON, plus for the last 50 model requests which credentials they carried (`Bearer mock access-<n>`, the account id, `User-Agent`, `originator`, `content-encoding`) |
+| `POST /auth/reset` | forget everything |
+
+Tokens are JWT-shaped (codex reads `exp` and the account claims from the payload) and unsigned.
+The first access token of a login expires in 2 minutes, inside codex's 5-minute refresh
+window, so the first use of the credentials also exercises the refresh endpoint; refreshed ones
+last an hour. Point codex at it with the environment variables
+`CODEX_APP_SERVER_LOGIN_ISSUER=<base>/auth`, `CODEX_REFRESH_TOKEN_URL_OVERRIDE=<base>/auth/oauth/token`,
+`CODEX_REVOKE_TOKEN_URL_OVERRIDE=<base>/auth/oauth/revoke` and the config keys
+`openai_base_url=<base>/v1`, `chatgpt_base_url=<base>/backend-api/`. codex only accepts an
+https `chatgpt_base_url`; the dev server's relay offers this server under the name
+`https://mock-llm.test` for that.
 
 ## Native baselines
 

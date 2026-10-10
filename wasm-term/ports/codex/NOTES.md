@@ -50,6 +50,10 @@ the module.
 Since the third session it is a guest on the shared dev page:
 `https://<machine>.<tailnet>.ts.net:4790/?guest=codex` (README, "codex in the browser").
 
+Since the fourth session there is a second guest, `?guest=codex-local`, in which the embedded
+app-server and the agent core run in the tab as well, and the only thing behind the page is a
+pass-through HTTP relay. That is section 8, including the process seam for a future shell.
+
 ## 2. Crate graph (question 1)
 
 ### Entry and shape
@@ -871,7 +875,304 @@ measurement. Not established: how a phone's real GPU behaves under the same anim
    `cfg(not(unix))` pair around terminal start-up in `tui/src/tui.rs` (the WASI build silently
    takes the fallback).
 
-## 8. Rules followed
+## 8. codex-local: the agent in the tab (fourth session)
+
+A second guest, `?guest=codex-local`: the same TUI with the **embedded app-server and the agent
+core running in the same module, on the one thread**, model and sign-in requests leaving the tab
+through `fetch`. The remote `codex` guest is unchanged in behaviour and size. Everything in this
+section is **[ran]** in Chrome through `web/verify/run.sh codex-local` (39 checks) unless marked.
+
+### Two builds from one source tree
+
+`ports/codex/main` has two bins: `src/main.rs` (remote) and `src/local.rs` (local), sharing
+`src/shared.rs`. `InProcessAppServerClient::start` on WASI calls through a function pointer that
+only `codex_app_server_client::enable_in_process_app_server()` sets. `local.rs` calls it;
+`main.rs` does not, so in the remote build nothing refers to `codex_app_server` and the linker
+drops it as before. No cargo feature, no second compilation of the workspace: the two builds
+share every rlib and differ in the final link.
+
+```sh
+BIN=local scripts/build.sh            # dist/codex-local.wasm (names kept), ~1 to 4 min after a change
+BIN=local scripts/ship.sh             # + wasm-ship, wasm-opt, packaged into dist/site-local/
+BIN=local scripts/ship.sh --names-only
+# headless (Bun; fetch goes straight to the mock, no relay needed):
+cd web && bun harness.ts --guest ../dist/codex-local.wasm --env CODEX_HOME=/home/user/.codex \
+  --env CODEX_WASM_CWD=/home/user/project --env CODEX_WASM_SEED=1 @@ \
+  ::: "until:Ask Codex" type:"please write a file" wait:300 key:enter "until:Worked for" screen ls:/home/user/project
+```
+
+`local.rs` passes a fixed set of `-c` overrides in front of the user's (so `?arg=-c&arg=key=value`
+still wins) and leaves `$CODEX_HOME/config.toml` alone:
+
+| Override | Why |
+| --- | --- |
+| `sandbox_mode="danger-full-access"` | any other mode routes file writes to a sandbox helper process (`exec-server/src/fs_sandbox.rs`), which fails; with this one `apply_patch` is plain `std::fs` through `DirectFileSystem`, and commands are not wrapped (`SandboxType::None`; `get_platform_sandbox` is `None` on WASI anyway) |
+| `approval_policy="never"` | nothing to approve without a sandbox; also keeps the guardian reviewer (a thread) out |
+| `cli_auth_credentials_store="file"` | the keyring crate's fallback on this target is an in-memory mock |
+| `features.daemon_auto_start=false` | the embedded path otherwise tries to start a daemon process and treats failure as fatal |
+| `features.shell_snapshot=false`, `plugins`, `remote_plugin`, `plugin_sharing`, `apps` = false | each spawns a process or a thread at start-up, or phones home |
+| `check_for_update_on_startup=false`, `analytics.enabled=false`, `feedback.enabled=false` | no update check, no analytics; `/feedback` would panic (nested `block_on`) |
+
+`CODEX_WASM_BACKEND` (the page's `backend=`) adds the rest:
+
+| Backend | Adds |
+| --- | --- |
+| `mock` (default) | `model_provider="mock"` at `http://127.0.0.1:4791/v1` (`requires_openai_auth=false`), `model="mock-model"`, `model_catalog_json=$CODEX_HOME/mock-catalog.json` (written by `main`; the bundled `gpt-5.5` entry under the slug `mock-model`, because without metadata codex offers no `apply_patch`) |
+| `mock-auth` | codex's own `openai` provider and sign-in, pointed at mock-llm's fakes through the relay's https alias: `openai_base_url=https://mock-llm.test/v1`, `chatgpt_base_url=https://mock-llm.test/backend-api/`, and the env `CODEX_APP_SERVER_LOGIN_ISSUER`, `CODEX_REFRESH_TOKEN_URL_OVERRIDE`, `CODEX_REVOKE_TOKEN_URL_OVERRIDE` (there are no config keys for those). https because codex refuses a non-https ChatGPT backend |
+| `openai` | nothing: the real service |
+
+Other environment: `CODEX_WASM_CWD` (project directory in the vfs), `CODEX_WASM_SEED=1` (write
+four sample files there if it is empty), `CODEX_WASM_DEMO_SHELL=1` (below), `CODEX_WASM_MOCK_URL`.
+
+### HTTP: the reqwest fork's WASI transport, and the relay
+
+`vendor/forks/reqwest/src/async_impl/wasi.rs` (patch 0002 of that fork). `Client::execute_request`
+on WASI builds the same `Pending` as natively, but the in-flight future is
+`wasm_term_tokio::http(...)` (the host's `http_open`, i.e. `fetch`) instead of the hyper stack,
+and the response body is an `http_body::Body` that reads the descriptor as chunks arrive. Timeouts
+(total and read) are reqwest's own and still apply. This is the one layer every HTTP request in
+the graph goes through: the Responses SSE stream, the model list, device-code and token
+endpoints, refresh, revoke, the backend client. Not through it: reqwest 0.13 under rmcp
+(streamable-HTTP MCP servers; still fails at connect), `reqwest::blocking` (OTLP exporters; needs
+a thread), the Responses **WebSocket** transport.
+
+- The Responses WebSocket is switched off on WASI (`ModelClient::responses_websocket_enabled`
+  returns false): a browser WebSocket cannot carry the `Authorization` header it authenticates
+  with. Natively codex tries it first for the `openai` provider and only falls back after a
+  retry budget.
+- Request bodies are sent whole (`fetch` cannot stream uploads here); codex's are JSON, zstd
+  compressed when signed in with ChatGPT. Binary bodies survive **[ran]**: the mock decodes them.
+- Cookies: the hyper cookie layer is bypassed, so the transport applies the client's cookie
+  store itself (codex keeps Cloudflare cookies for `chatgpt.com`). The relay passes `Set-Cookie`
+  back enveloped. **[read]**, not exercised: the mock sets none.
+- `WASM_TERM_HTTP_RELAY=<base>`: `https://host[:port]/path?q` is requested as
+  `<base>/host[:port]/path?q`, and **every** request header is sent as
+  `x-wasm-term-fwd-<name>`. Unset (the Bun harness): the URL is fetched directly and headers a
+  browser refuses are dropped.
+
+The relay is `web/server.ts`, `/proxy/http/<host>[:port]/<path>`:
+
+- stateless, adds no credentials, cookies or identity; one log line per request with method,
+  host, path without query, and status. No header values, no bodies;
+- forwards only the `x-wasm-term-fwd-*` headers, under their real names. What the browser adds
+  (`User-Agent`, `Origin`, `Referer`, `Cookie`, `Sec-*`, `Accept-Language`) and what a front
+  proxy adds (`X-Forwarded-*`, tailscale serve's `Tailscale-User-*`) never goes upstream. So the
+  upstream sees codex's `User-Agent`, `originator`, `Authorization`, `ChatGPT-Account-ID`,
+  `session-id`, ... exactly as the native binary sends them **[ran]** for the first two and the
+  auth pair, at the mock;
+- streams the response as it arrives; drops `content-encoding`/`content-length` (Bun decoded)
+  and upstream CORS headers; returns `Set-Cookie` (numbered) and `WWW-Authenticate` enveloped;
+  rewrites a redirect to another allowed host back onto the relay and refuses any other;
+- allowlist, host as the guest names it -> upstream origin:
+
+  | Host | Goes to | For |
+  | --- | --- | --- |
+  | `127.0.0.1:4791` | `http://127.0.0.1:4791` | mock-llm: model API, fake sign-in |
+  | `mock-llm.test` | the same (`MOCK_LLM_UPSTREAM`) | its https name, for `mock-auth` |
+  | `api.openai.com` | `https://api.openai.com` | API key: `POST /v1/responses` |
+  | `chatgpt.com` | `https://chatgpt.com` | ChatGPT sign-in: `/backend-api/codex/*`, `/backend-api/wham/*` |
+  | `auth.openai.com` | `https://auth.openai.com` | device code, token exchange, refresh, revoke |
+
+  `HTTP_RELAY_ALLOW="host[=origin] ..."` in the server's environment adds entries. Everything
+  else is 403 (so the announcement tip from `raw.githubusercontent.com` still fails, quietly).
+
+### Single thread: what it took
+
+The fallback to `wasm32-wasip1-threads` was not needed. `InProcessAppServerClient::start` and
+`app-server/src/in_process.rs` use tokio tasks and tokio channels only; the thread-dependent
+code is in what they reach. In the order it was hit:
+
+| Problem | Where | Fix (all `cfg(target_os = "wasi")` arms in patch 0010) |
+| --- | --- | --- |
+| The state database: sqlx-sqlite runs every connection on its own OS thread. The pools connect lazily, so opening "succeeds" and every query would fail | `tui/src/lib.rs` `init_state_db_for_app_server_target` | the embedded target gets `None` on WASI. The server already treats the handle as optional: threads are listed by scanning rollout files |
+| Without a state DB the local thread store still created threads in `paginated` history mode, which is read back from SQLite: `thread/resume` failed with `list_turns is not supported yet` | `thread-store/src/local/mod.rs` `default_history_mode`; `tui/src/app_server_session.rs` | `Legacy` when there is no state DB (not a cfg arm: it is wrong natively too); the TUI does not ask for `Paginated` from an embedded server on WASI. Resume replays the rollout JSONL |
+| `File::lock` / `try_lock` are `Unsupported` | `core/src/installation_id.rs`, `rollout/src/writer_lock.rs` | no-ops: one process, one thread |
+| `time::OffsetDateTime::now_local()` fails (no zone database) | `rollout/src/recorder.rs` | offset from `WASM_TERM_UTC_OFFSET_MINUTES`, as the chrono fork |
+| nucleo builds a thread pool, the file-search session spawns two threads: **panic = abort** as soon as the composer asks for a search | `file-search/src/lib.rs` `create_session` | returns an error on WASI: `@` file mentions find nothing. Also fixes the same latent abort in the remote guest |
+| `tokio::task::block_in_place` panics on a current-thread runtime | `utils/cache/src/lib.rs` (image cache) | initialise in place; `try_lock` instead of `blocking_lock` **[read]**, not exercised (no image was attached) |
+| Responses WebSocket first, HTTP only after the retry budget | `core/src/client.rs` | off on WASI |
+| Daemon auto-start, shell snapshot, plugin sync | config | the overrides above |
+
+Things that are fine as they are: tokio's inline blocking pool carries `tokio::fs`, the
+rollout recorder and config I/O; the skills and fs watchers construct a `notify` poll watcher
+whose thread fails to start silently (no hot reload); the dynamic-tools MCP listener fails to
+bind and only warns; `tokio::signal::ctrl_c()` never completes and is only ever one arm of a
+`select!`.
+
+Known remaining single-thread hazards, not hit by the checks **[read]**: resuming a thread by
+*name* (`rollout/src/session_index.rs`: `blocking_send` inside an inline `spawn_blocking`, a
+panic); "always allow" rules and MCP OAuth token storage (file locks, an error); streamable-HTTP
+MCP servers (reqwest 0.13); code-mode models (`tool_mode = code_mode_only` needs a host process).
+
+### The spawn seam
+
+Where codex starts commands, and what each does on WASI now:
+
+| Caller | Path | On WASI |
+| --- | --- | --- |
+| The model's `exec_command` / `write_stdin` (the only command tools in 0.162) | `core/src/unified_exec/process_manager.rs` -> `codex_sandboxing::spawn_process` -> `codex_utils_pty::{pty::spawn_process, pipe::spawn_process, pipe::spawn_process_no_stdin}` | the backend |
+| The exec-server's local backend | `exec-server/src/local_process.rs` -> `codex_sandboxing::spawn_process` | the backend |
+| App-server RPCs `command/exec`, `process/*` | `app-server/src/command_exec.rs`, `process_exec_processor.rs` -> `codex_utils_pty` directly | the backend |
+| The user's `!command`, one-shot `command/exec`, shell snapshot | `core/src/exec.rs` `exec()` (natively `spawn_child_async` + a tokio `Child`) | `exec.rs` `wasi_exec::run`: the backend, through `spawn_pipe_process_no_stdin` |
+| git helpers (`git-utils`: repo info, turn metadata), hooks, `notify`, MCP stdio servers, PowerShell probe | `tokio::process::Command` / `std::process::Command` directly | fail `Unsupported`; every caller tolerates it (`.ok()`, `None`, a failed server). Not routed: none is a tool call, and all are optional |
+| bwrap probe, sandbox wrappers | `sandboxing` | not reached: no platform sandbox, `SandboxType::None`, argv unchanged |
+
+So there is **one module**: `codex-rs/utils/pty/src/backend.rs` (`codex_utils_pty::backend`).
+
+```rust
+pub enum ProcessStdio { Pty { size: TerminalSize }, Pipes { stdin: bool } }
+pub struct ProcessSpawnRequest {
+    pub program: OsString,          // argv[0] as a path; for exec_command: the session shell, "/bin/sh"
+    pub args: Vec<String>,          // for exec_command: ["-lc", "<the command line>"] ("-c" without login)
+    pub cwd: PathBuf,
+    pub env: HashMap<String, String>,  // the whole environment; nothing is inherited
+    pub arg0: Option<String>,
+    pub stdio: ProcessStdio,
+}
+pub trait ProcessBackend: Send + Sync + 'static {
+    fn spawn(&self, request: ProcessSpawnRequest) -> io::Result<ProcessDriver>;
+}
+pub fn set_process_backend(backend: Arc<dyn ProcessBackend>) -> Option<Arc<dyn ProcessBackend>>;
+```
+
+- **Request.** argv, cwd, env, arg0 and the stdio shape. `Pty` when the model passes
+  `tty: true` (one output stream, a size, resizable); `Pipes { stdin: true }` for an
+  interactive process the model will `write_stdin` to; `Pipes { stdin: false }` for one-shot
+  commands (stdin at end-of-file). The shell is whatever `shell-command`'s detection finds; with
+  no `/bin/bash` or `/bin/zsh` in the vfs it is `/bin/sh`. There is **no timeout** in the request.
+- **Answer.** `spawn` returns at once with upstream's `ProcessDriver`
+  (`utils/pty/src/process.rs`), which `spawn_from_driver` turns into the `SpawnedProcess` the
+  native functions return:
+  - `writer_tx: mpsc::Sender<Vec<u8>>`: stdin bytes, as the caller writes them;
+  - `stdout_rx`, `stderr_rx: broadcast::Receiver<Vec<u8>>`: output chunks as they are produced
+    (a pty has only `stdout_rx`). **The backend must drop its senders after the last byte**:
+    readers wait for the streams to close even after the exit code;
+  - `exit_rx: oneshot::Receiver<i32>`: the exit code;
+  - `terminator: Option<Box<dyn FnMut() + Send + Sync>>`: kill now. Must lead to `exit_rx`
+    resolving;
+  - `resizer` (pty), `writer_handle` (a task to abort on drop).
+- **Streaming.** Upstream's code takes it from there unchanged: `ExecCommandOutputDelta` events
+  per chunk (at most 8192 bytes each, 10,000 per call), `exec_command`'s `yield_time_ms`
+  (default 10 s: the tool returns what has arrived and the process stays alive under a session
+  id for `write_stdin`), output truncation, the "Ran ..." cell.
+- **Timeouts and cancellation** are the caller's: unified exec calls the terminator when a
+  one-shot command exceeds `timeout_ms` (exit code 124) or the turn is cancelled; `wasi_exec`
+  does the same for `ExecExpiration` (timeout: 124 and `timed_out`; cancellation: 1).
+- **Threading.** `spawn` runs on the only thread inside the tokio runtime and must not block.
+  Do the work in a task (`tokio::spawn`), yield regularly: the TUI, the model stream and the
+  terminal share that thread.
+- **Exit codes** on WASI: std cannot build a non-success `ExitStatus`, so `exec()`'s result
+  carries the code beside it (`RawExecToolCallOutput::wasi_exit_code`). Unified exec uses plain
+  `i32` throughout.
+- **The default**, `NoShell`, fails every spawn with `NO_SHELL_MESSAGE`. The model reads
+  `exec_command failed: CreateProcess { message: "Rejected(\"Failed to create unified exec
+  process: no shell in this build: codex is running inside a browser tab, where commands cannot
+  be executed. Do not retry; ...\")" }`, the TUI shows `Failed (exit -1)` with the message,
+  and the turn goes on **[ran]**.
+- **A worked example**: `ports/codex/main/src/demo_shell.rs` (60 lines), installed by
+  `CODEX_WASM_DEMO_SHELL=1`. It runs nothing: it answers each command with one stdout line that
+  repeats the request, one stderr line and exit code 0. **[ran]** the model's `exec_command`
+  through it: `Ran echo mock-llm-tool-ok && pwd`, the line
+  `demo-shell: argv=["/bin/sh", "-lc", "echo mock-llm-tool-ok && pwd"] cwd=/home/user/project env=23 vars stdio=Pipes { stdin: false }`
+  as the tool result, turn completed. Not run: `Pty`, `write_stdin`, termination, `!command`
+  (`wasi_exec`).
+- **Where a real shell plugs in**: `local.rs`, before the runtime starts:
+  `codex_utils_pty::backend::set_process_backend(Arc::new(MyShell))`.
+
+One thing the shell effort gets for free: `exec_command` with an `apply_patch <<'EOF'` heredoc
+never reaches the seam; codex intercepts it and applies the patch in-process.
+
+### Tools
+
+- `apply_patch` (the freeform custom tool): parses and applies in-process through
+  `ExecutorFileSystem` -> `DirectFileSystem` -> `std::fs` on the vfs. **[ran]** update of an
+  existing file and add of a new one, read back with `wasmTerm.readFile`, still there after a
+  reload.
+- `view_image`: plain I/O **[read]**; not run.
+- There is **no `read_file`, `list_dir` or `grep_files` tool in 0.162**: models read and list
+  through the shell (`cat`, `ls`, `rg`). Until a shell is plugged in, a model can only write
+  blind or work from what the user pastes. `AGENTS.md` and the environment context are still
+  read by codex itself.
+- `update_plan`, `request_user_input`: no I/O; not run.
+
+### Sign-in
+
+- "Sign in with ChatGPT" in the onboarding screen starts the device-code flow on WASI
+  (`tui/src/onboarding/auth.rs`); the native flow needs a localhost callback server. "Sign in
+  with Device Code" is the same thing, and "Provide your own API key" works as natively.
+- Tokens: `$CODEX_HOME/auth.json` in the vfs (`/home/user/.codex/auth.json`), persisted to
+  IndexedDB with the rest of `CODEX_HOME` (database `wasm-term`, key `codex-local\n<path>`).
+  Plain JSON, as natively; any script on the page's origin can read it.
+- Sign out: `/logout` in the TUI (revokes the refresh token, deletes `auth.json`, exits);
+  `&signout=1` on the page URL or "Clear stored credentials" in the launcher (delete only
+  `auth.json` from IndexedDB, nothing is revoked); `&reset=1` / "Forget saved state" (everything).
+- **[ran]** against mock-llm's fake endpoints (`backend=mock-auth`): code and URL shown, polling
+  through the relay, approval, token exchange, the first access token refreshed (it is issued
+  inside codex's 5-minute refresh window on purpose), `auth.json` written and persisted, the
+  model request carrying `Authorization: Bearer <refreshed token>` and `ChatGPT-Account-ID`,
+  still signed in after a reload, `/logout` revoking and deleting, the API-key path, `&signout=1`.
+- **[ran]** against the real `auth.openai.com`, once per verification run: only
+  `POST /api/accounts/deviceauth/usercode` (unauthenticated) and the pending polls of
+  `POST /api/accounts/deviceauth/token`. The URL `https://auth.openai.com/codex/device` and a
+  code appear in the TUI; nothing was approved, Esc cancels, nothing is stored.
+- What a real session will send through the relay **[read]**, beyond those two:
+  `auth.openai.com`: `POST /oauth/token` (code exchange, form-encoded,
+  `redirect_uri=https://auth.openai.com/deviceauth/callback`; and refresh, JSON),
+  `POST /oauth/revoke` (`/logout`). `chatgpt.com`: `GET /backend-api/wham/accounts/check`
+  (right after sign-in; if it fails the TUI reports the sign-in as failed),
+  `GET /backend-api/codex/models?client_version=0.162.0`,
+  `POST /backend-api/codex/responses` (SSE; zstd request body),
+  `POST /backend-api/codex/responses/compact`, `GET /backend-api/wham/usage`,
+  `/wham/rate-limit-reset-credits`, `/wham/security-setup`, `/wham/settings/user`, and for
+  business/edu/enterprise plans `GET /backend-api/wham/config/bundle`. With an API key:
+  `api.openai.com` `POST /v1/responses`, plus the model list from `chatgpt.com` as above.
+- Not testable here, so unknown: whether `chatgpt.com` (Cloudflare) accepts the relay's
+  requests. They come from Bun's HTTP client on this machine with codex's headers, not from the
+  browser and not with reqwest's TLS fingerprint. The account check returns the workspace's
+  backend origin; if that is not `chatgpt.com` (data residency), the relay refuses the host
+  until it is added with `HTTP_RELAY_ALLOW`. The default model for a ChatGPT plan may be a
+  code-mode model, whose tools need a host process.
+
+### Module (codex-local)
+
+All **[ran]**, MB = 10^6 bytes, same pipeline as the remote build (`BIN=local scripts/ship.sh`:
+fat LTO, `wasm-opt -Oz`, brotli 9). The remote build was rebuilt from the same sources in the
+same session for comparison (it gained the reqwest transport and lost nothing: 38.4 MB, 11.3 MB
+brotli; 38.7 / 11.4 before).
+
+| Build | Raw | gzip | brotli 9 |
+| --- | --- | --- | --- |
+| `codex-local`, `wasm` (names kept; `&build=names`) | 201.3 | 45.6 | 39.5 (quality 3) |
+| `codex-local`, `wasm-ship` (fat LTO) | 82.1 | | |
+| `codex-local`, `wasm-ship` + `wasm-opt -Oz`, **shipped** | 70.4 | 26.6 | 20.2 |
+| `codex` (remote), shipped, for comparison | 38.4 | 14.7 | 11.3 |
+
+So running the agent in the tab costs 32 MB of module (8.9 MB over the wire). `ship.sh` for the
+local build took about 16 minutes here with the dependencies already compiled for the profile.
+
+In Chrome on this machine (shared Chrome under Xvfb, canvas renderer, module served from
+loopback): download and compile 0.5 to 1.1 s, start screen 1.2 s after navigation. Memory,
+crudely: the resident size of the renderer process Chrome created for the tab, after one long
+streamed reply, was 350 MB for `codex-local` (three runs: 353, 351, 349) and 292 MB for `codex`
+(291, 292), plus a 71 MB helper process in both cases. `performance.measureUserAgentSpecificMemory()`
+reports 15 MB for either: it does not see the Worker's wasm memory. Nothing was measured on a
+phone.
+
+### Remaining work, in order
+
+1. A shell behind the seam (`ports/codex/SHELL-DESIGN.md`, a separate effort). Without it the
+   agent can write files and cannot read them.
+2. A real sign-in by the user (the steps are in the README); then what Cloudflare does, and
+   which model the plan defaults to.
+3. `@` file search without threads (a single-threaded walk and match).
+4. The state database: either sqlx's SQLite worker made to run inline, or leave it out. Without
+   it: no paginated history, no goals, no queue, no thread search by name.
+5. Size: the local module is about twice the remote one; the cuts listed under "Module" in
+   section 7 (network proxy, starlark) apply here too.
+6. Rollout files are saved whole on every sync (the persistence layer stores whole files):
+   long sessions rewrite a growing file. Fine at the sizes run here.
+
+## 9. Rules followed
 
 `~/.codex` was not touched; nothing was executed that reads or writes a codex home, and no
 model provider was called. Second session: the mock backend was only ever started with

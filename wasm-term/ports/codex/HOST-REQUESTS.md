@@ -82,3 +82,26 @@ now picks the 2D canvas renderer when WebGL is software-emulated (6 ms between t
 measurement), which is the fix for browsers without a GPU. Not measured: a phone with a real
 GPU under load. If that shows the same thing, the network bridge belongs in its own Worker
 writing to a second ring, so that a slow frame cannot delay a reply.
+
+### 6. `http_open` in real use (fourth session, `codex-local`)
+
+The codex port's reqwest fork now sends every HTTP request through `http_open` / `http_head` /
+`fd_read` (NOTES, section 8). Ran, in Chrome and under Bun: JSON requests and responses, a
+zstd-compressed (binary) request body, server-sent event streams read as they arrive for
+replies of 80 lines, several requests in flight at once, and non-2xx statuses. Nothing had to
+change in the host. Not exercised: a transfer that fails half-way.
+
+Two things a guest cannot do through it, both browser rules rather than host gaps, and both
+handled by the relay convention in `docs/abi.md`: set `User-Agent`, `Cookie` and the other
+forbidden request headers, and read `Set-Cookie`.
+
+Wanted, not blocking:
+
+- **Streaming request bodies.** `http_open` takes the body whole. Fine for codex (JSON, a few
+  hundred KB at most); an upload of a large file would have to be buffered in the guest.
+- **`cache: "no-store"` / `credentials: "omit"` on the `fetch`.** The host uses the defaults, so
+  a GET may be answered from the browser's HTTP cache and same-origin requests carry the page's
+  cookies. The relay answers `Cache-Control: no-store` and ignores cookies, which covers it for
+  now.
+- **The harness's persistence store** (request 2 above) would have let "reload and resume" be
+  checked headless; it was checked in the browser instead.

@@ -373,7 +373,30 @@ http_head(fd: i32, buf: *mut u8, buf_len: i32, out: *mut [u32; 2], flags: i32) -
   events and other streamed responses usable. Calling `http_head` first is
   optional.
 - Redirects are followed by the browser; the status is the final one.
+- A browser will not send some request headers a program sets (`User-Agent`, `Cookie`,
+  `Origin`, `Referer`, `Accept-Encoding`, `Sec-*`, `Proxy-*`, ...): `fetch` drops them or
+  substitutes its own, and it hides `Set-Cookie` in the response. A program that needs them
+  goes through a relay on the page's origin (below).
 - The host stops pulling from the network when about 1 MiB of body is unread.
+
+#### The HTTP relay convention
+
+Not an import: an agreement between a guest's HTTP client and a relay on the page's own origin,
+for requests to servers that do not answer CORS or that need headers a page cannot set. The dev
+server implements the relay (`web/server.ts`, `/proxy/http/`); the codex port's reqwest fork
+implements the client side (`ports/codex/patches/forks/reqwest`, `src/async_impl/wasi.rs`).
+
+- The guest reads the relay's base URL from `WASM_TERM_HTTP_RELAY` (the page passes it as a
+  guest setting; unset or empty = fetch directly). A request for
+  `<scheme>://<host>[:<port>]<path>?<query>` is sent to `<base>/<host>[:<port>]<path>?<query>`
+  instead. The scheme is not sent: the relay knows the origin of every host it allows.
+- Every request header travels as `x-wasm-term-fwd-<name>: <value>`. The relay forwards
+  exactly those, under their real names, and nothing else from the incoming request.
+- The response comes back as it is, streamed, except: `set-cookie` arrives as
+  `x-wasm-term-fwd-set-cookie-<n>` (one per cookie) and `www-authenticate` as
+  `x-wasm-term-fwd-www-authenticate`; the guest unwraps both. `content-encoding` and
+  `content-length` are gone (the body is already decoded).
+- Hosts that are not allowlisted get `403`; an unreachable one `502`.
 
 ## 4. Host side
 
@@ -451,7 +474,9 @@ back as `files` on the next start. The page does the storing because a wasm
 guest's Worker is blocked and would never run IndexedDB's callbacks, and
 IndexedDB rather than OPFS because it behaves the same in every browser.
 `namespace` keeps programs apart; `exclude` leaves out paths containing a
-substring (lock directories).
+substring (lock directories). `openPersistStore(namespace).save(path, null)`
+then `flush()` deletes one stored file from the page (the dev page's
+`&signout=1` removes a guest's credential files, `GuestInfo.credentials`, that way).
 
 Clipboard. A Worker has no clipboard API. A program asks with
 `{ t: "clipboard_read", id }` and gets a `FRAME_CLIPBOARD` frame (`u32 id`,

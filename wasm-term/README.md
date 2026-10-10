@@ -66,7 +66,7 @@ Testing never calls a real model: `mock-llm/` serves scripted responses.
 | Port | Use |
 | --- | --- |
 | 4790 | `web/` dev server |
-| 4791 | mock model server (container) |
+| 4791 | mock model server (container); also the fake sign-in endpoints |
 | 4792 | `opencode serve` (container) |
 | 4793 | `codex app-server` (container) |
 | 4796 | browser-facing codex proxy (container); strips `Origin`, which `codex app-server` rejects |
@@ -95,14 +95,16 @@ runs one directly.
 | `js-demo` | a JavaScript program on the node-style shim (`host/node/demo-guest.ts`) |
 | `opencode` | the real opencode 2.0.26 TUI, attached to a remote `opencode serve` |
 | `codex` | the real codex-cli 0.162.0 TUI (Rust, `wasm32-wasip1`), attached to a remote `codex app-server` |
+| `codex-local` | codex-cli 0.162.0 entirely in the tab: TUI, app-server and agent core in one module; model and sign-in requests go out through the page server's HTTP relay |
 
 Page parameters: `&arg=...`, `&env=K=V` (`&env=WASM_TERM_TRACE=1` logs
 syscall rates, and stretches in which the program computed without reading
 input, to the console), `&persist=0` (no saved files), `&reset=1` (forget the
-guest's saved files first), `&renderer=canvas|webgl` (the terminal renderer;
+guest's saved files first), `&signout=1` (forget only its stored credentials first), `&renderer=canvas|webgl` (the terminal renderer;
 by default WebGL, or the 2D canvas when the browser only emulates WebGL in
 software). Each guest's home directory is kept in IndexedDB across reloads;
-opencode keeps its config and state directories, codex its `CODEX_HOME`.
+opencode keeps its config and state directories, codex its `CODEX_HOME`, codex-local its
+`CODEX_HOME` and its project directory.
 
 In the page's console, `await wasmTerm.readFile(path)`, `wasmTerm.listFiles(dir)`
 and `wasmTerm.download(path)` read files out of the program's filesystem (its
@@ -136,6 +138,7 @@ them same-origin: no CORS setup, no mixed content, one port to expose.
 | --- | --- | --- |
 | `/proxy/opencode/...` | `OPENCODE_UPSTREAM`, default `http://127.0.0.1:4792` | streamed as it arrives (the `/api/event` stream), no idle timeout; method, query (`?auth_token=` too), body and `Authorization` unchanged; `Origin` dropped going up, the Basic challenge header dropped coming down |
 | `/proxy/codex` | `CODEX_UPSTREAM`, default `ws://127.0.0.1:4796` | WebSocket relay, text and binary frames, subprotocols passed on |
+| `/proxy/http/<host>/<path>` | the named host, only if allowlisted | the pass-through relay for programs that make their own HTTP requests ("codex-local", below) |
 
 `mock-llm/down.sh` stops the backend. Prompts that select scripted replies
 (`please use a tool`, `show me markdown`, `long scroll`, ...) are listed in
@@ -163,12 +166,76 @@ settings. The parameters and their defaults (the mock backend):
 | `sandbox` | `danger-full-access` | passed as `-c sandbox_mode="..."`. The mock backend's container cannot run codex's sandbox, so anything else fails there, except that `workspace-write` with the prompt `run with approval` shows the approval dialog. Empty = the server's own setting |
 | `build` | (the shipped module) | `names`: the build that kept its name section, for `web/verify/profile.ts` and readable traps |
 
-The module is 11.4 MB over the wire (brotli) and 38.7 MB to compile
+The module is 11.3 MB over the wire (brotli) and 38.4 MB to compile
 (`ports/codex/NOTES.md`, "Module", has the table); the page shows a progress bar while it arrives and compiles, and the
 browser caches it for good: its URL contains its hash, so a rebuild is a new
 URL. `scripts/ship.sh` is `build.sh` for the two profiles plus `wasm-opt` and
 `package.ts`; the server reads `dist/site/manifest.json` on every load, so a
 rebuilt module is picked up without a restart.
+
+### codex-local: codex with nothing behind it
+
+The same TUI with codex's app-server and agent core in the module too: the agent loop, the
+tools and the model calls all run in the tab. What is left on the server is a relay for its
+HTTP requests.
+
+```sh
+cd wasm-term/ports/codex
+scripts/setup.sh                            # once, as above
+BIN=local scripts/ship.sh                   # dist/site-local/: the module to serve and a build with names
+
+cd ../.. && mock-llm/up.sh                  # the scripted model server on :4791 (and the fake sign-in endpoints)
+cd web && bun run dev
+```
+
+Open <http://127.0.0.1:4790/?guest=codex-local>, or the launcher.
+
+| Parameter | Default | |
+| --- | --- | --- |
+| `backend` | `mock` | `mock`: the scripted model server, no sign-in, no tokens. `openai`: the real service; the TUI asks you to sign in. `mock-auth`: codex's real sign-in flow and ChatGPT-style requests against mock-llm's fake auth server (what `web/verify/codex-local.js` uses) |
+| `relay` | `/proxy/http` | where the program's HTTP requests go: this page's server, which forwards them to an allowlist of hosts. Empty = the browser fetches directly (only servers that allow this origin by CORS) |
+| `dir` | `/home/user/project` | the project directory, in the tab's own filesystem |
+| `seed` | `1` | write a small sample project (`README.md`, `hello.txt`, `src/main.py`, `notes/todo.md`) into the project directory if it is empty |
+
+The project and `CODEX_HOME` (`/home/user/.codex`: `config.toml`, `auth.json`, `history.jsonl`,
+`sessions/`) are kept in IndexedDB across reloads. Look at them from the page's console:
+`await wasmTerm.listFiles("/home/user/project")`, `await wasmTerm.readFile("/home/user/project/hello.txt")`,
+`wasmTerm.download(path)`. `/resume` in the TUI lists earlier sessions.
+
+The module is 20.2 MB over the wire (brotli) and 70.4 MB to compile, against 11.3 and 38.4
+for the remote `codex` guest.
+
+What works: prompts and streamed replies, `apply_patch` (file edits land in the tab's
+filesystem), sessions and resume, sign-in. What does not: **there is no shell**. The model's
+`exec_command` gets a "no shell in this build" error it can read, and since codex 0.162 has no
+file-reading tool of its own (models use `cat`/`ls`), an agent here can write files but not
+read them. `ports/codex/NOTES.md`, section 8, has the seam a shell plugs into, and the rest of
+what is stubbed. `&env=CODEX_WASM_DEMO_SHELL=1` installs a stand-in that echoes each command.
+
+**The relay** (`/proxy/http/<host>[:port]/<path>` on :4790) forwards a request to
+`<origin of host>/<path>` if the host is one of: `127.0.0.1:4791` and `mock-llm.test` (both the
+mock), `api.openai.com`, `chatgpt.com`, `auth.openai.com`; `HTTP_RELAY_ALLOW="host[=origin] ..."`
+in the server's environment adds more. It is stateless and adds nothing of its own. It sends
+upstream only the headers the program wrapped as `x-wasm-term-fwd-<name>` (the browser's own
+`User-Agent`, `Origin`, cookies, and a front proxy's `X-Forwarded-*`/`Tailscale-User-*` are
+dropped), streams the response back, and logs method, host, path and status
+(`journalctl --user -u wasm-term-web | grep relay`), never header values or bodies. Anyone who
+can open the page can use it to reach those hosts with their own credentials.
+
+**Signing in with ChatGPT** (`&backend=openai`):
+
+1. Open `/?guest=codex-local&backend=openai`. The TUI shows "Sign in with ChatGPT", "Sign in
+   with Device Code", "Provide your own API key".
+2. Press Enter on the first. In a browser tab there is no localhost callback, so this is the
+   device-code flow: the TUI shows `https://auth.openai.com/codex/device` and a one-time code.
+3. Open that link (any device), sign in, enter the code. The TUI polls meanwhile and moves on
+   by itself; press Enter through the two notices that follow.
+4. The tokens are in `/home/user/.codex/auth.json` in the tab's filesystem, saved in this
+   browser's IndexedDB for this origin. Reloading keeps you signed in.
+
+To sign out: `/logout` in the TUI (revokes the token and deletes the file), or
+`/?guest=codex-local&signout=1` / "Clear stored credentials" in the launcher (delete the stored
+file without contacting anyone), or `&reset=1` (forget everything, project included).
 
 ### From other devices: tailnet HTTPS
 
@@ -223,7 +290,7 @@ code (`web/mobile.ts`):
 
 ### Checks
 
-`web/verify/run.sh [terminal-functions|opencode|opencode-perf|codex]` drives the
+`web/verify/run.sh [terminal-functions|opencode|opencode-perf|codex|codex-local]` drives the
 page in Chrome through `browser-control` (dev server up; the opencode and
 codex ones also need `mock-llm/up.sh`). `terminal-functions` checks each terminal
 function with the Rust guests and the JavaScript shim with `js-demo`;
@@ -235,7 +302,13 @@ served, the loading indicator, connect, plain and tool turns against the
 native captures, markdown, a long reply with wheel scrolling, resize, the
 slash popup, `/status`, the warnings viewer, paste, Shift+Enter, the
 filesystem helpers, history across a reload, a line typed in one burst, the
-approval dialog and `/quit`. Screenshots land in `docs/screenshots/`.
+approval dialog and `/quit`; `codex-local` runs the embedded build through the relay against the
+mock: plain, markdown and long replies, `apply_patch` edits read back from the filesystem, the
+"no shell" tool error, reload, history and `/resume`, the process seam with a stand-in backend,
+the whole device-code sign-in against mock-llm's fake auth server (code shown, approval, tokens
+stored, refresh, authenticated model request), `/logout`, the API-key path, `&signout=1`, and one
+unauthenticated request for a device code to the real `auth.openai.com`. Screenshots land in
+`docs/screenshots/`.
 
 `cd web && bun verify/profile.ts '<page URL>&build=names'` profiles a guest's
 Worker in a private headless Chrome (wasm function names from the module) and
