@@ -90,8 +90,41 @@ function conditionalStubs(): BunPlugin {
   }
 }
 
+// Node built-ins for the browser target. Bun's own browser polyfills cover
+// path, events, buffer, stream, util, crypto, assert, string_decoder; these are the rest.
+function nodeShims(): BunPlugin {
+  const shim = (name: string) => path.join(HERE, "src/node", name)
+  const map: Record<string, string> = {
+    fs: shim("fs.ts"),
+    "fs/promises": shim("fs-promises.ts"),
+    url: shim("url.ts"),
+    os: shim("os.ts"),
+    child_process: shim("unavailable.ts"),
+    module: shim("unavailable.ts"),
+    vm: shim("unavailable.ts"),
+    sqlite: shim("unavailable.ts"),
+    worker_threads: shim("unavailable.ts"),
+    perf_hooks: shim("unavailable.ts"),
+    tty: shim("unavailable.ts"),
+    net: shim("unavailable.ts"),
+    console: shim("console.ts"),
+    process: shim("process-module.ts"),
+    path: shim("path.ts"),
+  }
+  return {
+    name: "node-shims",
+    setup(build) {
+      build.onResolve({ filter: /^(node:)?(fs|fs\/promises|url|os|child_process|module|vm|sqlite|worker_threads|perf_hooks|tty|net|console|process|path)$/ }, (args) => {
+        // A shim may wrap the bundler's own polyfill of the module it replaces.
+        if (args.importer.startsWith(path.join(HERE, "src/node") + path.sep)) return undefined
+        return { path: map[args.path.replace(/^node:/, "")]! }
+      })
+    },
+  }
+}
+
 const result = await Bun.build({
-  entrypoints: [path.join(HERE, target === "bun" ? "host/bun-main.ts" : "host/worker-main.ts")],
+  entrypoints: [path.join(HERE, target === "bun" ? "host/bun-main.ts" : "host/worker-app.ts")],
   outdir: path.join(HERE, "dist"),
   naming: `opencode-tui.${target}.js`,
   target,
@@ -99,10 +132,11 @@ const result = await Bun.build({
   sourcemap: "linked",
   conditions: ["node"],
   define: {
+    ...(target === "browser" ? { global: "globalThis" } : {}),
     OPENCODE_VERSION: JSON.stringify(version),
     OPENCODE_CHANNEL: JSON.stringify("wasm-term"),
   },
-  plugins: [conditionalStubs(), singleInstances(), opentuiWasmPlugin(), createSolidTransformPlugin()],
+  plugins: [...(target === "browser" ? [nodeShims()] : []), conditionalStubs(), singleInstances(), opentuiWasmPlugin(), createSolidTransformPlugin()],
 })
 for (const log of result.logs) console.error(String(log))
 if (!result.success) process.exit(1)
