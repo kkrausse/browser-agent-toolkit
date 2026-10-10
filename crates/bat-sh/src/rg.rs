@@ -531,6 +531,8 @@ struct Walk<'a> {
     globs: Vec<Rule>,
     whitelists: bool,
     out: Vec<Target>,
+    /// The shell's `timeout` deadline: the walk stops there.
+    deadline: Option<f64>,
 }
 
 impl Walk<'_> {
@@ -571,7 +573,7 @@ impl Walk<'_> {
     }
 
     fn dir(&mut self, shown: &str, abs: &str, depth: usize, ig: &mut Vec<IgnoreFile>) {
-        if self.o.max_depth.is_some_and(|m| depth >= m) {
+        if self.o.max_depth.is_some_and(|m| depth >= m) || self.deadline.is_some_and(|d| sys::now_ms() >= d) {
             return;
         }
         let Ok(mut ents) = sys::readdir(abs) else { return };
@@ -841,7 +843,7 @@ pub fn run(sh: &mut Interp, a: &[String]) -> X {
         }
     }
     let whitelists = globs.iter().any(|r| !r.neg);
-    let mut w = Walk { o: &o, cwd: &cwd, globs, whitelists, out: Vec::new() };
+    let mut w = Walk { o: &o, cwd: &cwd, globs, whitelists, out: Vec::new(), deadline: sh.deadline };
     let mut errored = false;
     let mut any_dir = false;
     if o.paths.is_empty() {
@@ -882,6 +884,7 @@ pub fn run(sh: &mut Interp, a: &[String]) -> X {
     }
     let targets = std::mem::take(&mut w.out);
     drop(w);
+    sh.check_deadline()?;
     if o.files {
         let end = if o.null { "\0" } else { "\n" };
         let mut out = String::new();
@@ -906,7 +909,11 @@ pub fn run(sh: &mut Interp, a: &[String]) -> X {
     let with_name = o.with_name.unwrap_or(o.paths.len() > 1 || any_dir);
     let mut pr = Printer { o: &o, re: &re, out: String::new(), printed: false };
     let mut matched = false;
-    for t in &targets {
+    for (n, t) in targets.iter().enumerate() {
+        if n % 32 == 31 {
+            // Under `timeout`: stop between files.
+            sh.check_deadline()?;
+        }
         let data = match &t.abs {
             None => sh.read_stdin_all(),
             Some(p) => match sys::read_file(p) {

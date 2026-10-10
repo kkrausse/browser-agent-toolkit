@@ -339,6 +339,7 @@ impl Walk<'_> {
             }
         };
         self.prune = false;
+        self.sh.check_deadline()?;
         if !depth_first && depth >= min {
             self.eval(e, shown, path, &st)?;
         }

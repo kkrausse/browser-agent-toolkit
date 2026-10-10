@@ -1,6 +1,5 @@
 same     invoke     bash -lc                 bash -lc 'echo hi > f.txt && cat f.txt | wc -c && ls'
-differs  invoke     /bin/bash -lc            /bin/bash -lc 'echo $0; echo ok'
-         bash: /bin/bash|ok|status=0|  bat-sh: status=126| sh: /bin/bash: cannot execute binary file 
+same     invoke     /bin/bash -lc            /bin/bash -lc 'echo $0; echo ok'
 same     invoke     sh -c                    sh -c 'echo one; exit 3'; echo $?
 same     invoke     zsh -lc                  zsh -lc 'echo z'
 same     invoke     bash -c args             bash -c 'echo "$1-$2"' _ a b
@@ -36,15 +35,11 @@ same     lang       while read               while IFS= read -r l; do echo "[$l]
 same     lang       case                     case README.md in *.md) echo md;; *) echo no;; esac
 same     lang       if/elif                  if [ -d src ]; then echo d; elif [ -f src ]; then echo f; else echo n; fi
 same     lang       function                 f() { local x=$1; echo "<$x>"; return 2; }; f a; echo $?
-differs  lang       [[ ]] regex              [[ main.rs =~ ^(.*)\.rs$ ]] && echo ${BASH_REMATCH[1]}
-         bash: main|status=0|  bat-sh: |status=0| 
+same     lang       [[ ]] regex              [[ main.rs =~ ^(.*)\.rs$ ]] && echo ${BASH_REMATCH[1]}
 same     lang       [[ ]] glob               [[ -f README.md && README.md == *.md ]] && echo ok
-differs  lang       arrays                   a=(x y z); echo ${a[1]} ${#a[@]}; for i in "${a[@]}"; do echo $i; done
-         bash: y 3|x|y|z|status=0|  bat-sh: status=2| sh: syntax error near unexpected token `(x' 
-differs  lang       assoc arrays             declare -A m; m[k]=v; echo ${m[k]}
-         bash: v|status=0|  bat-sh: |status=0| sh: m[k]=v: command not found 
-differs  lang       process subst            diff <(echo a) <(echo a) && echo same
-         bash: same|status=0|  bat-sh: status=2| sh: syntax error near unexpected token `<(echo' 
+same     lang       arrays                   a=(x y z); echo ${a[1]} ${#a[@]}; for i in "${a[@]}"; do echo $i; done
+same     lang       assoc arrays             declare -A m; m[k]=v; echo ${m[k]}
+same     lang       process subst            diff <(echo a) <(echo a) && echo same
 same     lang       $'..' quoting            printf '%s' $'a\tb\n'
 same     lang       set -e                   set -e; false; echo no
 same     lang       set -o pipefail          set -o pipefail; false | true; echo $?
@@ -79,8 +74,7 @@ same     lang       nested quotes            echo "a 'b' \"c\" \$d" 'e "f"'
 same     read       cat                      cat a.txt
 same     read       cat -n                   cat -n a.txt
 same     read       cat multiple             cat a.txt b.txt | wc -l
-missing  read       nl -ba                   nl -ba a.txt
-         sh: nl: command not found
+same     read       nl -ba                   nl -ba a.txt
 same     read       head -n / -N             head -n 2 list.txt; head -1 list.txt
 same     read       head -c                  head -c 5 list.txt
 same     read       tail -n / +N             tail -n 2 list.txt; tail -n +5 list.txt
@@ -96,8 +90,7 @@ same     read       ls -lh size col          ls -lh list.txt | wc -l
 same     read       ls -t / -S               ls -S a.txt b.txt list.txt
 same     read       ls -d glob               ls -d src/*/
 same     read       ls -p / -F               ls -p; ls -F src
-missing  read       tree                     tree src
-         sh: tree: command not found
+same     read       tree                     tree src
 same     read       stat -c                  stat -c '%s %n' a.txt
 missing  read       file                     file README.md
          sh: file: command not found
@@ -107,20 +100,14 @@ missing  read       less/more                less a.txt
 same     read       pwd                      pwd | grep -c /
 same     read       realpath                 realpath src/../a.txt | grep -c a.txt
 same     read       basename/dirname         basename src/main.rs .rs; dirname src/util/helper.rs
-differs  read       od / xxd / hexdump       printf 'AB' | od -c | head -1
-         bash: 0000000   A   B|status=0|  bat-sh: status=0| sh: od: command not found 
-missing  read       xxd                      printf 'AB' | xxd
-         sh: xxd: command not found
+same     read       od / xxd / hexdump       printf 'AB' | od -c | head -1
+same     read       xxd                      printf 'AB' | xxd
 differs  read       strings                  strings a.txt | head -1
          bash: line1|status=0|  bat-sh: status=0| sh: strings: command not found 
-missing  read       md5sum / sha256sum       printf abc | sha256sum
-         sh: sha256sum: command not found
-missing  read       md5sum                   printf abc | md5sum
-         sh: md5sum: command not found
-missing  read       base64                   printf abc | base64
-         sh: base64: command not found
-missing  read       cmp                      cmp a.txt a.txt && echo same
-         sh: cmp: command not found
+same     read       md5sum / sha256sum       printf abc | sha256sum
+same     read       md5sum                   printf abc | md5sum
+same     read       base64                   printf abc | base64
+same     read       cmp                      cmp a.txt a.txt && echo same
 same     search     grep -n                  grep -n apple list.txt
 same     search     grep -rn                 grep -rn "fn " src | sort
 same     search     grep -rn --include       grep -rn --include='*.rs' TODO . | sort
@@ -138,12 +125,11 @@ same     search     grep --exclude-dir       grep -rn --exclude-dir=util fn . | 
 same     search     grep -e -e               grep -e apple -e cherry list.txt
 same     search     grep -m                  grep -m1 apple list.txt
 same     search     grep -L                  grep -L apple list.txt a.txt
-missing  search     rg pattern               rg -n "fn " src
-         sh: rg: command not found
-differs  search     rg --files               rg --files | sort
-         bash: a.txt|b.txt|Cargo.toml|docs/notes.md|list.txt|package.json|people.txt|README.md|src/main.rs|src/util/helper.rs  bat-sh: status=0| sh: rg: command not found 
-missing  search     rg -l / -g               rg -l fn -g '*.rs'
-         sh: rg: command not found
+differs  search     rg pattern               rg -n "fn " src
+         bash: src/util/helper.rs:1:pub fn helper() -> u32 {|src/main.rs:1:fn main() {|src/main.rs:6:fn add(a: i32, b: i32) -  bat-sh: src/main.rs:1:fn main() {|src/main.rs:6:fn add(a: i32, b: i32) -> i32 {|src/util/helper.rs:1:pub fn helper() - 
+same     search     rg --files               rg --files | LC_ALL=C sort
+differs  search     rg -l / -g               rg -l fn -g '*.rs'
+         bash: src/util/helper.rs|src/main.rs|status=0|  bat-sh: src/main.rs|src/util/helper.rs|status=0| 
 same     search     find -name               find . -name '*.rs' | sort
 differs  search     find -type f/-type d     find src -type d | sort; find . -maxdepth 1 -type f | sort
          bash: src|src/util|./a.txt|./b.txt|./Cargo.toml|./list.txt|./package.json|./people.txt|./README.md|status=0|  bat-sh: src|src/util|./Cargo.toml|./README.md|./a.txt|./b.txt|./list.txt|./package.json|./people.txt|status=0| 
@@ -155,11 +141,9 @@ same     search     find -exec {} +          find src -name '*.rs' -exec grep -l
 same     search     find -print0 | xargs -0  find src -name '*.rs' -print0 | xargs -0 grep -l fn | sort
 same     search     find -newer/-mtime/-size find . -size +0 -name 'a.txt'; find . -mtime -1 -name a.txt
 same     search     find -delete             find . -name 'a.txt' -delete; ls a.txt 2>/dev/null; echo $?
-differs  search     find -iname / -regex     find . -iname 'readme*'; find . -regex '.*/main\.rs'
-         bash: ./README.md|./src/main.rs|status=0|  bat-sh: ./README.md|status=1| find: unknown predicate `-regex' 
+same     search     find -iname / -regex     find . -iname 'readme*'; find . -regex '.*/main\.rs'
 same     search     find -prune              find . -name util -prune -o -name '*.rs' -print | sort
-differs  search     find -empty / -printf    find . -type d -empty; find src -maxdepth 1 -name '*.rs' -printf '%f\n'
-         bash: ./empty|main.rs|status=0|  bat-sh: ./empty|status=1| find: unknown predicate `-printf' 
+same     search     find -empty / -printf    find . -type d -empty; find src -maxdepth 1 -name '*.rs' -printf '%f\n'
 same     search     which                    which ls cat grep | wc -l
 missing  search     locate/fd                fd main
          sh: fd: command not found
@@ -201,40 +185,31 @@ EOF
          sh: apply_patch: command not found
 differs  edit       ed / ex                  printf '1d\nw\nq\n' | ed -s a.txt; cat a.txt
          bash: line2|line3|status=0|  bat-sh: line1|line2|line3|status=0| sh: ed: command not found 
-missing  edit       dd                       dd if=a.txt of=d.txt 2>/dev/null; cmp a.txt d.txt && echo ok
-         sh: cmp: command not found
+differs  edit       dd                       dd if=a.txt of=d.txt 2>/dev/null; cmp a.txt d.txt && echo ok
+         bash: ok|status=0|  bat-sh: status=2| cmp: d.txt: No such file or directory 
 same     text       sort flags               sort -u list.txt | wc -l; sort -n list.txt | tail -2; sort -r list.txt | head -1
 same     text       sort -k -t               sort -k2 -n people.txt | head -1; sort -t' ' -k3,3 -k1,1r people.txt | head -1
 same     text       uniq -c / -d             sort list.txt | uniq -c | sort -rn | head -1; sort list.txt | uniq -d
 same     text       cut                      cut -d' ' -f1,3 people.txt; cut -c1-3 list.txt | head -1
 same     text       tr                       echo hello | tr a-z A-Z; echo 'a  b' | tr -s ' '; echo abc | tr -d b
-missing  text       awk print col            awk '{print $2}' people.txt
-         sh: awk: command not found
-missing  text       awk -F / sum             awk -F' ' '{s+=$2} END {print s}' people.txt
-         sh: awk: command not found
-missing  text       awk NR range             awk 'NR>=2 && NR<=3' list.txt
-         sh: awk: command not found
+same     text       awk print col            awk '{print $2}' people.txt
+same     text       awk -F / sum             awk -F' ' '{s+=$2} END {print s}' people.txt
+same     text       awk NR range             awk 'NR>=2 && NR<=3' list.txt
 same     text       xargs                    ls *.txt | xargs wc -l | tail -1
 same     text       xargs -I                 printf 'a\nb\n' | xargs -I{} echo "<{}>"
 same     text       xargs -n / -P            echo 1 2 3 4 | xargs -n 2 echo
-differs  text       diff -u                  diff -u a.txt b.txt | tail -n +3; echo $?
-         bash: @@ -1,3 +1,4 @@| line1|-line2|+line2 changed| line3|+line4|0|status=0|  bat-sh: 0|status=0| sh: diff: command not found 
-differs  text       diff -q / -r             diff -q a.txt b.txt; diff -rq src docs | wc -l
-         bash: Files a.txt and b.txt differ|3|status=0|  bat-sh: 0|status=0| sh: diff: command not found sh: diff: command not found 
-differs  text       comm / join / paste      paste a.txt b.txt | head -1
-         bash: line1	line1|status=0|  bat-sh: status=0| sh: paste: command not found 
-differs  text       comm                     comm -12 <(sort a.txt) <(sort b.txt)
-         bash: line1|line3|status=0|  bat-sh: status=2| sh: syntax error near unexpected token `<(sort' 
-missing  text       column -t                column -t people.txt
-         sh: column: command not found
-missing  text       fold / fmt               echo 'aaaa bbbb cccc' | fold -w 5
-         sh: fold: command not found
+same     text       diff -u                  diff -u a.txt b.txt | tail -n +3; echo $?
+same     text       diff -q / -r             diff -q a.txt b.txt; diff -rq src docs | wc -l
+same     text       comm / join / paste      paste a.txt b.txt | head -1
+same     text       comm                     comm -12 <(sort a.txt) <(sort b.txt)
+same     text       column -t                column -t people.txt
+same     text       fold / fmt               echo 'aaaa bbbb cccc' | fold -w 5
 same     text       tac / rev                tac a.txt | head -1; echo abc | rev
 same     text       seq                      seq 3; seq 1 2 5 | tr '\n' ' '
 same     text       printf formats           printf '%5s|%-5s|%03d|%.2f|%x\n' a b 7 3.14159 255
 same     text       echo -e / -n             echo -e 'a\tb'; echo -n x; echo
 missing  text       expr / bc                expr 2 + 3; echo '2*3' | bc
-         sh: expr: command not found
+         sh: bc: command not found
 missing  text       jq                       echo '{"a":1}' | jq .a
          sh: jq: command not found
 differs  text       yes | head               yes | head -2
@@ -254,8 +229,7 @@ missing  sys        nproc / df / free        nproc >/dev/null && echo ok; df . >
 missing  sys        ps / kill / pgrep        ps >/dev/null && echo ps
          sh: ps: command not found
 same     sys        sleep                    sleep 0.05; echo slept
-missing  sys        timeout                  timeout 1 echo t
-         sh: timeout: command not found
+same     sys        timeout                  timeout 1 echo t
 same     sys        true/false/test          true && ! false && test 1 -lt 2 && echo ok
 differs  sys        type / hash / alias      type cd | head -1; alias ll='ls -l'; alias | grep -c ll
          bash: cd is a shell builtin|1|status=0|  bat-sh: cd is a shell builtin|0|status=1| 
@@ -270,10 +244,10 @@ differs  sys        curl                     curl --version | head -1
          bash: curl 8.18.0 (x86_64-pc-linux-gnu) libcurl/8.18.0 OpenSSL/3.5.5 zlib/1.3.1 brotli/1.2.0 zstd/1.5.7 libidn2/2.3.  bat-sh: status=0| sh: curl: command not found 
 differs  sys        wget                     wget --version | head -1
          bash: GNU Wget 1.25.0 built on linux-gnu.|status=0|  bat-sh: status=0| sh: wget: command not found 
-missing  tools      git status               git init -q . && git status --short | wc -l
-         sh: git: command not found
-missing  tools      git diff / log           git --version
-         sh: git: command not found
+differs  tools      git status               git init -q . && git status --short | wc -l
+         bash: 9|status=0|  bat-sh: status=127| git: not available in this environment (no git; use rg/find/ls/diff) 
+differs  tools      git diff / log           git --version
+         bash: git version 2.53.0|status=0|  bat-sh: status=127| git: not available in this environment (no git; use rg/find/ls/diff) 
 missing  tools      python3 -c               python3 -c 'print(1+1)'
          sh: python3: command not found
 missing  tools      python                   python -c 'print(1+1)'
@@ -302,4 +276,364 @@ missing  tools      pytest / jest            pytest --version
          sh: pytest: command not found
 missing  tools      sudo / apt               sudo true
          sh: sudo: command not found
-same=147 differs=28 missing=40 no-ref=0
+same     rg         pattern (cwd)            rg fn | LC_ALL=C sort
+same     rg         pattern --sort path      rg --sort path fn
+same     rg         pattern file             rg fn src/main.rs
+same     rg         pattern dir              rg --sort path fn src
+same     rg         pattern ./dir            rg --sort path TODO ./src
+same     rg         pattern .                rg --sort path TODO .
+same     rg         pattern dir/             rg --sort path TODO src/ web/
+same     rg         pattern two files        rg --sort path line a.txt b.txt; rg -c line b.txt a.txt | LC_ALL=C sort
+same     rg         pattern abs path         rg -c fn "$PWD/src/main.rs"
+same     rg         -n file                  rg -n fn src/main.rs
+same     rg         -n dir                   rg -n --sort path 'fn \w+' src
+same     rg         --line-number / -N       rg --line-number add src/main.rs; rg -N add src/main.rs; rg -n --no-line-number add src/main.rs
+same     rg         -i                       rg -i --sort path 'todo|DEMO'
+same     rg         -S smart case            rg -S --sort path todo; rg -S Todo; echo $?
+same     rg         -s after -i              rg -i -s todo; echo $?
+same     rg         -l                       rg -l --sort path fn
+same     rg         --files-with-matches dir rg --files-with-matches add src web | LC_ALL=C sort
+same     rg         --files-without-match    rg --files-without-match --sort path fn; echo $?; rg --files-without-match fn src/main.rs; echo $?
+same     rg         -c                       rg -c --sort path fn
+same     rg         -c single file           rg -c fn src/main.rs; rg -c nomatch src/main.rs; echo $?
+same     rg         -c -H / --include-zero   rg -c -H fn src/main.rs; rg -c --include-zero --sort path add src
+same     rg         --count-matches          rg --count-matches --sort path a src
+same     rg         --files                  rg --files | LC_ALL=C sort
+same     rg         --files --sort path      rg --files --sort path
+same     rg         --files path             rg --files --sort path src web
+same     rg         --files ./path and file  rg --files --sort path ./web a.txt
+same     rg         --files -g               rg --files --sort path -g '*.rs'
+same     rg         --files -g negation      rg --files --sort path -g '!*.rs' -g '!web'
+same     rg         --files several -g       rg --files --sort path -g '*.md' -g '*.toml'
+same     rg         --files -g braces        rg --files --sort path -g '*.{js,css}'
+same     rg         --files -g path glob     rg --files --sort path -g 'src/**/*.rs'; rg --files -g 'util/*.rs' src; echo $?
+same     rg         --files -g dir negation  rg --files --sort path --glob '!src/' --glob='!docs/**'
+same     rg         --files --iglob          rg --files --sort path --iglob '*.MD'; rg --files -g '*.MD'; echo $?
+same     rg         --files --hidden         rg --files --hidden --sort path
+same     rg         --files -u / -uu         rg --files -u --sort path; echo --; rg --files -uu --sort path
+same     rg         --files --no-ignore      rg --files --no-ignore --sort path
+same     rg         --files --no-ignore-vcs  rg --files --no-ignore-vcs --sort path
+same     rg         --files --max-depth      rg --files --max-depth 1 --sort path; echo --; rg --files --max-depth 2 --sort path src
+same     rg         --files -t               rg --files --sort path -t rust; rg --files -tpy -tjs --sort path
+same     rg         --files -T               rg --files --sort path -T rust -Tmd
+same     rg         --files types            for t in ts md json toml yaml sh html css c cpp go java; do rg --files --sort path -t $t; echo "$t=$?"; done
+same     rg         --files none / missing   rg --files -g 'zzz*'; echo $?; rg --files nope; echo $?
+same     rg         --files --sortr          rg --files --sortr path
+same     rg         --files in ignored dir   rg --files --sort path target web/dist
+same     rg         --files from subdir      cd src && rg --files --sort path && cd util && rg -c --sort path fn
+same     rg         -g with pattern          rg --sort path fn -g '*.rs'; rg --sort path -n add -g '!*.rs'
+same     rg         -t with pattern          rg --sort path -trust fn; rg --sort path --type py --type js add
+same     rg         -T with pattern          rg --sort path -Trust -T log fn
+same     rg         bad type                 rg -t rs fn; echo $?
+same     rg         -C                       rg -C1 -n hello src/main.rs
+same     rg         -C dir with separators   rg -C1 -n --sort path 'fn|TODO' src web
+same     rg         -A                       rg -A1 add src/main.rs
+same     rg         -B                       rg -B2 -n 'a \+ b' src/main.rs
+same     rg         -A -B overlap            rg -n -A2 -B1 '^[cgk]$' long1.txt
+same     rg         --context=N long forms   rg --context=1 d long1.txt; rg --after-context 1 --before-context 0 o long1.txt
+same     rg         -F                       rg -F 'add(' --sort path; rg -F 'a.b'; echo $?
+same     rg         -w                       rg -w a --sort path src; rg -w lin a.txt; echo $?
+same     rg         -x                       rg -x '}' --sort path src; rg -x line a.txt; echo $?
+same     rg         -v                       rg -v fn src/main.rs; rg -v -c line a.txt; echo $?
+same     rg         -o                       rg -o 'fn \w+' --sort path; rg -on 'a\w' src/main.rs
+same     rg         -e several               rg -e hello -e TODO --sort path; rg -n -e '^fn' -e '^}' src/main.rs
+same     rg         -e leading dash          rg -e '-> u32' src; rg -- '-> i32' src/main.rs
+same     rg         -m                       rg -m1 --sort path fn; rg --max-count 2 -n line b.txt
+same     rg         -m with -A               rg -m1 -A1 -n fn src/main.rs
+same     rg         --hidden                 rg --hidden --sort path fn
+same     rg         -u / -uu                 rg -u --sort path 'fn \w'; echo --; rg -uu --sort path 'fn \w'
+same     rg         --no-ignore              rg --no-ignore --sort path -l fn
+same     rg         gitignore negation and anchor rg -l --sort path 'fn (kept|build|gen)'
+same     rg         nested and parent ignore rg -l add web | LC_ALL=C sort; cd web && rg -l fn --sort path
+same     rg         .ignore                  rg -c scratch; echo $?; rg -c --no-ignore-dot scratch
+same     rg         explicit ignored file    rg --sort path fn debug.log target/out.rs
+same     rg         --max-depth              rg --max-depth 1 --sort path fn; rg --max-depth 2 -l --sort path fn
+same     rg         --no-heading             rg --no-heading --sort path TODO
+same     rg         --heading                rg --heading -n --sort path TODO
+same     rg         -H / --with-filename     rg -H fn src/main.rs; rg --with-filename -n hello src/main.rs
+same     rg         -I / --no-filename       rg -I --sort path fn src; rg --no-filename -n --sort path TODO
+same     rg         --color never            rg --color never -n hello src; rg --color=never hello src/main.rs; rg --color always --version >/dev/null
+same     rg         -q                       rg -q fn; echo $?; rg -q nomatch; echo $?
+same     rg         no match status          rg nomatch; echo $?; rg nomatch src/main.rs; echo $?
+same     rg         error status             rg fn nope; echo $?; rg fn nope src/main.rs; echo $?
+same     rg         bad regex                rg 'fn(' src; echo $?
+same     rg         no pattern               rg; echo $?
+same     rg         unknown flag             rg --bogus fn; echo $?
+same     rg         nothing searched         rg fn -g 'zzz*'; echo $?
+same     rg         binary skipped           rg -c --sort path 'fn (early|late)'; echo $?
+same     rg         binary explicit          rg fn bin.dat; rg -n fn bin.dat a.txt; rg -c fn bin.dat
+same     rg         -a binary as text        rg -a 'fn l' bin.dat
+same     rg         stdin pipe               printf 'one\ntwo\nthree\n' | rg -n t; cat a.txt | rg -c line
+same     rg         stdin -                  printf 'one\ntwo\n' | rg o -; printf 'one\n' | rg -H -n o
+same     rg         stdin redirect           rg hello < src/main.rs
+same     rg         --column / --vimgrep     rg --column add src/main.rs; rg --vimgrep --sort path add src
+same     rg         -r replace               rg -r 'sum($1)' 'add\((.*?)\)' src/main.rs; rg -o -r '<$0>' 'l\w+' a.txt
+same     rg         --trim / -M              rg --trim -n 'a \+ b' src/main.rs; rg -M 15 fn src/main.rs
+same     rg         -0 with -l               rg -0 -l --sort path fn | tr '\0' '\n'; rg --files -0 --sort path src | tr '\0' ' '
+same     rg         regex classes            rg -n '^\s+\d+ //' src; rg -c '[[:upper:]]{4}' --sort path; rg -o '\bfn\b \w+\(' src/main.rs
+same     rg         alternation and groups   rg -o --sort path '(pub )?fn (main|helper)' src
+same     rg         combined short flags     rg -in --sort path TODO; rg -nC1 hello src/main.rs; rg -lF 'add(' | LC_ALL=C sort
+same     rg         no .git: gitignore still applies rm -rf .git; rg --files --sort path | head -5
+same     rg         subdir root, parent anchored rule rg --files --sort path docs
+differs  rg         -U multiline unsupported rg -U 'main\(\) \{\n' src/main.rs; echo $?
+         bash: fn main() {|0|status=0|  bat-sh: 2|status=0| rg: --multiline is not supported by this rg (bat-sh builtin) 
+differs  rg         look-around unsupported  rg -P 'fn(?= main)' src/main.rs; echo $?
+         bash: fn main() {|0|status=0|  bat-sh: 2|status=0| rg: regex parse error:     fn(?= main) error: look-around is not supported 
+differs  rg         --json unsupported       rg --json fn src/main.rs | head -c 20; echo
+         bash: {"type":"begin","dat|status=0|  bat-sh: |status=0| rg: --json is not supported by this rg (bat-sh builtin) 
+same     nl         nl file                  nl a.txt
+same     nl         nl -ba                   nl -ba src/main.rs
+same     nl         nl default skips empty   nl blank.txt | cat -A
+same     nl         nl -b a / t / n          nl -b a blank.txt; nl -b t blank.txt; nl -bn a.txt
+same     nl         nl -b pREGEX             nl -b 'p^line[23]' a.txt
+same     nl         nl -w                    nl -w 3 a.txt; nl -ba -w2 blank.txt
+same     nl         nl -s                    nl -s ': ' a.txt; nl -ba -s' | ' -w4 blank.txt
+same     nl         nl -v -i                 nl -v 10 a.txt; nl -v5 -i 5 a.txt
+same     nl         nl -n ln/rn/rz           nl -n ln a.txt | cat -A; nl -n rn a.txt; nl -nrz -w4 a.txt
+same     nl         nl stdin                 printf 'x\ny\n' | nl; nl -ba < a.txt; cat a.txt | nl -ba -
+same     nl         nl several files         nl -ba a.txt b.txt
+same     nl         nl missing file          nl a.txt nope b.txt; echo $?
+same     nl         nl no trailing newline   printf 'a\nb' | nl -ba | cat -A
+same     nl         nl | sed range           nl -ba src/main.rs | sed -n '2,4p'
+same     nl         nl long options          nl --body-numbering=a --number-width=2 --number-separator=') ' a.txt
+same     util       base64 file / stdin      base64 a.txt; printf 'hello world' | base64; base64 < list.txt
+same     util       base64 wraps at 76       base64 src/main.rs
+same     util       base64 -w                base64 -w 20 src/main.rs; base64 --wrap=8 a.txt
+same     util       base64 -w 0              base64 -w 0 src/main.rs | wc -c; printf hi | base64 -w0; echo
+same     util       base64 -d                printf 'aGVsbG8gd29ybGQ=\n' | base64 -d; echo; base64 a.txt | base64 --decode; base64 src/main.rs > e; base64 -d e | cmp - src/main.rs; echo $?
+same     util       base64 -d invalid / missing printf 'a!!!' | base64 -d; echo $?; base64 nope; echo $?
+same     util       base64 binary round trip base64 bin.dat | base64 -d | od -c
+same     util       sha256sum                sha256sum a.txt b.txt; printf abc | sha256sum; sha256sum < a.txt
+same     util       sha256sum empty / long   : > z; sha256sum z; seq 1 2000 | sha256sum
+same     util       sha256sum -c             sha256sum a.txt b.txt > sums; sha256sum -c sums; echo $?; echo x >> a.txt; sha256sum -c sums; echo $?
+same     util       sha256sum -c missing / bad sha256sum a.txt > sums; rm a.txt; sha256sum -c sums; echo $?; echo junk > sums; sha256sum -c sums; echo $?
+same     util       sha256sum missing file   sha256sum nope a.txt; echo $?
+same     util       sha1sum / md5sum         sha1sum a.txt; md5sum a.txt list.txt; printf '' | md5sum; seq 1 500 | sha1sum; seq 1 500 | md5sum
+same     util       shasum -a 256            shasum -a 256 a.txt; shasum a.txt
+same     util       tree                     LC_COLLATE=C tree
+same     util       tree dir                 LC_COLLATE=C tree src; LC_COLLATE=C tree src docs
+same     util       tree -a                  LC_COLLATE=C tree -a
+same     util       tree -L                  LC_COLLATE=C tree -L 1; LC_COLLATE=C tree -L 2 src; tree -L 0; echo $?
+same     util       tree -d                  LC_COLLATE=C tree -d; LC_COLLATE=C tree -d -L 1
+same     util       tree -I                  LC_COLLATE=C tree -I 'target|build|*.txt'; LC_COLLATE=C tree -a -I '.git|web'
+same     util       tree --noreport          LC_COLLATE=C tree --noreport src; LC_COLLATE=C tree -a --noreport -L 1 web
+same     util       tree -f / -F / -i        LC_COLLATE=C tree -f src/util; LC_COLLATE=C tree -F -L 1; LC_COLLATE=C tree -i src
+same     util       tree -P / --dirsfirst    LC_COLLATE=C tree -P '*.rs' src web; LC_COLLATE=C tree --dirsfirst -L 2 src
+same     util       tree --charset ascii     LC_COLLATE=C tree --charset ascii src
+same     util       tree missing / file / empty tree nope; echo $?; tree a.txt; echo $?; tree empty
+same     util       tree symlink             ln -s a.txt lnk; ln -s src lnd; LC_COLLATE=C tree -L 1 | tail -8
+same     util       cmp                      cmp a.txt a.txt; echo $?; cmp a.txt b.txt; echo $?; cmp -s a.txt b.txt; echo $?
+same     util       cmp eof / missing / stdin head -c 8 a.txt > p; cmp a.txt p; echo $?; cmp a.txt nope; echo $?; cat a.txt | cmp - a.txt; echo $?
+same     util       paste                    paste a.txt b.txt; paste -d, a.txt list.txt | head -4; paste -d ':;' a.txt a.txt a.txt
+same     util       paste -s / stdin         paste -s a.txt; paste -sd+ a.txt; seq 5 | paste - -; seq 4 | paste -sd,
+same     util       comm                     sort a.txt > s1; sort b.txt > s2; comm s1 s2; comm -12 s1 s2; comm -23 s1 s2; comm -3 s1 s2 | cat -A
+same     util       expr arithmetic          expr 1 + 2; expr 7 / 2; expr 7 % 3; expr 2 \* 3; expr \( 1 + 2 \) \* 3; expr 10 - 2 - 3; expr -5 + 2; expr 2 + 3 \* 4
+same     util       expr comparison and status expr 3 \> 2; expr 1 - 1; echo $?; expr a = a; expr abc \< abd; expr 10 \< 9; echo $?; expr 3 '>=' 3; expr foo '!=' bar
+same     util       expr strings             expr length hello; expr substr hello 2 3; expr index hello l; expr abc : 'a\(.*\)'; expr abc : 'ab'; expr x : y; echo $?; expr match abc 'a.'
+same     util       expr | & errors          expr a \| b; expr '' \| b; expr 0 \& 1; echo $?; expr 1 +; echo $?; expr a + 1; echo $?; expr 9 / 0; echo $?; expr; echo $?
+same     util       expr in $( )             i=5; i=$(expr $i + 1); echo $i; n=`expr $i \* 2`; echo $n
+same     util       fold                     printf 'aaaa bbbb cccc dddd\n' | fold -w 7; printf 'aaaa bbbb cccc dddd\n' | fold -s -w 7 | cat -A; fold -w 3 a.txt; printf 'abcdef' | fold -w4 | cat -A
+same     util       fold default width       seq -s ' ' 1 60 | fold | wc -l; seq -s ' ' 1 60 | fold -s | head -1 | wc -c
+same     util       column -t                printf 'a bb ccc\ndddd e f\n' | column -t | cat -A; column -t people.txt; printf 'a b\n\n  c   d e\n' | column -t | cat -A
+same     util       column -t -s             column -t -s, data.csv; printf 'a,,b\n,c\n' | column -t -s, | cat -A; printf 'a:b\n' | column -s: -t -o ' | '
+same     util       od -c                    od -c a.txt; od -c -An a.txt; printf '\001\377a\t\0' | od -c; od -c -N 3 a.txt
+same     util       od -x / -t x1 / default  printf abc | od -x; printf abcdefghijklmnopq | od -t x1; printf abc | od; printf abc | od -An -tx1; printf abc | od -A x -t x1; printf abcd | od -t o1
+same     util       od squeezes repeats      printf '%060d' 0 | od -c; seq 100 | tr -d '\n' | tr '0-9' 'a' | od -c -v | tail -2
+same     util       xxd                      xxd a.txt; printf abc | xxd -p; xxd -l 4 a.txt; printf abc | xxd -c 2; xxd -g 1 -l 4 a.txt; seq 30 | xxd -p; xxd bin.dat
+same     util       hexdump -C               hexdump -C a.txt; head -c 40 src/main.rs | hexdump -C; printf '%052d' 0 | hexdump -C
+same     diff       diff normal              diff a.txt b.txt; echo $?
+same     diff       diff same                diff a.txt a.txt; echo $?
+same     diff       diff -u                  diff -u a.txt b.txt | sed '1,2s/\t.*//'; diff -u a.txt b.txt > /dev/null; echo $?
+same     diff       diff -u header format    diff -u a.txt b.txt | head -2 | sed -E 's/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9} [+-][0-9]{4}$/STAMP/' | cat -A
+same     diff       diff -u --label          diff -u --label old --label new a.txt b.txt; diff -u -L x -L y a.txt b.txt | head -2
+same     diff       diff -U N                diff -U 0 a.txt b.txt | tail -n +3; diff -U1 long1.txt long2.txt | tail -n +3; diff --unified=2 long1.txt long2.txt | tail -n +3
+same     diff       diff -u separate hunks   diff -u long1.txt long2.txt | tail -n +3; diff long1.txt long2.txt
+same     diff       diff -u merged hunks     diff -U 6 long1.txt long2.txt | tail -n +3
+same     diff       diff -uN digits          diff -u1 a.txt b.txt | tail -n +3
+same     diff       diff -q                  diff -q a.txt b.txt; echo $?; diff -q a.txt a.txt; echo $?; diff --brief list.txt a.txt
+same     diff       diff -s                  diff -s a.txt a.txt; echo $?; diff -s a.txt b.txt | head -1
+same     diff       diff -r                  diff -r old new; echo $?
+same     diff       diff -ru                 diff -ru old new | sed 's/\t.*//'
+same     diff       diff -rq                 diff -rq old new; echo $?; diff -rq src src; echo $?
+same     diff       diff -rN                 diff -rN old new; diff -ruN old new | sed 's/\t.*//'
+same     diff       diff -rs                 diff -rs old new
+same     diff       diff dirs without -r     diff old new; echo $?
+same     diff       diff dir and file        cp b.txt old/a.txt; diff old a.txt; echo $?; diff a.txt old; echo $?
+same     diff       diff -N missing          diff -N a.txt nope; echo $?; diff -uN nope a.txt | sed 's/\t.*//'
+same     diff       diff /dev/null           diff -u /dev/null a.txt | sed 's/\t.*//'; diff -u a.txt /dev/null | sed 's/\t.*//'; diff /dev/null /dev/null; echo $?
+same     diff       diff stdin               cat a.txt | diff - b.txt; printf 'line1\n' | diff -u a.txt - | tail -n +3; echo done | diff - -; echo $?
+same     diff       diff missing / usage     diff a.txt nope; echo $?; diff a.txt; echo $?; diff a.txt b.txt list.txt; echo $?
+same     diff       diff no newline at eof   printf 'a\nb' > n1; printf 'a\nb\n' > n2; diff n1 n2; diff -u n1 n2 | sed '1,2s/\t.*//'; diff n2 n1; printf 'a\nc' > n3; diff -u n1 n3 | tail -n +3
+same     diff       diff empty files         : > e1; diff e1 a.txt; diff a.txt e1; diff -u e1 a.txt | tail -n +3; diff e1 e1; echo $?
+same     diff       diff -w -b -i -B         printf 'a  b\n\nC\nd\n' > w1; printf 'a b\nc\nd\n\n' > w2; diff -w w1 w2; echo --; diff -b w1 w2; echo --; diff -i w1 w2; echo --; diff -B w1 w2; echo --; diff -wiB w1 w2; echo $?
+same     diff       diff -B unified          printf 'a\n\nb\nc\n' > w1; printf 'a\nb\nc\n' > w2; diff -B w1 w2; echo $?; diff -uB w1 w2; echo $?
+same     diff       diff binary              diff bin.dat a.txt; echo $?; cp bin.dat bin2.dat; diff bin.dat bin2.dat; echo $?
+same     diff       diff insert / delete blocks seq 1 20 > s1; seq 1 20 | sed '5d;12s/$/ x/;17a new' > s2; diff s1 s2; diff -u s1 s2 | tail -n +3
+same     diff       diff repeated lines      printf 'a\nb\na\nb\na\n' > r1; printf 'a\nb\na\nb\na\nb\na\n' > r2; diff r1 r2; diff -u r1 r2 | tail -n +3; diff r2 r1
+same     diff       diff blank line shifts   printf 'x\n\ny\n\nz\n' > r1; printf 'x\n\ny\n\nnew\n\nz\n' > r2; diff -u r1 r2 | tail -n +3; diff r1 r2
+same     diff       diff function added      printf 'fn a() {\n    1\n}\n\nfn c() {\n    3\n}\n' > f1; printf 'fn a() {\n    1\n}\n\nfn b() {\n    2\n}\n\nfn c() {\n    3\n}\n' > f2; diff -u f1 f2 | tail -n +3; diff f2 f1
+same     diff       diff moved block         seq 1 12 > m1; (seq 7 12; seq 1 6) > m2; diff m1 m2; diff -u m1 m2 | tail -n +3
+same     diff       diff total rewrite       diff -u a.txt list.txt | tail -n +3; diff list.txt people.txt
+same     diff       diff source files        sed 's/hello/goodbye/; 6i // adds two numbers' src/main.rs > m.rs; diff -u src/main.rs m.rs | tail -n +3; diff src/main.rs m.rs
+same     diff       diff larger random edits seq 1 400 > g1; sed '37d;74d;111,119d;29s/$/ mod/;58s/$/ mod/;53i ins\n200,203s/^/  /;300a tail one\n301a tail two\n399d' g1 > g2; diff g1 g2 | md5sum; diff -u g1 g2 | tail -n +3 | md5sum
+same     diff       diff -x                  diff -rq -x '*.txt' old new; diff -r --exclude=sub old new | grep -c '^diff'
+differs  diff       diff unsupported -y      diff -y a.txt b.txt | head -1; diff -c a.txt b.txt | tail -n +3
+         bash: line1								line1|***************|*** 1,3 ****|  line1|! line2|  line3|--- 1,4 ----|  line1|! line2 changed|   bat-sh: status=0| diff: option '-y' is not supported by this diff (normal and unified output only) diff: option '-c' is not supported by t
+same     timeout    timeout passes status    timeout 2 echo hi; echo $?; timeout 2 sh -c 'exit 3'; echo $?; timeout 5 false; echo $?
+same     timeout    timeout stops sleep      timeout 0.3 sleep 5; echo $?
+same     timeout    timeout stops a loop     timeout 0.3 sh -c 'while :; do sleep 0.05; done'; echo $?
+same     timeout    timeout stops a busy loop timeout 0.3 bash -c 'i=0; while true; do i=$((i+1)); done'; echo $?
+same     timeout    timeout is prompt        s=$(date +%s); timeout 1 sleep 30; e=$(date +%s); [ $((e-s)) -le 3 ] && echo prompt
+same     timeout    timeout units and options timeout 1s true; echo $?; timeout -s KILL 0.2 sleep 5; echo $?; timeout -k 1 0.2 sleep 5; echo $?; timeout --signal=TERM 0.2s sleep 5; echo $?; timeout --preserve-status 0.2 sleep 5; echo $?
+same     timeout    timeout output before the deadline timeout 0.5 sh -c 'echo first; sleep 5; echo never'; echo $?
+same     timeout    timeout nested and continue timeout 2 sh -c 'timeout 0.2 sleep 5; echo inner=$?; echo after'; echo outer=$?
+same     timeout    timeout in pipeline and subst out=$(timeout 0.2 sh -c 'echo a; sleep 5; echo b'); echo "$out $?"; timeout 0.2 sh -c 'while :; do echo x; sleep 0.05; done' | head -2
+same     timeout    timeout for loop and function f() { for i in 1 2 3 4 5 6 7 8 9; do sleep 0.1; done; echo done; }; timeout 0.25 bash -c 'for i in 1 2 3 4 5 6 7 8 9; do sleep 0.1; done; echo done'; echo $?
+same     timeout    timeout errors           timeout; echo $?; timeout abc true; echo $?; timeout 1; echo $?; timeout 1 nosuchcmd_x; echo $?
+same     timeout    timeout 0 means none     timeout 0 sh -c 'sleep 0.1; echo ran'; echo $?
+differs  stub       git status               git status; echo $?
+         bash: 128|status=0|  bat-sh: 127|status=0| git: not available in this environment (no git; use rg/find/ls/diff) 
+differs  stub       git probes               git rev-parse --show-toplevel; echo $?; git rev-parse --is-inside-work-tree 2>/dev/null; echo $?; git diff; echo $?; git log --oneline -3; echo $?; git ls-files; echo $?; git --version; echo $?
+         bash: 128|128|129|128|128|git version 2.53.0|0|status=0|  bat-sh: 127|127|127|127|127|127|status=0| git: not available in this environment (no git; use rg/find/ls/diff) git: not available in this environment (no git; use
+differs  stub       git in a condition       if git rev-parse --git-dir >/dev/null 2>&1; then echo repo; else echo norepo; fi; command -v git >/dev/null || echo nogit
+         bash: norepo|status=0|  bat-sh: norepo|nogit|status=0| 
+differs  stub       git message              rm -rf .git; git status 2>&1 | head -1 | cut -c1-4
+         bash: fata|status=0|  bat-sh: git:|status=0| 
+differs  stub       python / python3         python -c 'print(1)'; echo $?; python3 --version; echo $?
+         bash: 1|0|Python 3.10.13|0|status=0|  bat-sh: 127|127|status=0| sh: python: command not found sh: python3: command not found 
+differs  stub       pip / curl / wget        pip --version >/dev/null; echo $?; curl --version >/dev/null; echo $?; wget --version >/dev/null; echo $?
+         bash: 0|0|0|status=0|  bat-sh: 127|127|127|status=0| sh: pip: command not found sh: curl: command not found sh: wget: command not found 
+differs  stub       make / cargo             make --version >/dev/null; echo $?; cargo --version >/dev/null; echo $?
+         bash: 0|1|status=0|  bat-sh: 127|127|status=0| sh: make: command not found sh: cargo: command not found 
+differs  stub       node                     node -e 'console.log(1+1)'; echo $?
+         bash: 2|0|status=0|  bat-sh: 126|status=0| sh: node: No such file or directory 
+differs  stub       npm test                 npm test 2>/dev/null; echo $?
+         bash: |> demo@1.0.0 test|> echo ok||ok|0|status=0|  bat-sh: |> demo test|> echo ok||ok|0|status=0| 
+same     awk        print field              awk '{print $1}' people.txt
+same     awk        print fields with text   awk '{print $2, $1; print $1 " is " $2}' people.txt
+same     awk        $NF and NF               awk '{print $NF, NF, $(NF-1)}' people.txt
+same     awk        NR and FNR and FILENAME  awk '{print FILENAME, NR, FNR, $1}' a.txt people.txt
+same     awk        -F comma                 awk -F, '{print $2}' data.csv; awk -F ',' 'NR>1 {s+=$3} END {print s}' data.csv
+same     awk        -F colon and tab         printf 'a:b:c\n' | awk -F: '{print $2}'; printf 'a\tb c\td\n' | awk -F'\t' '{print $2}'; printf 'a b\tc\n' | awk -F '\t' '{print $1}'
+same     awk        -F regex and pipe        printf 'a,b;c\n' | awk -F'[,;]' '{print $2, $3}'; printf 'a|b|c\n' | awk -F'|' '{print $3}'; printf 'a, b,  c\n' | awk -F', *' '{print $3}'; printf 'a.b.c\n' | awk -F. '{print $2}'
+same     awk        -F single space and empty printf 'a  b\n' | awk -F' ' '{print $2}'; printf 'a  b\n' | awk -F'[ ]' '{print $2 "|" $3}'; printf 'abc\n' | awk -F '' '{print $2, NF}'; printf 'aTbtc\n' | awk -Ft '{print $2}'
+same     awk        -v                       awk -v n=2 'NR==n' people.txt; awk -v name=bob -v 's=a\tb' '$1==name {print s, $2}' people.txt; awk -v x=010 'BEGIN{print x+0, x==10, x=="010"}'
+same     awk        pattern regex            awk '/nyc/' people.txt; awk '!/nyc/ {print $1}' people.txt; awk '$3 ~ /^s/ {print $1}' people.txt; awk '$1 !~ /o/' people.txt
+same     awk        pattern comparison       awk '$2 > 28 {print $1}' people.txt; awk '$2 >= 30 && $3 == "nyc" {print $1}' people.txt; awk '$1 == "bob" || $2 == 35' people.txt
+same     awk        NR==n and ranges         awk 'NR==2' list.txt; awk 'NR>=2 && NR<=4' list.txt; awk 'NR==2,NR==4 {print NR": "$0}' list.txt; awk '/apple/,/cherry/' list.txt; awk 'NR%2==0' list.txt
+same     awk        BEGIN and END            awk 'BEGIN {print "start"} {n++} END {print "lines:", n}' list.txt; awk 'END {print NR}' list.txt; awk 'BEGIN {print "only"}'
+same     awk        sum and average          awk '{s+=$2} END {print s, s/NR}' people.txt; awk '{s+=$2} END {printf "%.2f\n", s/NR}' people.txt
+same     awk        count by key (sorted)    awk '{c[$3]++} END {for (k in c) print k, c[k]}' people.txt | sort; awk '{c[$0]++} END {for (k in c) if (c[k] > 1) print k, c[k]}' list.txt
+same     awk        dedupe !seen             awk '!seen[$0]++' list.txt; awk '!a[$3]++ {print $3}' people.txt
+same     awk        printf formats           awk '{printf "%-8s|%5d|%s\n", $1, $2, $3}' people.txt; awk 'BEGIN {printf "%d %i %5d|%-5d|%05d %+d %x %X %o %c %c %s %10s|%-10s|%.2s %e %E %f %.2f %g %G %% %5.1f\n", 42.9, -3, 42, 42, 42, 42, 255, 255, 8, 65, "hello", "str", "r", "l", "abcdef", 1234.5, 0.00012, 3.14159, 2.5, 0.0001234, 1e10, 3.14159}'
+same     awk        printf %g and friends    awk 'BEGIN {printf "%g %g %g %g %g %g %.3g %.10g %#g\n", 100000, 1000000, 1e-4, 1e-5, 123456789, 0.1, 1234.5, 1/3, 1.5; printf "%.0f %.0e %5.3d|%-+5d|% d|%+.2e|%010.3f|%#o %#x\n", 2.5, 12345, 7, 3, 4, 12345.678, 3.14159, 8, 255; printf "%*d|%-*d|%.*f\n", 5, 42, 5, 42, 2, 3.14159; printf "%5.2f|%-8.3e|%G|%g|%g\n", -0.0, 0, 0.00001234, -0.0, 1e100; printf "%d %d %x %u %s\n", -3.9, 1e30, -1, -5, 1e6}'
+crates/bat-sh/tests/codex-coverage.sh: line 74: warning: command substitution: ignored null byte in input
+same     awk        printf %c and strings    echo 65 | awk '{printf "%c|%c|%d\n", $1, $1+0, "3x"}'; awk 'BEGIN {printf "%c%c%c|%5c|%-3c|\n", 256, "", 65.7, "xyz", 66; printf "%s %5s|%-5s|%.1s\n", "a", "bc", "de", "xyz"}'
+same     awk        number output            awk 'BEGIN {print -0; x=0; print -x; print 1e30; print 2^53; print 0.1+0.2; print 1/3; print 100000*100000; print 1e6; print 1e-5; print 123456789012; print 0.000001234; print 17/4; print int(-3.7); print -7%3; print 2**3; print 1==1.0; print "a"<"b"; print "10"<"9"; print 10<9}'
+same     awk        number output large and OFMT awk 'BEGIN {printf "%s %s %s %s\n", 0.1, 1e21, 123456.789, 1234567.891; print 1e21, 123456.789, 1234567.891, 0.1, 1e-300, 3.0, "3.0"+0, 1e5, 1e15, 1e16, 1e17, 12345678901234567890; CONVFMT="%.2g"; a=3.14159; b=a ""; print b; x[a]=1; for(k in x) print k; OFMT="%.3f"; print a, 17, 1e3, a ""}'
+same     awk        source constants         awk 'BEGIN { print length(12345), length(1/3), 010 + 0, "010" + 0, 0x10, "0x10" + 0, 1e2, .5 , 5., "+5" + 0, " 12 " + 0, "1e2x"+0, ".e3"+0 }'
+same     awk        string to number         awk 'END { a="3x"; print a+1, +a, -a, a*2, "3"+"4", "3" "4", 1 " " 2, 1 2 }' /dev/null; awk 'BEGIN { x; print length(x), x+0, x "", (x==0), (x=="") }'
+same     awk        strnum comparisons       printf '10 9\n abc \n0x10 1e2\n+5 -0\n' | awk '{ print ($1 < $2), ($1 == 10), ($1 == "10"), ($2 == 100), ($1 == 5), ($2 == 0), length($1) }'; awk 'BEGIN { a[9]; for (k in a) print (k < 10), (k == 9), (k+0 < 10); split("9 10", b); print (b[1] < b[2]); x = "9"; print (x < 10) }'
+same     awk        concatenation precedence awk 'BEGIN { print 1 " " -1; print 1 -1; a="x"; print a -1; print 2 3 + 4; print 2 * 3 4; print 1 == 1 2; print "a" "b" == "ab"; print 1<2; print -1 " " -1; print 2 " " -1; x = "A"; print x "b" x; print length("a" "b"), length 5 }'
+same     awk        operators                awk 'BEGIN { i=5; print i++ + ++i, i--, --i, i; x = y = 3; x += 2; x -= 1; x *= 3; x /= 2; x %= 4; x ^= 2; print x, y; print 2^3^2, -2^2, !0, !1, !"", !"a", 1&&0, 1||0, 5>3?"y":"n"; print 10 % 3 * 2, 2 ** 2 ** 3, !1 + 1, 1 - -1, 5 - 3 - 1, 2 * 3 % 4, 7 / 2 * 2, 2^-1, 2^0.5 }'
+same     awk        ternary and logic        awk '{ print ($2 >= 30 ? "old" : "young"), ($3 == "nyc" && $2 > 30) ? 1 : 0, !($1 ~ /a/) }' people.txt; echo abc | awk '{ if (! $0 ~ /b/) print "A"; else print "B"; print !$0 ~ /0/; print 1 in x }'
+same     awk        fields assign and NF     printf 'a b c\n1 2 3\n' | awk '{print $1, $NF, NF, NR; print $(NF-1); $2="X"; print; print $0; NF=2; print; $5="e"; print; print NF}'; echo "a b" | awk '{ $2 = ""; print; print NF }' | cat -A; echo "5 apples" | awk '{ $1 = $1 * 2; print; print $1 + 0 }'
+same     awk        $0 assign and OFS        echo 'a b c' | awk '{ $0="x y"; print $2, NF }'; echo 'a b c' | awk 'BEGIN{OFS="-"} {$1=$1; print; print $1, $2}'; echo 'a b c' | awk -v OFS=, '{print $1, $3; $2="B"; print}'; awk 'BEGIN { $3 = "c"; print; print NF; $0 = "a:b"; FS=":"; print $1; $0 = "a:b"; print $1 }'
+same     awk        ORS and RS               awk 'BEGIN{ORS=";"} {print $1} END{printf "\n"}' people.txt; printf 'p1 l1\np1 l2\n\n\np2 l1\n' | awk 'BEGIN{RS=""}{print NR": "$1"-"$NF, NF}'; printf 'a;b;c' | awk 'BEGIN{RS=";"}{print NR, $0}'; printf 'a;b;c\n' | awk -v RS=';' '{print NR ":" $0 ":"}'
+same     awk        substr index length      awk 'BEGIN {print substr("hello",2,3), substr("hello",0), substr("hello",-1,3), substr("hello",2), substr("hello",4,100), substr("hello",1.5,2.3), "|" substr("hello",10) "|", index("hello","ll"), index("hello","z"), length("héllo"), toupper("abc"), tolower("ABC"); print "[" substr("hello",2,0) "]" substr("hello", 2, -1) "|" substr("hello",1.6,1) substr("hello",2,1.6); print index("abc", ""), index("", "a"), length() }'; awk '{print length($1), length, toupper(substr($1,1,1)) substr($1,2)}' people.txt
+same     awk        sub gsub                 awk 'BEGIN {s="aaa bbb aaa"; n=gsub(/a+/,"[&]",s); print n, s; t="hello"; sub(/l+/,"L\\&L",t); print t; u="abc"; gsub(/x*/,"-",u); print u; v="a.b.c"; gsub(".","X",v); print v; w="a.b.c"; gsub("\\.","X",w); print w; gsub(/b/,"\\\\&",w); print w }'; awk '{gsub(/a/,"A"); sub(/^/,"> "); print}' people.txt; awk '{n=gsub(/[aeiou]/,"",$1); print n, $1, $0}' people.txt
+same     awk        match and split          awk 'BEGIN {print match("foobar", /o+/), RSTART, RLENGTH; print match("x", /y/), RSTART, RLENGTH; n=split("a:b:c",arr,":"); print n, arr[1], arr[3]; n=split("  a  b ",q); print n, q[1], q[2]; n=split("abc",c,""); print n, c[2]; n=split("a1b22c",d,/[0-9]+/); print n, d[3]; print split("",e), length(e); if (match("key=val", /=(.*)/, m)) print m[1], m[0] }'
+same     awk        arrays                   awk 'BEGIN {a["x"]=1; a["y"]=2; delete a["x"]; print length(a), ("x" in a), ("y" in a); if (("z" in a)==0) print "noz"; print length(a); b[1,2]=3; for (k in b) { split(k,p,SUBSEP); print p[1], p[2] }; if ((1,2) in b) print "yes"; delete a; print length(a); c["q"]; print length(c), c["nope"] == "", length(c) }'
+same     awk        arrays reverse lines     awk '{ a[NR]=$0 } END { for (i=NR;i>0;i--) print a[i]; print length(a) }' a.txt; awk '{ last[$3] = $1; n[$3] += $2 } END { print last["nyc"], n["nyc"], n["sf"] }' people.txt
+same     awk        control flow             awk 'BEGIN { while (i<3) { i++; if (i==2) continue; print i }; do { j++ } while (j<5); print j; for (k=0;k<10;k++) { if (k==3) break }; print k; for (;;) { m++; if (m>2) break }; print m; if (m > 5) print "big"; else if (m > 2) print "mid"; else print "small" }'
+same     awk        next and exit            awk 'NR==2 {next} {print} NR==4 {exit}' list.txt; awk '{ if ($1 == "bob") exit 3; print $1 } END { print "end" }' people.txt; echo $?; awk 'BEGIN { exit 2 } END { print "end runs" }'; echo $?; awk 'BEGIN { exit } { print }' a.txt; echo $?
+same     awk        functions                awk 'function f(a,b){ return a+b } function g(arr,k){ arr[k]=1 } function fact(n){ return n<=1?1:n*fact(n-1) } BEGIN{print f(1,2), fact(10); g(z,"q"); print length(z), ("q" in z); print f(1)}'; awk 'function max(a, b) { return a > b ? a : b } { m = max(m, $2) } END { print m }' people.txt; awk 'function show(arr,   k, n) { for (k in arr) n++; return n } BEGIN { x["a"]; x["b"]; print show(x) }'
+same     awk        math functions           awk 'BEGIN {print int("42abc"), int(3.9), int(-3.9), sqrt(16), exp(0), log(1), sin(0), cos(0), atan2(0,-1), 10%3, 2^0.5, exp(1), log(10), sqrt(2); srand(1); r = rand(); print (r >= 0 && r < 1)}'
+same     awk        sprintf and string functions awk 'BEGIN {print toupper(substr("abc",2)), sprintf("%03d-%s", 7, "z"); s = sprintf("%5.1f%%", 12.345); print s; print tolower("MiXed") toupper("MiXed"), length(sprintf("%10s", "x")) }'
+same     awk        multi-line program       awk '
+BEGIN { FS = "," }
+NR == 1 { next }   # header
+{
+  total += $3
+  if ($3 > max) {
+    max = $3; name = $2
+  }
+}
+END {
+  printf "total=%d max=%s (%d)\n", total, name, max
+}' data.csv
+same     awk        semicolons and comments  awk 'BEGIN { x = 1; y = 2 ; print x + y } # trailing
+END { print "done" }' /dev/null; awk '{ print $1 }; END { print NR }' a.txt; awk 'NR==1; NR==2 { print "two" }' a.txt
+same     awk        print to file and stderr awk '{ print $1 > "out.txt" } END { close("out.txt"); while (0) {}; print "wrote" }' people.txt; cat out.txt; awk '{ print $1 >> "out.txt" }' a.txt; wc -l < out.txt; awk 'BEGIN { print "to stderr" > "/dev/stderr"; print "to stdout" > "/dev/stdout" }' 2>/dev/null; awk '{ print > ($3 ".txt") }' people.txt; cat nyc.txt
+same     awk        print pipe to command    awk '{ print $1 | "sort -r" } END { print "done" }' people.txt; awk 'BEGIN { print "start" } { print $2 | "sort -n" } END { close("sort -n"); print "after" }' people.txt
+same     awk        system                   awk 'BEGIN { print "x" > "s.txt"; r = system("cat s.txt; exit 3"); print r; system("echo from sh") ; print "after" }'
+same     awk        stdin and dash           printf '1\n2\n3\n' | awk '{s+=$1} END {print s}'; printf 'x\n' | awk '{print FILENAME "|" $0}' a.txt - | tail -2; cat people.txt | awk 'END{print NR}'
+same     awk        var=value operand        awk '{print v, $1}' v=1 a.txt v=2 a.txt | sed -n '1p;4p'; awk -F: '{print $1}' FS=, data.csv | head -2
+same     awk        ENVIRON ARGV             FOO=bar awk 'BEGIN { print ENVIRON["FOO"], ARGC, ARGV[1], ARGV[0] == "" }' x y
+same     awk        gensub                   awk 'BEGIN { print gensub(/(a+)(b+)/, "<\\2\\1>", "g", "aabb ab"); print gensub(/o/, "0", 2, "foo boo"); s = "x-y"; t = gensub(/-/, "+", 1, s); print s, t }'; echo "john smith" | awk '{ print gensub(/(\w+) (\w+)/, "\\2, \\1", 1) }'
+same     awk        asort and sorted_in      awk '{ a[NR] = $2 } END { n = asort(a); for (i = 1; i <= n; i++) printf "%s ", a[i]; print "" }' people.txt; awk '{ c[$1] = $2 } END { n = asorti(c, idx); for (i = 1; i <= n; i++) print idx[i], c[idx[i]] }' people.txt; awk '{ c[$1] = $2 } END { PROCINFO["sorted_in"] = "@val_num_desc"; for (k in c) print k, c[k]; PROCINFO["sorted_in"] = "@ind_str_asc"; for (k in c) print k }' people.txt
+same     awk        regex features           printf 'foo123 bar\nBaz_9 q\n\nx.y+z\n' | awk '/^[a-z]+[0-9]+/ {print "1:" $1} /[[:upper:]]/ {print "2:" $1} /^$/ {print "3:empty"} /\./ {print "4:" $0} $1 ~ "^x" {print "5"} /o{2}/ {print "6"} /(foo|Baz)/ {print "7"} /\<bar\>/ {print "8"} $0 ~ /a.z/ {print "9"}'
+same     awk        regex dynamic and special chars awk -v pat='^b' '$1 ~ pat' people.txt; awk 'BEGIN { s = "a/b/c"; n = gsub(/\//, "-", s); print n, s; t = "a+b"; gsub(/\+/, " plus ", t); print t; if ("abc" ~ /^a.c$/) print "m"; if ("a{b}" ~ /{b}/) print "brace"; print "x.y" ~ "x\\.y", "xzy" ~ "x\\.y" }'
+same     awk        uninitialized and types  awk 'BEGIN { if (!x) print "unset is false"; if (x == 0 && x == "") print "both"; y = x + 1; print y; z = x "s"; print z; print length(u), (u < 1), u++ + 0, u }'
+same     awk        division by zero         awk 'BEGIN { x = 0; print 1 / x; print "not reached" }'; echo $?
+same     awk        syntax error             awk 'BEGIN { print substr("x" }'; echo $?; awk '{ print $1 ' a.txt; echo $?
+same     awk        missing file             awk '{print $1}' nope.txt a.txt; echo $?
+differs  awk        getline unsupported      awk 'BEGIN { while ((getline line < "a.txt") > 0) n++; print n }'; echo $?
+         bash: 3|0|status=0|  bat-sh: 2|status=0| awk: getline is not supported by this awk (read the file as an operand, or use the shell) 
+same     awk        typical codex one-liners awk -F'"' '/"name"/ {print $4}' package.json; awk '/^fn /{print NR": "$0}' src/main.rs; awk 'NR>=3 && NR<=6 {printf "%4d  %s\n", NR, $0}' src/main.rs; awk -F= '/^name/ {gsub(/[ "]/, "", $2); print $2}' Cargo.toml; awk '{ $1=$1 } 1' people.txt | head -1; awk 'length > 14' src/main.rs; awk '{print NF}' src/main.rs | sort -n | tail -1; awk 'END{print $0}' a.txt
+same     awk        word frequency           tr -s ' ' '\n' < people.txt | awk '{ w[$1]++ } END { for (k in w) printf "%s %d\n", k, w[k] }' | sort | head -4
+same     awk        columns and csv          awk -F, 'NR>1 { printf "%-8s %3d\n", $2, $3 * 2 }' data.csv; awk -F, 'BEGIN{OFS="\t"} {print $3, $1}' data.csv; awk -F, '{ for (i = NF; i > 0; i--) printf "%s%s", $i, (i > 1 ? "," : "\n") }' data.csv
+same     awk        -f program file          printf 'BEGIN { n = 0 }\n/line/ { n++ }\nEND { print n }\n' > p.awk; awk -f p.awk a.txt b.txt
+crates/bat-sh/tests/codex-coverage.sh: line 74: warning: command substitution: ignored null byte in input
+same     awk        IGNORECASE and ARGV      awk 'BEGIN { IGNORECASE = 1 } /FN/ { n++ } END { print n + 0 }' src/main.rs; awk 'BEGIN { ARGV[1] = "people.txt"; ARGC = 2 } { n++ } END { print n }' data.csv; awk 'BEGIN { printf "%5%|%c|\n", "" }'
+same     awk        longer programs          awk -F, '
+NR == 1 { for (i = 1; i <= NF; i++) col[$i] = i; next }
+{
+  qty = $(col["qty"])
+  total += qty
+  if (qty > 5) big[$(col["name"])] = qty
+}
+END {
+  print "total", total
+  n = asorti(big, names)
+  for (i = 1; i <= n; i++) print names[i], big[names[i]]
+}' data.csv; awk '
+function abs(x) { return x < 0 ? -x : x }
+function join(arr, n, sep,    i, s) {
+  for (i = 1; i <= n; i++) s = s (i > 1 ? sep : "") arr[i]
+  return s
+}
+{ vals[NR] = abs($2 - 30) }
+END { print join(vals, NR, "+") }
+' people.txt
+same     awk        regex escapes and classes awk 'BEGIN { print "foo(bar)" ~ /\(bar\)/, "a|b" ~ /a\|b/, "a+b" ~ /a\+b/, "[x]" ~ /\[x\]/, "$5" ~ /^\$5$/, "aaa" ~ /^a{3}$/, "{}" ~ /{}/, "the cat" ~ /\<cat\>/, "concat" ~ /\ycat\y/, "a b" ~ /a\sb/, "a_1" ~ /^\w+$/, "a]" ~ /[]a]+$/, "x_y" ~ /^[[:alnum:]_]+$/ }'
+same     awk        field separators         for s in ':' '\t' ', *' '[' '(' '?' '"' '  ' 'ab+' '\\s+' '\\|' '\\'; do printf 'a:b\tc, d[e(f?g"h  i abbb j|k\\l\n' | awk -F"$s" '{ print NF, $2 }'; done
+differs  awk        errors are loud          awk 'BEGIN { x[1][2] = 3 }'; echo $?; awk 'BEGIN { "date" | getline d; print d }'; echo $?; awk 'BEGIN { print undefined_fn(1) }'; echo $?; awk 'BEGIN { printf "%d %s\n" }'; echo $?; awk 'BEGIN { x[1] = 1; x = 2 }'; echo $?; awk 'BEGIN { next }'; echo $?; awk; echo $?
+         bash: 0|Sat Oct 10 05:29:58 PM UTC 2026|0|2|2|2|1|1|status=0|  bat-sh: 1|2|2|2|2|1|1|status=0| awk: syntax error near '[' awk: getline is not supported by this awk (read the file as an operand, or use the shell) awk
+same     bash       array literal and index  a=(x y z); echo ${a[0]} ${a[1]} "${a[2]}" $a ${a[-1]}
+same     bash       array all and count      a=(x "y z" w); echo ${#a[@]} ${#a[*]} ${#a[1]}; printf '<%s>' "${a[@]}"; echo; printf '<%s>' ${a[@]}; echo; printf '<%s>' "${a[*]}"; echo
+same     bash       array append             a=(1 2); a+=(3 "4 5"); a+=(6); echo "${#a[@]}: ${a[@]}"; b=(); b+=(x); echo ${#b[@]} ${b[0]}
+same     bash       array for loop           a=(one "two three" four); for x in "${a[@]}"; do echo "[$x]"; done; for i in "${!a[@]}"; do echo "$i=${a[$i]}"; done
+same     bash       array element assign     a=(); a[0]=zero; a[2]=two; i=5; a[i]=five; a[$((i+1))]=six; echo "${a[@]}" "${!a[@]}" ${#a[@]}; a[0]+=more; echo ${a[0]}
+same     bash       array slices and ops     a=(a.txt b.txt c.md d); echo "${a[@]:1:2}" "${a[@]:2}"; echo "${a[@]%.txt}" "${a[@]/b/B}" "${a[@]^^}"; echo "${a[@]: -1}"
+same     bash       array from command and glob files=(src/*.rs *.md); echo ${#files[@]} "${files[@]}"; words=($(echo one two three)); echo ${#words[@]} ${words[2]}; lines=($(seq 3)); echo "${lines[@]}"
+same     bash       array empty and unset    e=(); echo "${#e[@]}"; for x in "${e[@]}"; do echo never; done; printf '[%s]\n' "${e[@]}" | wc -l; a=(1 2 3); unset 'a[1]'; echo "${a[@]}" ${#a[@]}; unset a; echo "${#a[@]}"
+same     bash       array in conditions and arithmetic a=(5 10 15); if [ ${#a[@]} -gt 2 ]; then echo many; fi; [[ ${a[1]} -eq 10 ]] && echo ten; echo $(( a[0] + a[2] )) $(( ${a[1]} * 2 )); (( a[0]++ )); (( a[1] = 7 )); echo "${a[@]}"; for ((i=0; i<${#a[@]}; i++)); do printf '%s,' "${a[i]}"; done; echo
+same     bash       array join with IFS      a=(x y z); IFS=,; echo "${a[*]}"; unset IFS; (IFS=:; echo "${a[*]}"); echo "${a[*]}"
+same     bash       array copy and concat    a=(1 2); b=("${a[@]}" 3); c=("${b[@]}"); c+=("${a[@]}"); echo "${c[@]}" ${#c[@]}
+same     bash       array in function and local f() { local arr=(a b c); local -a other; other+=(z); echo "${#arr[@]} ${arr[1]} ${other[0]}"; }; arr=(outer); f; echo "${arr[@]}"; g() { local n=$#; local args=("$@"); echo "$n ${args[1]}"; }; g p "q r" s
+same     bash       declare -a and declare array declare -a list=(a b); list+=(c); echo "${list[@]}"; declare -a e; echo ${#e[@]}; readonly -a ro=(1 2) 2>/dev/null; echo ${ro[1]}
+same     bash       assoc arrays             declare -A m; m[k]=v; m["two words"]=x; key=dyn; m[$key]=1; echo ${m[k]} "${m[two words]}" ${m[dyn]} ${#m[@]}; for k in "${!m[@]}"; do echo "$k=${m[$k]}"; done | sort; [[ -n ${m[k]} ]] && echo has; unset 'm[k]'; echo ${#m[@]}
+same     bash       assoc array literal      declare -A color=([red]=1 [green]=2 ["dark blue"]=3); echo ${color[green]} "${color[dark blue]}" ${#color[@]}; color[red]+=0; echo ${color[red]}; for k in "${!color[@]}"; do echo "$k"; done | sort | head -1
+same     bash       read -a and mapfile      IFS=, read -ra parts <<< "a,b c,d"; echo ${#parts[@]} "${parts[1]}"; read -ra w <<< "one two  three"; echo ${#w[@]} ${w[2]}; mapfile -t lines < a.txt; echo ${#lines[@]} "${lines[1]}"; readarray -t l2 < <(grep -v 2 a.txt); echo "${l2[@]}"
+same     bash       BASH_REMATCH and PIPESTATUS [[ main.rs =~ ^(.*)\.(rs)$ ]] && echo ${BASH_REMATCH[1]} ${BASH_REMATCH[2]} ${BASH_REMATCH[0]}; false | true | (exit 3); echo "${PIPESTATUS[@]}"; true; echo ${PIPESTATUS[0]}; cat a.txt | grep -c line; echo ${PIPESTATUS[0]} 
+same     bash       indirect expansion       name=target; target=value; echo ${!name}; a=(x y); ref='a[1]'; echo "${!a[@]}"
+same     bash       array quoting edge       a=("" "x" ""); echo ${#a[@]}; printf '<%s>' "${a[@]}"; echo; set -- "${a[@]}"; echo $#; b=("a b" c); set -- ${b[@]}; echo $#; echo "pre${b[@]}post"
+same     bash       array sort idiom         a=(pear apple fig); sorted=($(printf '%s\n' "${a[@]}" | sort)); echo "${sorted[@]}"; IFS=$'\n' s2=($(sort <<< "${a[*]}")); unset IFS; echo "${s2[0]}"
+same     bash       process substitution input diff <(echo a) <(echo a) && echo same; cat <(echo one) <(echo two); wc -l < <(seq 5); comm -12 <(sort a.txt) <(sort b.txt)
+same     bash       process substitution in loop while read -r l; do echo "[$l]"; done < <(head -2 a.txt); n=0; while read -r x; do n=$((n+1)); done < <(seq 4); echo $n; diff <(sort list.txt) <(sort -u list.txt)
+same     bash       process substitution output echo hi | tee >(tr a-z A-Z > up.txt) > /dev/null; sleep 0.1; cat up.txt; paste <(seq 2) <(seq 3 4)
+same     bash       nounset with arrays      set -u; a=(1); echo "${a[@]}" "${#a[@]}"; e=(); echo "n=${#e[@]}"; echo "${e[@]:-default}"
+same     util       find -regex              find . -regex '.*/main\.rs'; find src -regex '.*\.\(rs\|py\)' | LC_ALL=C sort; find . -iregex '.*README.*'; find src -regextype posix-extended -regex '.*/(main|helper)\.rs' | LC_ALL=C sort; find . -regex 'main.rs'; echo $?
+same     util       find -printf             find src -maxdepth 1 -name '*.rs' -printf '%f\n'; find src -name '*.rs' -printf '%p %s %y\n' | LC_ALL=C sort; find docs -type f -printf '%h/%f|'; echo; find src -maxdepth 0 -printf '[%p]\t%%\n'
+same=470 differs=35 missing=22 no-ref=0
