@@ -129,6 +129,24 @@
 .oc-markdown p {
   margin: 8px 0;
 }
+/* The host page's own element styles (an app that lays out every `li` as a flex row)
+   must not reach a rendered answer. */
+.oc-markdown ul,
+.oc-markdown ol {
+  display: block;
+  margin: 8px 0;
+  padding-left: 1.4em;
+}
+.oc-markdown ul {
+  list-style: disc;
+}
+.oc-markdown ol {
+  list-style: decimal;
+}
+.oc-markdown li {
+  display: list-item;
+  margin: 2px 0;
+}
 .oc-heading {
   font-size: 1.1em;
   font-weight: 650;
