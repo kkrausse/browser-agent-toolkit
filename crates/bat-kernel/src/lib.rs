@@ -8,6 +8,7 @@ pub mod fd;
 pub mod http;
 pub mod image;
 pub mod lock;
+pub mod module_facts;
 pub mod path;
 pub mod persist;
 pub mod proc;
