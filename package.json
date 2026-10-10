@@ -1,0 +1,11 @@
+{
+  "name": "browser-agent-toolkit-workspace",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "examples/*"],
+  "scripts": {
+    "build": "bun run --cwd packages/toolkit build",
+    "typecheck": "bun run --cwd packages/toolkit typecheck && bun run --cwd examples/todo-app typecheck",
+    "example:fake": "bun scripts/example-fake.ts"
+  }
+}
