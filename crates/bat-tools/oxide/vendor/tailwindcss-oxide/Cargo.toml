@@ -1,0 +1,36 @@
+# VENDORED: `crates/oxide/src` of tailwindlabs/tailwindcss at tag v4.3.3
+# (commit c2b24dd15fed1c59dd521bd86082f520c9f5ad0d), MIT, see LICENSE.
+#
+# Left out: src/main.rs, src/fixtures and src/extractor/pre_processors/test-fixtures
+# (a CLI and test inputs; `cargo test` of this copy therefore does not build),
+# tests/, fuzz/. One source change, marked "CHANGED (bat)" in src/scanner/mod.rs:
+# re-scans use the synchronous walker on targets without threads, which is the
+# change in kkrausse/tailwindcss@11050dda (upstream PR 20487) applied to v4.3.3.
+#
+# Why a copy and not a git dependency: that fork rev sits on upstream `main` well
+# past v4.3.3 (newer vendored `ignore`, `files` also listing canonical paths,
+# changed `.gitignore` and Haml/Slim/Ruby handling), so it does not reproduce the
+# 4.3.3 native scanner; the differential in ../../harness/compare.mjs shows it.
+# A fork branch "v4.3.3 + that commit" would let this directory be replaced by a
+# git dependency again. The unmodified sibling crates still come from the tag.
+[package]
+name = "tailwindcss-oxide"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+bstr = "1.11.3"
+globwalk = "0.9.1"
+log = "0.4.22"
+rayon = "1.10.0"
+fxhash = { package = "rustc-hash", version = "2.1.1" }
+tracing = { version = "0.1.40", features = [] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+walkdir = "2.5.0"
+dunce = "1.0.5"
+bexpand = "1.2.0"
+fast-glob = "0.4.3"
+classification-macros = { git = "https://github.com/tailwindlabs/tailwindcss.git", rev = "c2b24dd15fed1c59dd521bd86082f520c9f5ad0d" }
+ignore = { git = "https://github.com/tailwindlabs/tailwindcss.git", rev = "c2b24dd15fed1c59dd521bd86082f520c9f5ad0d" }
+regex = "1.11.1"

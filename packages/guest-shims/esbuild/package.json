@@ -1,0 +1,11 @@
+{
+  "name": "esbuild",
+  "version": "0.28.2",
+  "description": "Guest shim for esbuild: transform() on oxc compiled to Wasm, in process; everything else lazily from esbuild-wasm. Normally laid over an installed esbuild-wasm (see package.overlay.json and the guest policy); this manifest is for using the directory as a package of its own.",
+  "license": "MIT",
+  "main": "lib/bat-main.js",
+  "files": ["lib"],
+  "dependencies": {
+    "esbuild-wasm": "0.28.2"
+  }
+}

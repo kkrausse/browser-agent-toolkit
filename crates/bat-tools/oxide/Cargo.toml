@@ -1,0 +1,33 @@
+# Tailwind CSS's scanner (`tailwindcss-oxide`, the Rust half of
+# `@tailwindcss/oxide`) as one plain single-threaded wasm32-wasip1 module with a
+# C ABI. Its own workspace (own lock file, own profile) so nothing here leaks
+# into the native build. Build with ./build-wasm.sh; the output and its JS
+# binding live in packages/guest-shims/tailwindcss-oxide.
+[package]
+name = "bat-oxide-wasm"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# The scanner: Tailwind CSS v4.3.3's `crates/oxide`, vendored with one line
+# changed. vendor/tailwindcss-oxide/Cargo.toml says what, from where and why.
+tailwindcss-oxide = { path = "vendor/tailwindcss-oxide" }
+
+# crates.io same-file has no WASI implementation, which makes the walker drop
+# every symlinked directory. See stubs/same-file.
+[patch.crates-io]
+same-file = { path = "stubs/same-file" }
+
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+debug = 0
+strip = true

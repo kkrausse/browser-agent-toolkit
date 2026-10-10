@@ -1,0 +1,12 @@
+# Replaces crates.io `same-file` for the wasm32-wasip1 build (see ../../Cargo.toml).
+# The published crate has no WASI implementation: every `Handle::from_path` fails,
+# so walkdir's symlink-loop check errors and the scanner silently drops every
+# symlinked directory (which is what a bun/pnpm `node_modules/<package>` is).
+[package]
+name = "same-file"
+version = "1.0.6"
+edition = "2021"
+license = "Unlicense OR MIT"
+description = "same-file's Handle API for wasm32-wasip1, keyed by canonical path"
+
+[workspace]

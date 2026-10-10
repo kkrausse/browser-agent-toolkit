@@ -31,13 +31,13 @@ if (!keepCache) fs.rmSync(path.join(appDir, '.browser-editor-cache'), { recursiv
 const env = { ...process.env, BROWSER_AGENT_GUEST: '1', NODE_ENV: 'development', ...extraEnv };
 if (trace) env.BAT_ESBUILD_TRACE = path.join(outDir, 'esbuild-trace.jsonl');
 const started = performance.now();
-const child = spawn(path.join(here, 'ws.sh'), [appDir, 'node', 'node_modules/vite/bin/vite.js', '--configLoader', 'native', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+const child = spawn(path.join(here, 'ws.sh'), [appDir, 'node', 'node_modules/vite/bin/vite.js', '--configLoader', 'native', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
 let log = '';
 child.stdout.on('data', d => { log += d; });
 child.stderr.on('data', d => { log += d; });
 child.on('exit', (code, signal) => { if (!stopping) console.error(`vite exited early (code ${code}, signal ${signal})\n` + log.slice(-3000)); });
 let stopping = false;
-const stop = () => { stopping = true; try { child.kill('SIGTERM'); } catch {} };
+const stop = () => { stopping = true; try { process.kill(-child.pid, 'SIGTERM'); } catch {} }; // the whole group: bwrap, node, tool children
 process.on('exit', stop);
 
 const origin = `http://127.0.0.1:${port}`;

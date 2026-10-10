@@ -1,0 +1,28 @@
+# The WebAssembly build of bat-tools' esbuild transform. Its own workspace (own lock
+# file, own profile, own [patch]) so that none of this leaks into the native build.
+[package]
+name = "bat-tools-wasm"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+bat-tools = { path = ".." }
+
+# oxc_transformer -> oxc_compat -> oxc-browserslist depends on js-sys on every wasm32
+# target, for a clock nothing here calls. Same stub as crates/bat-modules/wasm.
+[patch.crates-io]
+js-sys = { path = "stubs/js-sys" }
+
+# Sizes and timings: docs/experiments/2026-10-09-tools.md.
+[profile.release]
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+debug = 0
+strip = true
