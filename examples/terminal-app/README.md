@@ -1,7 +1,7 @@
 # Terminal example
 
 The TODO app of `../todo-app` with the real OpenCode terminal client beside it, everything in
-one browser tab: the app's Vite dev server and the OpenCode 2.0.3 server run on the toolkit's
+one browser tab: the app's Vite dev server and the OpenCode 2.0.26 server run on the toolkit's
 runtime, the OpenCode 2.0.26 TUI runs on [wasm-term](#the-terminal-half)'s pty machine in a
 ghostty-web terminal. The terminal is a panel on the right: **Close** / **OpenCode** slide it,
 the grip on its left edge drags its width, and the terminal refits. No chat UI.
@@ -23,7 +23,8 @@ bun examples/terminal-app/mock-model.ts
 `server.ts` is a plain file server over `dist/` (`bunx serve dist` does the same). Open
 `http://127.0.0.1:4310/` in Chrome. Type `hello`, then `set the heading to "Tasks"`: the
 client shows the read and the edit, the file changes in the tab's filesystem and the app
-hot-reloads. Page parameters: `?model=<base URL>`, `?modelId=<id>` (default `scripted`),
+hot-reloads. ``run `echo hi` `` makes the mock call the shell tool, which this page's
+configuration allows only after asking: the client shows its permission dialog. Page parameters: `?model=<base URL>`, `?modelId=<id>` (default `scripted`),
 `?reset=1` (forget this browser's workspace and the client's saved state first),
 `?diag=<url>` (where the page posts its diagnostics; `0` turns them off).
 
@@ -76,9 +77,21 @@ page wiring (`web/embed.ts`, `host/js-worker.ts`) and copies its built files int
 contract, instead of the toolkit's `openEditor`, which always sets up the page server's model
 proxy, its header plugin and catalog.
 
-**Versions.** The client is 2.0.26, the server 2.0.3. 115 of about 144 routes are the same;
-`src/compat.ts` translates the renamed ones the client uses and answers `/api/info`. Routes
-with no older equivalent (credentials, pairing, `/api/location/reload`) get the server's 404.
+**Versions.** Client and server are both 2.0.26. The server is bundled from the published
+`@opencode/server` packages by `scripts/opencode-server` (pinned by its `bun.lock`) into
+`.runtime/opencode-2.0.26/`; `bun run terminal` builds it when it is missing, and `prepare.ts`
+names that directory. The directory carries an `application.json`, which is what makes
+`bat-prepare` take it in place of the 2.0.3 artefact its policy pins (the TODO example and its
+React chat stay on 2.0.3).
+
+**Diagnostics.** The server runs with `BAT_FETCH_DIAG=1`: every request of it that the
+browser's fetch rejected, or that was answered 400 or more, is one stderr line
+(`[bat fetch] POST https://host/path -> HTTP 401`, never the query, headers or bodies), which
+the page logs and posts with the rest. From the collector's file:
+
+```sh
+jq -r 'select(.kind == "log" and (.data | test("bat fetch|sign-in"))) | "\(.at) \(.id) \(.data)"' /tmp/bat-terminal-diag.jsonl
+```
 
 **What a model endpoint must allow** to be called from the tab: answer the preflight
 (`OPTIONS`, any 2xx) and the request with `Access-Control-Allow-Origin` for the page's origin
@@ -87,3 +100,35 @@ with no older equivalent (credentials, pairing, `/api/location/reload`) get the 
 `x-opencode-client`, `x-opencode-project`, `x-opencode-session`, `x-session-affinity`,
 `x-session-id`. The key is the provider's `apiKey`, sent as `Authorization: Bearer …`; here it
 is a placeholder. From an https page the endpoint must be https too.
+
+## Sign in with ChatGPT
+
+OpenCode 2.0.26 can use a ChatGPT plan: ctrl+p, "Connect an integration", OpenAI, "Sign in
+with ChatGPT". That is an authorization-code flow with PKCE whose redirect goes to a listener
+the server opens on `127.0.0.1:<random port>`. OpenAI accepts only loopback redirects for it
+(an https address of this page is refused with `invalid_authorize_request`, param
+`redirect_uri`), and in the tab that listener is a socket inside the runtime, which no other
+browser tab can reach. So the last step is by hand (`src/signin.ts`):
+
+1. While the client shows "Waiting for authorization…", a bar appears above the terminal.
+   **Open the sign-in page** opens OpenAI's page in a new tab (the page also tries to open it
+   by itself; a popup blocker may stop that).
+2. Sign in and approve there. The browser then goes to
+   `http://127.0.0.1:<port>/auth/callback?code=…` and shows a connection error: nothing on
+   the machine listens there. That is expected.
+3. Copy that address from the address bar, paste it into the bar's field, **Finish sign-in**.
+   The page hands the request to the server's listener (`runtime.endpoint(port).fetch`); the
+   server exchanges the code at `auth.openai.com` and checks the identity token. The bar, the
+   log and the client say how it went.
+
+What the server then calls, all straight from the tab: `auth.openai.com/api/accounts/oauth/token`
+(exchange and refresh) and `api.openai.com/v1/responses`; both answer preflights for any
+origin. `auth.openai.com/.well-known/jwks.json`, which the identity check reads, sends no CORS
+headers, so `build.ts` ships a copy (`openai-jwks.json`) and the runtime answers the server's
+request with it (`BAT_FETCH_MAP`). When OpenAI rotates those keys the check fails ("invalid ID
+token") until the page is built again.
+
+The tokens are a row of the server's database, `/workspace/.server/data/opencode.sqlite`, in
+plain text: in this browser's storage for this page (OPFS), kept across reloads, removed by
+`?reset=1`, and readable by the agent's own file and shell tools like every file there.
+

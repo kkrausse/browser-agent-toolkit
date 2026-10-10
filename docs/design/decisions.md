@@ -895,3 +895,42 @@ no server of its own. Measured in Chrome 154.
   cache (`pageshow`, `persisted`), and takes `?reset=1` out of the address before anything
   can reload it.
 
+## 2026-10-10 two OpenCode versions, and what a tab needs for an OAuth sign-in (`examples/terminal-app`)
+
+- **The application directory describes itself.** `bat-prepare` takes `{ id, files }` from an
+  `application.json` in the directory it is given (`--opencode`, `BAT_OPENCODE_DIR`,
+  `prepare({ openCodeDir })`) in place of the policy's `application.id` and `application.files`;
+  guest directory, support packages, program and launch stay the policy's. That is how one
+  checkout prepares the TODO example with the 2.0.3 release asset and the terminal example
+  with 2.0.26. Chosen over a second policy file (which would repeat the substitutions and
+  their `dir:` paths) and over a version switch in the tool (the tool knows no versions).
+- **2.0.26 is built here, and pinned by a lockfile.** `scripts/opencode-server` bundles the
+  published `@opencode/server` with Bun (the recipe the 2.0.3 artefact was made with). The
+  bundle's bytes change with the directory it is built in (measured: 20,707,881 and
+  20,707,241 bytes for the same lockfile in two paths), so an output hash in a committed
+  policy would only match one machine; the hashes in `application.json` are of the build
+  beside them. 2.0.26 ran on the runtime with no change to it: same Node surface as 2.0.3,
+  `/api/info` in place of `/api/health`, and a shell tool, which found `/bin/sh`.
+- **`BAT_FETCH_DIAG=1`** (process environment): a request handed to the browser's fetch that
+  rejects or is answered 400+ writes one stderr line with method, origin + path and the
+  status or error. Opt-in and on stderr because the only reader that exists is whoever pumps
+  the process's output; a callback on `RuntimeHost` would need a channel from each process
+  worker to the page for one consumer.
+- **`BAT_FETCH_MAP`** (process environment): exact URLs fetched from another URL. Needed
+  because `auth.openai.com/.well-known/jwks.json` has no `Access-Control-Allow-Origin`
+  (its preflight is a 404), so the identity-token check of OpenCode's ChatGPT sign-in gets
+  "Failed to fetch" in a tab; the example ships a build-time copy of that public document.
+  The alternatives were patching the check out of the server bundle or a relay.
+- **A loopback redirect is finished by the page.** Measured against OpenAI on 2026-10-10:
+  `redirect_uri` on `127.0.0.1` or `localhost` (any port, any path) reaches the login page;
+  an https origin gets HTTP 400 `invalid_authorize_request` (param `redirect_uri`); the
+  discovery document names no device or registration endpoint and
+  `deviceauth/usercode` refuses the dynamic client (`invalid_client`). So the browser ends on
+  a dead loopback address, and the page delivers the pasted address to the guest listener
+  through `endpoint(port).fetch`. The page finds the attempt and its port in the client's own
+  requests, which pass through it; nothing in OpenCode is patched.
+- **Seen, not fixed**: a guest process that made one request through the browser's fetch does
+  not exit by itself afterwards (`node probe.mjs` with one awaited `fetch`, output complete,
+  `exited` unresolved after 8 s; the same on the build before these changes). The servers
+  here never exit on their own, so nothing depended on it.
+
