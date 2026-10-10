@@ -290,9 +290,13 @@ pub(crate) fn transform_esm<'a>(
         tla: false,
         import_meta: false,
         dynamic: false,
+        decorator: None,
     };
     visitor.visit_program(program);
-    let EsmVisitor { dynamic_imports, requires, tla, import_meta, dynamic, .. } = visitor;
+    let EsmVisitor { dynamic_imports, requires, tla, import_meta, dynamic, decorator, .. } = visitor;
+    if let Some((start, end)) = decorator {
+        diagnostics.push(crate::standard_decorator_warning(start, end));
+    }
 
     let mut facts = Facts { kind: ModuleKind::Esm, ..Facts::default() };
     if tla {
@@ -456,6 +460,7 @@ struct EsmVisitor<'v> {
     tla: bool,
     import_meta: bool,
     dynamic: bool,
+    decorator: Option<(u32, u32)>,
 }
 
 impl EsmVisitor<'_> {
@@ -560,6 +565,11 @@ impl<'a> Visit<'a> for EsmVisitor<'_> {
             out.push_str(CTX);
             out.push_str(".meta");
         });
+    }
+
+    fn visit_decorator(&mut self, it: &Decorator<'a>) {
+        self.decorator.get_or_insert((it.span.start, it.span.end));
+        walk::walk_decorator(self, it);
     }
 
     fn visit_import_expression(&mut self, it: &ImportExpression<'a>) {

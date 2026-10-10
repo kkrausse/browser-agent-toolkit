@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use oxc_allocator::Allocator;
+use oxc_ast::ast::Statement;
 use oxc_codegen::{Codegen, CodegenOptions};
 use oxc_parser::{ParseOptions, Parser};
 use oxc_semantic::SemanticBuilder;
@@ -66,12 +67,34 @@ pub(crate) fn lower(
     want_map: bool,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Lowered> {
-    let parsed = Parser::new(allocator, source, source_type)
-        .with_options(ParseOptions {
-            allow_return_outside_function: !source_type.is_module(),
-            ..ParseOptions::default()
-        })
-        .parse();
+    let parse = |source_type: SourceType| {
+        Parser::new(allocator, source, source_type)
+            .with_options(ParseOptions {
+                allow_return_outside_function: !source_type.is_module(),
+                ..ParseOptions::default()
+            })
+            .parse()
+    };
+    let mut parsed = parse(source_type);
+    // `import x = require()` and `export =` are CommonJS; only real
+    // import/export statements or `import.meta` make the file a module.
+    let esm_syntax = !parsed.module_record.import_metas.is_empty()
+        || parsed.program.body.iter().any(|stmt| match stmt {
+            // Type-only statements vanish; they do not decide the module kind.
+            Statement::ImportDeclaration(d) => !d.import_kind.is_type(),
+            Statement::ExportAllDeclaration(d) => !d.export_kind.is_type(),
+            Statement::ExportNamedDeclaration(d) => !d.export_kind.is_type(),
+            Statement::ExportFromDeclaration(d) => !d.export_kind.is_type(),
+            Statement::ExportDeclaration(d) => !d.declaration.is_typescript_syntax(),
+            Statement::ExportDefaultDeclaration(d) => !d.is_typescript_syntax(),
+            _ => false,
+        });
+    if source_type.is_commonjs() && esm_syntax {
+        // CommonJS by extension or package type, but written with
+        // import/export: the next pass will treat it as an ES module, so lower
+        // it as one (otherwise the JSX runtime would arrive through `require`).
+        parsed = parse(source_type.with_module(true));
+    }
     let failed = parsed.fatal_error || parsed.diagnostics.has_errors();
     for d in parsed.diagnostics.into_vec() {
         push_oxc(diagnostics, source, d);

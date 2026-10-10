@@ -9,6 +9,8 @@
 // from Node itself.
 
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createLoader } from "./loader.mjs";
@@ -136,6 +138,45 @@ const scenarios = {
     const config = await vite.resolveConfig({ configFile: false, root: app, logLevel: "silent" }, "serve");
     assert.equal(config.root, app);
     assert.ok(config.plugins.length > 10);
+  },
+
+  async "vite dev server: listens and serves a transformed TSX module"() {
+    // A throwaway project that borrows the app's node_modules.
+    const root = mkdtempSync(join(tmpdir(), "bat-vite-"));
+    try {
+      symlinkSync(join(app, "node_modules"), join(root, "node_modules"));
+      mkdirSync(join(root, "src"));
+      writeFileSync(join(root, "index.html"), '<div id="root"></div><script type="module" src="/src/main.tsx"></script>');
+      writeFileSync(join(root, "src/style.css"), '@import "tailwindcss";\n.todo { @apply font-bold; }\n');
+      writeFileSync(
+        join(root, "src/main.tsx"),
+        'import "./style.css";\nconst label: string = "todo";\nexport const view = <b className="todo font-bold">{label}</b>;\n',
+      );
+      const vite = await load("vite");
+      const { default: tailwindcss } = await load("@tailwindcss/vite");
+      const server = await vite.createServer({
+        configFile: false,
+        root,
+        cacheDir: join(root, ".vite"),
+        logLevel: "silent",
+        plugins: [tailwindcss()],
+        optimizeDeps: { noDiscovery: true },
+        server: { host: "127.0.0.1", port: 43117, strictPort: false, hmr: false, watch: null },
+      });
+      try {
+        await server.listen();
+        const { port } = server.httpServer.address();
+        const module = await (await fetch(`http://127.0.0.1:${port}/src/main.tsx`)).text();
+        assert.match(module, /(createElement|jsxDEV)\("b"/); // esbuild lowered the JSX
+        assert.doesNotMatch(module, /: string/); // and stripped the type
+        const css = await (await fetch(`http://127.0.0.1:${port}/src/style.css?direct`)).text();
+        assert.match(css, /font-weight/); // Tailwind compiled the stylesheet
+      } finally {
+        await server.close();
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   },
 
   async "@react-router/dev/vite"() {

@@ -35,11 +35,21 @@ pub(crate) fn transform_cjs<'a>(
         flags: 0,
         check_reserved: source.contains(CTX),
         reserved: None,
+        decorator: None,
     };
     if let Some(hashbang) = &program.hashbang {
         visitor.edits.replace(hashbang.span.start, hashbang.span.start + 2, "//");
     }
+    for stmt in &program.body {
+        // `export {}` left by the TypeScript transform in a CommonJS file.
+        if let Statement::ExportNamedDeclaration(d) = stmt {
+            visitor.edits.remove_statement(source, d.span.start, d.span.end);
+        }
+    }
     visitor.visit_program(program);
+    if let Some((start, end)) = visitor.decorator {
+        diagnostics.push(crate::standard_decorator_warning(start, end));
+    }
 
     if let Some((name, start, end)) = visitor.reserved.take() {
         diagnostics.push(Diagnostic::error(
@@ -82,6 +92,7 @@ struct CjsVisitor<'v, 'a> {
     flags: u32,
     check_reserved: bool,
     reserved: Option<(String, u32, u32)>,
+    decorator: Option<(u32, u32)>,
 }
 
 /// `exports` or `module.exports`.
@@ -221,6 +232,11 @@ impl<'a> Visit<'a> for CjsVisitor<'_, 'a> {
         if self.check_reserved && self.reserved.is_none() && it.name.as_str().starts_with(CTX) {
             self.reserved = Some((it.name.as_str().to_owned(), it.span.start, it.span.end));
         }
+    }
+
+    fn visit_decorator(&mut self, it: &Decorator<'a>) {
+        self.decorator.get_or_insert((it.span.start, it.span.end));
+        walk::walk_decorator(self, it);
     }
 
     fn visit_import_expression(&mut self, it: &ImportExpression<'a>) {

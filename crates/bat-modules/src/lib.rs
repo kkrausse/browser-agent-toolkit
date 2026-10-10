@@ -137,6 +137,17 @@ impl Diagnostic {
     }
 }
 
+/// Decorators that survived lowering: only legacy (`experimentalDecorators`)
+/// decorators can be compiled; standard ones are passed through and current
+/// engines reject them.
+pub(crate) fn standard_decorator_warning(start: u32, end: u32) -> Diagnostic {
+    Diagnostic::warning(
+        "standard decorators are not lowered (only `experimentalDecorators` are); the output keeps them and will not parse in engines without decorator support",
+        start,
+        end,
+    )
+}
+
 pub(crate) fn push_oxc(
     out: &mut Vec<Diagnostic>,
     _source: &str,
@@ -385,9 +396,25 @@ fn parse_js<'a>(
         // (common for TypeScript sources and for packages without `type`
         // shipping ESM to bundlers). Node would refuse; load it as ESM.
         let retry = parse(SourceType::mjs());
-        if !(retry.fatal_error || retry.diagnostics.has_errors())
-            && retry.module_record.has_module_syntax
-        {
+        let retry_ok = !(retry.fatal_error || retry.diagnostics.has_errors());
+        // The TypeScript transform leaves `export {}` behind when it removes
+        // type-only imports; that alone does not make a `.cts` file a module.
+        let only_empty_exports = lowered
+            && retry.program.body.iter().all(|stmt| match stmt {
+                Statement::ExportNamedDeclaration(d) => d.specifiers.is_empty(),
+                Statement::ImportDeclaration(_)
+                | Statement::ExportAllDeclaration(_)
+                | Statement::ExportDefaultDeclaration(_)
+                | Statement::ExportDeclaration(_)
+                | Statement::ExportFromDeclaration(_) => false,
+                _ => true,
+            })
+            && retry.module_record.import_metas.is_empty();
+        if retry_ok && only_empty_exports {
+            parsed = retry;
+            failed = false;
+            kind = ModuleKind::CommonJs;
+        } else if retry_ok && retry.module_record.has_module_syntax {
             diagnostics.push(Diagnostic::warning(
                 "file is CommonJS by extension or package type but uses ES module syntax; treated as an ES module",
                 0,
