@@ -206,3 +206,6 @@ Spec: `docs/design/module-format.md`; reference loader `crates/bat-modules/harne
   private fields under `useDefineForClassFields: false`). oxc has no inline-helper mode.
   The runtime has to provide that package for workspace code using those options.
   Standard decorators are not lowered by oxc at all: warning, output kept as written.
+- **Wasm build is `opt-level = "z"`** (supersedes the 1.86 MB figure above, which was "s"):
+  1.24 MB, 0.46 MB gzip. On a 234-line TSX file, warm: z 1.6–1.8 ms, s 1.4 ms, 3 1.1–1.3 ms
+  (2.29 MB). Workspace files are few, the download is paid by every visitor.
