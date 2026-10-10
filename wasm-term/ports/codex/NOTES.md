@@ -1439,6 +1439,9 @@ What changed with the move:
   snapshot store under `.state/`. Old session logs under `.state/` still name the old path.
 - **Cargo after the move**: kernel and guests rebuilt only their own crates (seconds);
   `scripts/check.sh` re-checked 216 units in 2 min 46 s, the forks under `vendor/` and what
-  depends on them, the registry crates being reused.
+  depends on them, the registry crates being reused; `scripts/build.sh` (the names build)
+  recompiled 217 crates in 6 min 58 s at 8 jobs and linked. The shipped modules in `dist/site`
+  and `dist/site-local` are still the ones built before the move. All 17 patch series were
+  re-applied to their bases and compared equal to the port branches.
 - `examples/terminal-app` of the repository takes the opencode guest from `../../wasm-term` by
   default.
