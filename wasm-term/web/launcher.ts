@@ -5,6 +5,7 @@
 
 import { openPersistStore } from "../host/persist-store";
 import type { GuestInfo } from "./guests";
+import { filesFromFolder, filesFromZip, type ImportedFile, importIntoGuest } from "./import";
 
 const STYLE = `
   #launcher { position: fixed; inset: 0; overflow: auto; padding: 24px 16px; color: #dcd7ba; font: 15px/1.5 system-ui, sans-serif; }
@@ -19,12 +20,49 @@ const STYLE = `
   #launcher .row { display: flex; gap: 10px; align-items: center; margin-top: 12px; }
   #launcher button { padding: 7px 14px; border: 1px solid #363646; border-radius: 6px; background: #2d4f67; color: #dcd7ba; font: inherit; cursor: pointer; }
   #launcher button.quiet { background: transparent; color: #a6a69c; }
+  #launcher .row { flex-wrap: wrap; }
+  #launcher .import { margin-top: 12px; padding-top: 10px; border-top: 1px solid #2a2a37; font-size: 13px; color: #a6a69c; }
+  #launcher .import label { display: inline-flex; gap: 6px; align-items: center; margin: 0; }
+  #launcher .import input[type=checkbox] { display: inline; width: auto; margin: 0; }
+  #launcher .import input[type=file] { display: none; }
+  #launcher .import output { display: block; margin-top: 6px; color: #98bb6c; white-space: pre-wrap; }
 `;
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, properties: Partial<HTMLElementTagNameMap[K]> = {}, children: (Node | string)[] = []): HTMLElementTagNameMap[K] {
   const node = Object.assign(document.createElement(tag), properties);
   node.append(...children);
   return node;
+}
+
+/** "Import folder" / "Import .zip": the user's own files into the guest's persistent directory, before it runs. */
+function importControls(namespace: string, directory: string): HTMLElement {
+  const status = element("output", { className: "import-status" });
+  const replace = element("input", { type: "checkbox", className: "import-replace" });
+  async function run(read: () => Promise<ImportedFile[]>): Promise<void> {
+    status.textContent = "Importing...";
+    try {
+      const result = await importIntoGuest(namespace, directory, await read(), replace.checked);
+      const skipped = result.skipped.length ? `; left out ${result.skipped.length} (${result.skipped.slice(0, 3).join(", ")}${result.skipped.length > 3 ? ", ..." : ""})` : "";
+      status.textContent = `Imported ${result.files} files (${(result.bytes / 1024).toFixed(0)} kB) into ${directory}${skipped}`;
+    } catch (error) {
+      status.textContent = `Import failed: ${(error as Error).message}`;
+    }
+  }
+  const folder = element("input", { type: "file", multiple: true, className: "import-folder" });
+  folder.setAttribute("webkitdirectory", "");
+  folder.addEventListener("change", () => folder.files?.length && run(() => filesFromFolder(folder.files!)).then(() => (folder.value = "")));
+  const zip = element("input", { type: "file", accept: ".zip,application/zip", className: "import-zip" });
+  zip.addEventListener("change", () => zip.files?.[0] && run(async () => filesFromZip(new Uint8Array(await zip.files![0]!.arrayBuffer()))).then(() => (zip.value = "")));
+  const pick = (label: string, input: HTMLInputElement) => {
+    const button = element("button", { type: "button", className: "quiet", textContent: label });
+    button.addEventListener("click", () => input.click());
+    return button;
+  };
+  return element("div", { className: "import" }, [
+    `Your own files, into ${directory} (stays in this browser):`,
+    element("div", { className: "row" }, [pick("Import folder", folder), pick("Import .zip", zip), element("label", {}, [replace, "replace what is there"]), folder, zip]),
+    status,
+  ]);
 }
 
 export function showLauncher(guests: GuestInfo[]): void {
@@ -59,6 +97,7 @@ export function showLauncher(guests: GuestInfo[]): void {
       row.append(signOut);
     }
     form.append(row);
+    if (guest.importDir) form.append(importControls(guest.name, guest.importDir));
     main.append(element("section", {}, [
       element("h2", { textContent: guest.name }),
       ...(guest.description ? [element("small", { textContent: guest.description })] : []),

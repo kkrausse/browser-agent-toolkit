@@ -28,6 +28,8 @@ export interface GuestInfo {
   persist?: { roots: string[]; exclude?: string[] };
   /** Persisted files that hold credentials: `&signout=1` and the launcher's "Clear stored credentials" delete exactly these. */
   credentials?: string[];
+  /** A persistent directory the launcher can import a folder or a .zip into (codex-local: the project). */
+  importDir?: string;
   /** A wasm guest that runs commands: the page gives it a shell (`proc_*`, docs/abi.md 3.4). `?shell=inline|worker|off` overrides how. */
   shell?: boolean;
   /** Environment the guest always gets (the page's `?env=` wins). */

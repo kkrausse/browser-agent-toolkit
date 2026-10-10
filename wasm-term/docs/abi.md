@@ -30,6 +30,7 @@ number (0 = success); these are also the target's native `errno` values, so
 | `IO` | 29 | | `NOTTY` | 59 |
 | `ISDIR` | 31 | | `RANGE` | 68 |
 | `LOOP` | 32 | | `SPIPE` | 70 |
+| `NOSYS` | 52 | | `PIPE` | 64 |
 
 ## 1. Process environment
 
@@ -112,13 +113,14 @@ Any mix of subscriptions; blocks until at least one is ready.
   | signal descriptor | a caught signal is queued |
   | WebSocket | an event is queued (or the socket has finished) |
   | HTTP | the response head has arrived and not been taken; or body bytes are available; or the body has ended or failed |
+  | child process | an event (output or exit) is queued |
   | file, directory, `/dev/null` | always |
 
   The event's `nbytes` is the number of bytes a read would return now (at
   least 1). wasi-libc implements `ioctl(FIONREAD)` from this field.
 - `FD_WRITE`: ready at once for terminals open for writing, files and
-  `/dev/null`. **Never ready** for signal, WebSocket and HTTP descriptors and
-  for a terminal opened read-only, because those cannot be written with
+  `/dev/null`. **Never ready** for signal, WebSocket, HTTP and child-process
+  descriptors and for a terminal opened read-only, because those cannot be written with
   `fd_write`. This is deliberate: mio's wasi backend is level-triggered and
   tokio registers both directions, so a descriptor that always polled writable
   would make the runtime spin.
@@ -398,6 +400,98 @@ implements the client side (`ports/codex/patches/forks/reqwest`, `src/async_impl
   `content-length` are gone (the body is already decoded).
 - Hosts that are not allowlisted get `403`; an unreachable one `502`.
 
+### 3.4 Child processes
+
+A guest runs commands in **the machine's shell**: bat-rust's `bat-sh`, a POSIX-style shell with
+the coreutils built in (`cat`, `ls`, `sed`, `grep`, `rg`, `find`, ...; `host/sh/`, built from a
+pinned bat-rust commit by `host/sh/build.sh`). There are no other programs: what is not a
+command of that shell is "command not found" (127). The shell works on **the guest's own
+filesystem**, the same objects `path_open` reaches, so a file either side writes is there for the
+other at once. A machine started without a shell (`ProgramOptions.shell`) fails `proc_spawn`
+with `NOSYS`.
+
+```
+proc_spawn(req: *const u8, req_len: i32, flags: i32, fd: *mut u32) -> errno
+proc_recv(fd: i32, buf: *mut u8, buf_len: i32, out: *mut [u32; 2], flags: i32) -> errno
+proc_send(fd: i32, data: *const u8, len: i32, flags: i32) -> errno
+proc_signal(fd: i32, signo: i32) -> errno
+```
+
+- `proc_spawn` starts a child and returns at once with a descriptor. `req` is
+  `u32 argc, u32 envc`, then `cwd`, `argv[0..argc]`, `env[0..envc]` (`NAME=value`), each as
+  `u32 length` + bytes (UTF-8, no terminator). `argv` is a shell invocation
+  (`["/bin/bash", "-lc", "<command line>"]`; `sh`, `bash`, `zsh`, `dash`, `ash`, with or without
+  a directory) or one of the shell's commands by itself (`["ls", "-la"]`). The child gets exactly
+  `env`; nothing is inherited. `flags` bit 0: keep the child's stdin open for `proc_send`
+  (otherwise it reads end of file). `INVAL` for a malformed request or one over 768 KiB,
+  `NOSYS` without a shell. A program that does not exist is not an error here: the child
+  starts, prints the shell's message to stderr and exits 127.
+- `proc_recv` takes the next event. `out[0]` = kind, `out[1]` = payload length, also when the
+  call fails with `RANGE` because `buf` is too small (the event stays queued: call again with a
+  larger buffer). `AGAIN` when no event is queued and `flags & 1` or the descriptor is
+  non-blocking; otherwise it blocks. `NOTCONN` once the exit event has been taken.
+
+  | kind | Event | Payload |
+  | --- | --- | --- |
+  | 1 | stdout | bytes as the child wrote them; consecutive writes may arrive merged, at most 256 KiB per event |
+  | 2 | stderr | the same |
+  | 3 | exited (the last event) | `i32 status`, `i32 signal`, `u32 queue_us`, `u32 run_us`, `u32 host_calls` |
+
+  `status` is the exit status, `128 + signal` when a signal ended the child (`signal` 0
+  otherwise). The last three say what the run cost: microseconds from `proc_spawn` until a shell
+  picked the command up, microseconds from then to the end, and how many host calls (file
+  operations and writes) the shell made.
+- `proc_send` queues bytes for the child's stdin; `flags` bit 0 closes stdin after them (with
+  `len = 0`: just end of file). `PIPE` when stdin was not opened, is closed, or the child has
+  ended. Never blocks: what the child has not read yet is held by the host.
+- `proc_signal`: `signo` 2 (INT), 15 (TERM) or 9 (KILL), anything else `INVAL`. There are no
+  handlers on the other side: each ends the child, with status `128 + signo`. A child inside a
+  host call (file operation, `sleep`, a read of stdin, a blocked write) ends at once; one that
+  is only computing (`while :; do :; done`) is ended after 250 ms by terminating its Worker.
+  Signalling a child that has ended succeeds and does nothing.
+- `fd_close` on a running child kills it (KILL) and discards its unread events.
+- `poll_oneoff`: readable when an event is queued; never writable. `fd_read`/`fd_write` on the
+  descriptor fail with `INVAL`.
+- Back-pressure: while more than 1 MiB of output events are unread, the child's writes to
+  stdout and stderr are not answered, so it waits. A reader must therefore keep reading until
+  the exit event.
+
+Not there: a terminal for the child (no pty, `isatty` is false in it), process groups, job
+control, a pid, `waitpid`, children of children that are real programs. Inside one child,
+pipeline stages run one after another, each into a buffer (bat-sh's design), so `yes | head`
+does not end.
+
+Rust: `wasm_term_sys::process::Child` (`spawn`, `recv` / `try_recv`, `send`, `close_stdin`,
+`signal`; `Drop` closes) and, under tokio, `wasm_term_tokio::Child` with `async fn recv`.
+`guests/proc` is a program that checks and times all of the above.
+
+**How it runs** (`host/proc.ts`, `host/sh/`, `host/shell-worker.ts`). By default each child
+runs in a **shell Worker**: a Worker holding one `bat_sh.wasm` instance that sleeps on a
+`SharedArrayBuffer` channel between runs, so starting a command is one `Atomics.notify`
+(about 0.1 ms), not a Worker start. The shell's 24 host calls (`sh_open`, `sh_read`, ...) travel
+over the channel to the guest's Worker, which owns the filesystem, and are answered there:
+at the top of every blocking host call, inside every wait (`poll_oneoff`, a blocking read,
+`ws_recv`, ...), and in the wait of the guest's own terminal-output flow control. A guest that
+computes without making a blocking host call keeps its children waiting; that is the price of
+one thread owning the files. One answering pass is limited to 4 ms so that a child making
+thousands of calls does not keep the guest from its own events. Up to four children run at
+once (`ShellOptions.slots`); more wait for a free Worker. The page creates the Workers (the
+guest's Worker is blocked and could not): the guest's Worker posts `{ t: "proc_need", slot,
+channel }` for a channel that has no Worker yet (one is asked for before the first command)
+and `{ t: "proc_replace", slot, channel }` when a killed child would not stop, with a fresh
+channel, so whatever the dying Worker still writes goes nowhere. If a Worker cannot be
+started the page says so with a `FRAME_PROC` frame and the machine switches to **inline**
+mode: the shell runs to completion inside `proc_spawn`, in the guest's own Worker. Inline is
+also the default on a machine that reports at most two cores, and can be asked for
+(`ShellOptions.mode`, `?shell=inline` on the dev page). Inline has no streaming (all events are
+queued when `proc_spawn` returns), no stdin (end of file), and no kill: a run is abandoned
+with status 124 after two minutes, and a loop that makes no host call cannot be stopped at all.
+
+After a child that changed files has ended, the persistence hook runs (the same one a guest's
+own `fd_close` triggers), so shell-written files below a persistent root are stored like any
+other. `/bin/sh`, `/bin/bash`, `/usr/bin/bash` and `/usr/bin/env` exist as empty files, for
+programs that look for a shell before asking for one.
+
 ## 4. Host side
 
 For whoever embeds the machine in a page (`host/index.ts`):
@@ -407,6 +501,7 @@ const program = startProgram({
   guestUrl, kernelUrl, workerUrl, args, env, files,
   cols, rows, xpixel, ypixel,
   persist: { namespace, roots: ["/home/user"], exclude: ["/locks/"] },   // optional
+  shell: { moduleUrl: "/bat_sh.wasm", workerUrl: "/shell-worker.js" },   // optional: child processes (3.4); mode, slots, spinUs
   clipboard: { readText, writeText },             // optional; default navigator.clipboard
   onOutput(bytes) { terminal.write(bytes) },   // pty master output
   onExit(status) { ... },                      // { code, signal?, error? }
@@ -419,6 +514,8 @@ program.kill();                   // terminate the Worker now (after exit: relea
 await program.exited;
 await program.readFile(path);     // Uint8Array | null: a file out of the program's filesystem
 await program.listFiles(dir);     // [{ path, size }]: every regular file below a directory
+program.procs;                    // [{ command, status, signal, calls, queueMs, runMs }]: the children that have ended (last 500)
+program.shellWorkers;             // [{ slot, why: "need" | "replace", at }]: every shell Worker the page started
 ```
 
 `workerUrl` selects the kind of guest: the bundled `host/worker.ts` runs a
@@ -459,12 +556,20 @@ it. A JavaScript guest's Worker ends with the program. On the dev page:
 - page → Worker: a single-producer/single-consumer frame ring in a
   `SharedArrayBuffer` (`host/ring.ts`, `host/protocol.ts`), because a Worker
   blocked in a syscall never services `postMessage`. Frames: terminal input,
-  resize, signal, network event, clipboard reply, file request. Frames that do
-  not fit wait on the page.
+  resize, signal, network event, clipboard reply, file request, shell-Worker
+  status. Frames that do not fit wait on the page.
 - Worker → page: `postMessage` (terminal output, exit, network requests,
   changed persistent files, clipboard requests, load progress, file answers).
   Output is flow-controlled: the Worker pauses when 1 MiB is unacknowledged.
-  That holds for both kinds of guest (`machine.flushOutput()`).
+  That holds for both kinds of guest (`machine.flushOutput()`). While it is
+  paused it sleeps on the ring's wake counter (not on the ack word), sets
+  `H_OUT_WAITING`, and the page then bumps the wake counter with each ack; that
+  way the same sleep also answers the shell Workers.
+- shell Worker ↔ guest's Worker (3.4): one `SharedArrayBuffer` channel per
+  shell Worker (`host/sh/channel.ts`): the run request one way, the shell's
+  host calls and their replies the other. The shell bumps the ring's wake
+  counter after posting a call, which is what `Machine.addWakeSource` is for:
+  every sleep of the guest's Worker checks its wake sources first.
 
 Persistence (`host/persist.ts`, `host/persist-store.ts`). The vfs stays in
 memory. The Worker posts `{ t: "persist", path, data | null }` for every file

@@ -1,7 +1,7 @@
 // Headless smoke test of the dev page in Playwright's WebKit build (Linux WPE
 // port), at a desktop viewport and with an iPhone device profile.
 //   web/webkit/smoke.sh [base URL]      default http://127.0.0.1:4790
-//   GUESTS=opencode,codex               which guests to run (default both); PROFILE=desktop|iphone
+//   GUESTS=opencode,codex,proc,codex-local   which guests to run (default all four); PROFILE=desktop|iphone
 // Needs webkit/install.sh once, the dev server, and mock-llm/up.sh.
 //
 // This is WebKit's engine on Linux, not Safari: it says whether the page's
@@ -254,6 +254,82 @@ async function runCodex(profile: string, options: BrowserContextOptions, touch: 
   return checks;
 }
 
+/** Child processes on WebKit: the `proc` guest's own checks (shell Workers, SharedArrayBuffer channels, stdin, kills),
+ * then codex-local taking a turn whose tool calls run in the shell. */
+async function runShell(profile: string, options: BrowserContextOptions, touch: boolean, guests: string[]): Promise<Check[]> {
+  const checks: Check[] = [];
+  const check = (name: string, ok: unknown, detail?: unknown) => {
+    checks.push({ name, ok: !!ok, detail: ok ? undefined : detail });
+  };
+  const browser = await webkit.launch({ headless: true });
+  const context = await browser.newContext(options);
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(String(error)));
+  page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+  page.on("crash", () => errors.push("the page crashed"));
+  interface ProcResult { failed: number; checks: { name: string; ok: boolean; detail: string }[]; numbers: Record<string, unknown> }
+  const procRun = async (query: string): Promise<ProcResult | null> => {
+    await page.goto(`${base}/?guest=proc&persist=0${query}`);
+    await page.waitForFunction(() => window.wasmTerm?.exit, null, { timeout: 120_000 }).catch(() => {});
+    // The result line is longer than the screen is wide: read it from the scrollback.
+    return page.evaluate(() => {
+      const buffer = window.wasmTerm.terminal.buffer.active;
+      let all = "";
+      for (let row = 0; row < buffer.length; row++) {
+        const line = buffer.getLine(row);
+        all += (line?.translateToString(true) ?? "") + (buffer.getLine(row + 1)?.isWrapped ? "" : "\n");
+      }
+      const at = all.lastIndexOf("RESULT {");
+      try { return at < 0 ? null : JSON.parse(all.slice(at + 7).split("\n")[0]!); } catch { return null; }
+    });
+  };
+  try {
+    if (guests.includes("proc")) {
+      for (const [label, query] of [["shell Workers", "&shell=worker"], ["inline", "&shell=inline&arg=inline&arg=quick"]] as const) {
+        const result = await procRun(query);
+        const bad = result?.checks.filter(item => !item.ok) ?? [];
+        check(`proc (${label}): ${result?.checks.length ?? 0} checks of child processes pass`, result && result.failed === 0 && result.checks.length >= 15, { bad, exit: await page.evaluate(() => window.wasmTerm?.exit).catch(() => null), errors: errors.slice(0, 3) });
+        if (result && label === "shell Workers") {
+          const pick = (name: string) => JSON.stringify(result.numbers[name]);
+          check(`proc numbers: \`echo hi\` ${pick("`echo hi`: spawn to exit event, ms")}; grep -rn over 2,000 files ${pick("`grep -rn NEEDLE tree | wc -l` over 2,000 files, 6.5 MB: spawn to exit event, ms")}; busy-loop kill ${pick("kill of `while :; do :; done`: ms from kill to exit event")} ms`, true);
+        }
+      }
+    }
+    if (guests.includes("codex-local")) {
+      await page.goto(`${base}/?guest=codex-local&persist=0`);
+      const home = await waitFor(page, "Ask Codex", 240_000).then(() => true, () => false);
+      check("codex-local: the module starts and shows its start screen", home, { tail: (await screen(page)).split("\n").filter(Boolean).slice(-6), errors: errors.slice(0, 3) });
+      const key = (name: string) => page.locator(`.terminal-keys [data-key="${name}"]`).tap();
+      if (touch) await key("Keyboard");
+      else await page.evaluate(() => window.wasmTerm.terminal.focus());
+      await page.waitForTimeout(500);
+      const turn = async (prompt: string, done: string) => {
+        await page.keyboard.type(prompt, { delay: 15 });
+        await page.waitForTimeout(300);
+        await page.keyboard.press("Enter");
+        return waitFor(page, done, 60_000).then(() => waitFor(page, "Worked for", 15_000)).then(() => true, () => false);
+      };
+      const read = await turn("shell-read", "MOCK-SHELL-READ-DONE");
+      const procs = await page.evaluate(() => window.wasmTerm.program.procs);
+      check("codex-local: a turn of six shell commands (rg --files, rg -n, nl -ba | sed -n, sed -n, cat, ls -la) all exit 0", read && procs.length === 6 && procs.every(proc => proc.status === 0), { procs, tail: (await screen(page)).split("\n").filter(Boolean).slice(-12) });
+      const flat = (await screen(page)).replace(/\n\s*/g, " ");
+      check("codex-local: the model got the commands' output (first lines of rg and cat)", /2\. exit 0: `src\/inventory\.py:\d+:def load_items/.test(flat) && /5\. exit 0: `name,quantity,unit_price`/.test(flat), flat.slice(-900));
+      const fix = await turn("shell-fix", "MOCK-SHELL-FIX-DONE");
+      check("codex-local: read, apply_patch, verify with the shell", fix && /sorted\(items/.test((await page.evaluate(() => window.wasmTerm.readFile("/home/user/project/src/report.py"))) ?? ""), (await screen(page)).split("\n").filter(Boolean).slice(-10));
+      const all = await page.evaluate(() => window.wasmTerm.program.procs);
+      const rg = all.filter(proc => /-lc rg /.test(proc.command));
+      check(`codex-local numbers: ${all.length} commands, waiting for a shell ${Math.max(...all.map(proc => proc.queueMs)).toFixed(2)} ms at most, rg ${rg.map(proc => (proc.queueMs + proc.runMs).toFixed(2)).join(" / ")} ms`, true);
+      await page.screenshot({ path: join(shots, `webkit-${profile}-codex-local-shell.png`) });
+      check("codex-local: no page errors", errors.length === 0, errors.slice(0, 5));
+    }
+  } catch (error) {
+    check("shell: the script ran to the end", false, { error: String((error as Error).stack ?? error).slice(0, 500), errors: errors.slice(0, 5) });
+  }
+  await browser.close();
+  return checks;
+}
+
 const profiles: [string, BrowserContextOptions, boolean][] = [
   ["desktop", { viewport: { width: 1280, height: 800 } }, false],
   ["iphone", devices["iPhone 15"]!, true],
@@ -262,8 +338,12 @@ let failed = 0;
 for (const [profile, options, touch] of profiles) {
   if (process.env.PROFILE && process.env.PROFILE !== profile) continue;
   console.log(`\n== WebKit (Linux, headless), ${profile} profile, ${base}`);
-  const guests = (process.env.GUESTS ?? "opencode,codex").split(",");
-  const results = [...(guests.includes("opencode") ? await run(profile, options, touch) : []), ...(guests.includes("codex") ? await runCodex(profile, options, touch) : [])];
+  const guests = (process.env.GUESTS ?? "opencode,codex,proc,codex-local").split(",");
+  const results = [
+    ...(guests.includes("opencode") ? await run(profile, options, touch) : []),
+    ...(guests.includes("codex") ? await runCodex(profile, options, touch) : []),
+    ...(guests.includes("proc") || guests.includes("codex-local") ? await runShell(profile, options, touch, guests) : []),
+  ];
   for (const item of results) {
     if (!item.ok) failed++;
     console.log(`${item.ok ? "PASS" : "FAIL"} ${item.name}${item.ok ? "" : `: ${JSON.stringify(item.detail)}`}`);

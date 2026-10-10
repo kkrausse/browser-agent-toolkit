@@ -229,6 +229,145 @@ function toolThenAnswer(
   };
 }
 
+// ---- shell scripts: what a model does with a shell tool, step by step ---------------------------
+// For clients whose tool is codex's `exec_command` / `write_stdin` (the commands assume the sample
+// project of wasm-term/ports/codex/main/sample, which `?guest=codex-local` seeds).
+
+/** The command's own output: codex puts a header (chunk id, wall time, exit code or session id) before "Output:". */
+function outputOf(result: string): string {
+  return result.includes("\nOutput:\n") ? result.slice(result.indexOf("\nOutput:\n") + 9) : result;
+}
+const exitOf = (result: string) => /Process exited with code (-?\d+)/.exec(result)?.[1] ?? "?";
+const sessionOf = (result: string) => Number(/Process running with session ID (\d+)/.exec(result)?.[1] ?? -1);
+const lastLine = (text: string) => text.trimEnd().split("\n").pop() ?? "";
+
+function execCall(turn: Turn, cmd: string, extra: Record<string, unknown> = {}): ToolCall | undefined {
+  const tool = findTool(turn, ["exec_command"]);
+  if (!tool) return shellCall(turn, cmd);
+  return { id: nextCallId(), name: tool.name, kind: "function", payload: JSON.stringify({ cmd, ...extra }) };
+}
+
+function stdinCall(turn: Turn, sessionId: number, chars: string, yieldMs = 1000): ToolCall | undefined {
+  const tool = findTool(turn, ["write_stdin"]);
+  if (!tool) return undefined;
+  return { id: nextCallId(), name: tool.name, kind: "function", payload: JSON.stringify({ session_id: sessionId, chars, yield_time_ms: yieldMs }) };
+}
+
+function patchCall(turn: Turn, patch: string): ToolCall | undefined {
+  const tool = findTool(turn, ["apply_patch"]);
+  if (!tool) return undefined;
+  return { id: nextCallId(), name: tool.name, kind: tool.kind, payload: tool.kind === "custom" ? patch : fillArgs(tool, { input: patch, patch }) };
+}
+
+/** Runs `steps` one tool call per request, then answers with one line per result: `<n>. exit <code>: <first line of output>`. */
+function script(label: string, steps: ((turn: Turn) => { say: string; tool: ToolCall | undefined })[], report: (turn: Turn) => string = () => ""): (turn: Turn) => Step {
+  return (turn) => {
+    const n = turn.toolResults.length;
+    if (n < steps.length) {
+      const { say, tool } = steps[n]!(turn);
+      if (!tool) return { text: `mock-llm: the ${label} scenario needs a tool the client did not offer (offered: ${turn.tools.map((t) => t.name).join(", ") || "none"}).` };
+      return { text: `Step ${n + 1} of ${steps.length}: ${say}`, tool };
+    }
+    const lines = turn.toolResults.map((result, index) => `${index + 1}. exit ${exitOf(result)}: \`${firstLine(result, 100)}\``);
+    const extra = report(turn);
+    return { text: `${lines.join("\n")}\n${extra ? `${extra}\n` : ""}\nThe ${label} scenario is complete. MOCK-${label.toUpperCase()}-DONE` };
+  };
+}
+
+const REPORT_PATCH = [
+  "*** Begin Patch",
+  "*** Update File: src/report.py",
+  "@@",
+  " def format_report(items: list[Item]) -> str:",
+  "-    # TODO: sort the items by name before printing",
+  "-    lines = [format_line(item) for item in items]",
+  "+    lines = [format_line(item) for item in sorted(items, key=lambda item: item.name)]",
+  '     lines.append("-" * 38)',
+  "*** End Patch",
+  "",
+].join("\n");
+
+const STDIN_LOOP = 'while IFS= read -r line; do echo "got:$line"; [ "$line" = quit ] && break; done; echo bye';
+
+const SHELL_SCENARIOS: Scenario[] = [
+  {
+    // How a model gets to know a project: list, search, read with line numbers.
+    name: "shell-read",
+    match: /\bshell-read\b/i,
+    step: script("shell-read", [
+      (t) => ({ say: "listing the files.", tool: execCall(t, "rg --files | sort") }),
+      (t) => ({ say: "finding the functions.", tool: execCall(t, 'rg -n "^def " src') }),
+      (t) => ({ say: "reading the report module with line numbers.", tool: execCall(t, "nl -ba src/report.py | sed -n '1,14p'") }),
+      (t) => ({ say: "reading the top of the README.", tool: execCall(t, "sed -n '1,5p' README.md") }),
+      (t) => ({ say: "reading the data.", tool: execCall(t, "cat data/items.csv") }),
+      (t) => ({ say: "listing the directory.", tool: execCall(t, "ls -la") }),
+    ]),
+  },
+  {
+    // Read, edit with apply_patch, check the edit: the loop a coding agent lives in.
+    name: "shell-fix",
+    match: /\bshell-fix\b/i,
+    step: script("shell-fix", [
+      (t) => ({ say: "looking for the open TODOs.", tool: execCall(t, "rg -n TODO src") }),
+      (t) => ({ say: "reading the function.", tool: execCall(t, "nl -ba src/report.py | sed -n '10,14p'") }),
+      (t) => ({ say: "sorting the items by name.", tool: patchCall(t, REPORT_PATCH) }),
+      (t) => ({ say: "checking the edit.", tool: execCall(t, 'rg -n "sorted\\(" src/report.py && ! rg -q "TODO: sort" src && echo edit-verified') }),
+    ], (turn) => `Verification: \`${lastLine(outputOf(turn.toolResults[3] ?? ""))}\``),
+  },
+  {
+    // Commands that fail, and programs this machine does not have.
+    name: "shell-fail",
+    match: /\bshell-fail\b/i,
+    step: script("shell-fail", [
+      (t) => ({ say: "reading a file that is not there.", tool: execCall(t, "cat does-not-exist.txt") }),
+      (t) => ({ say: "asking git.", tool: execCall(t, "git status --short") }),
+      (t) => ({ say: "asking python.", tool: execCall(t, "python3 -c 'print(1)'") }),
+      (t) => ({ say: "a pipeline whose status is the last command's.", tool: execCall(t, "rg -n nothing-matches-this src; echo \"rg=$?\"; false") }),
+    ]),
+  },
+  {
+    name: "shell-long",
+    match: /\bshell-long\b/i,
+    step: script("shell-long", [(t) => ({ say: "printing 60,000 lines.", tool: execCall(t, "seq 1 60000") })], (turn) => {
+      const out = outputOf(turn.toolResults[0] ?? "");
+      return `Output seen by the model: ${out.length} chars, ${out.split("\n").length} lines, last line \`${lastLine(out)}\`${/truncated|omitted/i.test(out) ? ", truncated by the client" : ""}.`;
+    }),
+  },
+  {
+    // The model's own timeout: there is no timeout parameter on exec_command, so `timeout` in the shell.
+    name: "shell-timeout",
+    match: /\bshell-timeout\b/i,
+    step: script("shell-timeout", [(t) => ({ say: "running a command that takes too long, under `timeout`.", tool: execCall(t, 'echo started; timeout 1 sleep 30; echo "timeout-status=$?"') })], (turn) =>
+      `Last line: \`${lastLine(outputOf(turn.toolResults[0] ?? ""))}\``),
+  },
+  {
+    // A command the user has to interrupt (Esc): the tool call does not return for two minutes.
+    name: "shell-sleep",
+    match: /\bshell-sleep\b/i,
+    step: script("shell-sleep", [(t) => ({ say: "sleeping for two minutes.", tool: execCall(t, "echo sleeping; sleep 120; echo woke", { yield_time_ms: 30000 }) })]),
+  },
+  {
+    // A process left running after the yield time, then interrupted by the model with Ctrl-C.
+    name: "shell-ctrlc",
+    match: /\bshell-ctrlc\b/i,
+    step: script("shell-ctrlc", [
+      (t) => ({ say: "starting a long command and yielding after half a second.", tool: execCall(t, "echo started; sleep 300; echo never", { yield_time_ms: 500 }) }),
+      (t) => ({ say: "interrupting it.", tool: stdinCall(t, sessionOf(t.toolResults[0] ?? ""), "\u0003") }),
+      (t) => ({ say: "the shell still works.", tool: execCall(t, "echo after-interrupt") }),
+    ], (turn) => `Session ${sessionOf(turn.toolResults[0] ?? "")} was running after the first call; after Ctrl-C: exit ${exitOf(turn.toolResults[1] ?? "")}.`),
+  },
+  {
+    // An interactive process: a terminal session the model types into.
+    name: "shell-stdin",
+    match: /\bshell-stdin\b/i,
+    step: script("shell-stdin", [
+      (t) => ({ say: "starting a loop that reads lines.", tool: execCall(t, STDIN_LOOP, { tty: true, yield_time_ms: 500 }) }),
+      (t) => ({ say: "typing a line.", tool: stdinCall(t, sessionOf(t.toolResults[0] ?? ""), "hello from stdin\n") }),
+      (t) => ({ say: "typing the last line.", tool: stdinCall(t, sessionOf(t.toolResults[0] ?? ""), "quit\n") }),
+    ], (turn) => `Second write returned: ${JSON.stringify(outputOf(turn.toolResults[2] ?? "").trim())}`),
+  },
+];
+
 const SCENARIOS: Scenario[] = [
   {
     name: "title",
@@ -241,6 +380,7 @@ const SCENARIOS: Scenario[] = [
     match: /\bmock-error\b/i,
     step: () => ({ text: "" }), // handled before streaming: HTTP 400
   },
+  ...SHELL_SCENARIOS,
   {
     name: "multi-tool",
     match: /\bmulti[- ]?tool\b/i,

@@ -172,6 +172,14 @@ The mock picks a script from the last real user message (injected
 | Prompt contains | Scenario | What comes back |
 | --- | --- | --- |
 | `mock-error` | error | HTTP 400 with an OpenAI-style error body (5xx would make both clients retry) |
+| `shell-read` | shell-read | six `exec_command` calls, one per request, the way a model gets to know a project: `rg --files \| sort`, `rg -n "^def " src`, `nl -ba src/report.py \| sed -n '1,14p'`, `sed -n '1,5p' README.md`, `cat data/items.csv`, `ls -la` |
+| `shell-fix` | shell-fix | read, edit, verify: `rg -n TODO src`, `nl -ba src/report.py \| sed -n '10,14p'`, an `apply_patch` that sorts the report's items, then `rg -n "sorted\(" src/report.py && ! rg -q "TODO: sort" src && echo edit-verified` |
+| `shell-fail` | shell-fail | commands that fail: `cat does-not-exist.txt`, `git status --short`, `python3 -c 'print(1)'`, `rg -n nothing-matches-this src; echo "rg=$?"; false` |
+| `shell-long` | shell-long | `seq 1 60000`; the answer says how much of it the model was given |
+| `shell-timeout` | shell-timeout | `echo started; timeout 1 sleep 30; echo "timeout-status=$?"` (codex's `exec_command` has no timeout parameter: a model uses the shell's) |
+| `shell-sleep` | shell-sleep | `echo sleeping; sleep 120; echo woke` with `yield_time_ms` 30000: a tool call for the user to interrupt |
+| `shell-ctrlc` | shell-ctrlc | `echo started; sleep 300; echo never` with `yield_time_ms` 500 (comes back still running, with a session id), then `write_stdin` of `\u0003` to that session, then `echo after-interrupt` |
+| `shell-stdin` | shell-stdin | an interactive process: a `while read` loop started with `tty: true`, then two `write_stdin` calls (`hello from stdin`, `quit`) |
 | `multi-tool` | multi-tool | shell call, then a file write, then a final answer |
 | `change` | change | rewrites the first line of `hello.txt` in place: the prompt quotes the line (`change hello.txt "<its first line>"`) and the model appends ` (changed by mock-llm)` with an `apply_patch` "Update File". Without `apply_patch` or a quoted line it overwrites the file |
 | `edit`, `write`, `patch` | write | writes `mock-output.txt`, then answers |
@@ -182,6 +190,14 @@ The mock picks a script from the last real user message (injected
 | `long`, `scroll` | long | 80 numbered lines ending `END-OF-LONG-RESPONSE` (about 11 s at the default delay) |
 | `think`, `reason`, `reasoning` | reasoning | reasoning stream, then text ending `MOCK-REASONING-DONE` |
 | anything else | plain | one paragraph of streamed text |
+
+The `shell-*` scenarios are for a client whose tools are codex's `exec_command` /
+`write_stdin` / `apply_patch` and a working directory holding the sample project
+that `?guest=codex-local` seeds (`ports/codex/main/sample/`). Each request gets
+`Step n of m: ...` and one tool call; the final answer has one line per result,
+`<n>. exit <code>: \`<first line of its output>\``, and ends with
+`MOCK-<NAME>-DONE` (`MOCK-SHELL-READ-DONE`, ...), so a test can assert what every
+command returned.
 
 Tool scenarios end with `MOCK-TOOL-DONE` and quote the first line of the tool
 result, so a test can assert the result made the round trip. The tool call is

@@ -8,8 +8,10 @@
 //! - `enable_in_process_app_server()` is what links the embedded server in;
 //! - `CODEX_WASM_CWD` names the project directory, a path in the emulated
 //!   filesystem that the page keeps across reloads;
-//! - there are no processes: the shell tools answer the model with a
-//!   "no shell in this build" error (NOTES.md, "The spawn seam").
+//! - there are no processes: commands (the model's `exec_command`, the user's
+//!   `!command`) run in the page's emulated shell (`shell.rs`; NOTES.md, "The
+//!   spawn seam"). `CODEX_WASM_SHELL=0` leaves the "no shell in this build"
+//!   default in place.
 
 use clap::Parser;
 use codex_arg0::Arg0DispatchPaths;
@@ -18,8 +20,8 @@ use codex_tui::Cli;
 use codex_tui::run_main;
 use codex_utils_cli::CliConfigOverrides;
 
-mod demo_shell;
 mod shared;
+mod shell;
 
 #[derive(Parser, Debug)]
 #[command(name = "codex")]
@@ -51,8 +53,11 @@ fn main() -> anyhow::Result<()> {
         seed_sample_project()
             .map_err(|err| anyhow::anyhow!("failed to seed the sample project: {err}"))?;
     }
-    if std::env::var("CODEX_WASM_DEMO_SHELL").is_ok_and(|demo| demo == "1") {
-        demo_shell::install();
+    if std::env::var("CODEX_WASM_SHELL").map_or(true, |shell| shell != "0") {
+        // codex finds the shell by path (the page plants /bin/bash and /bin/sh). PATH is NOT set
+        // for codex itself: std::env::split_paths panics on WASI, and every PATH lookup calls it.
+        // Commands get a PATH from the backend.
+        shell::install();
     }
     codex_app_server_client::enable_in_process_app_server();
 
@@ -106,6 +111,14 @@ fn browser_defaults(backend: &str) -> anyhow::Result<Vec<String>> {
     let default_mock = if backend == "mock-auth" { "https://mock-llm.test" } else { "http://127.0.0.1:4791" };
     let mock = std::env::var("CODEX_WASM_MOCK_URL").unwrap_or_else(|_| default_mock.to_string());
     let mock = mock.trim_end_matches('/');
+    // What this machine is, for the model: codex's own slot for it (`developer_instructions`
+    // is sent as a developer message with every thread). `?arg=-c&arg=developer_instructions=...` replaces it.
+    if std::env::var("CODEX_WASM_SHELL").map_or(true, |shell| shell != "0") {
+        overrides.push(format!(
+            "developer_instructions={}",
+            toml_string(include_str!("environment.md").trim())
+        ));
+    }
     let codex_home = std::env::var("CODEX_HOME")?;
     let mock_model = |overrides: &mut Vec<String>| -> anyhow::Result<()> {
         // Without metadata codex treats an unknown model as one without `apply_patch`.
@@ -140,6 +153,24 @@ fn browser_defaults(backend: &str) -> anyhow::Result<Vec<String>> {
     Ok(overrides)
 }
 
+/// A TOML basic string.
+fn toml_string(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 2);
+    out.push('"');
+    for ch in text.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            ch if (ch as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", ch as u32)),
+            ch => out.push(ch),
+        }
+    }
+    out.push('"');
+    out
+}
+
 /// A small project in the working directory, written once: only when the
 /// directory holds nothing yet.
 fn seed_sample_project() -> anyhow::Result<()> {
@@ -147,11 +178,16 @@ fn seed_sample_project() -> anyhow::Result<()> {
     if std::fs::read_dir(&cwd)?.next().is_some() {
         return Ok(());
     }
-    let files: [(&str, &str); 4] = [
-        ("README.md", "# Sample project\n\nA few files for codex to read and edit. They live in the browser tab's\nfilesystem (IndexedDB) and survive a reload.\n"),
-        ("hello.txt", "hello from the wasm-term sample project\n"),
-        ("src/main.py", "def greet(name: str) -> str:\n    return f\"hello, {name}\"\n\n\nif __name__ == \"__main__\":\n    print(greet(\"world\"))\n"),
-        ("notes/todo.md", "- [ ] add a farewell function to src/main.py\n- [ ] mention it in the README\n"),
+    let files = [
+        ("README.md", include_str!("../sample/README.md")),
+        ("hello.txt", include_str!("../sample/hello.txt")),
+        ("src/main.py", include_str!("../sample/src/main.py")),
+        ("src/inventory.py", include_str!("../sample/src/inventory.py")),
+        ("src/report.py", include_str!("../sample/src/report.py")),
+        ("tests/test_inventory.py", include_str!("../sample/tests/test_inventory.py")),
+        ("data/items.csv", include_str!("../sample/data/items.csv")),
+        ("notes/todo.md", include_str!("../sample/notes/todo.md")),
+        (".gitignore", include_str!("../sample/gitignore")),
     ];
     for (path, contents) in files {
         let path = cwd.join(path);

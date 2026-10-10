@@ -31,3 +31,7 @@ codex-utils-cli = { workspace = true }
 codex-utils-pty = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt", "time", "macros", "net", "sync"] }
+
+# The host's child processes (`proc_*`): what src/shell.rs runs commands on.
+[target.'cfg(target_os = "wasi")'.dependencies]
+wasm-term-tokio = { path = "../../../guests/wasm-term-tokio" }
