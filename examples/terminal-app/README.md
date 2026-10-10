@@ -58,11 +58,11 @@ Every URL is relative to the page, so the directory works at `/` and at
 
 ## The terminal half
 
-wasm-term lives in another repository (`random`, branch `wasm-term`) and its build outputs
-are megabytes, so none of it is checked in. `wasm-term.ts` bundles its page wiring
-(`web/embed.ts`, `host/js-worker.ts`) and copies its built files into the gitignored
-`.wasm-term/`; it says what is missing. `WASM_TERM_DIR` names the checkout's `wasm-term`
-directory.
+wasm-term is [`wasm-term/`](../../wasm-term/README.md) of this repository; its build outputs
+are megabytes and gitignored, so they have to be built there first. `wasm-term.ts` bundles its
+page wiring (`web/embed.ts`, `host/js-worker.ts`) and copies its built files into the gitignored
+`.wasm-term/`; it says what is missing. `WASM_TERM_DIR` names another `wasm-term` directory
+(default `../../wasm-term`).
 
 ## How the pieces talk
 

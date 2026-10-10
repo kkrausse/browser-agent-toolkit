@@ -1,17 +1,17 @@
 // Brings in the terminal half: wasm-term (the pty machine, the ghostty-web terminal and the
-// OpenCode TUI built for it) lives in another repository and its outputs are megabytes, so
-// nothing of it is checked in here. This bundles its page wiring and copies its built files
+// OpenCode TUI built for it) is `wasm-term/` of this repository; its build outputs are
+// megabytes and gitignored. This bundles its page wiring and copies its built files
 // into the gitignored `.wasm-term/`, which the server serves under `/wasm-term/`.
 //
-//   WASM_TERM_DIR   the wasm-term directory of a checkout of `random`, branch `wasm-term`
+//   WASM_TERM_DIR   another wasm-term directory (default: ../../wasm-term)
 import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
 
-const root = resolve(process.env.WASM_TERM_DIR ?? '/home/kkrausse/devfs/repos/kkrausse/random/.claude/worktrees/wasm-term/wasm-term')
+const root = resolve(process.env.WASM_TERM_DIR ?? join(import.meta.dirname, '../../wasm-term'))
 const out = resolve(import.meta.dirname, '.wasm-term')
 const need: [path: string, how: string][] = [
-  ['web/embed.ts', 'this checkout predates the embedding entry; use branch `wasm-term` of `random`'],
+  ['web/embed.ts', 'this checkout has no wasm-term/ (it is on branch `wasm-term`)'],
   ['web/node_modules/@random/ghostty-web/package.json', 'cd web && bun install'],
   ['kernel/target/wasm32-unknown-unknown/release/wasm_term_kernel.wasm', 'cd web && bun run build'],
   ['ports/opencode/dist/site/guest.js', 'cd ports/opencode && bun run build:native && bun run build:tui (see ports/opencode/NOTES.md)'],
@@ -19,7 +19,7 @@ const need: [path: string, how: string][] = [
 ]
 const missing = need.filter(([path]) => !existsSync(join(root, path)))
 if (missing.length) {
-  console.error(`wasm-term is not ready at ${root} (set WASM_TERM_DIR to the wasm-term directory of a checkout of \`random\`, branch \`wasm-term\`):`)
+  console.error(`wasm-term is not ready at ${root} (WASM_TERM_DIR names another wasm-term directory):`)
   for (const [path, how] of missing) console.error(`  missing ${path}\n    ${how}`)
   process.exit(1)
 }
