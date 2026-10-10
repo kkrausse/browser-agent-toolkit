@@ -8,6 +8,7 @@ Programs built for the wasm-term guest ABI (`../docs/abi.md`), all
 | `repl` | Cooked mode. Lines read from ordinary `std::io::stdin()`; echo, backspace, `^W`, `^U`, `^V`, `^D`, `^C` are all the kernel's line discipline. Also `stty`, a password prompt (ECHO off), vfs commands, and `keys`: a raw-mode dump of the exact bytes each key, paste, click and focus change sends. |
 | `tui` | Raw mode. ratatui on the stock `CrosstermBackend`: alternate screen, colours, kitty keyboard, mouse, bracketed paste, focus, resize, and a 50 ms timer multiplexed with input through `crossterm::event::poll`. |
 | `async-tui` | The codex shape: tokio `current_thread` + crossterm `EventStream` + ratatui + a WebSocket + a streamed HTTP body, in one `select!`. |
+| `tcp` | The TCP stream descriptor through the dev server's relay: blocking and tokio use, half-close, write back-pressure, refusals, reset, and that an idle stream does not wake the runtime. |
 | `net` | The WebSocket and streaming-HTTP primitives against the dev server's `/test/` endpoints, then one `poll` loop over keyboard + WebSocket + event stream + timer. |
 | `events` | Prints each crossterm event. A small probe for the crossterm backend. |
 
@@ -16,7 +17,7 @@ Libraries:
 | Crate | What |
 | --- | --- |
 | `wasm-term-sys` | Bindings for the ABI: `termios`, `signal`, `poll`, `net`. No dependencies. |
-| `wasm-term-tokio` | tokio adapters: `Readiness` (an `AsyncFd` for wasi), async `WebSocket`, async streaming `http`. |
+| `wasm-term-tokio` | tokio adapters: `Readiness` (an `AsyncFd` for wasi), async `WebSocket`, async streaming `http`, `Child`, and `TcpStream` (`AsyncRead` + `AsyncWrite`). |
 | `crossterm-wasi/` | The crossterm fork codex pins, made to build for wasi. Generated; see below. |
 
 ## Build
@@ -144,6 +145,16 @@ let n = response.read(&mut buf).await?;    // returns as bytes arrive; 0 = end
 ```
 
 `Readiness::new(fd)` is the general tool for any other descriptor.
+
+`wasm_term_tokio::TcpStream` is the one descriptor that does poll writable, so the "never
+register something writable" rule above would make it spin: a connected stream is writable
+almost always, and level-triggered mio would report that on every park. It is therefore opened
+with the ABI's edge-triggered flag (`TCP_EDGE`): the host reports writable once when the
+connection is established and after that only when room returns after a write that was cut
+short or refused, and readable once per arrival. tokio caches readiness until a call returns
+`WouldBlock`, which is exactly the contract edges need. Inside it is tokio's own
+`TcpStream::from_std` on the descriptor, so reads, writes and shutdown are tokio's code.
+Measured in `guests/tcp`: 2 parks in a second with an open idle stream.
 
 codex talks to its app-server through `tokio-tungstenite`. That crate does its
 own TCP + TLS + framing, none of which exists here: the browser owns the

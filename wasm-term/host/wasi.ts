@@ -3,9 +3,9 @@
 // keep the two in step.
 
 import { TERMIOS_SIZE } from "./kernel";
-import { type HttpHandle, type Machine, NSIG, ProcessExit, SIG_CATCH, SIGKILL, type SignalQueue, type WsHandle } from "./machine";
+import { type HttpHandle, type Machine, NSIG, ProcessExit, SIG_CATCH, SIGKILL, type SignalQueue, type TcpHandle, type WsHandle } from "./machine";
 import { type Proc, type Processes, SPAWN_STDIN } from "./proc";
-import { WS_BINARY, WS_TEXT } from "./protocol";
+import { TCP_WINDOW, WS_BINARY, WS_TEXT } from "./protocol";
 import { MAX_JOB_BYTES } from "./sh/channel";
 import { type DirNode, ERRNO, type FileNode, type Vfs, type VfsNode } from "./vfs";
 
@@ -25,6 +25,9 @@ const EVENTTYPE_FD_READ = 1;
 const EVENTTYPE_FD_WRITE = 2;
 /** `flags` bit of ws_recv / http_head: fail with EAGAIN instead of blocking. */
 const NET_NONBLOCK = 1;
+/** `flags` bit of tcp_connect: readiness is reported once per change (for reactors that cache it). */
+const TCP_EDGE = 1;
+const SDFLAGS_WR = 2;
 
 type Fd =
   | { kind: "tty"; flags: number; readOnly?: boolean }
@@ -34,6 +37,7 @@ type Fd =
   | { kind: "sig"; flags: number; queue: SignalQueue }
   | { kind: "ws"; flags: number; handle: WsHandle }
   | { kind: "http"; flags: number; handle: HttpHandle; headTaken: boolean }
+  | { kind: "tcp"; flags: number; handle: TcpHandle }
   | { kind: "proc"; flags: number; proc: Proc };
 
 export interface WasiOptions {
@@ -137,6 +141,70 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
     });
   }
 
+  /** What a failed stream answers every call with. */
+  function tcpFailure(handle: TcpHandle): number {
+    machine.lastError = handle.error;
+    return handle.errno;
+  }
+
+  function tcpRead(fdNumber: number, fd: Extract<Fd, { kind: "tcp" }>, cap: number): Uint8Array | number {
+    const { handle } = fd;
+    return blockOn<Uint8Array | number>(nonblocking(fd), () => {
+      if (handle.buffered > 0) {
+        // As much as fits, across chunks: a short read then means "nothing more is buffered",
+        // which is what a reactor that caches readiness concludes from one.
+        const out = new Uint8Array(Math.min(cap, handle.buffered));
+        let at = 0;
+        while (at < out.length) {
+          const chunk = handle.chunks[0]!;
+          const part = chunk.subarray(0, out.length - at);
+          out.set(part, at);
+          at += part.length;
+          if (part.length === chunk.length) handle.chunks.shift();
+          else handle.chunks[0] = chunk.subarray(part.length);
+        }
+        handle.buffered -= out.length;
+        handle.readEdge = handle.buffered > 0 || handle.eof || handle.state === "failed";
+        if (out.length > 0) machine.post({ t: "tcp_ack", handle: fdNumber, bytes: out.length });
+        return out;
+      }
+      // End of file before a failure: after the peer's FIN the only "failure" left is the
+      // connection going away, which a reader has already been told.
+      if (handle.eof) return new Uint8Array(0);
+      if (handle.state === "failed") return tcpFailure(handle);
+      return undefined;
+    });
+  }
+
+  /** Bytes a write could take now. */
+  const tcpSpace = (handle: TcpHandle) => TCP_WINDOW - (handle.sent - handle.acked);
+
+  /** Takes as much of `data` as the window allows: `{ written }`, or an errno. */
+  function tcpWrite(fdNumber: number, fd: Extract<Fd, { kind: "tcp" }>, data: Uint8Array): { written: number } | number {
+    const { handle } = fd;
+    for (;;) {
+      machine.pump();
+      if (handle.state === "failed") return tcpFailure(handle);
+      if (handle.writeShut) return ERRNO.PIPE;
+      const space = handle.state === "open" ? tcpSpace(handle) : 0;
+      if (space > 0 || (data.length === 0 && handle.state === "open")) {
+        const taken = data.subarray(0, space);
+        if (taken.length > 0) {
+          machine.post({ t: "tcp_send", handle: fdNumber, data: taken.slice() });
+          handle.sent += taken.length;
+        }
+        // Cut short: the window is full now, and its reopening is the next writable edge.
+        if (taken.length < data.length) handle.writeEdge = true;
+        return { written: taken.length };
+      }
+      if (nonblocking(fd)) {
+        handle.writeEdge = true;
+        return ERRNO.AGAIN;
+      }
+      machine.waitUntil(Infinity);
+    }
+  }
+
   function readFd(fdNumber: number, cap: number): Uint8Array | number {
     const fd = fds.get(fdNumber);
     if (!fd) return ERRNO.BADF;
@@ -152,6 +220,7 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
       case "dir": return ERRNO.ISDIR;
       case "sig": return sigRead(fd.queue, cap, nonblocking(fd));
       case "http": return httpRead(fdNumber, fd, cap);
+      case "tcp": return tcpRead(fdNumber, fd, cap);
       case "ws": return ERRNO.INVAL; // message boundaries matter: use wasm_term.ws_recv
       case "proc": return ERRNO.INVAL; // events, not a byte stream: use wasm_term.proc_recv
     }
@@ -324,6 +393,14 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
     },
     fd_write(fdNumber: number, iovsPtr: number, iovsLen: number, nwrittenPtr: number) {
       const data = gather(iovecs(iovsPtr, iovsLen));
+      const target = fds.get(fdNumber);
+      if (target?.kind === "tcp") {
+        // The one descriptor that takes part of a write: the rest waits for the relay.
+        const result = tcpWrite(fdNumber, target, data);
+        if (typeof result === "number") return result;
+        view().setUint32(nwrittenPtr, result.written, true);
+        return ERRNO.SUCCESS;
+      }
       const errno = writeFd(fdNumber, data);
       if (errno !== ERRNO.SUCCESS) return errno;
       view().setUint32(nwrittenPtr, data.length, true);
@@ -373,7 +450,7 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
       if (!fd) return ERRNO.BADF;
       if (fd.kind === "sig") machine.closeSignalQueue(fd.queue);
       if (fd.kind === "proc") processes?.close(fd.proc);
-      if (fd.kind === "ws" || fd.kind === "http") {
+      if (fd.kind === "ws" || fd.kind === "http" || fd.kind === "tcp") {
         machine.net.delete(fdNumber);
         machine.post({ t: "net_close", handle: fdNumber });
       }
@@ -592,6 +669,12 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
       }
 
       /** Bytes (or records) a read would return now; 0 = not readable. An errno is returned as a negative number. */
+      /** A TCP stream takes a write now (or would answer it with its error). With edge-triggered
+       * readiness: only if that is news since the last report. */
+      const tcpWritable = (handle: TcpHandle): boolean => {
+        if (handle.edge && !handle.writeEdge) return false;
+        return handle.state === "failed" || (handle.state === "open" && (handle.writeShut || tcpSpace(handle) > 0));
+      };
       const readable = (fdNumber: number): number => {
         const fd = fds.get(fdNumber);
         if (!fd) return -ERRNO.BADF;
@@ -603,6 +686,11 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
             if (fd.handle.chunks[0]) return fd.handle.chunks[0].length;
             return (!fd.headTaken && fd.handle.head !== null) || fd.handle.ended ? 1 : 0;
           case "proc": return fd.proc.events[0] ? Math.max(1, fd.proc.events[0].data.length) : 0;
+          case "tcp": {
+            const { handle } = fd;
+            if (handle.edge && !handle.readEdge) return 0;
+            return handle.buffered > 0 ? handle.buffered : handle.eof || handle.state === "failed" ? 1 : 0;
+          }
           case "file": return Math.max(1, fd.node.size - fd.pos);
           default: return 1;
         }
@@ -621,6 +709,10 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
             const ready = readable(sub.fd);
             if (ready < 0) events.push({ sub, errno: -ready });
             else if (ready > 0) events.push({ sub, errno: 0, nbytes: ready });
+          } else if (fds.get(sub.fd)?.kind === "tcp") {
+            // The one network descriptor that is written with fd_write, so the one that polls
+            // writable: while the relay has room. A reactor must ask for edges (tcp_connect flag 1).
+            if (tcpWritable((fds.get(sub.fd) as Extract<Fd, { kind: "tcp" }>).handle)) events.push({ sub, errno: 0 });
           } else {
             // Descriptors that cannot be written with fd_write never poll
             // writable: signal, WebSocket, HTTP and process descriptors, and a terminal
@@ -632,6 +724,13 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
           }
         }
         if (events.length > 0) {
+          // An edge is reported once: the next one needs a change (machine.ts) or a call that came up short.
+          for (const { sub } of events) {
+            const fd = sub.type === EVENTTYPE_CLOCK ? undefined : fds.get(sub.fd);
+            if (fd?.kind !== "tcp" || !fd.handle.edge) continue;
+            if (sub.type === EVENTTYPE_FD_READ) fd.handle.readEdge = false;
+            else fd.handle.writeEdge = false;
+          }
           const v = view();
           events.forEach(({ sub, errno, nbytes }, index) => {
             const at = outPtr + index * 32;
@@ -657,7 +756,16 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
     },
     sock_send: (fdNumber: number, iovsPtr: number, iovsLen: number, _flags: number, nwrittenPtr: number) =>
       wasi.fd_write(fdNumber, iovsPtr, iovsLen, nwrittenPtr),
-    sock_shutdown: (fdNumber: number) => (fds.has(fdNumber) ? ERRNO.SUCCESS : ERRNO.BADF),
+    sock_shutdown(fdNumber: number, how: number) {
+      const fd = fds.get(fdNumber);
+      if (!fd) return ERRNO.BADF;
+      // A TCP stream's sending side really closes (the peer reads end of file); the receiving side needs nothing.
+      if (fd.kind === "tcp" && how & SDFLAGS_WR && !fd.handle.writeShut) {
+        fd.handle.writeShut = true;
+        if (fd.handle.state !== "failed") machine.post({ t: "tcp_end", handle: fdNumber });
+      }
+      return ERRNO.SUCCESS;
+    },
     sock_accept: () => ERRNO.NOTSUP,
   };
 
@@ -803,6 +911,37 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
         bytes(bufPtr, head.headers.length).set(head.headers);
         fd.headTaken = true;
         return ERRNO.SUCCESS;
+      });
+    },
+
+    // ---- TCP through the relay (docs/abi.md 3.3) ------------------------------
+
+    tcp_connect(hostPtr: number, hostLen: number, port: number, flags: number, fdPtr: number) {
+      const host = readString(hostPtr, hostLen);
+      if (!host || /[\s/?#@]/.test(host) || port < 1 || port > 65535) {
+        machine.lastError = `tcp_connect: not a host and port: ${host}:${port}`;
+        return ERRNO.INVAL;
+      }
+      const edge = (flags & TCP_EDGE) !== 0;
+      const handle: TcpHandle = {
+        kind: "tcp", state: "connecting", errno: 0, error: "", chunks: [], buffered: 0, eof: false,
+        sent: 0, acked: 0, writeShut: false, edge, readEdge: false, writeEdge: true,
+      };
+      const fdNumber = allocFd({ kind: "tcp", flags: 0, handle });
+      machine.net.set(fdNumber, handle);
+      machine.post({ t: "tcp_open", handle: fdNumber, host, port });
+      view().setUint32(fdPtr, fdNumber, true);
+      return ERRNO.SUCCESS;
+    },
+    tcp_status(fdNumber: number, flags: number) {
+      const fd = fds.get(fdNumber);
+      if (!fd) return ERRNO.BADF;
+      if (fd.kind !== "tcp") return ERRNO.INVAL;
+      const { handle } = fd;
+      const nonblock = (flags & NET_NONBLOCK) !== 0 || nonblocking(fd);
+      return blockOn(nonblock, () => {
+        if (handle.state === "failed") return tcpFailure(handle);
+        return handle.state === "open" ? ERRNO.SUCCESS : undefined;
       });
     },
 

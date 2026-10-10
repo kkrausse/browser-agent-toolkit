@@ -47,6 +47,16 @@ export const HTTP_HEAD = 10; // data: u32 status (LE), then "name: value\r\n" li
 export const HTTP_BODY = 11;
 export const HTTP_END = 12;
 export const HTTP_ERROR = 13; // data: message (utf-8)
+// A TCP stream carried by the relay (docs/abi.md 3.3, "TCP").
+export const TCP_OPEN = 20; // the relay's TCP connection is established
+export const TCP_DATA = 21; // data: bytes from the peer
+export const TCP_END = 22; // the peer closed its sending side; nothing more arrives
+export const TCP_ERROR = 23; // data: u32 errno (LE), then a message (utf-8); the stream is dead
+export const TCP_ACK = 24; // data: u32 count (LE) of sent bytes the relay has written to its socket
+
+/** A TCP write is refused (EAGAIN) while this many bytes are not yet written to the relay's socket;
+ * the relay stops reading its socket while this many received bytes are unread by the guest. */
+export const TCP_WINDOW = 256 * 1024;
 
 export interface InitMessage {
   t: "init";
@@ -110,6 +120,13 @@ export type WorkerMessage =
   | { t: "http_open"; handle: number; method: string; url: string; headers: [string, string][]; body: Uint8Array | null }
   | { t: "http_ack"; handle: number; bytes: number }
   | { t: "net_close"; handle: number }
+  /** Open a TCP stream to `host:port` through the page's relay; answered with TCP_OPEN or TCP_ERROR. */
+  | { t: "tcp_open"; handle: number; host: string; port: number }
+  | { t: "tcp_send"; handle: number; data: Uint8Array }
+  /** No more data will be sent (half-close); the peer's data still arrives. */
+  | { t: "tcp_end"; handle: number }
+  /** The guest has read this many received bytes (read back-pressure). */
+  | { t: "tcp_ack"; handle: number; bytes: number }
   | { t: "log"; text: string }
   /** A persistent file changed (`data`) or went away (`null`). */
   | { t: "persist"; path: string; data: Uint8Array | null }

@@ -5,7 +5,7 @@
 import type { Pty } from "./kernel";
 import {
   FRAME_CLIPBOARD, FRAME_FILE, FRAME_INPUT, FRAME_NET, FRAME_PROC, FRAME_RESIZE, FRAME_SIGNAL, H_OUT_ACK, H_OUT_WAITING, H_READ, H_WAKE, H_WRITE,
-  HTTP_BODY, HTTP_END, HTTP_ERROR, HTTP_HEAD, OUT_WINDOW, WS_CLOSE, WS_ERROR, type WorkerMessage,
+  HTTP_BODY, HTTP_END, HTTP_ERROR, HTTP_HEAD, OUT_WINDOW, TCP_ACK, TCP_DATA, TCP_END, TCP_ERROR, TCP_OPEN, WS_CLOSE, WS_ERROR, type WorkerMessage,
 } from "./protocol";
 import type { RingReader } from "./ring";
 
@@ -54,7 +54,31 @@ export interface SignalQueue {
   pending: number[];
 }
 
-export type NetHandle = WsHandle | HttpHandle;
+/** A TCP stream through the page's relay (docs/abi.md 3.3, "TCP"). */
+export interface TcpHandle {
+  kind: "tcp";
+  state: "connecting" | "open" | "failed";
+  /** Why it failed: a WASI errno and what the relay or the browser said. */
+  errno: number;
+  error: string;
+  /** Received and not yet read. */
+  chunks: Uint8Array[];
+  buffered: number;
+  /** The peer closed its sending side. */
+  eof: boolean;
+  /** Bytes given to the page, and how many of them the relay has written to its socket. */
+  sent: number;
+  acked: number;
+  /** The guest shut its sending side down. */
+  writeShut: boolean;
+  /** Edge-triggered readiness (`tcp_connect` flag 1): `poll_oneoff` reports a direction once
+   * per change, which is what a reactor that caches readiness (tokio over mio) needs. */
+  edge: boolean;
+  readEdge: boolean;
+  writeEdge: boolean;
+}
+
+export type NetHandle = WsHandle | HttpHandle | TcpHandle;
 
 /** Something besides the page that the program's Worker must answer while it is blocked:
  * the shell Workers of `proc.ts`, whose file calls arrive over shared memory. A source wakes
@@ -181,6 +205,29 @@ export function createMachine(pty: Pty, ring: RingReader, postMessage: (message:
     const kind = view.getUint32(4, true);
     const data = payload.subarray(8);
     if (!handle) return; // closed by the guest while the event was in flight
+    if (handle.kind === "tcp") {
+      if (kind === TCP_OPEN) {
+        if (handle.state === "connecting") handle.state = "open";
+        handle.writeEdge = true;
+      } else if (kind === TCP_DATA) {
+        handle.chunks.push(data);
+        handle.buffered += data.length;
+        handle.readEdge = true;
+      } else if (kind === TCP_END) {
+        handle.eof = true;
+        handle.readEdge = true;
+      } else if (kind === TCP_ACK) {
+        handle.acked += new DataView(data.buffer, data.byteOffset).getUint32(0, true);
+      } else if (kind === TCP_ERROR) {
+        handle.state = "failed";
+        handle.errno = new DataView(data.buffer, data.byteOffset).getUint32(0, true);
+        handle.error = new TextDecoder().decode(data.subarray(4));
+        // Both directions: a reader and a writer each have to find out.
+        handle.readEdge = true;
+        handle.writeEdge = true;
+      }
+      return;
+    }
     if (handle.kind === "ws") {
       handle.events.push({ kind, data });
       if (kind === WS_CLOSE || kind === WS_ERROR) handle.finished = true;

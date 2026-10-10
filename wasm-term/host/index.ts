@@ -80,6 +80,9 @@ export interface ProgramOptions {
   persist?: PersistOptions;
   /** Gives the program a shell to run commands in (`proc_*`). */
   shell?: ShellOptions;
+  /** Where `tcp_connect` goes: the URL (or a path on this origin) of a TCP relay endpoint, `/proxy/tcp` of web/server.ts
+   * (docs/abi.md 3.3, "TCP"). Absent: `tcp_connect` fails. */
+  tcpRelay?: string;
   /** Clipboard for programs that ask the host for it. Default: `navigator.clipboard`. */
   clipboard?: ClipboardBridge;
   /** JavaScript guests: `fetch` of URLs under these prefixes is answered by the page (page-fetch.ts), e.g. by a server that runs in this tab. */
@@ -148,7 +151,7 @@ export function startProgram(options: ProgramOptions): Program {
   const sab = createShared();
   const header = new Int32Array(sab, 0, HEADER_BYTES / 4);
   const ring = createRingWriter(sab);
-  const net = createNetBridge(ring);
+  const net = createNetBridge(ring, { tcpRelay: options.tcpRelay });
   const encoder = new TextEncoder();
   const worker = new Worker(options.workerUrl, { type: "module", name: `wasm-term:${options.guestUrl}` });
 

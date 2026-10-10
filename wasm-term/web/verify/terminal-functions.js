@@ -245,6 +245,18 @@ const procInline = await procResult("&shell=inline&arg=inline&arg=quick");
 check("proc (inline shell, no Workers): the checks that hold without streaming, stdin and kill pass", procInline.failed === 0 && procInline.checks.length >= 15 && procInline.workers?.length === 0, procInline.error ?? procInline.checks.filter(item => !item.ok));
 const procNumbers = procWorker.numbers;
 
+// ---- TCP streams through the relay: the `tcp` guest's own checks (docs/abi.md 3.3, "TCP") ----
+await page.goto(`${BASE}/?guest=tcp&persist=0`);
+await page.waitForFunction(() => window.wasmTerm?.exit, null, { timeout: 120000 }).catch(() => {});
+const tcpResult = await page.evaluate(async () => {
+  try { return JSON.parse(await window.wasmTerm.readFile("/home/user/tcp-result.json")); } catch (error) { return { failed: -1, checks: [], error: String(error), tail: window.wasmTerm.screen().slice(-12) }; }
+});
+for (const item of tcpResult.checks) check(`tcp: ${item.name}`, item.ok, item.detail);
+check("tcp: the guest's checks all ran and passed", tcpResult.failed === 0 && tcpResult.checks.length >= 14, tcpResult.error ?? tcpResult.tail);
+// The relay itself, from the page: another site's WebSocket is refused before any connection is made.
+const tcpPlain = await page.evaluate(async () => (await fetch("/proxy/tcp?host=example.com&port=80")).status);
+check("tcp relay: a plain request for a host outside the allowlist is 403", tcpPlain === 403, tcpPlain);
+
 await page.setViewportSize({ width: 1200, height: 800 });
 const failed = checks.filter(item => !item.ok);
 return { passed: checks.length - failed.length, failed: failed.length, procNumbers, failures: failed, checks: checks.map(item => `${item.ok ? "PASS" : "FAIL"} ${item.name}`) };

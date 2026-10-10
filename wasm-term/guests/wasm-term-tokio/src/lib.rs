@@ -7,16 +7,20 @@
 //!
 //! [`Readiness`] is the building block (an `AsyncFd` for wasi); [`WebSocket`]
 //! and [`HttpResponse`] are the network primitives made async with it, and
-//! [`Child`] a command running in the host's shell.
+//! [`Child`] a command running in the host's shell. [`TcpStream`] is a TCP
+//! connection through the page's relay: a byte stream with `AsyncRead` and
+//! `AsyncWrite`, for programs that bring their own protocols (TLS, HTTP).
 #![cfg(target_os = "wasi")]
 
 use std::fs::File;
 use std::io::{self, Read};
 use std::mem::ManuallyDrop;
 use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
-use tokio::io::Interest;
-use tokio::net::TcpStream;
+use tokio::io::{AsyncRead, AsyncWrite, Interest, ReadBuf};
+use tokio::net::TcpStream as TokioStream;
 use wasm_term_sys::net;
 pub use wasm_term_sys::net::WsEvent;
 use wasm_term_sys::process;
@@ -29,7 +33,7 @@ pub use wasm_term_sys::process::{ChildEvent, Usage, SIGINT, SIGKILL, SIGTERM};
 /// `Readiness` deregisters it without closing it.
 #[derive(Debug)]
 pub struct Readiness {
-    stream: ManuallyDrop<TcpStream>,
+    stream: ManuallyDrop<TokioStream>,
 }
 
 impl Readiness {
@@ -39,7 +43,7 @@ impl Readiness {
     /// wasm-term signal/WebSocket/HTTP descriptor and of a terminal opened
     /// read-only) or the reactor will spin.
     pub fn new(fd: RawFd) -> io::Result<Readiness> {
-        let stream = TcpStream::from_std(unsafe { std::net::TcpStream::from_raw_fd(fd) })?;
+        let stream = TokioStream::from_std(unsafe { std::net::TcpStream::from_raw_fd(fd) })?;
         Ok(Readiness { stream: ManuallyDrop::new(stream) })
     }
 
@@ -189,5 +193,75 @@ impl Child {
 
     pub fn signal(&self, signo: u32) -> io::Result<()> {
         self.inner.signal(signo)
+    }
+}
+
+/// A TCP connection through the page's relay (docs/abi.md 3.3, "TCP").
+///
+/// Unlike the other descriptors this one is written with `fd_write` and polls writable, so it
+/// is a socket as far as tokio is concerned: the stream inside is tokio's own `TcpStream` on
+/// the descriptor, and reads, writes and shutdown are tokio's. The descriptor is opened with
+/// [`net::TCP_EDGE`]: the host reports readable and writable once per change, not for as long
+/// as they hold. mio on wasi is level-triggered and tokio registers both directions, so a
+/// stream that polled writable whenever it is (nearly always) would wake the runtime on every
+/// pass; with edges the runtime sleeps until something happens, as it does on epoll.
+#[derive(Debug)]
+pub struct TcpStream {
+    inner: TokioStream,
+}
+
+impl TcpStream {
+    /// Connects to `host:port`; the relay resolves the name. Must be called inside a tokio
+    /// runtime with I/O enabled. Errors: `PermissionDenied` (not in the relay's allowlist, or
+    /// an address it does not connect to), `ConnectionRefused`, `TimedOut`, `HostUnreachable`.
+    pub async fn connect(host: &str, port: u16) -> io::Result<TcpStream> {
+        let stream = net::TcpStream::start(host, port, net::TCP_EDGE)?;
+        wasm_term_sys::set_nonblocking(stream.as_raw_fd(), true)?;
+        let fd = stream.as_raw_fd();
+        // From here the descriptor belongs to tokio's stream, which closes it.
+        let inner = TokioStream::from_std(unsafe { std::net::TcpStream::from_raw_fd(stream.into_raw_fd()) })?;
+        loop {
+            // The first writable edge is the connection being established, or having failed.
+            inner.writable().await?;
+            match unsafe { wasm_term_sys::raw::tcp_status(fd as u32, 1) } {
+                0 => return Ok(TcpStream { inner }),
+                wasm_term_sys::ERRNO_AGAIN => {
+                    let _ = inner.try_io(Interest::WRITABLE, || Err::<(), _>(io::ErrorKind::WouldBlock.into()));
+                }
+                errno => return Err(net::tcp_error(errno)),
+            }
+        }
+    }
+
+    /// tokio's stream on the descriptor, for code that names `tokio::net::TcpStream`.
+    pub fn into_inner(self) -> TokioStream {
+        self.inner
+    }
+}
+
+impl AsRawFd for TcpStream {
+    fn as_raw_fd(&self) -> RawFd {
+        self.inner.as_raw_fd()
+    }
+}
+
+impl AsyncRead for TcpStream {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_read(cx, buf)
+    }
+}
+
+impl AsyncWrite for TcpStream {
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.inner).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_flush(cx)
+    }
+
+    /// Closes the sending side; the peer's data still arrives.
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_shutdown(cx)
     }
 }

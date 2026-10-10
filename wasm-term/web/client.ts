@@ -186,6 +186,8 @@ const program = startProgram({
   xpixel: Math.round(pixels.width * terminal.cols),
   ypixel: Math.round(pixels.height * terminal.rows),
   persist,
+  // Where a program's `tcp_connect` goes: this server's TCP relay (web/tcp-relay.ts), allowlisted hosts only.
+  tcpRelay: "/proxy/tcp",
   shell: info.kind === "wasm" && (info.shell || params.has("shell")) && params.get("shell") !== "off"
     ? { moduleUrl: "/bat_sh.wasm", workerUrl: "/shell-worker.js", mode: params.get("shell") === "inline" ? "inline" : params.get("shell") === "worker" ? "worker" : undefined }
     : undefined,

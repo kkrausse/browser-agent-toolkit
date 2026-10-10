@@ -31,6 +31,9 @@ number (0 = success); these are also the target's native `errno` values, so
 | `ISDIR` | 31 | | `RANGE` | 68 |
 | `LOOP` | 32 | | `SPIPE` | 70 |
 | `NOSYS` | 52 | | `PIPE` | 64 |
+| `ACCES` | 2 | | `CONNREFUSED` | 14 |
+| `CONNRESET` | 15 | | `HOSTUNREACH` | 23 |
+| `TIMEDOUT` | 73 | | | |
 
 ## 1. Process environment
 
@@ -114,6 +117,7 @@ Any mix of subscriptions; blocks until at least one is ready.
   | WebSocket | an event is queued (or the socket has finished) |
   | HTTP | the response head has arrived and not been taken; or body bytes are available; or the body has ended or failed |
   | child process | an event (output or exit) is queued |
+  | TCP stream | received bytes are unread; or the peer has closed its side; or the stream has failed |
   | file, directory, `/dev/null` | always |
 
   The event's `nbytes` is the number of bytes a read would return now (at
@@ -123,7 +127,10 @@ Any mix of subscriptions; blocks until at least one is ready.
   descriptors and for a terminal opened read-only, because those cannot be written with
   `fd_write`. This is deliberate: mio's wasi backend is level-triggered and
   tokio registers both directions, so a descriptor that always polled writable
-  would make the runtime spin.
+  would make the runtime spin. A **TCP stream** (3.3) is the exception: it is written with
+  `fd_write`, so it is ready when a write would be taken (connected and the relay has room) or
+  would be answered with the stream's error. A reactor must open such a stream
+  edge-triggered (`tcp_connect` flag 1) for exactly the reason above.
 - Unknown descriptor: an event with `error = BADF`.
 - `poll_oneoff` itself never fails with `INTR`. To notice a signal while
   polling, include a signal descriptor in the subscriptions.
@@ -165,8 +172,9 @@ usual. Rules a guest can rely on:
 
 `sock_recv` / `sock_send` behave as `fd_read` / `fd_write` (so a descriptor
 from this ABI can be wrapped in `std::net::TcpStream` for runtimes that only
-know sockets), `sock_shutdown` succeeds, `sock_accept` is `NOTSUP`. There is
-no `connect`: outbound connections are made with section 3.3.
+know sockets), `sock_shutdown` succeeds (and on a TCP stream of 3.3 closes the
+sending side when `how` includes `SDFLAGS_WR` = 2), `sock_accept` is `NOTSUP`.
+There is no `connect`: outbound connections are made with section 3.3.
 
 ### Signals through WASI
 
@@ -298,9 +306,9 @@ not change dispositions: call `sig_action(signo, 2)` too.
 ### 3.3 Network
 
 The browser does the I/O (`WebSocket`, `fetch`) on the page's thread; the
-program sees descriptors. Both kinds are pollable with `FD_READ`, never poll
-writable, and are closed with `fd_close` (which closes the socket or aborts
-the request).
+program sees descriptors. All kinds are pollable with `FD_READ` and are closed
+with `fd_close` (which closes the socket or aborts the request). WebSocket and
+HTTP descriptors never poll writable; a TCP stream does.
 
 Browser rules apply and cannot be worked around from the guest: cross-origin
 `fetch` needs CORS; WebSocket handshakes cannot carry custom headers (only
@@ -399,6 +407,77 @@ implements the client side (`ports/codex/patches/forks/reqwest`, `src/async_impl
   `x-wasm-term-fwd-www-authenticate`; the guest unwraps both. `content-encoding` and
   `content-length` are gone (the body is already decoded).
 - Hosts that are not allowlisted get `403`; an unreachable one `502`.
+
+#### TCP
+
+A byte stream to `host:port`, for a program that brings its own protocols: TLS, HTTP, a
+WebSocket handshake with any headers it likes. A browser cannot open a socket, so the page
+carries the bytes over a binary WebSocket to a relay that holds the real connection (the dev
+server's `/proxy/tcp`, `web/tcp-relay.ts`; `ProgramOptions.tcpRelay` names it). The relay
+resolves the name, connects and copies. It sees every byte, so what it can learn is what the
+program puts on the wire: with TLS inside the program, ciphertext, the server name in the
+ClientHello and sizes and timing.
+
+```
+tcp_connect(host: *const u8, host_len: i32, port: i32, flags: i32, fd: *mut u32) -> errno
+tcp_status(fd: i32, flags: i32) -> errno
+```
+
+- `tcp_connect` returns at once with a descriptor; the connection proceeds in the background.
+  `host` is a name or an address literal (UTF-8, no scheme, no port). `INVAL` for an empty or
+  malformed host or a port outside 1..65535. `flags` bit 0: **edge-triggered readiness** (below).
+- `tcp_status`: 0 once connected; while connecting it blocks, or fails with `AGAIN` with
+  `flags & 1` or `O_NONBLOCK`; the stream's error if it failed, also later on:
+
+  | errno | When |
+  | --- | --- |
+  | `ACCES` | the relay refuses the destination: not in its allowlist, or the name resolves to an address it does not connect to (private, loopback, link-local) |
+  | `CONNREFUSED` | nothing accepted the connection |
+  | `HOSTUNREACH` | the name does not resolve, the host or the relay itself cannot be reached |
+  | `TIMEDOUT` | the connection was not established in time, or the relay's idle timeout passed |
+  | `CONNRESET` | the peer reset the connection, or the relay went away |
+  | `NOSYS` | the page has no relay |
+  | `IO` | a limit of the relay (connections at once, bytes or lifetime of one) |
+
+  `last_error` has the relay's words for it.
+- `fd_read` returns received bytes, as many as are there and fit; with none it blocks, or fails
+  with `AGAIN` when non-blocking; 0 once the peer has closed its sending side and everything
+  has been read; the stream's error after a failure (bytes received before it are returned
+  first). A read shorter than the buffer means nothing more is buffered.
+- `fd_write` **may take only part of the data** (the count it returns), unlike every other
+  descriptor here: at most 256 KiB may be on its way to the relay's socket. With no room, or
+  while still connecting, it blocks, or fails with `AGAIN` when non-blocking. `PIPE` after the
+  sending side was shut down or the connection closed, the stream's error after a failure.
+- `sock_shutdown(fd, how)` with `SDFLAGS_WR` (2): half-close. The peer reads end of file; its
+  data keeps arriving until its own end of file.
+- `fd_close` closes the connection.
+- `poll_oneoff`: `FD_READ` as in the table of section 2; `FD_WRITE` when a write would be taken
+  or would return the stream's error.
+- **Edge-triggered readiness** (`flags & 1` at `tcp_connect`): `poll_oneoff` reports each
+  direction once per change instead of for as long as it holds. Readable: once when bytes, the
+  end of file or a failure arrive, and again after a read that left bytes behind. Writable: once
+  when the connection is established (or has failed), and after that only once a write was cut
+  short or refused and room has returned. This is what a reactor that caches readiness until a
+  call says "would block" needs (tokio over mio; epoll's `EPOLLET`): a connected stream is
+  writable nearly all the time, and reported level-triggered it would wake such a reactor on
+  every pass. The edges are per descriptor, not per subscriber: register the descriptor once.
+- Back-pressure both ways: the relay stops reading from its socket while 256 KiB of received
+  bytes are unread by the program, and a write is refused as above. Nothing queues without bound.
+
+Rust: `wasm_term_sys::net::TcpStream` (`connect`, or `start` + `status`; `Read` / `Write`;
+`shutdown_write`; `wasm_term_sys::poll_writable`) and, under tokio, `wasm_term_tokio::TcpStream`
+(`connect(host, port).await`, `AsyncRead` / `AsyncWrite`, `into_inner()` for tokio's own
+`TcpStream` on the same descriptor). `guests/tcp` checks all of the above against the dev
+server's test endpoints.
+
+**The relay** (`web/tcp-relay.ts`): `GET /proxy/tcp?host=<name>&port=<n>` upgraded to a
+WebSocket. Binary frames are the stream's bytes; text frames are JSON about it: from the relay
+`{"t":"open"}`, `{"t":"ack","bytes":n}` (written to the socket), `{"t":"end"}` (the peer's FIN),
+`{"t":"error","code":...,"message":...}`; from the page `{"t":"ack","bytes":n}` (read by the
+program) and `{"t":"end"}`. It only connects to `host:port` pairs in its allowlist, resolves
+names itself and refuses non-public addresses unless the entry names its target, refuses
+WebSockets from other origins, and has connect, idle, lifetime, byte and connection-count
+limits (`README.md`, "The TCP tunnel").
 
 ### 3.4 Child processes
 
@@ -501,6 +580,7 @@ const program = startProgram({
   guestUrl, kernelUrl, workerUrl, args, env, files,
   cols, rows, xpixel, ypixel,
   persist: { namespace, roots: ["/home/user"], exclude: ["/locks/"] },   // optional
+  tcpRelay: "/proxy/tcp",                                                // optional: where tcp_connect goes (3.3)
   shell: { moduleUrl: "/bat_sh.wasm", workerUrl: "/shell-worker.js" },   // optional: child processes (3.4); mode, slots, spinUs
   clipboard: { readText, writeText },             // optional; default navigator.clipboard
   onOutput(bytes) { terminal.write(bytes) },   // pty master output

@@ -13,6 +13,7 @@
 #![cfg(target_os = "wasi")]
 
 use std::io;
+use std::time::Duration;
 
 pub type RawFd = std::os::fd::RawFd;
 
@@ -43,6 +44,8 @@ pub mod raw {
             fd: *mut u32,
         ) -> u32;
         pub fn http_head(fd: u32, buf: *mut u8, buf_len: u32, out: *mut [u32; 2], flags: u32) -> u32;
+        pub fn tcp_connect(host: *const u8, host_len: u32, port: u32, flags: u32, fd: *mut u32) -> u32;
+        pub fn tcp_status(fd: u32, flags: u32) -> u32;
         pub fn proc_spawn(req: *const u8, req_len: u32, flags: u32, fd: *mut u32) -> u32;
         pub fn proc_recv(fd: u32, buf: *mut u8, buf_len: u32, out: *mut [u32; 2], flags: u32) -> u32;
         pub fn proc_send(fd: u32, data: *const u8, len: u32, flags: u32) -> u32;
@@ -54,6 +57,7 @@ pub mod raw {
         pub fn poll_oneoff(subs: *const u8, events: *mut u8, count: u32, nevents: *mut u32) -> u32;
         pub fn fd_fdstat_get(fd: u32, stat: *mut u8) -> u32;
         pub fn fd_fdstat_set_flags(fd: u32, flags: u32) -> u32;
+        pub fn sock_shutdown(fd: u32, how: u32) -> u32;
     }
 }
 
@@ -340,6 +344,26 @@ pub mod poll {
     }
 }
 
+/// Waits until `fd` takes a write or the timeout passes (`None` = wait forever): whether it
+/// does. Only a TCP stream ([`net::TcpStream`]) and plain files ever do; the other network
+/// descriptors never poll writable.
+pub fn poll_writable(fd: RawFd, timeout: Option<Duration>) -> io::Result<bool> {
+    let count = 1 + usize::from(timeout.is_some());
+    let mut subs = vec![0u8; count * 48];
+    subs[8] = 2; // EVENTTYPE_FD_WRITE
+    subs[16..20].copy_from_slice(&(fd as u32).to_le_bytes());
+    if let Some(timeout) = timeout {
+        let sub = &mut subs[48..];
+        sub[0..8].copy_from_slice(&u64::MAX.to_le_bytes());
+        sub[16..20].copy_from_slice(&1u32.to_le_bytes()); // CLOCKID_MONOTONIC
+        sub[24..32].copy_from_slice(&u64::try_from(timeout.as_nanos()).unwrap_or(u64::MAX).to_le_bytes());
+    }
+    let mut events = vec![0u8; count * 32];
+    let mut nevents = 0u32;
+    check(unsafe { raw::poll_oneoff(subs.as_ptr(), events.as_mut_ptr(), count as u32, &mut nevents) })?;
+    Ok(events.chunks_exact(32).take(nevents as usize).any(|event| event[0..8] == [0u8; 8]))
+}
+
 pub mod net {
     use super::{check, last_error, raw, RawFd, ERRNO_AGAIN, ERRNO_RANGE};
     use std::fs::File;
@@ -550,6 +574,97 @@ pub mod net {
     }
 
     impl AsRawFd for HttpRequest {
+        fn as_raw_fd(&self) -> RawFd {
+            self.file.as_raw_fd()
+        }
+    }
+
+    /// `tcp_connect` flag: readiness is reported by `poll_oneoff` once per change instead of
+    /// for as long as it holds. What a reactor that caches readiness (tokio over mio) must ask
+    /// for: a stream is writable nearly all the time, and reported level-triggered it would
+    /// wake such a reactor on every pass.
+    pub const TCP_EDGE: u32 = 1;
+
+    /// A TCP connection, carried by the page's relay (docs/abi.md 3.3, "TCP"). The bytes are
+    /// the program's own: the relay opens the connection and copies. A plain byte stream:
+    /// `Read` and `Write` are `fd_read` and `fd_write` on the descriptor.
+    ///
+    /// Blocking by default. With [`super::set_nonblocking`], a read with nothing to return and
+    /// a write the relay has no room for fail with `WouldBlock`; a write may take only part of
+    /// its buffer. The descriptor polls readable and writable accordingly.
+    #[derive(Debug)]
+    pub struct TcpStream {
+        file: File,
+    }
+
+    impl TcpStream {
+        /// Starts connecting to `host:port` and returns at once. `host` is a name or an address;
+        /// the relay resolves it and only connects to what its allowlist names. Writes wait for
+        /// the connection (or fail with `WouldBlock`); [`TcpStream::status`] tells how it went.
+        pub fn start(host: &str, port: u16, flags: u32) -> io::Result<TcpStream> {
+            let mut fd = 0u32;
+            let errno = unsafe { raw::tcp_connect(host.as_ptr(), host.len() as u32, port as u32, flags, &mut fd) };
+            if errno != 0 {
+                return Err(io::Error::new(io::Error::from_raw_os_error(errno as i32).kind(), last_error()));
+            }
+            Ok(TcpStream { file: unsafe { File::from_raw_fd(fd as RawFd) } })
+        }
+
+        /// Connects and waits for the connection: refused by the relay's allowlist is
+        /// `PermissionDenied`, then `ConnectionRefused`, `TimedOut`, `HostUnreachable`.
+        pub fn connect(host: &str, port: u16) -> io::Result<TcpStream> {
+            let stream = TcpStream::start(host, port, 0)?;
+            match stream.status(true)? {
+                true => Ok(stream),
+                false => unreachable!("blocking tcp_status returned EAGAIN"),
+            }
+        }
+
+        /// `Ok(true)` once connected, `Ok(false)` while still connecting (only when not
+        /// `wait`ing), the error if the connection failed, also later on.
+        pub fn status(&self, wait: bool) -> io::Result<bool> {
+            match unsafe { raw::tcp_status(self.file.as_raw_fd() as u32, if wait { 0 } else { 1 }) } {
+                0 => Ok(true),
+                ERRNO_AGAIN => Ok(false),
+                errno => Err(tcp_error(errno)),
+            }
+        }
+
+        /// Closes the sending side: the peer reads end of file, its data still arrives.
+        pub fn shutdown_write(&self) -> io::Result<()> {
+            check(unsafe { raw::sock_shutdown(self.file.as_raw_fd() as u32, 2) })
+        }
+
+        /// The descriptor, given up: the caller closes it.
+        pub fn into_raw_fd(self) -> RawFd {
+            std::os::fd::IntoRawFd::into_raw_fd(self.file)
+        }
+    }
+
+    /// The errno with what the relay said about it.
+    pub fn tcp_error(errno: u32) -> io::Error {
+        let os = io::Error::from_raw_os_error(errno as i32);
+        let detail = last_error();
+        if detail.is_empty() { os } else { io::Error::new(os.kind(), detail) }
+    }
+
+    impl Read for TcpStream {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            self.file.read(buf)
+        }
+    }
+
+    impl io::Write for TcpStream {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            io::Write::write(&mut self.file, buf)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl AsRawFd for TcpStream {
         fn as_raw_fd(&self) -> RawFd {
             self.file.as_raw_fd()
         }

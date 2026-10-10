@@ -3,7 +3,8 @@
 // The page performs the I/O and reports events as FRAME_NET frames.
 
 import {
-  FRAME_NET, HTTP_BODY, HTTP_END, HTTP_ERROR, HTTP_HEAD, HTTP_WINDOW, WS_BINARY, WS_CLOSE, WS_ERROR, WS_OPEN, WS_TEXT,
+  FRAME_NET, HTTP_BODY, HTTP_END, HTTP_ERROR, HTTP_HEAD, HTTP_WINDOW, TCP_ACK, TCP_DATA, TCP_END, TCP_ERROR, TCP_OPEN,
+  WS_BINARY, WS_CLOSE, WS_ERROR, WS_OPEN, WS_TEXT,
   type WorkerMessage,
 } from "./protocol";
 import type { RingWriter } from "./ring";
@@ -22,10 +23,34 @@ export interface NetBridge {
   dispose(): void;
 }
 
-export function createNetBridge(ring: RingWriter): NetBridge {
+/** One TCP stream: a binary WebSocket to the relay, which holds the real socket. */
+interface TcpState {
+  socket: WebSocket;
+  /** The guest's bytes that arrived before the relay said the connection is open. */
+  pending: Uint8Array[];
+  open: boolean;
+  /** An error or the end has been reported; whatever the socket says next is not news. */
+  finished: boolean;
+  /** The peer's end of file has arrived: the relay closing the socket afterwards is the normal end. */
+  ended: boolean;
+}
+
+/** The relay's error codes (web/server.ts) as WASI errnos. */
+const TCP_ERRNO: Record<string, number> = {
+  denied: 2 /* ACCES */, refused: 14 /* CONNREFUSED */, reset: 15 /* CONNRESET */, unreachable: 23 /* HOSTUNREACH */,
+  dns: 23, timeout: 73 /* TIMEDOUT */, limit: 29 /* IO */, norelay: 52 /* NOSYS */, pipe: 64 /* PIPE */,
+};
+
+export interface NetOptions {
+  /** `ws(s)://` URL of the TCP relay endpoint (`/proxy/tcp` of web/server.ts); absent: `tcp_connect` fails with NOSYS. */
+  tcpRelay?: string;
+}
+
+export function createNetBridge(ring: RingWriter, options: NetOptions = {}): NetBridge {
   const encoder = new TextEncoder();
   const sockets = new Map<number, WebSocket>();
   const requests = new Map<number, HttpState>();
+  const streams = new Map<number, TcpState>();
 
   function event(handle: number, kind: number, data: Uint8Array = new Uint8Array(0)): void {
     const payload = new Uint8Array(8 + data.length);
@@ -80,6 +105,66 @@ export function createNetBridge(ring: RingWriter): NetBridge {
     } else if (socket.readyState === WebSocket.OPEN) {
       socket.send(data);
     }
+  }
+
+  function tcpError(handle: number, code: string, message: string): void {
+    const text = encoder.encode(message);
+    const data = new Uint8Array(4 + text.length);
+    new DataView(data.buffer).setUint32(0, TCP_ERRNO[code] ?? 29 /* IO */, true);
+    data.set(text, 4);
+    event(handle, TCP_ERROR, data);
+  }
+
+  /** The relay speaks binary frames for the stream's bytes and JSON text frames for everything
+   * about it: `open`, `end` (the peer's FIN), `error`, `ack` (bytes written to its socket). */
+  function openStream(handle: number, host: string, port: number): void {
+    if (!options.tcpRelay) return tcpError(handle, "norelay", "tcp_connect: this page has no TCP relay");
+    let socket: WebSocket;
+    try {
+      const url = new URL(options.tcpRelay, location.href);
+      url.protocol = url.protocol.replace(/^http/, "ws");
+      url.searchParams.set("host", host);
+      url.searchParams.set("port", String(port));
+      socket = new WebSocket(url);
+    } catch (error) {
+      return tcpError(handle, "unreachable", `tcp relay: ${String(error)}`);
+    }
+    socket.binaryType = "arraybuffer";
+    const state: TcpState = { socket, pending: [], open: false, finished: false, ended: false };
+    streams.set(handle, state);
+    const fail = (code: string, message: string) => {
+      if (state.finished) return;
+      state.finished = true;
+      tcpError(handle, code, message);
+    };
+    socket.addEventListener("message", message => {
+      if (typeof message.data !== "string") {
+        event(handle, TCP_DATA, new Uint8Array(message.data as ArrayBuffer));
+        return;
+      }
+      let control: { t?: string; bytes?: number; code?: string; message?: string };
+      try { control = JSON.parse(message.data); } catch { return; }
+      if (control.t === "open") {
+        state.open = true;
+        for (const data of state.pending.splice(0)) socket.send(data as BufferSource);
+        event(handle, TCP_OPEN);
+      } else if (control.t === "ack") {
+        event(handle, TCP_ACK, new Uint8Array(new Uint32Array([control.bytes ?? 0]).buffer));
+      } else if (control.t === "end") {
+        state.ended = true;
+        event(handle, TCP_END);
+      } else if (control.t === "error") {
+        fail(control.code ?? "", `${host}:${port}: ${control.message ?? "connection failed"}`);
+      }
+    });
+    socket.addEventListener("error", () => fail("unreachable", `tcp relay: WebSocket error (${host}:${port})`));
+    socket.addEventListener("close", close => {
+      streams.delete(handle);
+      // After the peer's end of file the relay closing is the stream's ordinary end (reads see the end
+      // of file; a write would be into a closed connection); before it, a reset.
+      if (state.ended) fail("pipe", `${host}:${port}: the connection is closed`);
+      else fail(state.open ? "reset" : "unreachable", `${host}:${port}: the relay closed the connection (${close.code} ${close.reason})`);
+    });
   }
 
   async function request(handle: number, message: Extract<WorkerMessage, { t: "http_open" }>): Promise<void> {
@@ -139,11 +224,38 @@ export function createNetBridge(ring: RingWriter): NetBridge {
           }
           return true;
         }
-        case "net_close":
+        case "tcp_open":
+          openStream(message.handle, message.host, message.port);
+          return true;
+        case "tcp_send": {
+          const state = streams.get(message.handle);
+          if (!state || state.finished) return true;
+          if (state.open) state.socket.send(message.data as BufferSource);
+          else state.pending.push(message.data);
+          return true;
+        }
+        case "tcp_end": {
+          const state = streams.get(message.handle);
+          if (state?.socket.readyState === WebSocket.OPEN) state.socket.send(JSON.stringify({ t: "end" }));
+          return true;
+        }
+        case "tcp_ack": {
+          const state = streams.get(message.handle);
+          if (state?.socket.readyState === WebSocket.OPEN) state.socket.send(JSON.stringify({ t: "ack", bytes: message.bytes }));
+          return true;
+        }
+        case "net_close": {
           sockets.get(message.handle)?.close();
           sockets.delete(message.handle);
           requests.get(message.handle)?.abort.abort();
+          const state = streams.get(message.handle);
+          if (state) {
+            state.finished = true;
+            state.socket.close();
+            streams.delete(message.handle);
+          }
           return true;
+        }
         default:
           return false;
       }
@@ -151,6 +263,11 @@ export function createNetBridge(ring: RingWriter): NetBridge {
     dispose() {
       for (const socket of sockets.values()) socket.close();
       for (const state of requests.values()) state.abort.abort();
+      for (const state of streams.values()) {
+        state.finished = true;
+        state.socket.close();
+      }
+      streams.clear();
       sockets.clear();
       requests.clear();
     },

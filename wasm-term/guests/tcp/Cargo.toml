@@ -1,0 +1,10 @@
+[package]
+name = "tcp"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+tokio = { version = "1", features = ["rt", "time", "macros", "net", "io-util"] }
+wasm-term-sys = { path = "../wasm-term-sys" }
+wasm-term-tokio = { path = "../wasm-term-tokio" }

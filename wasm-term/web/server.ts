@@ -12,6 +12,7 @@
 //   /proxy/opencode/...  ->  OPENCODE_UPSTREAM  (default http://127.0.0.1:4792), streamed
 //   /proxy/codex         ->  CODEX_UPSTREAM     (default ws://127.0.0.1:4796), WebSocket
 //   /proxy/http/<host>/  ->  the named host, if allowlisted: the pass-through relay (below)
+//   /proxy/tcp?host&port ->  a TCP connection to an allowlisted host:port, bytes only: the tunnel (tcp-relay.ts)
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, extname, join, normalize } from "node:path";
@@ -20,6 +21,7 @@ import type { Manifest } from "../ports/codex/scripts/package";
 import { codexGuest, codexLocalGuest } from "../ports/codex/web/guest";
 import { opencodeGuest } from "../ports/opencode/web/guest";
 import type { GuestInfo, JsGuest, WasmGuest } from "./guests";
+import { createTcpRelay, type TcpTunnel } from "./tcp-relay";
 
 /** Wasm guests that are ports: a packaged directory each (content-hashed, precompressed), served under /guests/<name>/. */
 const wasmGuests: WasmGuest[] = [codexGuest, codexLocalGuest];
@@ -256,6 +258,12 @@ for (const entry of (process.env.HTTP_RELAY_ALLOW ?? "").split(/[\s,]+/).filter(
 }
 const relayOrigins = new Map([...relayHosts].map(([host, origin]) => [origin, host]));
 
+// The TCP tunnel's allowlist starts from the same hosts: every one the HTTP relay reaches over
+// https is reachable as <host>:443, where the program does its own TLS. See tcp-relay.ts.
+const tcpRelay = createTcpRelay({
+  https: [...relayHosts].filter(([host, origin]) => origin === `https://${host}`).map(([host]) => host),
+});
+
 function relayLog(method: string, host: string, path: string, status: number | string): void {
   if (process.env.HTTP_RELAY_QUIET) return;
   console.log(`relay ${method} ${host}${path} -> ${status}`);
@@ -324,7 +332,7 @@ interface Relay {
   /** Frames from the browser that arrived before the upstream connection opened. */
   pending: (string | Uint8Array)[];
 }
-type SocketData = { kind: "echo" } | Relay;
+type SocketData = { kind: "echo" } | Relay | TcpTunnel;
 
 const server = Bun.serve<SocketData>({
   hostname: process.env.HOST ?? "127.0.0.1",
@@ -382,6 +390,21 @@ const server = Bun.serve<SocketData>({
       return respond("expected a WebSocket upgrade\n", "text/plain", {}, 426);
     }
 
+    if (path === "/proxy/tcp") {
+      const data = tcpRelay.accept(request, url);
+      if (data instanceof Response) return data;
+      if (server.upgrade(request, { data })) return undefined as unknown as Response;
+      tcpRelay.release(data);
+      return respond("expected a WebSocket upgrade\n", "text/plain", {}, 426);
+    }
+    if (path === "/proxy/tcp/capture") return tcpRelay.capture(url);
+    // The private CA of mock-llm's TLS front (mock-llm/up.sh writes it): what a program is given to trust
+    // when, and only when, its backend is the mock. Public by nature; it signs one test name.
+    if (path === "/test/mock-ca.pem") {
+      const ca = process.env.MOCK_LLM_CA ?? join(root, ".state/mock-tls/ca.pem");
+      return existsSync(ca) ? respond(Bun.file(ca), "application/x-pem-file") : respond(`No test CA at ${ca}: run mock-llm/up.sh\n`, "text/plain", {}, 404);
+    }
+
     // ---- endpoints for the `net` guest -------------------------------------
     if (path === "/test/ws") {
       if (server.upgrade(request, { data: { kind: "echo" } })) return undefined as unknown as Response;
@@ -403,6 +426,7 @@ const server = Bun.serve<SocketData>({
         socket.send("hello from /test/ws");
         return;
       }
+      if (data.kind === "tcp") return tcpRelay.open(socket as never, data);
       const upstream = new WebSocket(data.url, data.protocols);
       upstream.binaryType = "arraybuffer";
       data.upstream = upstream;
@@ -418,11 +442,13 @@ const server = Bun.serve<SocketData>({
     },
     close(socket, code, reason) {
       const data = socket.data;
+      if (data.kind === "tcp") return tcpRelay.close(data);
       if (data.kind !== "relay") return;
       data.upstream?.close([1005, 1006, 1015].includes(code) ? 1000 : code, reason);
     },
     message(socket, message) {
       const data = socket.data;
+      if (data.kind === "tcp") return tcpRelay.message(socket as never, data, message);
       if (data.kind === "relay") {
         const frame = typeof message === "string" ? message : new Uint8Array(message);
         if (data.upstream?.readyState === WebSocket.OPEN) data.upstream.send(frame);
