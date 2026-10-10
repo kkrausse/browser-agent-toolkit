@@ -389,6 +389,47 @@ http_head(fd: i32, buf: *mut u8, buf_len: i32, out: *mut [u32; 2], flags: i32) -
   goes through a relay on the page's origin (below).
 - The host stops pulling from the network when about 1 MiB of body is unread.
 
+#### Direct requests
+
+A URL on another origin than the page's is fetched as it is: a CORS request from the tab, with no
+server of the page's in between. The host (`host/net.ts`) makes it with `mode: "cors"`,
+`credentials: "omit"`, `referrerPolicy: "no-referrer"`, `cache: "no-store"` and
+`redirect: "follow"`, and so:
+
+- **No cookies either way.** None is sent, and a `Set-Cookie` in the answer is ignored by the
+  browser, not just hidden. A server that answers `Access-Control-Allow-Credentials: true` with
+  the origin echoed is fine with that: the flag permits credentials, it does not demand them.
+- **No `Referer`** (the page URL carries the program's settings), and `Origin` is the page's.
+- **Request headers** the browser forbids are not sent, whatever the program set; the browser's
+  own `User-Agent`, `Accept-Encoding`, `Accept-Language` and `Sec-*` go instead. Every other
+  header goes under its own name, and each one that is not CORS-safelisted (`Authorization`, any
+  `x-...`, `Content-Encoding`, a JSON `Content-Type`) makes the browser ask the server first
+  (a preflight `OPTIONS`), which the server must answer with that header allowed.
+- **Response headers** are the CORS-safelisted ones (`cache-control`, `content-language`,
+  `content-length`, `content-type`, `expires`, `last-modified`, `pragma`) plus what the server
+  lists in `Access-Control-Expose-Headers`. Everything else is absent from `http_head`, as if it
+  had not been sent. The body is already decoded (`content-encoding` is the browser's business).
+- **The request body is whole** (a compressed one, e.g. zstd with `Content-Encoding`, is bytes
+  like any other). A streamed upload needs `duplex: "half"` and HTTP/2 and is not offered.
+- **Redirects** are followed by the browser under the same rules; the Fetch standard has it
+  drop `Authorization` on a redirect to another origin (not exercised here: nothing redirects).
+- **A refusal has no reason.** When the server does not allow the page's origin (or the
+  preflight fails), `fetch` rejects exactly as it does for an unreachable host. The program gets
+  `IO`, and `last_error` says both are possible. The page can do better where it knows more:
+  `ProgramOptions.http.blocked` is called with the method and URL and may return a status and a
+  body, which the program then receives as the response (marked `x-wasm-term-synthetic: blocked`).
+  The dev page and the static build use it for codex-local (`web/direct.ts`).
+- COEP `require-corp` on the page does not stand in the way: it restricts `no-cors` loads, and a
+  request in CORS mode is not one. `credentialless` is not needed anywhere. (It would let the
+  page probe a refusing host with a `no-cors` request to tell "refused" from "unreachable", which
+  `require-corp` blocks; Safari has no `credentialless`, so the page does not rely on it.)
+- A WebSocket (`ws_open`) cannot carry request headers at all, so nothing that authenticates
+  with `Authorization` can use one directly.
+
+`ProgramOptions.http` also has `seen` (called with each response head: method, origin and path,
+status, the readable header names; the dev page keeps the last 200 as `wasmTerm.requests`) and
+`rewrite` (origins replaced before a request leaves, for tests).
+
 #### The HTTP relay convention
 
 Not an import: an agreement between a guest's HTTP client and a relay on the page's own origin,
