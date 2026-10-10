@@ -54,6 +54,10 @@ Since the fourth session there is a second guest, `?guest=codex-local`, in which
 app-server and the agent core run in the tab as well, and the only thing behind the page is a
 pass-through HTTP relay. That is section 8, including the process seam for a future shell.
 
+Since the sixth session codex-local's requests leave by default through a TCP tunnel instead,
+with TLS done by codex inside the module, so the page server carries ciphertext; the HTTP relay
+is the fallback (`net=fetch`). That is section 11.
+
 ## 2. Crate graph (question 1)
 
 ### Entry and shape
@@ -475,7 +479,7 @@ wasm-term/ports/codex/
   scripts/commit-vendor.sh   commit dirty vendor trees to their port branches and re-export patches/
   scripts/export-patches.sh  regenerate patches/ from the port branches
   scripts/fork-crate.sh      start a crates.io fork under vendor/forks/ (records it in forks.txt)
-  scripts/forks.txt          "<crate> <version>" for every fork
+  scripts/forks.txt          "<crate> <version>" for every fork (16 since the sixth session: hyper-util was added)
   scripts/unixify.sh, unixify-line.sh   cfg(unix) -> cfg(any(unix, target_os = "wasi")), whole file or given lines
   patches/codex/             against openai/codex rust-v0.162.0
   patches/tokio/             against tokio 1.52.3 (crates.io)
@@ -933,6 +937,9 @@ and with a `PATH` every lookup of a program (`which`) calls it **[ran]**: the mo
 start-up. Commands get `PATH=/usr/local/bin:/usr/bin:/bin` from the backend.
 
 ### HTTP: the reqwest fork's WASI transport, and the relay
+
+(Since the sixth session this is `net=fetch`, the fallback. The default transport is section 11's
+tunnel, in which none of the restrictions below apply.)
 
 `vendor/forks/reqwest/src/async_impl/wasi.rs` (patch 0002 of that fork). `Client::execute_request`
 on WASI builds the same `Pending` as natively, but the in-flight future is
@@ -1445,3 +1452,211 @@ What changed with the move:
   re-applied to their bases and compared equal to the port branches.
 - `examples/terminal-app` of the repository takes the opencode guest from `../../wasm-term` by
   default.
+
+## 11. The TCP tunnel: codex's own TLS, HTTP and WebSocket (sixth session)
+
+`?guest=codex-local&net=tunnel` (now the default; `net=fetch` is section 8's transport, kept
+whole). codex's native network stack runs in the module unchanged, reqwest over hyper over
+rustls on aws-lc, and tokio-tungstenite for the Responses WebSocket, on top of one new host
+primitive: a TCP stream that the page carries over a binary WebSocket to a relay on the dev
+server (`docs/abi.md` 3.3 "TCP", `web/tcp-relay.ts`). The relay opens the connection and copies
+bytes. Everything here is **[ran]** in Chrome through `web/verify/run.sh codex-local` (tunnel
+pass: 64 checks; fetch pass: 55) on the shipped build unless marked.
+
+### Where the tunnel enters
+
+Three small cuts, each the narrowest place that still had the host name:
+
+| Where | What |
+| --- | --- |
+| tokio fork, `TcpStream::connect` (patch 0005) | on wasip1 it asks its sealed `ToSocketAddrs` argument for `(host, port)` (new method `wasi_host_port`, implemented for the string and address forms) and calls a connector installed with `tokio::net::set_wasi_tcp_connector`. No connector: `Unsupported`, as before. tokio itself knows nothing about wasm-term; `wasi_tcp_available()` says whether one is installed |
+| hyper-util fork (new, 0.1.20, one `cfg` arm) | `HttpConnector::call_async` on WASI skips its resolver, happy-eyeballs and socket options and calls `TcpStream::connect((host, port))`. This is under reqwest 0.12 (everything codex itself sends) and reqwest 0.13 (rmcp's streamable-HTTP client) |
+| codex `websocket-client/src/dialer.rs` (patch 0012) | on WASI one path: `TcpStream::connect((host, port))`, then tungstenite's own TLS and handshake (`client_async_tls_with_config`), always with an explicit rustls config. tungstenite's dialer resolves before it connects, so it could not be used as is |
+
+`ports/codex/main/src/local.rs` installs `wasm_term_tokio::TcpStream::connect` as the connector
+when `WASM_TERM_NET=tunnel`, and calls `reqwest::wasi_use_native_transport(true)`: the reqwest
+fork's `execute_request` then builds the ordinary hyper request instead of the `fetch` one (patch
+0003 of that fork; the choice is a runtime flag, so one module carries both transports). The
+remote `codex` guest installs nothing and behaves as before.
+
+What came back, compared with the fetch transport:
+
+- **HTTP/2**: negotiated by ALPN with the mock's TLS front and with the real `api.openai.com`
+  (the probe prints `HTTP/2.0` for both).
+- **The Responses WebSocket**: `ModelClient::responses_websocket_enabled` is no longer forced
+  off on WASI when a connector exists. With codex's own `openai` provider (signed in, or an API
+  key) turns go over `wss://<host>/v1/responses` with the `Authorization` header in the
+  handshake, prewarm and incremental requests, as natively; the mock records them as
+  `ws /v1/responses`. The `mock` provider has no `supports_websockets`, so it stays on the HTTP
+  stream, also as natively. Not exercised: permessage-deflate before this session's last change
+  to the mock (see "Gaps").
+- Request bodies are streamed by hyper and sent as codex made them (zstd with ChatGPT
+  sign-in when it uses HTTP), headers are the native ones with nothing enveloped, cookies are
+  hyper's cookie layer, redirects are reqwest's.
+- Entropy is `random_get` (`crypto.getRandomValues`), time is `clock_time_get`; certificate
+  validity is judged by the browser's clock.
+
+### aws-lc and `errno`
+
+The first handshake trapped (`memory access out of bounds` in `aws_lc_0_45_0_ERR_put_error`).
+aws-lc-sys's build script passes `-pthread` for every target but emscripten; with it clang
+(wasi-sdk 34) keeps thread-locals as TLS relocations against `__tls_base`, and wasi-libc's
+`errno` is one. The libc that Rust links for wasm32-wasip1 defines `errno` as an ordinary
+global, and the linker resolved the relocation to that global's absolute address, so the code
+read `__tls_base + 49336572`. The disassembly (`wasm-dis`, the names build) shows exactly that
+load. `scripts/env.sh` now appends `-Xclang -target-feature -Xclang -atomics` to the wasip1
+C flags (the driver refuses `-mno-atomics` beside `-pthread`); without atomics LLVM lowers
+thread-locals to plain globals. This had been latent in every build since the first session:
+aws-lc was linked and never run. Any C dependency built with `-pthread` had the same fault.
+
+### Trust
+
+- The baseline is `webpki-roots` (already a dependency of reqwest's rustls backend, now also
+  what `codex-http-client`'s rustls configs start from on WASI; there is no platform store).
+  **[ran]**: one unauthenticated `GET https://api.openai.com/v1/models` through the tunnel
+  answered `401 HTTP/2.0` in 96 ms with only those roots.
+- Verification is on **[ran]**: a certificate from an unknown CA is `UnknownIssuer`, the test
+  CA's certificate under another name is `not valid for name`, both before any HTTP is sent.
+- The extra root for the mock: codex honours `CODEX_CA_CERTIFICATE` / `SSL_CERT_FILE` /
+  `SSL_CERT_DIR` natively. `local.rs` (`trust_policy`) removes all of them from the
+  environment for every backend, then sets `CODEX_CA_CERTIFICATE` from `WASM_TERM_TEST_CA`
+  only for `mock` and `mock-auth`. The page supplies that variable and the file only for those
+  two backends. **[ran]**: with `backend=openai` and all four variables passed in the URL, the
+  mock's certificate is refused (`UnknownIssuer`).
+- The CA itself is made by the mock's TLS container at start, name-constrained to
+  `mock-llm.test`, and its key is deleted after one signature (`mock-llm/README.md`, "TLS").
+
+### What the relay can see
+
+| | tunnel (`/proxy/tcp`) | fetch (`/proxy/http`) |
+| --- | --- | --- |
+| Bearer token, cookies | no | yes: it receives them as `x-wasm-term-fwd-authorization` and sends them on |
+| Prompts, replies, tool output | no | yes: request and response bodies pass through it in the clear |
+| Host and port | yes (it is asked for them; the name is also in the ClientHello) | yes, and method, path and query |
+| Sizes and timing | yes | yes |
+| What the far end sees | codex's own ClientHello and HTTP stack | Bun's TLS and HTTP client with codex's headers |
+
+Evidence for the tunnel column **[ran]**: the verify script signs in with a random API key on a
+second dev server started with `TCP_RELAY_CAPTURE=1` (it keeps the bytes of connections whose
+allowlist entry names a target, i.e. the mock, never a real host), takes a turn, and searches
+everything the relay carried (two connections, about 52 kB): every connection starts with a TLS
+handshake record and contains the server name; the key, any 24-byte prefix of it, the prompt,
+the reply, `HTTP/1.1`, `authorization`, `Bearer `, `user-agent`, `response.create` and
+`output_text` do not occur. The fetch column is by construction: `relayHttp` in `web/server.ts`
+copies those headers and bodies itself (it does not log them).
+
+The relay is not an open proxy **[ran]**: `example.com:443`, `chatgpt.com:80`, `127.0.0.1:4791`
+and `169.254.169.254:80` are refused as not allowlisted, `localhost:7` (allowlisted on purpose)
+because it resolves to loopback; a WebSocket with another site's `Origin` gets 403
+(`curl`, and through the tailnet URL). `README.md`, "The TCP tunnel", lists the limits.
+
+### Numbers
+
+Module **[ran]** (same pipeline as before; MB = 10^6 bytes):
+
+| Build | Raw | brotli | Before this session |
+| --- | --- | --- | --- |
+| `codex-local`, shipped | 70,428,881 | 20,245,934 | 70,438,302 raw, 20.3 MB brotli |
+| `codex-local`, names | 201,482,627 | 28.7 MB (quality 3) | 201.3 MB |
+| `codex` (remote), shipped | 38,320,604 | 11,249,790 | 38,382,867 raw, 11,341,144 brotli |
+| `codex` (remote), names | 103,454,292 | 15.0 MB | 103.5 MB |
+
+The tunnel added nothing: hyper, h2, rustls and aws-lc were already in both modules (the fetch
+transport replaced one call, the linker kept the rest), and the C code without atomics came out
+slightly smaller. The remote guest is 62 kB smaller and otherwise untouched (`run.sh codex`).
+
+Times **[ran]**, Chrome on this machine, shipped build, everything on loopback, the mock sending
+a chunk every 15 ms (`web/verify/run.sh codex-local-perf`; medians, two runs where two values
+are given):
+
+| | tunnel | fetch |
+| --- | --- | --- |
+| One GET on a new connection (tunnel: relay WebSocket, TCP, TLS 1.3 handshake in wasm, HTTP/2 preface) | 21 to 37 ms | 11 to 17 ms |
+| One GET on the open connection | 1.1 to 1.4 ms | 2.1 to 2.3 ms |
+| Enter to first reply byte, `mock` provider (HTTP stream; codex opens a new connection per turn) | 104 ms first turn, 110 ms later turns | 81 ms, 83 ms |
+| Enter to first reply byte, `openai` provider with an API key (tunnel: Responses WebSocket; fetch: HTTP stream) | 81 ms, 81 ms | 83 ms, 85 ms |
+
+About 60 ms of each first-byte time is the mock (four events precede the first text delta). So
+a TLS handshake inside the module costs 20 to 30 ms here, paid per new connection; over the
+WebSocket, which codex keeps open across turns, the tunnel is as fast as fetch. Against a real
+host each new connection also costs the round trips of TCP and TLS, which the HTTP relay's
+pooled upstream connections hid.
+
+CPU **[ran]** (`web/verify/profile.ts ... --burst "long scroll" --seconds 30 --sum 'tls=rustls|aws_lc'`,
+names build, private headless Chrome; start-up plus one long streamed reply): the guest thread
+was busy 3.57 s through the tunnel and 3.31 s through fetch; 125 ms of the tunnel's had a rustls
+or aws-lc frame on the stack (handshakes and record decryption together). TLS in wasm is a few
+percent of a turn.
+
+Reactor **[ran]**: the stream is the first descriptor here that polls writable. With the host's
+edge-triggered mode (`guests/README.md`) an idle open stream gives 2 runtime parks per second
+in `guests/tcp`; no spinning was seen in codex either (the idle TUI's syscall rates with
+`WASM_TERM_TRACE=1` were not re-measured **[inferred]** from the unchanged idle CPU).
+
+WebKit **[ran]** (`web/webkit/smoke.sh`, Playwright's WebKit, desktop and iPhone profiles):
+the TLS probe through the tunnel and the codex-local turns pass; numbers in the README.
+
+### The default
+
+`net=tunnel`. The rule was: the tunnel if it is verified end to end against the mock and the
+fake sign-in, fetch otherwise. It is: every check of the fetch pass also passes through the
+tunnel (streamed replies, shell turns, `apply_patch`, device-code sign-in with refresh and
+logout, the API-key path, reload and resume), plus certificate verification and the capture.
+It costs nothing in size, a handshake per new connection in time, and it removes the page
+server from the set of things that can read a token.
+
+### A real sign-in over the tunnel: what to expect, and what is not known
+
+Different from fetch, **[read]** or **[inferred]** unless marked:
+
+- The server sees codex's own TLS handshake (rustls with aws-lc, the post-quantum hybrid key
+  share first) and HTTP/2, the same as the native CLI, from this machine's address. Through
+  fetch it saw Bun. Whether Cloudflare in front of `chatgpt.com` treats either differently is
+  not known; `api.openai.com` answered the unauthenticated probe normally **[ran]**.
+- Turns go over the Responses WebSocket (`wss://chatgpt.com/backend-api/codex/responses`):
+  one connection for the session, prewarmed, incremental requests. If the upgrade fails codex
+  retries and then falls back to the HTTPS stream by itself, as natively.
+- The dev server's log shows `tcp chatgpt.com:443 -> closed up=... down=... 12.3s` lines, one
+  per connection, instead of one `relay POST chatgpt.com/backend-api/...` line per request.
+- A connection idle for 10 minutes is closed by the relay (`TCP_RELAY_IDLE_MS`); the next turn
+  reconnects. Natively the socket would also die eventually, at the server's choosing.
+- Hosts outside the allowlist fail at connect with "permission denied" instead of a 403 from
+  the HTTP relay: the announcement tip (`raw.githubusercontent.com`) on every start, and a
+  workspace backend other than `chatgpt.com` (data residency) until it is added
+  (`HTTP_RELAY_ALLOW="host"` adds it to both relays).
+- Sign-in itself, the token file, refresh, `/logout` and `&signout=1` are the same.
+
+Not testable from here: completing a real sign-in; what `chatgpt.com` and the real WebSocket
+endpoint answer (subprotocols, the `x-codex-turn-state` and model headers, permessage-deflate
+with real traffic); rate limits; a real model's behaviour. All of section 8's unknowns about a
+real session still stand.
+
+### Gaps, in order
+
+1. A real sign-in and turn by the user (above).
+2. `reqwest::blocking` (OTLP exporters) still needs a thread; unchanged.
+3. The remote `codex` guest's own HTTP requests (announcement tip, update check) still use
+   `fetch` without a relay and fail quietly; it could use the tunnel too, at the price of
+   linking the connector in.
+4. The relay's limits are global, not per user: 32 connections for everyone who has the page
+   open. `tailscale serve` passes the user's identity in headers; the relay does not use it.
+5. Connections are not reused across reqwest clients, and codex builds clients freely; a
+   session ticket cache would shorten the handshakes (rustls has one; whether it is used across
+   clients here was not looked at).
+6. The edge-triggered flag is per descriptor: a stream handed from one tokio registration to
+   another (`into_std` then `from_std`) would miss edges reported to the first. Nothing here
+   does that.
+7. IPv6-only destinations: the relay prefers an IPv4 address when a name has both.
+
+### Rules followed (sixth session)
+
+`~/.codex` was not touched and no real credential was read or used. Exactly one request went
+to a real host through the tunnel: the unauthenticated `GET https://api.openai.com/v1/models`
+above (401). No sign-in was started against the real auth host; `CODEX_LOCAL_REAL_AUTH` was not
+set for any verification run. The mock image was rebuilt (nginx-light and openssl added) and
+the backend restarted several times with `mock-llm/up.sh`; two more loopback ports are
+published (4797, 4798). The dev server unit was restarted and is running; the one tailscale
+serve entry was not changed. Private dev servers ran on loopback ports 4788 and 4789 during the
+work and were stopped. Toolchains: nothing new. All 18 patch series (codex with 0012, tokio
+with 0005, 16 forks including the new hyper-util) were re-applied to fresh bases and compared
+equal to the port branches.

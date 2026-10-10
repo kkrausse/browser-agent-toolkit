@@ -38,7 +38,7 @@ async function firstByte(prompt, expect) {
         const armed = window.__perf.armed;
         if (armed && !armed.at) {
           armed.seen += typeof data === "string" ? data : decoder.decode(data, { stream: true });
-          if (armed.seen.includes(armed.expect)) armed.at = performance.now();
+          if (armed.seen.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").includes(armed.expect)) armed.at = performance.now();
         }
         return write(data);
       };
@@ -52,12 +52,17 @@ async function firstByte(prompt, expect) {
   }, expect);
   await page.waitForFunction(() => window.__perf.armed.at > 0, null, { timeout: 60000 });
   const ms = await page.evaluate(() => window.__perf.armed.at - window.__perf.armed.from);
-  await page.waitForFunction(() => /Worked for /.test(window.wasmTerm.screen().join("\n")) && !/esc to interrupt/.test(window.wasmTerm.screen().join("\n")), null, { timeout: 60000 });
+  await page.waitForFunction(() => !/esc to interrupt/.test(window.wasmTerm.screen().join("\n")), null, { timeout: 90000 });
   await page.waitForTimeout(500);
   return ms;
 }
 
-async function turns(net, backend, sessions, perSession) {
+// A different scripted reply each turn: the TUI repaints earlier replies when Enter is pressed,
+// so the text waited for has to be one that is not on the screen yet.
+// One word each: the TUI draws with cursor movements, so only the inside of a word is contiguous.
+const TURNS = [["hi there", "Hello"], ["show me markdown", "Scripted"], ["long scroll", "intentionally"]];
+
+async function turns(net, backend, sessions) {
   const first = [];
   const later = [];
   for (let session = 0; session < sessions; session++) {
@@ -75,9 +80,8 @@ async function turns(net, backend, sessions, perSession) {
     await page.evaluate(() => window.wasmTerm.terminal.focus());
     // Whatever codex does by itself after starting (model list, prewarm) is over before the first prompt.
     await page.waitForTimeout(2500);
-    for (let index = 0; index < perSession; index++) {
-      // "Hello" is the reply's first word; the echo of the prompt has none.
-      const ms = await firstByte(`hi number ${index + 1}`, "Hello");
+    for (const [index, [prompt, expect]] of TURNS.entries()) {
+      const ms = await firstByte(prompt, expect);
       (index === 0 ? first : later).push(ms);
     }
   }
@@ -96,8 +100,8 @@ for (const net of ["tunnel", "fetch"]) {
   }
   out[net] = {
     probe: { newConnectionMs: stats(first), openConnectionMs: stats(reused) },
-    mockProvider: await turns(net, "mock", 3, 4),
-    openaiProviderWithApiKey: await turns(net, "mock-auth", 3, 4),
+    mockProvider: await turns(net, "mock", 4),
+    openaiProviderWithApiKey: await turns(net, "mock-auth", 4),
   };
 }
 return out;

@@ -191,7 +191,7 @@ settings. The parameters and their defaults (the mock backend):
 | `sandbox` | `danger-full-access` | passed as `-c sandbox_mode="..."`. The mock backend's container cannot run codex's sandbox, so anything else fails there, except that `workspace-write` with the prompt `run with approval` shows the approval dialog. Empty = the server's own setting |
 | `build` | (the shipped module) | `names`: the build that kept its name section, for `web/verify/profile.ts` and readable traps |
 
-The module is 11.3 MB over the wire (brotli) and 38.4 MB to compile
+The module is 11.2 MB over the wire (brotli) and 38.3 MB to compile
 (`ports/codex/NOTES.md`, "Module", has the table); the page shows a progress bar while it arrives and compiles, and the
 browser caches it for good: its URL contains its hash, so a rebuild is a new
 URL. `scripts/ship.sh` is `build.sh` for the two profiles plus `wasm-opt` and
@@ -235,7 +235,7 @@ a folder or an archive into `/home/user/project` in this browser's storage (noth
 empties everything, and the sample project comes back on the next start. Files come out again
 with `wasmTerm.download(path)`.
 
-The module is 20.3 MB over the wire (brotli) and 70.4 MB to compile, against 11.3 and 38.4
+The module is 20.2 MB over the wire (brotli) and 70.4 MB to compile, against 11.2 and 38.3
 for the remote `codex` guest; the shell is another 0.86 MB (`/bat_sh.wasm`).
 
 **What works**: prompts and streamed replies, sessions and resume, sign-in, `apply_patch`
@@ -319,6 +319,11 @@ can open the page can use it to reach those hosts with their own credentials.
 4. The tokens are in `/home/user/.codex/auth.json` in the tab's filesystem, saved in this
    browser's IndexedDB for this origin. Reloading keeps you signed in.
 
+With the default `net=tunnel` these requests are codex's own TLS to `auth.openai.com:443` and
+`chatgpt.com:443`: the page server copies ciphertext and cannot read the tokens. Its log shows
+one `tcp <host>:443 -> ... up=... down=...` line per connection. With `net=fetch` they pass
+through the HTTP relay in the clear. `ports/codex/NOTES.md`, section 11, says what else differs.
+
 To sign out: `/logout` in the TUI (revokes the token and deletes the file), or
 `/?guest=codex-local&signout=1` / "Clear stored credentials" in the launcher (delete the stored
 file without contacting anyone), or `&reset=1` (forget everything, project included).
@@ -379,7 +384,7 @@ code (`web/mobile.ts`; the three files are in `third_party/bun-web-terminal/`):
 `web/verify/run.sh [terminal-functions|opencode|opencode-perf|codex|codex-local]` drives the
 page in Chrome through `browser-control` (dev server up; the opencode and
 codex ones also need `mock-llm/up.sh`). `terminal-functions` checks each terminal
-function with the Rust guests and the JavaScript shim with `js-demo`;
+function with the Rust guests (the `tcp` guest's checks of TCP streams through the relay among them) and the JavaScript shim with `js-demo`;
 `opencode` runs the TUI through connect, prompts, the permission dialog,
 markdown, scrolling, palette, sessions, clipboard, reload and exit, comparing
 screens with the native client's captures; `opencode-perf` prints load and
@@ -388,8 +393,8 @@ served, the loading indicator, connect, plain and tool turns against the
 native captures, markdown, a long reply with wheel scrolling, resize, the
 slash popup, `/status`, the warnings viewer, paste, Shift+Enter, the
 filesystem helpers, history across a reload, a line typed in one burst, the
-approval dialog and `/quit`; `codex-local` runs the embedded build through the relay against the
-mock: plain, markdown and long replies, `apply_patch` edits read back from the filesystem, then
+approval dialog and `/quit`; `codex-local` runs the embedded build against the
+mock once per transport (`CODEX_LOCAL_NET="tunnel fetch"` by default), each pass: plain, markdown and long replies, `apply_patch` edits read back from the filesystem, then
 the shell: a command's output and status reaching the model, a turn of six reads (`rg --files`,
 `rg -n`, `nl -ba | sed -n`, `sed -n`, `cat`, `ls -la`), a read / `apply_patch` / verify turn,
 failing commands and missing programs (`git`, `python3`), 60,000 lines of output, `timeout`, a
@@ -399,9 +404,16 @@ persistence of a shell-written file across a reload, history and `/resume`, the 
 with `&shell=off`, the inline shell, the launcher's zip and folder import and "Forget saved
 state", then the whole device-code sign-in against mock-llm's fake auth server (code shown,
 approval, tokens stored, refresh, authenticated model request), `/logout`, the API-key path and
-`&signout=1`. It also returns what the commands cost (`numbers`). Nothing in it reaches a real
-host unless `CODEX_LOCAL_REAL_AUTH=1` is set, which adds one unauthenticated request for a
-device code to the real `auth.openai.com`. `WASM_TERM_BUILD=names` runs the codex guests' build
+`&signout=1`. The tunnel pass adds what only it can show: the relay refusing destinations
+outside its allowlist and private addresses, the module refusing a certificate from an unknown
+CA, a certificate for another name, and the mock's test CA when the real backend is selected,
+the signed-in turn going over the Responses WebSocket, and a search for plaintext in what the
+relay carried (for that it starts a second dev server on loopback :4789 with
+`TCP_RELAY_CAPTURE=1` and stops it again). It also returns what the commands cost (`numbers`).
+Nothing in it reaches a real host unless `CODEX_LOCAL_REAL_AUTH=1` is set, which adds, in the
+fetch pass, one unauthenticated request for a device code to the real `auth.openai.com` and its
+pending polls, and in the tunnel pass one unauthenticated GET to the real `api.openai.com`.
+`codex-local-perf` prints connection and first-byte times for both transports. `WASM_TERM_BUILD=names` runs the codex guests' build
 with wasm names. `terminal-functions` also runs the `proc` guest in both shell modes. Screenshots land in
 `docs/screenshots/`.
 
@@ -415,14 +427,16 @@ Both run against another base URL with `WASM_TERM_URL`, e.g. the tailnet one:
 
 `web/webkit/smoke.sh [base URL]` runs the page headless in Playwright's WebKit
 build, at a desktop viewport and with an iPhone device profile (`PROFILE=desktop`
-or `iphone` for one; `GUESTS=opencode,codex,proc,codex-local` to choose guests): isolation,
+or `iphone` for one; `GUESTS=opencode,codex,proc,codex-local` to choose guests;
+`NET=tunnel|fetch` for codex-local's transport): isolation,
 the Worker, the opencode home screen, a prompt and its reply; in the iPhone
 profile also the keys row, focus, swipe scrolling and refitting to a
 keyboard-sized viewport. Then the codex guest: that the module downloads,
 compiles and starts at all, a prompt and its reply, `/quit`, and in the iPhone
 profile the keys row against codex (arrow up, Shift+Enter, Ctrl, Esc). Then
-child processes: the `proc` guest's checks in both shell modes, and codex-local
-taking two turns whose tool calls run in the shell. Once before:
+child processes: the `proc` guest's checks in both shell modes, and codex-local:
+its TLS probe through the tunnel (rustls in wasm on JavaScriptCore, HTTP/2 to the
+mock's TLS front), then two turns whose tool calls run in the shell. Once before:
 `web/webkit/install.sh`, which puts the browser under
 `vendor/playwright-browsers` and the system libraries it lacks under
 `vendor/webkit-syslibs` (downloaded Ubuntu packages, unpacked; nothing
