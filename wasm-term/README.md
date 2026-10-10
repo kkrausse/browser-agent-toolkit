@@ -72,6 +72,30 @@ Testing never calls a real model: `mock-llm/` serves scripted responses.
 | 4796 | browser-facing codex proxy (container); strips `Origin`, which `codex app-server` rejects |
 | 4798, 4799 | per-port dev servers in `ports/opencode`, `ports/codex` |
 
+## Run it
+
+Phase 1 (the emulated machine and its test programs). Needs bun, cargo with
+the `wasm32-unknown-unknown` and `wasm32-wasip1` targets, and network access
+once (to clone the crossterm fork).
+
+```sh
+cd wasm-term/kernel && cargo test          # line discipline against termios behaviour
+cd ../web && bun install
+bun run build                               # kernel wasm + guests -> guests/dist/*.wasm
+bun run dev                                 # http://127.0.0.1:4790/?guest=repl
+```
+
+Guests: `?guest=repl` (cooked mode), `tui` (ratatui, raw mode), `async-tui`
+(tokio + crossterm `EventStream` + WebSocket), `net`, `events`. Add
+`&arg=...` / `&env=K=V`; `&env=WASM_TERM_TRACE=1` logs syscall rates to the
+console.
+
+`web/verify/run.sh` drives the page in Chrome through `browser-control` and
+checks each terminal function (screenshots land in `docs/screenshots/`).
+
+The guest ABI is `docs/abi.md`. How crossterm/ratatui/tokio run on it, and
+what the codex port should reuse, is `guests/README.md`.
+
 ## Rules for working here
 
 - Never touch the user's real opencode/codex state or background service, and
