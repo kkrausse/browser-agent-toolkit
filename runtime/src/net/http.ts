@@ -85,6 +85,14 @@ function createHttp(rt: Runtime): { http: any; https: any } {
     return out
   }
 
+  /**
+   * Node's IncomingMessage emits 'error' only when someone listens for it. A request aborted
+   * after its response began ("aborted", ECONNRESET on the response) is otherwise an uncaught
+   * exception: `ws` aborts its handshake request that way on any answer but 101, with a
+   * listener on the request only.
+   */
+  const heard = (message: any, err: Error | null): Error | null => (err && message.listenerCount('error') === 0 ? null : err)
+
   class IncomingMessage extends Readable {
     socket: any
     httpVersionMajor = 1
@@ -140,7 +148,7 @@ function createHttp(rt: Runtime): { http: any; https: any } {
       if (!this.complete) this.aborted = true
       this._full = false
       this._resume?.()
-      cb(err)
+      cb(heard(this, err))
     }
     setTimeout(ms: number, cb?: () => void) {
       if (cb) this.on('timeout', cb)
@@ -866,7 +874,7 @@ function createHttp(rt: Runtime): { http: any; https: any } {
               }
               res._destroy = (err: Error | null, cb: (err?: Error | null) => void) => {
                 if (!res.complete) void reader?.cancel().catch(() => {})
-                cb(err)
+                cb(heard(res, err))
               }
               res.once('end', () => {
                 res.destroy()
