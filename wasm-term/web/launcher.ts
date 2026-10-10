@@ -12,6 +12,7 @@ const STYLE = `
   #launcher main { max-width: 640px; margin: 0 auto; }
   #launcher h1 { font-size: 20px; margin: 0 0 4px; }
   #launcher p { margin: 0 0 16px; color: #a6a69c; }
+  #launcher p.note { padding: 10px 12px; border: 1px solid #363646; border-radius: 8px; color: #dcd7ba; font-size: 14px; }
   #launcher section { border: 1px solid #2a2a37; border-radius: 8px; padding: 14px 16px; margin: 0 0 12px; background: #1f1f28; }
   #launcher h2 { font: 600 15px/1.4 ui-monospace, monospace; margin: 0; }
   #launcher label { display: block; margin: 10px 0 0; font-size: 13px; color: #a6a69c; }
@@ -65,18 +66,28 @@ function importControls(namespace: string, directory: string): HTMLElement {
   ]);
 }
 
-export function showLauncher(guests: GuestInfo[]): void {
+/** What a page that is not the dev page says about itself above the programs. */
+export interface LauncherText {
+  title: string;
+  intro: string;
+  notes?: string[];
+}
+
+export function showLauncher(guests: GuestInfo[], text: LauncherText = { title: "wasm-term", intro: "Terminal programs running in this browser tab, on an emulated machine. Pick one." }): void {
   document.querySelector("#terminal")?.remove();
   document.head.append(element("style", { textContent: STYLE }));
   const main = element("main", {}, [
-    element("h1", { textContent: "wasm-term" }),
-    element("p", { textContent: "Terminal programs running in this browser tab, on an emulated machine. Pick one." }),
+    element("h1", { textContent: text.title }),
+    element("p", { textContent: text.intro }),
+    ...(text.notes ?? []).map(note => element("p", { className: "note", textContent: note })),
   ]);
 
   // Programs with settings first: they are the ones a person comes here for.
   for (const guest of [...guests].sort((a, b) => (b.params?.length ?? 0) - (a.params?.length ?? 0))) {
-    const form = element("form", { method: "get", action: "/" }, [element("input", { type: "hidden", name: "guest", value: guest.name })]);
+    // The page's own path: the directory may be served anywhere.
+    const form = element("form", { method: "get", action: location.pathname }, [element("input", { type: "hidden", name: "guest", value: guest.name })]);
     for (const param of guest.params ?? []) {
+      if (param.hidden) continue;
       const input = element("input", { name: param.query, value: param.default, type: param.secret ? "password" : "text", autocomplete: "off", spellcheck: false });
       form.append(element("label", {}, [param.label, input, ...(param.hint ? [element("small", { textContent: param.hint })] : [])]));
     }
@@ -105,5 +116,5 @@ export function showLauncher(guests: GuestInfo[]): void {
     ]));
   }
   document.body.append(element("div", { id: "launcher" }, [main]));
-  document.title = "wasm-term";
+  document.title = text.title;
 }

@@ -36,7 +36,7 @@ export const codexLocalGuest: WasmGuest = {
   build: "cd wasm-term/ports/codex && BIN=local scripts/ship.sh",
   params: [
     { query: "backend", env: "CODEX_WASM_BACKEND", label: "Backend", default: "mock", hint: "mock = the scripted model server from mock-llm, no sign-in, no tokens. openai = the real service: sign in with ChatGPT (device code) or an API key in the TUI. mock-auth = codex's real sign-in flow against mock-llm's fake auth server" },
-    { query: "net", env: "WASM_TERM_NET", label: "Network", default: "tunnel", hint: "tunnel = codex's own HTTP and TLS over a TCP stream this page's server only carries (it sees ciphertext; web/tcp-relay.ts). fetch = the browser's fetch through the HTTP relay below, which terminates TLS and can read tokens and content" },
+    { query: "net", env: "WASM_TERM_NET", label: "Network", default: "tunnel", hint: "tunnel = codex's own HTTP and TLS over a TCP stream this page's server only carries (it sees ciphertext; web/tcp-relay.ts). fetch = the browser's fetch through the HTTP relay below, which terminates TLS and can read tokens and content. direct = the browser's fetch straight to the real hosts, no relay: only what those hosts allow this page's origin by CORS works (an API key and sign-in anywhere; a ChatGPT subscription only from http://localhost:3000 and a few others)" },
     { query: "relay", env: "WASM_TERM_HTTP_RELAY", label: "HTTP relay", default: "/proxy/http", url: true, hint: "/proxy/http = this page's server forwards the program's HTTP requests to an allowlist of hosts (web/server.ts). Empty = the browser fetches them directly, which only works for servers that allow this page's origin (CORS)" },
     { query: "dir", env: "CODEX_WASM_CWD", label: "Project directory", default: "/home/user/project", hint: "a directory in this tab's filesystem; kept across reloads when it is below /home/user/project" },
     { query: "seed", env: "CODEX_WASM_SEED", label: "Seed a sample project", default: "1", hint: "1 = write a few sample files into the project directory if it is empty; 0 = leave it empty" },
@@ -47,6 +47,12 @@ export const codexLocalGuest: WasmGuest = {
   // The private CA of mock-llm's TLS front, which the module trusts in addition to the public roots only
   // when it gets this file, and it gets it only with a mock backend (main/src/local.rs, `trust_policy`).
   fetchFiles: [{ url: "/test/mock-ca.pem", path: "/etc/wasm-term/mock-ca.pem", env: "WASM_TERM_TEST_CA", when: [{ param: "backend", in: ["mock", "mock-auth"] }, { param: "net", in: ["tunnel"] }] }],
+  // net=direct: the page explains a refused origin, and (mock backends only) sends the mock's https name, which
+  // codex insists on for a ChatGPT backend and no browser can reach, to the mock on loopback.
+  direct: {
+    when: [{ param: "net", in: ["direct"] }],
+    rewrite: [{ from: "https://mock-llm.test", to: "http://127.0.0.1:4791", when: [{ param: "backend", in: ["mock", "mock-auth"] }] }],
+  },
   // The launcher's "Import folder" / "Import .zip" write here: the project the agent works on.
   importDir: "/home/user/project",
   // Where sign-in leaves its tokens or API key (cli_auth_credentials_store = "file").
@@ -54,3 +60,15 @@ export const codexLocalGuest: WasmGuest = {
   // CODEX_HOME (config.toml, auth.json, history.jsonl, sessions/) and the project. Not scratch, logs, or SQLite files (never opened here; they would be rewritten whole on every change).
   persist: { roots: ["/home/user/.codex", "/home/user/project"], exclude: ["/home/user/.codex/tmp/", "/home/user/.codex/log/", ".sqlite", "/thread-writer-locks/"] },
 };
+
+// codex-local as the static build offers it (web/static.ts): no relay exists there, so `net` is `direct` and
+// nothing else, the backend is the real one, and the launcher asks for nothing but the project directory.
+export const codexStaticGuest: Omit<WasmGuest, "site" | "build"> = (({ site, build, fetchFiles, ...guest }) => ({
+  ...guest,
+  description: "codex-cli 0.162.0 entirely in this tab: TUI, app-server and agent core (wasm32-wasip1). Sign in inside the program (ChatGPT device code, or an API key); requests go from this tab straight to OpenAI; files and credentials stay in this browser's storage for this origin",
+  params: guest.params!.filter(param => param.query !== "relay").map(param =>
+    param.query === "backend" ? { ...param, default: "openai", hidden: true }
+    : param.query === "net" ? { ...param, default: "direct", hidden: true, only: ["direct"], hint: "this page is static files with no relay behind it; use the dev server (web/server.ts) for net=tunnel or net=fetch" }
+    : param.query === "seed" ? { ...param, hidden: true }
+    : param),
+}))(codexLocalGuest);

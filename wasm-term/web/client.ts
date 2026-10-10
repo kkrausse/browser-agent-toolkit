@@ -20,9 +20,11 @@
 //   terminal resize  → program.resize  (winsize + SIGWINCH)
 
 import { init, Terminal } from "@random/ghostty-web";
-import { type ClipboardBridge, type ExitStatus, type Program, startProgram } from "../host/index";
+import { type ClipboardBridge, type ExitStatus, type HttpSeen, type Program, startProgram } from "../host/index";
 import { openPersistStore } from "../host/persist-store";
-import type { GuestInfo } from "./guests";
+import { explainBlocked, originNote, requestLog } from "./direct";
+import type { GuestCondition, GuestInfo } from "./guests";
+import { isolate } from "./isolate";
 import { showLauncher } from "./launcher";
 import { installMobileControls } from "./mobile";
 
@@ -48,20 +50,12 @@ declare global {
       download(path: string): Promise<boolean>;
       /** How the module arrived: milliseconds from the Worker's start to each phase, and the bytes. */
       load: { downloadedMs?: number; compiledMs?: number; bytes?: number };
+      /** The program's HTTP requests (`http_open`), most recent last: method, origin and path, status, and the names of
+       * the response headers this page was allowed to read. No values, no query strings. */
+      requests: HttpSeen[];
     };
   }
 }
-
-const params = new URLSearchParams(location.search);
-const guests = (await (await fetch("/guests.json")).json()) as GuestInfo[];
-const guest = params.get("guest");
-if (guest === null) {
-  showLauncher(guests);
-  // Nothing below applies without a program; a module cannot return, so wait forever.
-  await new Promise(() => {});
-  throw new Error("unreachable");
-}
-const container = document.querySelector<HTMLDivElement>("#terminal")!;
 
 function fatal(message: string): never {
   const element = document.querySelector<HTMLPreElement>("#fatal")!;
@@ -69,6 +63,24 @@ function fatal(message: string): never {
   element.style.display = "block";
   throw new Error(message);
 }
+
+/** The static build (web/static.ts): a directory of files with no server of ours behind it. Every URL below is
+ * relative to the page, so the directory works at any path; isolation and the compressed module come from the
+ * page's service worker. On the dev server this is false and the server does both. */
+const STATIC = process.env.WASM_TERM_STATIC === "1";
+if (STATIC) await isolate("sw.js", "./").catch(error => fatal(String((error as Error).message ?? error)));
+
+const params = new URLSearchParams(location.search);
+const guests = (await (await fetch("guests.json", { cache: "no-store" })).json()) as GuestInfo[];
+// A static build is for one program: its launcher is the page itself.
+const guest = params.get("guest");
+if (guest === null) {
+  showLauncher(guests, STATIC ? { title: "codex in this tab", intro: "codex-cli 0.162.0 running entirely in this browser tab: the TUI, the agent and its tools. This page is a directory of static files; nothing of ours is behind it, and the program's requests go from this tab straight to OpenAI.", notes: [originNote(location.origin)] } : undefined);
+  // Nothing below applies without a program; a module cannot return, so wait forever.
+  await new Promise(() => {});
+  throw new Error("unreachable");
+}
+const container = document.querySelector<HTMLDivElement>("#terminal")!;
 
 if (!crossOriginIsolated) fatal("This page is not cross-origin isolated; SharedArrayBuffer is unavailable.\nServe it with COOP: same-origin and COEP: require-corp (bun web/server.ts does).");
 if (!/^[\w-]+$/.test(guest)) fatal(`Bad guest name: ${guest}`);
@@ -93,7 +105,7 @@ function rendererChoice(): "webgl" | "canvas" {
   return "webgl";
 }
 
-await init();
+await init({ wasmUrl: "ghostty-vt.wasm" });
 const terminal = new Terminal({
   rendererType: rendererChoice(),
   // Ctrl+V is the terminal's literal-next key (and a key binding in many TUIs),
@@ -136,6 +148,7 @@ const guestArgs: string[] = [];
 const settings: Record<string, string> = {};
 for (const param of info.params ?? []) {
   let value = params.get(param.query) ?? param.default;
+  if (param.only && !param.only.includes(value)) fatal(`${param.query}=${value} is not available on this page (${param.only.join(", ")}): ${param.hint ?? ""}`);
   settings[param.query] = value;
   if (param.url && value.startsWith("/")) {
     value = new URL(value, location.origin).href.replace(/\/$/, "");
@@ -145,10 +158,12 @@ for (const param of info.params ?? []) {
   if (param.args && value !== "") guestArgs.push(...param.args.map(arg => arg.replaceAll("{}", value)));
 }
 
+const holds = (conditions: GuestCondition[] = []) => conditions.every(condition => condition.in.includes(settings[condition.param] ?? ""));
+
 // Files a guest wants from this server under its current settings (GuestInfo.fetchFiles).
 const fetched: Record<string, Uint8Array> = {};
 for (const wanted of info.fetchFiles ?? []) {
-  if (!(wanted.when ?? []).every(condition => condition.in.includes(settings[condition.param] ?? ""))) continue;
+  if (!holds(wanted.when)) continue;
   try {
     const response = await fetch(wanted.url);
     if (!response.ok) continue;
@@ -188,13 +203,16 @@ function hideLoading(): void {
 }
 
 const build = params.get("build");
-const moduleUrl = (build && info.builds?.[build]) || info.module || `/guests/${guest}.wasm`;
+const moduleUrl = (build && info.builds?.[build]) || info.module || `guests/${guest}.wasm`;
+// The program sends its requests straight to other origins (GuestInfo.direct): say why when the browser rejects one.
+const direct = info.direct && holds(info.direct.when) ? info.direct : undefined;
+const requests = requestLog();
 const sent: string[] = [];
 const pixels = cellPixels();
 const program = startProgram({
-  guestUrl: info.kind === "js" ? `/guests/${guest}/guest.js` : moduleUrl,
-  kernelUrl: "/kernel.wasm",
-  workerUrl: info.kind === "js" ? "/js-worker.js" : "/worker.js",
+  guestUrl: info.kind === "js" ? `guests/${guest}/guest.js` : moduleUrl,
+  kernelUrl: "kernel.wasm",
+  workerUrl: info.kind === "js" ? "js-worker.js" : "worker.js",
   args: [guest, ...guestArgs, ...params.getAll("arg")],
   env: { ...info.env, ...env, WASM_TERM_ORIGIN: location.origin },
   files: fetched,
@@ -204,9 +222,14 @@ const program = startProgram({
   ypixel: Math.round(pixels.height * terminal.rows),
   persist,
   // Where a program's `tcp_connect` goes: this server's TCP relay (web/tcp-relay.ts), allowlisted hosts only.
-  tcpRelay: "/proxy/tcp",
+  tcpRelay: STATIC ? undefined : "/proxy/tcp",
+  http: {
+    seen: requests.seen,
+    blocked: direct ? request => explainBlocked(request) : undefined,
+    rewrite: direct && Object.fromEntries((direct.rewrite ?? []).filter(entry => holds(entry.when)).map(entry => [entry.from, entry.to])),
+  },
   shell: info.kind === "wasm" && (info.shell || params.has("shell")) && params.get("shell") !== "off"
-    ? { moduleUrl: "/bat_sh.wasm", workerUrl: "/shell-worker.js", mode: params.get("shell") === "inline" ? "inline" : params.get("shell") === "worker" ? "worker" : undefined }
+    ? { moduleUrl: "bat_sh.wasm", workerUrl: "shell-worker.js", mode: params.get("shell") === "inline" ? "inline" : params.get("shell") === "worker" ? "worker" : undefined }
     : undefined,
   // Indirect, so that replacing window.wasmTerm.clipboard takes effect.
   clipboard: {
@@ -279,6 +302,7 @@ window.wasmTerm = {
   exit: null,
   clipboard,
   load,
+  requests: requests.entries,
   async readFile(path) {
     const data = await program.readFile(path);
     return data && new TextDecoder().decode(data);

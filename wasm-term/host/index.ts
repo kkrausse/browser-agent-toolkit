@@ -5,7 +5,9 @@
 //   terminal.onData(data => program.write(data));
 //   terminal.onResize(({ cols, rows }) => program.resize(cols, rows));
 
-import { createNetBridge } from "./net";
+import { createNetBridge, type HttpOptions } from "./net";
+
+export type { HttpBlocked, HttpOptions, HttpSeen } from "./net";
 import { type PageFetchOptions, servePageFetch } from "./page-fetch";
 import { openPersistStore, type PersistStore } from "./persist-store";
 import {
@@ -83,6 +85,8 @@ export interface ProgramOptions {
   /** Where `tcp_connect` goes: the URL (or a path on this origin) of a TCP relay endpoint, `/proxy/tcp` of web/server.ts
    * (docs/abi.md 3.3, "TCP"). Absent: `tcp_connect` fails. */
   tcpRelay?: string;
+  /** How `http_open` requests to other origins are made and what happens when the browser rejects one (net.ts). */
+  http?: HttpOptions;
   /** Clipboard for programs that ask the host for it. Default: `navigator.clipboard`. */
   clipboard?: ClipboardBridge;
   /** JavaScript guests: `fetch` of URLs under these prefixes is answered by the page (page-fetch.ts), e.g. by a server that runs in this tab. */
@@ -151,7 +155,7 @@ export function startProgram(options: ProgramOptions): Program {
   const sab = createShared();
   const header = new Int32Array(sab, 0, HEADER_BYTES / 4);
   const ring = createRingWriter(sab);
-  const net = createNetBridge(ring, { tcpRelay: options.tcpRelay });
+  const net = createNetBridge(ring, { tcpRelay: options.tcpRelay, http: options.http });
   const encoder = new TextEncoder();
   const worker = new Worker(options.workerUrl, { type: "module", name: `wasm-term:${options.guestUrl}` });
 

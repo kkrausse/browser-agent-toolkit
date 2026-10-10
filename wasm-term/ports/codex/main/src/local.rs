@@ -1,11 +1,15 @@
 //! `codex` for the browser with nothing behind it: the upstream TUI, the
 //! embedded app-server and the agent core in one module on one thread. Model
-//! and sign-in requests leave one of two ways (`WASM_TERM_NET`, the page's `net=`):
+//! and sign-in requests leave one of three ways (`WASM_TERM_NET`, the page's `net=`):
 //! - `tunnel`: codex's own HTTP stack (reqwest, hyper, rustls) and WebSocket dialer over a
 //!   TCP stream the page's relay carries. TLS ends in this module, so the relay sees
 //!   ciphertext only;
 //! - `fetch`: the host's `fetch` (the reqwest fork's WASI transport) by way of the page's
 //!   pass-through HTTP relay, which terminates TLS and so can read everything.
+//! - `direct`: the host's `fetch` again, but straight to the real URL: no relay, no server of
+//!   the page's at all. Only what the far end allows the page's origin by CORS works, the
+//!   browser drops the headers it will not let a page set (`User-Agent`, `Cookie`, ...) and
+//!   hides response headers the server does not expose (NOTES.md, section 12).
 //!
 //! Differences from the native binary, all forced by the target:
 //! - no `arg0` dispatch, a current-thread runtime (see `main.rs`);
@@ -52,7 +56,14 @@ fn main() -> anyhow::Result<()> {
     let tunnel = match std::env::var("WASM_TERM_NET").as_deref() {
         Ok("tunnel") => true,
         Ok("fetch") | Ok("") | Err(_) => false,
-        Ok(other) => anyhow::bail!("unknown WASM_TERM_NET {other:?} (tunnel or fetch)"),
+        Ok("direct") => {
+            // The reqwest fork's WASI transport reads this on every request; without it the
+            // URL is fetched as it is. A relay named in the page URL must not survive.
+            // SAFETY: single-threaded, before anything reads the environment concurrently.
+            unsafe { std::env::remove_var("WASM_TERM_HTTP_RELAY") };
+            false
+        }
+        Ok(other) => anyhow::bail!("unknown WASM_TERM_NET {other:?} (tunnel, fetch or direct)"),
     };
     trust_policy(&backend);
     if tunnel {

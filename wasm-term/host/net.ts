@@ -41,9 +41,42 @@ const TCP_ERRNO: Record<string, number> = {
   dns: 23, timeout: 73 /* TIMEDOUT */, limit: 29 /* IO */, norelay: 52 /* NOSYS */, pipe: 64 /* PIPE */,
 };
 
+/** What the page learns about one `http_open` request once its head has arrived (names only: no header values, no query). */
+export interface HttpSeen {
+  method: string;
+  /** Origin and path of where the request went; the query is left out (it may carry secrets). */
+  url: string;
+  status: number;
+  /** The response header names script was allowed to see: for another origin, the CORS-safelisted ones and what it exposed. */
+  headers: string[];
+  /** The page answered instead of the server (`HttpOptions.blocked`). */
+  synthetic?: boolean;
+}
+
+/** A request to another origin that `fetch` rejected: the browser does not say whether the network or CORS stopped it. */
+export interface HttpBlocked {
+  method: string;
+  url: string;
+  /** The browser's own text ("Failed to fetch", "Load failed", ...). */
+  error: string;
+}
+
+/** How `http_open` treats requests that go straight to another origin (docs/abi.md 3.3, "Direct requests"). */
+export interface HttpOptions {
+  /** Origins replaced before a request leaves, e.g. `{ "https://mock-llm.test": "http://127.0.0.1:4791" }`: for tests, where
+   * a program insists on an https name this browser cannot reach. The caller decides what may be listed here. */
+  rewrite?: Record<string, string>;
+  /** Called when a cross-origin request was rejected. Return a response and the program gets that instead of a
+   * transport error (which it would retry and then report without a reason); return nothing to pass the error on. */
+  blocked?(request: HttpBlocked): { status: number; body: string } | undefined;
+  /** Called with every response head. */
+  seen?(response: HttpSeen): void;
+}
+
 export interface NetOptions {
   /** `ws(s)://` URL of the TCP relay endpoint (`/proxy/tcp` of web/server.ts); absent: `tcp_connect` fails with NOSYS. */
   tcpRelay?: string;
+  http?: HttpOptions;
 }
 
 export function createNetBridge(ring: RingWriter, options: NetOptions = {}): NetBridge {
@@ -171,17 +204,40 @@ export function createNetBridge(ring: RingWriter, options: NetOptions = {}): Net
   async function request(handle: number, message: Extract<WorkerMessage, { t: "http_open" }>): Promise<void> {
     const state: HttpState = { abort: new AbortController(), sent: 0, acked: 0, resume: null };
     requests.set(handle, state);
+    const http = options.http ?? {};
+    let target = message.url;
+    let where = message.url;
+    let crossOrigin = false;
     try {
-      const response = await fetch(message.url, {
+      const url = new URL(message.url, location.href);
+      const rewritten = http.rewrite?.[url.origin];
+      if (rewritten) target = `${rewritten}${url.pathname}${url.search}`;
+      const final = new URL(target, location.href);
+      crossOrigin = final.origin !== location.origin;
+      where = `${final.origin}${final.pathname}`;
+    } catch {
+      // not a URL: fetch says so below
+    }
+    const head = (status: number, lines: string) => {
+      const data = encoder.encode(`\0\0\0\0${lines}`);
+      new DataView(data.buffer).setUint32(0, status, true);
+      event(handle, HTTP_HEAD, data);
+    };
+    let answered = false;
+    try {
+      const response = await fetch(target, {
         method: message.method,
         headers: message.headers,
         body: message.body as BodyInit | null,
         signal: state.abort.signal,
+        // Straight to another origin: a CORS request that carries nothing of the browser's own. No cookies either way
+        // (`omit` also makes the browser ignore `Set-Cookie`), no `Referer` (the page URL holds the program's settings),
+        // nothing from or into the HTTP cache. Redirects are followed by the browser, under the same rules.
+        ...(crossOrigin ? { mode: "cors", credentials: "omit", referrerPolicy: "no-referrer", cache: "no-store", redirect: "follow" } as const : {}),
       });
-      const lines = [...response.headers].map(([name, value]) => `${name}: ${value}\r\n`).join("");
-      const head = encoder.encode(`\0\0\0\0${lines}`);
-      new DataView(head.buffer).setUint32(0, response.status, true);
-      event(handle, HTTP_HEAD, head);
+      answered = true;
+      http.seen?.({ method: message.method, url: where, status: response.status, headers: [...response.headers.keys()] });
+      head(response.status, [...response.headers].map(([name, value]) => `${name}: ${value}\r\n`).join(""));
       const reader = response.body?.getReader();
       while (reader) {
         const { done, value } = await reader.read();
@@ -193,7 +249,18 @@ export function createNetBridge(ring: RingWriter, options: NetOptions = {}): Net
       }
       event(handle, HTTP_END);
     } catch (error) {
-      if (!state.abort.signal.aborted) event(handle, HTTP_ERROR, encoder.encode(error instanceof Error ? error.message : String(error)));
+      if (state.abort.signal.aborted) return;
+      const text = error instanceof Error ? error.message : String(error);
+      // `fetch` rejects before any response only for the network or for CORS, and says the same for both.
+      const answer = crossOrigin && error instanceof TypeError && !answered ? http.blocked?.({ method: message.method, url: where, error: text }) : undefined;
+      if (answer) {
+        http.seen?.({ method: message.method, url: where, status: answer.status, headers: ["content-type", "x-wasm-term-synthetic"], synthetic: true });
+        head(answer.status, "content-type: text/plain; charset=utf-8\r\nx-wasm-term-synthetic: blocked\r\n");
+        event(handle, HTTP_BODY, encoder.encode(answer.body));
+        event(handle, HTTP_END);
+      } else {
+        event(handle, HTTP_ERROR, encoder.encode(crossOrigin ? `${text} (${where}: the network, or this page's origin is not allowed by the server's CORS policy)` : text));
+      }
     } finally {
       requests.delete(handle);
     }

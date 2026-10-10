@@ -17,6 +17,16 @@ export interface GuestParam {
    * "ws": as a WebSocket URL (ws:// on an http page, wss:// on an https one). */
   url?: boolean | "ws";
   hint?: string;
+  /** Not asked for in the launcher; the default applies and the page URL can still set it. */
+  hidden?: boolean;
+  /** The only values the page accepts (a static build has no relay behind it: `net` is `direct` there). */
+  only?: string[];
+}
+
+/** Holds while the guest's setting `param` has one of these values. */
+export interface GuestCondition {
+  param: string;
+  in: string[];
 }
 
 export interface GuestInfo {
@@ -35,7 +45,11 @@ export interface GuestInfo {
   /** Files the page fetches from its own server into the program's filesystem before it starts, each
    * only while every `when` condition holds for the guest's settings; `env` then names the path.
    * A file the server does not have is left out. (codex-local: the mock's test CA, only with a mock backend.) */
-  fetchFiles?: { url: string; path: string; env?: string; when?: { param: string; in: string[] }[] }[];
+  fetchFiles?: { url: string; path: string; env?: string; when?: GuestCondition[] }[];
+  /** The guest can send its HTTP requests straight to other origins (codex-local with `net=direct`): while `when` holds
+   * the page answers a request the browser rejected with an explanation instead of a bare transport error (web/direct.ts),
+   * and replaces the origins in `rewrite` (tests: an https name no browser can reach -> the mock on loopback). */
+  direct?: { when: GuestCondition[]; rewrite?: { from: string; to: string; when: GuestCondition[] }[] };
   /** Environment the guest always gets (the page's `?env=` wins). */
   env?: Record<string, string>;
   /** A wasm guest's module, when it is not /guests/<name>.wasm; other builds of it by name (`?build=`). */

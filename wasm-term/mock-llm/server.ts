@@ -824,11 +824,60 @@ function anthropicReply(turn: Turn, step: Step): Response {
 // HTTP plumbing
 // ---------------------------------------------------------------------------
 
+// Placeholder on every response; `withCors` below replaces it with what the real host for that path sends.
 const CORS = {
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "*",
-  "access-control-allow-methods": "GET, POST, OPTIONS",
 };
+
+// CORS the way the real hosts answered on 2026-10-10 (ports/codex/NOTES.md, section 12), so that a browser calling
+// this server directly (codex-local with net=direct) is allowed and refused exactly where it would be there:
+//   /backend-api/*   chatgpt.com: a fixed list of origins. A listed one is echoed with allow-credentials; any other
+//                    gets its preflight answered 400 and its real requests answered without an allow-origin header.
+//                    Nothing is exposed, so a page cannot read the rate-limit or request-id headers.
+//   /auth/*          auth.openai.com: every origin (`*`).
+//   everything else  api.openai.com: every origin (`*`), `X-Request-ID` and `CF-Ray` exposed.
+// MOCK_CHATGPT_ORIGINS="origin ..." replaces the list ("*" = every origin, the mock's old behaviour).
+const CHATGPT_ORIGINS = (process.env.MOCK_CHATGPT_ORIGINS ?? [
+  ...[3000, 3002, 3005, 5000, 5001, 5173, 8000, 8002].map((port) => `http://localhost:${port}`),
+  "https://chatgpt.com", "https://chat.openai.com", "https://platform.openai.com", "https://auth.openai.com", "https://sora.com", "https://sora.chatgpt.com", "https://chatgpt-staging.com",
+].join(" ")).split(/\s+/).filter(Boolean);
+/** Preflights and refusals seen, for the checks: `GET /auth/state` -> `cors`. */
+const corsSeen: { path: string; origin: string; allowed: boolean; preflight: boolean }[] = [];
+
+function corsHeaders(req: Request, path: string): { headers: Record<string, string>; allowed: boolean } {
+  const origin = req.headers.get("origin");
+  const asked = req.headers.get("access-control-request-headers");
+  const common: Record<string, string> = { "access-control-allow-methods": "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT", ...(asked ? { "access-control-allow-headers": asked } : {}) };
+  if (path.startsWith("/backend-api/")) {
+    const allowed = !origin || CHATGPT_ORIGINS.includes("*") || CHATGPT_ORIGINS.includes(origin);
+    return { allowed, headers: { ...common, vary: "Origin", "access-control-allow-credentials": "true", "access-control-max-age": "600", ...(origin && allowed ? { "access-control-allow-origin": origin } : {}) } };
+  }
+  if (path.startsWith("/auth/")) return { allowed: true, headers: { ...common, "access-control-allow-origin": "*" } };
+  return { allowed: true, headers: { ...common, "access-control-allow-origin": "*", "access-control-expose-headers": "X-Request-ID, CF-Ray" } };
+}
+
+function withCors(req: Request, path: string, response: Response): Response {
+  const cors = corsHeaders(req, path);
+  const origin = req.headers.get("origin");
+  if (origin && path !== "/auth/state" && (req.method === "OPTIONS" || !cors.allowed)) {
+    corsSeen.push({ path, origin, allowed: cors.allowed, preflight: req.method === "OPTIONS" });
+    if (corsSeen.length > 100) corsSeen.shift();
+  }
+  if (req.method === "OPTIONS") return new Response(null, { status: cors.allowed ? (path.startsWith("/backend-api/") ? 200 : 204) : 400, headers: cors.headers });
+  for (const name of [...response.headers.keys()]) if (name.startsWith("access-control-")) response.headers.delete(name);
+  for (const [name, value] of Object.entries(cors.headers)) response.headers.set(name, value);
+  // What the real hosts send and a page may or may not read: a request id everywhere, and on the ChatGPT backend the
+  // rate-limit window of the account (codex shows it in /status), which chatgpt.com does not expose.
+  response.headers.set("x-request-id", `mock-req-${++responseSeq}`);
+  if (path.startsWith("/backend-api/codex/")) {
+    response.headers.set("x-codex-primary-used-percent", "12.5");
+    response.headers.set("x-codex-primary-window-minutes", "300");
+    response.headers.set("x-codex-primary-reset-at", String(Math.floor(Date.now() / 1000) + 3600));
+    response.headers.set("x-models-etag", "mock-etag-1");
+  }
+  return response;
+}
+let responseSeq = 0;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "content-type": "application/json" } });
@@ -879,7 +928,7 @@ const auth = {
   refreshes: 0,
   revoked: [] as string[],
   accountChecks: [] as { authorization: string; status: number }[],
-  modelRequests: [] as { path: string; authorization: string; account: string; userAgent: string; originator: string; contentEncoding: string; tools: string[]; browserTabNote: boolean }[],
+  modelRequests: [] as { path: string; authorization: string; account: string; userAgent: string; originator: string; contentEncoding: string; origin: string; headers: string[]; tools: string[]; browserTabNote: boolean }[],
   requests: [] as string[],
 };
 
@@ -911,9 +960,10 @@ function describeAuthorization(header: string | null): string {
 async function handleAuth(req: Request, path: string, url: URL): Promise<Response | null> {
   if (!path.startsWith("/auth/") && !path.startsWith("/backend-api/")) return null;
   if (path !== "/auth/state") auth.requests.push(`${req.method} ${path}`);
-  if (path === "/auth/state") return json(auth);
+  if (path === "/auth/state") return json({ ...auth, cors: corsSeen });
   if (path === "/auth/reset" && req.method === "POST") {
     Object.assign(auth, { logins: [], generation: 0, exchanges: 0, refreshes: 0, revoked: [], accountChecks: [], modelRequests: [], requests: [] });
+    corsSeen.length = 0;
     return json({ ok: true });
   }
   if (path === "/auth/api/accounts/deviceauth/usercode" && req.method === "POST") {
@@ -1020,6 +1070,9 @@ async function handleModel(req: Request, path: string, parse: (b: Json, raw: str
     userAgent: req.headers.get("user-agent") ?? "",
     originator: req.headers.get("originator") ?? "",
     contentEncoding: encoding,
+    // Where a browser sent it from (empty: not a browser, or through a relay), and every header name that arrived.
+    origin: req.headers.get("origin") ?? "",
+    headers: [...req.headers.keys()].sort(),
     // What the client offered and told the model: tool names, and whether codex-local's note about its environment is in the request.
     tools: ((body.tools ?? []) as Json[]).map((tool) => String(tool.name ?? tool.function?.name ?? tool.type)),
     browserTabNote: raw.includes("running inside a browser tab"),
@@ -1063,6 +1116,15 @@ const server = Bun.serve<ResponsesSocket>({
     },
   },
   async fetch(req, server) {
+    const path = new URL(req.url).pathname.replace(/\/+$/, "") || "/";
+    if (req.method === "OPTIONS") return withCors(req, path, new Response(null));
+    const response = await route(req, server);
+    return response && withCors(req, path, response);
+  },
+});
+
+async function route(req: Request, server: { upgrade(req: Request, options: { data: ResponsesSocket }): boolean }): Promise<Response> {
+  {
     const url = new URL(req.url);
     const path = url.pathname.replace(/\/+$/, "") || "/";
     if (req.method === "GET" && /^(\/v1)?\/responses$/.test(path) && (req.headers.get("upgrade") ?? "").toLowerCase() === "websocket") {
@@ -1079,12 +1141,13 @@ const server = Bun.serve<ResponsesSocket>({
       if (server.upgrade(req, { data })) return undefined as unknown as Response;
       return json({ error: { message: "mock-llm: websocket upgrade failed" } }, 400);
     }
-    if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     if (req.method === "GET" && (path === "/" || path === "/health")) return json({ ok: true, service: "mock-llm", models: MODELS });
-    if (req.method === "GET" && /^(\/v1)?\/models$/.test(path)) {
+    if (req.method === "GET" && /^(\/v1|\/backend-api\/codex)?\/models$/.test(path)) {
       log(`GET ${path}${url.search}`);
       return json({ object: "list", data: MODELS.map((id) => ({ id, object: "model", created: 0, owned_by: "mock-llm" })) });
     }
+    // The ChatGPT backend's own model endpoints (what a ChatGPT sign-in uses instead of /v1): same replies, chatgpt.com's CORS.
+    if (req.method === "POST" && path === "/backend-api/codex/responses") return handleModel(req, path, parseResponses, responsesReply);
     const authResponse = await handleAuth(req, path, url);
     if (authResponse) return authResponse;
     if (req.method === "POST" && /^(\/v1)?\/chat\/completions$/.test(path)) return handleModel(req, path, parseChat, chatReply);
@@ -1093,7 +1156,7 @@ const server = Bun.serve<ResponsesSocket>({
     const bodyLen = req.method === "GET" ? 0 : (await req.text()).length;
     log(`!! unhandled ${req.method} ${path}${url.search} (${bodyLen} bytes) ua="${clip(req.headers.get("user-agent") ?? "", 40)}"`);
     return json({ error: { message: `mock-llm: no handler for ${req.method} ${path}`, type: "not_found" } }, 404);
-  },
-});
+  }
+}
 
 log(`mock-llm listening on http://${server.hostname}:${server.port} (delay ${DELAY_MS}ms/chunk)`);
