@@ -125,6 +125,9 @@ pub struct Interp {
     pub rand: u32,
     /// `trap … EXIT`
     pub exit_trap: Option<String>,
+    /// `timeout`: when the command it runs has to stop (host clock, ms), and whether that happened.
+    pub deadline: Option<f64>,
+    pub timed_out: bool,
 }
 
 pub fn normalize(path: &str) -> String {
@@ -204,6 +207,20 @@ impl Interp {
             stage_pipe: None,
             rand: (now as u64 as u32) ^ 0x9e37_79b9,
             exit_trap: None,
+            deadline: None,
+            timed_out: false,
+        }
+    }
+
+    /// Under `timeout`: unwind (as `exit 124`) once the time is up. Checked before
+    /// every command, so loops and lists stop between two commands.
+    pub fn check_deadline(&mut self) -> Result<(), Flow> {
+        match self.deadline {
+            Some(d) if sys::now_ms() >= d => {
+                self.timed_out = true;
+                Err(Flow::Exit(124))
+            }
+            _ => Ok(()),
         }
     }
 
@@ -381,6 +398,7 @@ impl Interp {
     }
 
     pub fn exec(&mut self, c: &Cmd) -> X {
+        self.check_deadline()?;
         let st = self.exec_inner(c)?;
         self.s.status = st;
         if st != 0 && self.s.opts.errexit && self.s.cond_depth == 0 {
@@ -699,6 +717,7 @@ impl Interp {
 
     /// Run a command given as words: function, builtin, or program.
     pub fn run_argv(&mut self, argv: &[String], may_spawn: bool) -> Result<Done, Flow> {
+        self.check_deadline()?;
         if let Some(f) = self.s.funcs.get(&argv[0]).cloned() {
             return self.call_func(f, &argv[1..]).map(Done::Status);
         }
@@ -708,7 +727,11 @@ impl Interp {
         // `/bin/ls`, `/usr/bin/env`, `/bin/bash`: the same commands by their conventional paths.
         let name = argv[0].as_str();
         if let Some(base) = name.strip_prefix("/bin/").or_else(|| name.strip_prefix("/usr/bin/")).or_else(|| name.strip_prefix("/usr/local/bin/")) {
-            if (crate::builtins::is_program(base) || SHELL_NAMES.contains(&base)) && sys::stat(name, true).map(|s| s.size < 64).unwrap_or(true) {
+            // A shell by its path is this shell, whatever file the machine has there; `$0` is the name as given.
+            if SHELL_NAMES.contains(&base) {
+                return Ok(Done::Status(crate::nested(self, argv)));
+            }
+            if crate::builtins::is_program(base) && sys::stat(name, true).map(|s| s.size < 64).unwrap_or(true) {
                 let mut v = argv.to_vec();
                 v[0] = base.to_string();
                 if let Some(r) = crate::builtins::run(self, &v) {
@@ -742,7 +765,12 @@ impl Interp {
                 Ok(Done::Status(self.subshell(|sh| sh.run_file(&path, &name, args))))
             }
             Prog::NotFound => {
-                self.err(&format!("sh: {}: command not found", argv[0]));
+                if argv[0] == "git" {
+                    // Probed by every agent; say what to use instead of leaving it at "not found".
+                    self.err("git: not available in this environment (no git; use rg/find/ls/diff)");
+                } else {
+                    self.err(&format!("sh: {}: command not found", argv[0]));
+                }
                 Ok(Done::Status(127))
             }
             Prog::NotExecutable(why) => {

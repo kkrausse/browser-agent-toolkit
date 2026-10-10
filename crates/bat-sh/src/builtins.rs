@@ -78,7 +78,7 @@ pub const BUILTINS: &[&str] = &[
     "printf", "pwd", "read", "readlink", "readonly", "realpath", "return", "rm", "rmdir", "sed", "seq", "set", "shift", "sleep", "sort", "source", "tail",
     "tee", "test", "touch", "tr", "trap", "true", "type", "umask", "uname", "uniq", "unset", "wait", "wc", "which", "whoami", "xargs", "npm", "npx", "bunx",
     "yarn", "pnpm", "bun", "unalias", "declare", "typeset", "let", "nproc", "stat", "rev", "tac", "yes", "clear", "sync", "rg", "nl", "base64", "sha256sum", "sha1sum", "md5sum", "shasum", "tree", "cmp", "paste", "comm", "expr", "fold", "column", "od", "xxd",
-    "hexdump", "diff",
+    "hexdump", "diff", "timeout",
 ];
 
 /// Shell builtins proper: these are not found as programs by `which`.
@@ -218,9 +218,19 @@ pub fn run(sh: &mut Interp, argv: &[String]) -> Option<X> {
                 };
                 total += num.parse::<f64>().unwrap_or(0.0) * mul;
             }
-            sys::sleep_ms(total * 1000.0);
-            Ok(0)
+            let ms = total * 1000.0;
+            match sh.deadline.map(|d| d - sys::now_ms()) {
+                Some(left) if left < ms => {
+                    sys::sleep_ms(left.max(0.0));
+                    sh.check_deadline().map(|_| 0)
+                }
+                _ => {
+                    sys::sleep_ms(ms);
+                    Ok(0)
+                }
+            }
         }
+        "timeout" => timeout(sh, a),
         "xargs" => xargs(sh, a),
         "npm" | "yarn" | "pnpm" | "bun" | "npx" | "bunx" => crate::pkg::run(sh, a),
         "cat" | "ls" | "mkdir" | "rm" | "rmdir" | "cp" | "mv" | "touch" | "ln" | "chmod" | "basename" | "dirname" | "realpath" | "readlink" | "mktemp" | "du" | "stat" => {
@@ -854,4 +864,74 @@ fn xargs(sh: &mut Interp, a: &[String]) -> X {
 /// The `name` to show for a command in messages and `$0` of applets.
 pub fn applet_name(arg0: &str) -> &str {
     basename(arg0)
+}
+
+fn duration_ms(v: &str) -> Option<f64> {
+    let (num, mul) = match v.as_bytes().last()? {
+        b's' => (&v[..v.len() - 1], 1.0),
+        b'm' => (&v[..v.len() - 1], 60.0),
+        b'h' => (&v[..v.len() - 1], 3600.0),
+        b'd' => (&v[..v.len() - 1], 86400.0),
+        _ => (v, 1.0),
+    };
+    num.parse::<f64>().ok().filter(|n| *n >= 0.0).map(|n| n * mul * 1000.0)
+}
+
+/// `timeout DURATION COMMAND…`: the command runs in this shell with a deadline
+/// that `Interp::check_deadline` enforces before every command and that `sleep`
+/// honours. Nothing preempts a single builtin in the middle of its work, a
+/// read that waits for input, or a child process (`sys::wait` has no timeout).
+fn timeout(sh: &mut Interp, a: &[String]) -> X {
+    let mut i = 1;
+    let mut preserve = false;
+    while i < a.len() && a[i].starts_with('-') && a[i].len() > 1 {
+        let s = a[i].as_str();
+        i += 1;
+        match s {
+            "--" => break,
+            // No signals here: the command is stopped the same way whatever is asked for.
+            "-s" | "--signal" | "-k" | "--kill-after" => i += 1,
+            "--preserve-status" => preserve = true,
+            "--foreground" | "-v" | "--verbose" => {}
+            _ if s.starts_with("--signal=") || s.starts_with("-s") || s.starts_with("--kill-after=") || s.starts_with("-k") => {}
+            _ => {
+                sh.err(&format!("timeout: invalid option '{s}'"));
+                return Ok(125);
+            }
+        }
+    }
+    let Some(ms) = a.get(i).and_then(|v| duration_ms(v)) else {
+        sh.err(&match a.get(i) {
+            Some(v) => format!("timeout: invalid time interval '{v}'"),
+            None => "timeout: missing operand".into(),
+        });
+        return Ok(125);
+    };
+    if i + 1 >= a.len() {
+        sh.err(&format!("timeout: missing operand after '{}'", a[i]));
+        return Ok(125);
+    }
+    let outer = (sh.deadline, sh.timed_out);
+    let mine = if ms > 0.0 { Some(sys::now_ms() + ms) } else { None };
+    sh.deadline = match (outer.0, mine) {
+        (Some(o), Some(m)) => Some(o.min(m)),
+        (o, m) => o.or(m),
+    };
+    sh.timed_out = false;
+    let r = sh.run_status(&a[i + 1..]);
+    let fired = sh.timed_out;
+    sh.deadline = outer.0;
+    sh.timed_out = outer.1;
+    if !fired {
+        return r;
+    }
+    if mine.is_none_or(|m| sys::now_ms() < m) {
+        // An enclosing timeout ran out, not this one: keep unwinding.
+        sh.timed_out = true;
+        return Err(Flow::Exit(124));
+    }
+    match r {
+        Ok(_) | Err(Flow::Exit(_)) => Ok(if preserve { 143 } else { 124 }),
+        other => other,
+    }
 }

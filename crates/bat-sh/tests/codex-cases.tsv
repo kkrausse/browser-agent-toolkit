@@ -413,3 +413,24 @@ diff	diff source files	sed 's/hello/goodbye/; 6i // adds two numbers' src/main.r
 diff	diff larger random edits	seq 1 400 > g1; sed '37d;74d;111,119d;29s/$/ mod/;58s/$/ mod/;53i ins\n200,203s/^/  /;300a tail one\n301a tail two\n399d' g1 > g2; diff g1 g2 | md5sum; diff -u g1 g2 | tail -n +3 | md5sum
 diff	diff -x	diff -rq -x '*.txt' old new; diff -r --exclude=sub old new | grep -c '^diff'
 diff	diff unsupported -y	diff -y a.txt b.txt | head -1; diff -c a.txt b.txt | tail -n +3
+timeout	timeout passes status	timeout 2 echo hi; echo $?; timeout 2 sh -c 'exit 3'; echo $?; timeout 5 false; echo $?
+timeout	timeout stops sleep	timeout 0.3 sleep 5; echo $?
+timeout	timeout stops a loop	timeout 0.3 sh -c 'while :; do sleep 0.05; done'; echo $?
+timeout	timeout stops a busy loop	timeout 0.3 bash -c 'i=0; while true; do i=$((i+1)); done'; echo $?
+timeout	timeout is prompt	s=$(date +%s); timeout 1 sleep 30; e=$(date +%s); [ $((e-s)) -le 3 ] && echo prompt
+timeout	timeout units and options	timeout 1s true; echo $?; timeout -s KILL 0.2 sleep 5; echo $?; timeout -k 1 0.2 sleep 5; echo $?; timeout --signal=TERM 0.2s sleep 5; echo $?; timeout --preserve-status 0.2 sleep 5; echo $?
+timeout	timeout output before the deadline	timeout 0.5 sh -c 'echo first; sleep 5; echo never'; echo $?
+timeout	timeout nested and continue	timeout 2 sh -c 'timeout 0.2 sleep 5; echo inner=$?; echo after'; echo outer=$?
+timeout	timeout in pipeline and subst	out=$(timeout 0.2 sh -c 'echo a; sleep 5; echo b'); echo "$out $?"; timeout 0.2 sh -c 'while :; do echo x; sleep 0.05; done' | head -2
+timeout	timeout for loop and function	f() { for i in 1 2 3 4 5 6 7 8 9; do sleep 0.1; done; echo done; }; timeout 0.25 bash -c 'for i in 1 2 3 4 5 6 7 8 9; do sleep 0.1; done; echo done'; echo $?
+timeout	timeout errors	timeout; echo $?; timeout abc true; echo $?; timeout 1; echo $?; timeout 1 nosuchcmd_x; echo $?
+timeout	timeout 0 means none	timeout 0 sh -c 'sleep 0.1; echo ran'; echo $?
+stub	git status	git status; echo $?
+stub	git probes	git rev-parse --show-toplevel; echo $?; git rev-parse --is-inside-work-tree 2>/dev/null; echo $?; git diff; echo $?; git log --oneline -3; echo $?; git ls-files; echo $?; git --version; echo $?
+stub	git in a condition	if git rev-parse --git-dir >/dev/null 2>&1; then echo repo; else echo norepo; fi; command -v git >/dev/null || echo nogit
+stub	git message	rm -rf .git; git status 2>&1 | head -1 | cut -c1-4
+stub	python / python3	python -c 'print(1)'; echo $?; python3 --version; echo $?
+stub	pip / curl / wget	pip --version >/dev/null; echo $?; curl --version >/dev/null; echo $?; wget --version >/dev/null; echo $?
+stub	make / cargo	make --version >/dev/null; echo $?; cargo --version >/dev/null; echo $?
+stub	node	node -e 'console.log(1+1)'; echo $?
+stub	npm test	npm test 2>/dev/null; echo $?
