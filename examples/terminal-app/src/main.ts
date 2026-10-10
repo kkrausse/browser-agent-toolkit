@@ -85,6 +85,11 @@ const say = (text: string, error = false) => { status.textContent = text; status
 window.batTerminal = { log: [], model }
 document.querySelector('#title')!.textContent = `OpenCode · model ${model.id} at ${new URL(model.baseURL).host}`
 const panel = installPanel({ onOpen: () => window.batTerminal.terminal?.terminal.focus() })
+// Ctrl+Tab and Ctrl+Shift+Tab switch browser tabs. The terminal would take them (and cancel
+// the browser's handling) like any other key, so they are kept from it here.
+for (const type of ['keydown', 'keyup'] as const) {
+  window.addEventListener(type, event => { if (event.ctrlKey && event.key === 'Tab') event.stopImmediatePropagation() }, true)
+}
 
 function log(line: string) {
   window.batTerminal.log.push(line)
