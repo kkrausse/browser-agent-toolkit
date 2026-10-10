@@ -69,6 +69,8 @@ export interface Machine {
   waitUntil(deadlineMs: number): void;
   /** Sends pending pty output to the page (applies output flow control). */
   flushOutput(): void;
+  /** Bytes sent to the page so far, and how many times a flush had to wait for the page to catch up. */
+  outputStats(): { bytes: number; waits: number };
   post(message: WorkerMessage, transfer?: Transferable[]): void;
 
   /** Returns the previous disposition. */
@@ -91,6 +93,8 @@ export function createMachine(pty: Pty, ring: RingReader, postMessage: (message:
   const signalQueues = new Set<SignalQueue>();
   let caughtSeq = 0;
   let outSent = 0;
+  let outBytes = 0;
+  let outWaits = 0;
   const net = new Map<number, NetHandle>();
 
   function post(message: WorkerMessage, transfer: Transferable[] = []): void {
@@ -101,12 +105,14 @@ export function createMachine(pty: Pty, ring: RingReader, postMessage: (message:
     const data = pty.masterRead();
     if (data.length === 0) return;
     outSent = (outSent + data.length) >>> 0;
+    outBytes += data.length;
     post({ t: "out", data }, [data.buffer]);
     // Flow control: a program that prints in a tight loop must not queue
     // unbounded messages on the page. Wait for the page to catch up.
     for (;;) {
       const acked = Atomics.load(ring.header, H_OUT_ACK) >>> 0;
       if (((outSent - acked) >>> 0) < OUT_WINDOW) break;
+      outWaits++;
       Atomics.wait(ring.header, H_OUT_ACK, acked | 0, 100);
     }
   }
@@ -187,6 +193,7 @@ export function createMachine(pty: Pty, ring: RingReader, postMessage: (message:
       ring.wait(deadlineMs === Infinity ? Infinity : deadlineMs - performance.now());
     },
     flushOutput,
+    outputStats: () => ({ bytes: outBytes, waits: outWaits }),
     post,
     setDisposition(signo, disposition) {
       const previous = dispositions.get(signo) ?? SIG_DFL;

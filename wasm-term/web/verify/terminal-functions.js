@@ -202,6 +202,29 @@ await press("Escape");
 await page.waitForFunction(() => window.wasmTerm.exit !== null);
 check("tokio: clean exit", (await exited()).code === 0);
 
+// ---- a JavaScript guest on the node-style shim (host/node) ----------------------
+await page.goto(`${BASE}/?guest=js-demo&reset=1`); await waitFor("Commands:");
+await open("js-demo", "Commands:");
+check("js guest: process.stdin is a tty, stdout has the window size, node:fs sees the vfs", /stdin isTTY=true, 120x47, visit 2/.test(await text()) && (await text()).includes("exists(/dev/tty)=true"), (await rows()).slice(0, 2));
+check("js guest: files in the home directory persist across a reload (visit count 2)", (await text()).includes("visit 2"));
+await type("half"); await press("Control+c"); await waitFor("[SIGINT caught]");
+check("js guest: cooked mode echo and ^C as process.on('SIGINT')", (await text()).includes("> half^C"));
+await enter("flood 6"); await waitFor("flood done", 60000);
+const flood = /flood done: (\d+) bytes, paused (\d+) times/.exec(await text());
+check("js guest: output flow control pauses process.stdout.write when the page is behind", Number(flood[1]) > 6_000_000 && Number(flood[2]) > 0, flood[0]);
+await enter("raw"); await waitFor("q leaves");
+await press("ArrowUp"); await press("Control+c"); await waitFor("read 1: \\x03");
+check("js guest: setRawMode(true) delivers bytes unprocessed (arrow key, ^C as a byte)", (await text()).includes("read 3: \\e[A"));
+await press("q"); await waitFor("cooked again");
+await page.setViewportSize({ width: 1000, height: 600 }); await waitFor("[resize: now 100x35]");
+check("js guest: stdout 'resize' with the new columns/rows", true);
+await page.evaluate(() => { window.__copied = []; window.wasmTerm.clipboard = { readText: async () => "from the page", writeText: async (value) => { window.__copied.push(value); } }; });
+await enter("copy to the page"); await waitFor("copied"); await enter("paste"); await waitFor('clipboard: "from the page"');
+check("js guest: clipboard write and read go through the page", (await page.evaluate(() => window.__copied))[0] === "to the page");
+await press("Control+d");
+await page.waitForFunction(() => window.wasmTerm.exit !== null);
+check("js guest: EOF ends stdin, main() returns, exit 0", (await exited()).code === 0 && (await text()).includes("[EOF]"));
+
 await page.setViewportSize({ width: 1200, height: 800 });
 const failed = checks.filter(item => !item.ok);
 return { passed: checks.length - failed.length, failed: failed.length, failures: failed, checks: checks.map(item => `${item.ok ? "PASS" : "FAIL"} ${item.name}`) };

@@ -25,7 +25,9 @@ export interface GuestInfo {
 export interface JsGuest extends GuestInfo {
   kind: "js";
   /** Built files; `guest.js` in it is the module the machine imports. */
-  dir: string;
+  dir?: string;
   /** Shown when `dir` has not been built. */
-  build: string;
+  build?: string;
+  /** Instead of `dir`: a TypeScript entry the dev server bundles into guest.js on every load. */
+  entry?: string;
 }

@@ -8,11 +8,20 @@
 
 import { existsSync, readdirSync } from "node:fs";
 import { basename, extname, join, normalize } from "node:path";
+import { nodeShimsPlugin } from "../host/node/bun-plugin";
 import { opencodeGuest } from "../ports/opencode/web/guest";
 import type { GuestInfo, JsGuest } from "./guests";
 
 /** JavaScript guests (ports). Each is served from its own directory under /guests/<name>/. */
-const jsGuests: JsGuest[] = [opencodeGuest];
+const jsGuests: JsGuest[] = [
+  opencodeGuest,
+  {
+    name: "js-demo",
+    kind: "js",
+    description: "the node-style shim by itself: tty, raw mode, signals, files, clipboard, output flow control",
+    entry: join(import.meta.dir, "../host/node/demo-guest.ts"),
+  },
+];
 
 const root = join(import.meta.dir, "..");
 const port = Number(process.env.PORT ?? 4790);
@@ -61,7 +70,7 @@ function guestList(): GuestInfo[] {
   const wasm: GuestInfo[] = existsSync(guestsDir)
     ? readdirSync(guestsDir).filter(name => name.endsWith(".wasm")).sort().map(name => ({ name: basename(name, ".wasm"), kind: "wasm" }))
     : [];
-  return [...wasm, ...jsGuests.map(({ dir, build, ...info }) => info)];
+  return [...wasm, ...jsGuests.map(({ dir, build, entry, ...info }) => info)];
 }
 
 /** Server-sent events: `count` events, one every `interval` ms, each flushed on its own. */
@@ -113,7 +122,13 @@ const server = Bun.serve({
     if (jsFile && jsGuest) {
       const relative = normalize(jsFile[2]!);
       if (relative.startsWith("..")) return respond("Not found\n", "text/plain", {}, 404);
-      const target = join(jsGuest.dir, relative);
+      if (jsGuest.entry) {
+        if (relative !== "guest.js") return respond("Not found\n", "text/plain", {}, 404);
+        const built = await Bun.build({ entrypoints: [jsGuest.entry], target: "browser", format: "esm", sourcemap: "inline", plugins: [nodeShimsPlugin()] });
+        if (!built.success) throw new AggregateError(built.logs, `bundling ${jsGuest.name} failed`);
+        return respond(built.outputs[0]!, "text/javascript");
+      }
+      const target = join(jsGuest.dir!, relative);
       if (!existsSync(target)) return respond(`Not built: ${target}\nRun: ${jsGuest.build}\n`, "text/plain", {}, 404);
       return respond(Bun.file(target), TYPES[extname(target)] ?? "application/octet-stream");
     }
