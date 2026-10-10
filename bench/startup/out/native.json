@@ -1,0 +1,265 @@
+{
+ "meta": {
+  "label": "native",
+  "date": "2026-10-10T07:13:40.281Z",
+  "node": "v24.18.0",
+  "prepared": "/home/kkrausse/devfs/repos/kkrausse/bat-rust/target-perf/tree/examples/todo-app/.editor/prepared",
+  "image": "image-346c2eba87c91dbb.batimg"
+ },
+ "summary": {
+  "vite": {
+   "load1": {
+    "n": 7,
+    "median": 5.6,
+    "min": 5.34,
+    "max": 6.23
+   },
+   "listening": {
+    "n": 7,
+    "median": 427.3,
+    "min": 400.2,
+    "max": 445.7
+   },
+   "document": {
+    "n": 7,
+    "median": 825.4,
+    "min": 768.6,
+    "max": 882.5
+   },
+   "page": {
+    "n": 7,
+    "median": 1256.4,
+    "min": 1125.7,
+    "max": 1282.4
+   },
+   "requests": {
+    "n": 7,
+    "median": 31,
+    "min": 31,
+    "max": 31
+   },
+   "viteReadyIn": {
+    "n": 7,
+    "median": 404,
+    "min": 376,
+    "max": 420
+   }
+  },
+  "opencode": {
+   "load1": {
+    "n": 7,
+    "median": 5.64,
+    "min": 5.34,
+    "max": 6.23
+   },
+   "listening": {
+    "n": 7,
+    "median": 1124.3,
+    "min": 1028.5,
+    "max": 1370.4
+   },
+   "health": {
+    "n": 7,
+    "median": 1174.7,
+    "min": 1064,
+    "max": 1419.7
+   },
+   "activated": {
+    "n": 7,
+    "median": 1603.6,
+    "min": 1425,
+    "max": 1994.9
+   },
+   "ready": {
+    "n": 7,
+    "median": 1643.5,
+    "min": 1455.9,
+    "max": 2051.4
+   }
+  }
+ },
+ "samples": [
+  {
+   "kind": "vite",
+   "load": [
+    5.34,
+    9.58,
+    11.06
+   ],
+   "listening": 426.6,
+   "document": 847.9,
+   "page": 1256.4,
+   "requests": 31,
+   "viteReadyIn": 404,
+   "optimizerRan": false
+  },
+  {
+   "kind": "opencode",
+   "load": [
+    5.34,
+    9.58,
+    11.06
+   ],
+   "listening": 1370.4,
+   "health": 1419.7,
+   "activated": 1994.9,
+   "ready": 2051.4
+  },
+  {
+   "kind": "vite",
+   "load": [
+    5.4,
+    9.52,
+    11.03
+   ],
+   "listening": 442.7,
+   "document": 864.7,
+   "page": 1282.4,
+   "requests": 31,
+   "viteReadyIn": 419,
+   "optimizerRan": false
+  },
+  {
+   "kind": "opencode",
+   "load": [
+    5.4,
+    9.52,
+    11.03
+   ],
+   "listening": 1124.3,
+   "health": 1174.7,
+   "activated": 1603.6,
+   "ready": 1643.5
+  },
+  {
+   "kind": "vite",
+   "load": [
+    5.6,
+    9.5,
+    11.02
+   ],
+   "listening": 400.2,
+   "document": 795.2,
+   "page": 1257.5,
+   "requests": 31,
+   "viteReadyIn": 376,
+   "optimizerRan": false
+  },
+  {
+   "kind": "opencode",
+   "load": [
+    5.6,
+    9.5,
+    11.02
+   ],
+   "listening": 1101.9,
+   "health": 1153.5,
+   "activated": 1679.4,
+   "ready": 1729.3
+  },
+  {
+   "kind": "vite",
+   "load": [
+    5.6,
+    9.5,
+    11.02
+   ],
+   "listening": 445.7,
+   "document": 825.4,
+   "page": 1202,
+   "requests": 31,
+   "viteReadyIn": 420,
+   "optimizerRan": false
+  },
+  {
+   "kind": "opencode",
+   "load": [
+    5.64,
+    9.44,
+    10.99
+   ],
+   "listening": 1286.4,
+   "health": 1324.8,
+   "activated": 1754.7,
+   "ready": 1792.7
+  },
+  {
+   "kind": "vite",
+   "load": [
+    5.64,
+    9.44,
+    10.99
+   ],
+   "listening": 444.3,
+   "document": 882.5,
+   "page": 1258.6,
+   "requests": 31,
+   "viteReadyIn": 420,
+   "optimizerRan": false
+  },
+  {
+   "kind": "opencode",
+   "load": [
+    5.64,
+    9.44,
+    10.99
+   ],
+   "listening": 1142.8,
+   "health": 1185.9,
+   "activated": 1592.8,
+   "ready": 1631.9
+  },
+  {
+   "kind": "vite",
+   "load": [
+    6.23,
+    9.5,
+    11
+   ],
+   "listening": 418.9,
+   "document": 807.6,
+   "page": 1255.8,
+   "requests": 31,
+   "viteReadyIn": 397,
+   "optimizerRan": false
+  },
+  {
+   "kind": "opencode",
+   "load": [
+    6.23,
+    9.5,
+    11
+   ],
+   "listening": 1057.9,
+   "health": 1102.2,
+   "activated": 1570,
+   "ready": 1613.2
+  },
+  {
+   "kind": "vite",
+   "load": [
+    6.23,
+    9.5,
+    11
+   ],
+   "listening": 427.3,
+   "document": 768.6,
+   "page": 1125.7,
+   "requests": 31,
+   "viteReadyIn": 402,
+   "optimizerRan": false
+  },
+  {
+   "kind": "opencode",
+   "load": [
+    5.89,
+    9.37,
+    10.95
+   ],
+   "listening": 1028.5,
+   "health": 1064,
+   "activated": 1425,
+   "ready": 1455.9
+  }
+ ]
+}

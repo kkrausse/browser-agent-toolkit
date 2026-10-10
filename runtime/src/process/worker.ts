@@ -136,7 +136,7 @@ function warmUp() {
     host: { ...host, global: g },
     mark: (name: string) => {
       marks.push([name, performance.now() - runAt])
-      trace(name, { pid })
+      trace(name, { pid, loader: loader ? { ...loader.stats } : undefined })
     },
     marks,
   }

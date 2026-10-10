@@ -14,6 +14,7 @@ import { POLLHUP } from './client'
 import { F_EXPECT_CONTINUE, F_HTTP10, F_KEEPALIVE, F_UPGRADE, type HttpHead } from './codec'
 import { getGuestFetch } from './fetch'
 import { getNet } from './net'
+import { trace, tracing } from '../trace'
 
 export const STATUS_CODES: Record<number, string> = {
   100: 'Continue', 101: 'Switching Protocols', 102: 'Processing', 103: 'Early Hints', 200: 'OK', 201: 'Created', 202: 'Accepted',
@@ -385,6 +386,7 @@ function createHttp(rt: Runtime): { http: any; https: any } {
         if (chunk != null && chunk.length === 0) chunk = undefined
       }
       this.finished = true
+      if (tracing()) trace(`res ${this.statusCode} ${String(this.req?.url).slice(0, 80)}`, { pid: rt.process?.pid, loader: rt.loader?.stats.modules, compileMs: rt.loader?.stats.compileMs })
       return super.end(chunk, encoding, cb)
     }
     _write(chunk: any, _encoding: string, cb: (err?: Error | null) => void) {
@@ -516,6 +518,7 @@ function createHttp(rt: Runtime): { http: any; https: any } {
           if (server.listenerCount('checkContinue') > 0) return void server.emit('checkContinue', req, res)
           res.writeContinue()
         }
+        if (tracing()) trace(`req ${message.method} ${String(message.url).slice(0, 80)}`, { pid: rt.process?.pid })
         server.emit('request', req, res)
       },
       body(chunk: Uint8Array) {

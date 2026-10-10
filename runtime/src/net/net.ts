@@ -5,6 +5,7 @@
 import type { Runtime } from '../process/runtime'
 import { createOutbox, POLLERR, POLLHUP, POLLIN, POLLOUT, type FdIo } from './client'
 import { EAGAIN, getCodec, type Codec } from './codec'
+import { trace, tracing } from '../trace'
 
 export interface NetInternals {
   net: any
@@ -397,6 +398,7 @@ function createNet(rt: Runtime): NetInternals {
       this._fd = fd
       kernel.setNonblock(fd, true)
       const bound = kernel.sockPorts(fd).local
+      if (tracing()) trace(`listen ${bound}`, { pid: rt.process?.pid, loader: { ...rt.loader?.stats }, resolveMs: rt.loader?.resolver.stats.ms })
       const address = host === undefined ? '::' : host === 'localhost' ? '127.0.0.1' : host
       this._address = path !== undefined ? path : { address, family: isIPv6(address) ? 'IPv6' : 'IPv4', port: bound }
       this.listening = true
