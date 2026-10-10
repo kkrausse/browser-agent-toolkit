@@ -1,0 +1,364 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Fri, 9 Oct 2026 23:25:54 -0700
+Subject: [PATCH] wasi: transport relay, port main as workspace member, wasm
+ profile, current_exe fallback in config loader
+
+---
+ codex-rs/Cargo.lock                           |  24 +++
+ codex-rs/Cargo.toml                           |  16 ++
+ codex-rs/app-server-client/Cargo.toml         |   4 +
+ codex-rs/app-server-client/src/lib.rs         |   2 +
+ codex-rs/app-server-client/src/remote.rs      |  35 +++++
+ codex-rs/app-server-client/src/remote_wasi.rs | 141 ++++++++++++++++++
+ codex-rs/config/src/loader/mod.rs             |   8 +-
+ 7 files changed, 229 insertions(+), 1 deletion(-)
+ create mode 100644 codex-rs/app-server-client/src/remote_wasi.rs
+
+diff --git a/codex-rs/Cargo.lock b/codex-rs/Cargo.lock
+index 246763b..61ab76a 100644
+--- a/codex-rs/Cargo.lock
++++ b/codex-rs/Cargo.lock
+@@ -2210,6 +2210,7 @@ dependencies = [
+  "toml 0.9.11+spec-1.1.0",
+  "tracing",
+  "url",
++ "wasm-term-tokio",
+ ]
+ 
+ [[package]]
+@@ -5270,6 +5271,21 @@ dependencies = [
+  "webrtc",
+ ]
+ 
++[[package]]
++name = "codex-wasm-term"
++version = "0.162.0"
++dependencies = [
++ "anyhow",
++ "clap",
++ "codex-arg0",
++ "codex-build-info",
++ "codex-config",
++ "codex-tui",
++ "codex-utils-cli",
++ "tempfile",
++ "tokio",
++]
++
+ [[package]]
+ name = "codex-web-search-extension"
+ version = "0.162.0"
+@@ -16730,6 +16746,14 @@ dependencies = [
+ name = "wasm-term-sys"
+ version = "0.1.0"
+ 
++[[package]]
++name = "wasm-term-tokio"
++version = "0.1.0"
++dependencies = [
++ "tokio",
++ "wasm-term-sys",
++]
++
+ [[package]]
+ name = "wasmparser"
+ version = "0.244.0"
+diff --git a/codex-rs/Cargo.toml b/codex-rs/Cargo.toml
+index 11fffba..4a273f7 100644
+--- a/codex-rs/Cargo.toml
++++ b/codex-rs/Cargo.toml
+@@ -1,5 +1,7 @@
+ [workspace]
+ members = [
++    # wasm-term port: the browser `main`, kept outside the upstream tree.
++    "../../../ports/codex/main",
+     "aws-auth",
+     "analytics",
+     "agent-graph-store",
+@@ -635,6 +637,20 @@ debug = "full"
+ lto = false
+ strip = false
+ 
++# wasm-term port: the browser build. Light optimisation keeps function bodies
++# within engine limits and the module tens rather than hundreds of megabytes,
++# without a release-length compile.
++[profile.wasm]
++inherits = "dev"
++opt-level = 1
++debug = false
++strip = "debuginfo"
++panic = "abort"
++incremental = false
++
++[profile.wasm.package."*"]
++opt-level = "s"
++
+ [profile.ci-test]
+ # Reduce binary size to reduce disk pressure.
+ inherits = "test"
+diff --git a/codex-rs/app-server-client/Cargo.toml b/codex-rs/app-server-client/Cargo.toml
+index daa6ef6..24b17d7 100644
+--- a/codex-rs/app-server-client/Cargo.toml
++++ b/codex-rs/app-server-client/Cargo.toml
+@@ -33,6 +33,10 @@ toml = { workspace = true }
+ tracing = { workspace = true }
+ url = { workspace = true }
+ 
++# wasm-term port: the browser WebSocket, as a tokio-pollable descriptor.
++[target.'cfg(target_os = "wasi")'.dependencies]
++wasm-term-tokio = { path = "../../../../guests/wasm-term-tokio" }
++
+ [dev-dependencies]
+ pretty_assertions = { workspace = true }
+ serde_json = { workspace = true }
+diff --git a/codex-rs/app-server-client/src/lib.rs b/codex-rs/app-server-client/src/lib.rs
+index df5dc3e..8ed06c8 100644
+--- a/codex-rs/app-server-client/src/lib.rs
++++ b/codex-rs/app-server-client/src/lib.rs
+@@ -18,6 +18,8 @@
+ 
+ mod path;
+ mod remote;
++#[cfg(target_os = "wasi")]
++mod remote_wasi;
+ 
+ use std::error::Error;
+ use std::fmt;
+diff --git a/codex-rs/app-server-client/src/remote.rs b/codex-rs/app-server-client/src/remote.rs
+index 6b5571b..001f352 100644
+--- a/codex-rs/app-server-client/src/remote.rs
++++ b/codex-rs/app-server-client/src/remote.rs
+@@ -39,24 +39,30 @@ use codex_app_server_protocol::ServerNotification;
+ use codex_app_server_protocol::ServerRequest;
+ use codex_uds::UnixStream;
+ use codex_utils_absolute_path::AbsolutePathBuf;
++#[cfg(not(target_os = "wasi"))]
+ use codex_utils_rustls_provider::ensure_rustls_crypto_provider;
+ use futures::SinkExt;
+ use futures::StreamExt;
+ use serde::de::DeserializeOwned;
+ use tokio::io::AsyncRead;
+ use tokio::io::AsyncWrite;
++#[cfg(not(target_os = "wasi"))]
+ use tokio::net::TcpStream;
+ use tokio::sync::mpsc;
+ use tokio::sync::oneshot;
+ use tokio::time::timeout;
++#[cfg(not(target_os = "wasi"))]
+ use tokio_tungstenite::MaybeTlsStream;
+ use tokio_tungstenite::WebSocketStream;
+ use tokio_tungstenite::client_async_with_config;
++#[cfg(not(target_os = "wasi"))]
+ use tokio_tungstenite::connect_async_with_config;
+ use tokio_tungstenite::tungstenite::Error as TungsteniteError;
+ use tokio_tungstenite::tungstenite::Message;
+ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
++#[cfg(not(target_os = "wasi"))]
+ use tokio_tungstenite::tungstenite::http::HeaderValue;
++#[cfg(not(target_os = "wasi"))]
+ use tokio_tungstenite::tungstenite::http::header::AUTHORIZATION;
+ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
+ use tracing::warn;
+@@ -695,6 +701,35 @@ impl RemoteAppServerRequestHandle {
+     }
+ }
+ 
++/// wasm-term port: the browser opens the socket (see `remote_wasi.rs`). It cannot
++/// attach an `Authorization` header, so a token is refused rather than dropped.
++#[cfg(target_os = "wasi")]
++async fn connect_websocket_endpoint(
++    websocket_url: String,
++    auth_token: Option<String>,
++) -> IoResult<(String, WebSocketStream<tokio::io::DuplexStream>)> {
++    Url::parse(&websocket_url).map_err(|err| {
++        IoError::new(
++            ErrorKind::InvalidInput,
++            format!("invalid websocket URL `{websocket_url}`: {err}"),
++        )
++    })?;
++    if auth_token.is_some() {
++        return Err(IoError::new(
++            ErrorKind::InvalidInput,
++            "remote auth tokens cannot be sent from a browser WebSocket; authenticate at the proxy in front of the app server",
++        ));
++    }
++    let stream = crate::remote_wasi::connect(
++        &websocket_url,
++        remote_websocket_config(),
++        CONNECT_TIMEOUT,
++    )
++    .await?;
++    Ok((websocket_url, stream))
++}
++
++#[cfg(not(target_os = "wasi"))]
+ async fn connect_websocket_endpoint(
+     websocket_url: String,
+     auth_token: Option<String>,
+diff --git a/codex-rs/app-server-client/src/remote_wasi.rs b/codex-rs/app-server-client/src/remote_wasi.rs
+new file mode 100644
+index 0000000..051c638
+--- /dev/null
++++ b/codex-rs/app-server-client/src/remote_wasi.rs
+@@ -0,0 +1,141 @@
++//! wasm-term port: the remote app-server connection inside a browser Worker.
++//!
++//! On WASI there is no TCP. The browser owns the WebSocket and the wasm-term
++//! host hands the guest whole messages through a pollable descriptor
++//! (`wasm_term_tokio::WebSocket`). The rest of `remote.rs` is written against
++//! `WebSocketStream<S>`, so instead of re-typing it this module gives it one:
++//! the client end of an in-memory duplex pipe, with a task on the other end
++//! that speaks the server role of the framing and relays each message to and
++//! from the browser socket. No handshake runs on the pipe and nothing in it
++//! reaches the network; it only exists to keep the upstream code unchanged.
++
++use std::io::Error as IoError;
++use std::io::ErrorKind;
++use std::io::Result as IoResult;
++use std::time::Duration;
++
++use futures::SinkExt;
++use futures::StreamExt;
++use tokio::io::DuplexStream;
++use tokio::time::timeout;
++use tokio_tungstenite::WebSocketStream;
++use tokio_tungstenite::tungstenite::Message;
++use tokio_tungstenite::tungstenite::protocol::CloseFrame;
++use tokio_tungstenite::tungstenite::protocol::Role;
++use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
++use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
++use wasm_term_tokio::WebSocket;
++use wasm_term_tokio::WsEvent;
++
++/// Bytes of framed data either direction may hold before the writer waits.
++const PIPE_CAPACITY: usize = 4 * 1024 * 1024;
++/// A close frame's reason is limited to 123 bytes by the protocol.
++const MAX_CLOSE_REASON_BYTES: usize = 120;
++
++pub(crate) async fn connect(
++    websocket_url: &str,
++    config: WebSocketConfig,
++    connect_timeout: Duration,
++) -> IoResult<WebSocketStream<DuplexStream>> {
++    let mut socket = WebSocket::connect(websocket_url, &[]).map_err(|err| {
++        IoError::other(format!(
++            "failed to connect to remote app server at `{websocket_url}`: {err}"
++        ))
++    })?;
++    let opened = timeout(connect_timeout, socket.recv()).await.map_err(|_| {
++        IoError::new(
++            ErrorKind::TimedOut,
++            format!("timed out connecting to remote app server at `{websocket_url}`"),
++        )
++    })??;
++    match opened {
++        WsEvent::Open(_) => {}
++        WsEvent::Error(message) => {
++            return Err(IoError::other(format!(
++                "failed to connect to remote app server at `{websocket_url}`: {message}"
++            )));
++        }
++        WsEvent::Close { code, reason } => {
++            return Err(IoError::other(format!(
++                "remote app server at `{websocket_url}` closed the connection during connect: {code} {reason}"
++            )));
++        }
++        WsEvent::Text(_) | WsEvent::Binary(_) => {
++            return Err(IoError::other(format!(
++                "remote app server at `{websocket_url}` sent data before the connection opened"
++            )));
++        }
++    }
++
++    let (client_io, relay_io) = tokio::io::duplex(PIPE_CAPACITY);
++    let client = WebSocketStream::from_raw_socket(client_io, Role::Client, Some(config)).await;
++    let relay = WebSocketStream::from_raw_socket(relay_io, Role::Server, Some(config)).await;
++    tokio::spawn(relay_messages(socket, relay));
++    Ok(client)
++}
++
++fn close_frame(code: CloseCode, reason: &str) -> CloseFrame {
++    let mut end = reason.len().min(MAX_CLOSE_REASON_BYTES);
++    while !reason.is_char_boundary(end) {
++        end -= 1;
++    }
++    CloseFrame {
++        code,
++        reason: reason[..end].to_string().into(),
++    }
++}
++
++async fn relay_messages(mut socket: WebSocket, mut relay: WebSocketStream<DuplexStream>) {
++    loop {
++        tokio::select! {
++            outgoing = relay.next() => match outgoing {
++                Some(Ok(Message::Text(text))) => {
++                    if socket.send_text(text.as_str()).is_err() {
++                        break;
++                    }
++                }
++                Some(Ok(Message::Binary(data))) => {
++                    if socket.send_binary(&data).is_err() {
++                        break;
++                    }
++                }
++                Some(Ok(Message::Close(_))) | Some(Err(_)) | None => {
++                    // Browsers only accept 1000 or 3000-4999 from script.
++                    let _ = socket.close(1000, "");
++                    break;
++                }
++                Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_))) => {}
++            },
++            incoming = socket.recv() => {
++                let result = match incoming {
++                    Ok(WsEvent::Text(text)) => relay.send(Message::Text(text.into())).await,
++                    Ok(WsEvent::Binary(data)) => relay.send(Message::Binary(data.into())).await,
++                    Ok(WsEvent::Open(_)) => Ok(()),
++                    Ok(WsEvent::Close { code, reason }) => {
++                        let code = match code {
++                            // Not valid inside a frame; the browser reports them for abnormal ends.
++                            1005 | 1006 | 1015 => CloseCode::Error,
++                            other => CloseCode::from(other),
++                        };
++                        let _ = relay.close(Some(close_frame(code, &reason))).await;
++                        break;
++                    }
++                    Ok(WsEvent::Error(message)) => {
++                        let _ = relay.close(Some(close_frame(CloseCode::Error, &message))).await;
++                        break;
++                    }
++                    Err(err) => {
++                        let _ = relay
++                            .close(Some(close_frame(CloseCode::Error, &err.to_string())))
++                            .await;
++                        break;
++                    }
++                };
++                if result.is_err() {
++                    let _ = socket.close(1000, "");
++                    break;
++                }
++            }
++        }
++    }
++}
+diff --git a/codex-rs/config/src/loader/mod.rs b/codex-rs/config/src/loader/mod.rs
+index 4c6e152..faada01 100644
+--- a/codex-rs/config/src/loader/mod.rs
++++ b/codex-rs/config/src/loader/mod.rs
+@@ -184,7 +184,13 @@ pub async fn load_config_layers_state(
+             resolve_relative_paths_in_config_toml(config, base_dir)?,
+         )
+     } else {
+-        let file = AbsolutePathBuf::from_absolute_path(std::env::current_exe()?)?;
++        // wasm-term port: a wasm module has no executable path (`current_exe` is
++        // `Unsupported` on WASI); the packaged defaults only need a stable label.
++        #[cfg(target_os = "wasi")]
++        let current_exe = std::path::PathBuf::from("/usr/bin/codex");
++        #[cfg(not(target_os = "wasi"))]
++        let current_exe = std::env::current_exe()?;
++        let file = AbsolutePathBuf::from_absolute_path(current_exe)?;
+         let raw_toml = include_str!("../../defaults.toml");
+         let config = toml::from_str(raw_toml).map_err(|error| {
+             io::Error::new(

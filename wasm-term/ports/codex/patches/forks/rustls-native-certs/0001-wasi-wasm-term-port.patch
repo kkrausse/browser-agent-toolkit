@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Fri, 9 Oct 2026 22:20:50 -0700
+Subject: [PATCH] wasi: wasm-term port
+
+---
+ src/lib.rs | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/src/lib.rs b/src/lib.rs
+index 44631f1..5f693b7 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -33,6 +33,14 @@ mod unix;
+ #[cfg(all(unix, not(target_os = "macos")))]
+ use unix as platform;
+ 
++// wasm-term port: no platform trust store on WASI; only SSL_CERT_FILE/DIR apply.
++#[cfg(target_os = "wasi")]
++mod platform {
++    pub(crate) fn load_native_certs() -> crate::CertificateResult {
++        crate::CertificateResult::default()
++    }
++}
++
+ #[cfg(windows)]
+ mod windows;
+ #[cfg(windows)]

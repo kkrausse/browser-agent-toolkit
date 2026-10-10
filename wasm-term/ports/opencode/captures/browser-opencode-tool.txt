@@ -1,0 +1,54 @@
+
+  ┃                                                                                                                                                     Mock session
+  ┃  please use a tool
+  ┃                                                                                                                                                     Context
+                                                                                                                                                        5,755 tokens
+     I will run a shell command.                                                                                                                        3% used
+
+  ┃
+  ┃  $ echo mock-llm-tool-ok && pwd
+  ┃
+  ┃  mock-llm-tool-ok
+  ┃  /home/kkrausse/devfs/repos/kkrausse/random/.claude/worktrees/wasm-term/wasm-term/.state/workspace
+  ┃
+
+     Tool result received (115 chars). First line: `mock-llm-tool-ok`
+
+     The shell scenario is complete. MOCK-TOOL-DONE
+
+     Build · Mock Model · 1.6s · 64.1 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                                                          ⬖ Getting started                ✕
+
+                                                                                                                                                            OpenCode includes free models so
+                                                                                                                                                            you can start immediately.
+
+                                                                                                                                                            Connect from 75+ providers to
+                                                                                                                                                            use other models, including
+  ┃                                                                                                                                                         Claude, GPT, Gemini etc
+  ┃
+  ┃                                                                                                                                                         Connect provider        /connect
+  ┃  Build · Mock Model Mock LLM
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  /home/kkrausse/devfs/repos/kkrausse/random/.claude/worktrees/wasm-term/wasm-term/.state/workspace:master                5.8K (3%)  ctrl+p commands    /…/wasm-term/.state/workspace:master

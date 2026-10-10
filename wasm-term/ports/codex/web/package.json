@@ -1,0 +1,12 @@
+{
+  "name": "wasm-term-codex-port",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "bun server.ts",
+    "harness": "bun harness.ts"
+  },
+  "devDependencies": {
+    "@xterm/headless": "5.5.0"
+  }
+}

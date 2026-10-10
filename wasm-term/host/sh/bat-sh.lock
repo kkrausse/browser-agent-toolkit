@@ -1,0 +1,6 @@
+# bat-rust commit host/sh/dist/bat_sh.wasm is built from (host/sh/build.sh <commit> rewrites this file)
+commit=6427fd71823c57c80e3faa2be0695ac4e0b716b9
+subject=bat-sh: a program the host cannot spawn is 'command not found' (127)
+sha256=18c2a70c0645bf4abcaa72058de6541be1a14c21b59967d5d104e999564bab90
+size=857466
+rustc=rustc 1.99.0 (b940084d7 2026-09-28)

@@ -1,0 +1,421 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Sat, 10 Oct 2026 00:48:44 -0700
+Subject: [PATCH] wasi: remote-only client (in-process app-server stubbed),
+ startup probe on wasi, local time and home dir through chrono/dirs forks,
+ temp_dir guards, wasm-ship profile
+
+---
+ codex-rs/Cargo.lock                           |  4 ---
+ codex-rs/Cargo.toml                           | 10 +++++++
+ codex-rs/app-server-client/src/lib.rs         | 15 ++++++++++
+ codex-rs/chatgpt/src/apply_command.rs         |  2 +-
+ codex-rs/cloud-tasks-client/src/http.rs       |  2 +-
+ codex-rs/exec-server-protocol/src/protocol.rs |  2 +-
+ codex-rs/hooks/src/output_spill.rs            |  2 +-
+ codex-rs/tui/Cargo.toml                       |  2 +-
+ codex-rs/tui/src/ide_context/ipc.rs           |  2 +-
+ codex-rs/tui/src/terminal_palette.rs          |  8 ++---
+ codex-rs/tui/src/terminal_probe.rs            | 30 ++++++++++++-------
+ codex-rs/tui/src/tui.rs                       | 26 ++++++++--------
+ 12 files changed, 68 insertions(+), 37 deletions(-)
+
+diff --git a/codex-rs/Cargo.lock b/codex-rs/Cargo.lock
+index 61ab76a..2302256 100644
+--- a/codex-rs/Cargo.lock
++++ b/codex-rs/Cargo.lock
+@@ -1732,8 +1732,6 @@ dependencies = [
+ [[package]]
+ name = "chrono"
+ version = "0.4.43"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "fac4744fb15ae8337dc853fee7fb3f4e48c0fbaa23d0afe49c447b4fab126118"
+ dependencies = [
+  "iana-time-zone",
+  "js-sys",
+@@ -6492,8 +6490,6 @@ dependencies = [
+ [[package]]
+ name = "dirs"
+ version = "6.0.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "c3e8aa94d75141228480295a7d0e7feb620b1a5ad9f12bc40be62411e38cce4e"
+ dependencies = [
+  "dirs-sys",
+ ]
+diff --git a/codex-rs/Cargo.toml b/codex-rs/Cargo.toml
+index 446ccf8..2e41aa6 100644
+--- a/codex-rs/Cargo.toml
++++ b/codex-rs/Cargo.toml
+@@ -657,6 +657,14 @@ inherits = "wasm"
+ opt-level = "s"
+ strip = true
+ 
++# wasm-term port: what the page ships. Whole-program LTO on top of wasm-small:
++# one codegen unit sees every crate, so duplicate generic instances and code
++# only reachable from the dropped embedded server go away. Slow to link.
++[profile.wasm-ship]
++inherits = "wasm-small"
++lto = "fat"
++codegen-units = 1
++
+ [profile.ci-test]
+ # Reduce binary size to reduce disk pressure.
+ inherits = "test"
+@@ -670,6 +678,8 @@ opt-level = 0
+ # tokio = 1.52.3 + WASI stand-ins.
+ crossterm = { path = "../../../guests/crossterm-wasi/crossterm" }
+ tokio = { path = "../../tokio" }
++chrono = { path = "../../forks/chrono" }
++dirs = { path = "../../forks/dirs" }
+ gethostname = { path = "../../forks/gethostname" }
+ gix-fs = { path = "../../forks/gix-fs" }
+ rustls-native-certs = { path = "../../forks/rustls-native-certs" }
+diff --git a/codex-rs/app-server-client/src/lib.rs b/codex-rs/app-server-client/src/lib.rs
+index 8ed06c8..a860a16 100644
+--- a/codex-rs/app-server-client/src/lib.rs
++++ b/codex-rs/app-server-client/src/lib.rs
+@@ -354,6 +354,21 @@ impl InProcessAppServerClient {
+     ///
+     /// The returned client is ready for requests and ordered event consumption.
+     /// Request queues remain bounded without blocking on unread notifications.
++    // wasm-term: the browser build is remote-only. This is the one place the
++    // client enters `codex_app_server`; without it the embedded server, and
++    // everything in `codex-core` that only the server runs, is unreachable and
++    // the linker drops it from the module.
++    #[cfg(target_os = "wasi")]
++    pub async fn start(args: InProcessClientStartArgs) -> IoResult<Self> {
++        let _ = args;
++        Err(std::io::Error::new(
++            std::io::ErrorKind::Unsupported,
++            "the embedded app-server is not part of the browser build; connect to a remote one",
++        ))
++    }
++
++    /// See the native `start` above.
++    #[cfg(not(target_os = "wasi"))]
+     pub async fn start(args: InProcessClientStartArgs) -> IoResult<Self> {
+         let channel_capacity = args.channel_capacity.max(1);
+         let mut handle =
+diff --git a/codex-rs/chatgpt/src/apply_command.rs b/codex-rs/chatgpt/src/apply_command.rs
+index 70fe448..8939a91 100644
+--- a/codex-rs/chatgpt/src/apply_command.rs
++++ b/codex-rs/chatgpt/src/apply_command.rs
+@@ -54,7 +54,7 @@ pub async fn apply_diff_from_task(
+ }
+ 
+ async fn apply_diff(diff: &str, cwd: Option<PathBuf>) -> anyhow::Result<()> {
+-    let cwd = cwd.unwrap_or(std::env::current_dir().unwrap_or_else(|_| std::env::temp_dir()));
++    let cwd = cwd.unwrap_or(std::env::current_dir().unwrap_or_else(|_| (if cfg!(target_os = "wasi") { std::path::PathBuf::from("/tmp") } else { std::env::temp_dir() })));
+     let req = ApplyGitRequest {
+         cwd,
+         diff: diff.to_string(),
+diff --git a/codex-rs/cloud-tasks-client/src/http.rs b/codex-rs/cloud-tasks-client/src/http.rs
+index d2edcdb..aac3813 100644
+--- a/codex-rs/cloud-tasks-client/src/http.rs
++++ b/codex-rs/cloud-tasks-client/src/http.rs
+@@ -476,7 +476,7 @@ mod api {
+             }
+ 
+             let req = ApplyGitRequest {
+-                cwd: std::env::current_dir().unwrap_or_else(|_| std::env::temp_dir()),
++                cwd: std::env::current_dir().unwrap_or_else(|_| (if cfg!(target_os = "wasi") { std::path::PathBuf::from("/tmp") } else { std::env::temp_dir() })),
+                 diff: diff.clone(),
+                 revert: false,
+                 preflight,
+diff --git a/codex-rs/exec-server-protocol/src/protocol.rs b/codex-rs/exec-server-protocol/src/protocol.rs
+index 62d901e..754ddb3 100644
+--- a/codex-rs/exec-server-protocol/src/protocol.rs
++++ b/codex-rs/exec-server-protocol/src/protocol.rs
+@@ -258,7 +258,7 @@ impl EnvironmentInfo {
+                 }
+             })
+         };
+-        let temp_dir = normalize_temp_path(std::env::temp_dir().into_os_string());
++        let temp_dir = normalize_temp_path((if cfg!(target_os = "wasi") { std::path::PathBuf::from("/tmp") } else { std::env::temp_dir() }).into_os_string());
+ 
+         Self {
+             shell: codex_shell_command::shell_detect::default_user_shell().into(),
+diff --git a/codex-rs/hooks/src/output_spill.rs b/codex-rs/hooks/src/output_spill.rs
+index b60ac97..9983fcd 100644
+--- a/codex-rs/hooks/src/output_spill.rs
++++ b/codex-rs/hooks/src/output_spill.rs
+@@ -44,7 +44,7 @@ pub(crate) struct HookOutputSpiller {
+ impl HookOutputSpiller {
+     pub(crate) fn new(thread_id: ThreadId) -> Self {
+         Self {
+-            output_dir: AbsolutePathBuf::resolve_path_against_base(std::env::temp_dir(), "/")
++            output_dir: AbsolutePathBuf::resolve_path_against_base((if cfg!(target_os = "wasi") { std::path::PathBuf::from("/tmp") } else { std::env::temp_dir() }), "/")
+                 .join(HOOK_OUTPUTS_DIR)
+                 .join(thread_id.to_string()),
+         }
+diff --git a/codex-rs/tui/Cargo.toml b/codex-rs/tui/Cargo.toml
+index 3cb0d00..6aefd93 100644
+--- a/codex-rs/tui/Cargo.toml
++++ b/codex-rs/tui/Cargo.toml
+@@ -137,7 +137,7 @@ uuid = { workspace = true }
+ codex-windows-sandbox = { workspace = true }
+ tokio-util = { workspace = true, features = ["time"] }
+ 
+-[target.'cfg(unix)'.dependencies]
++[target.'cfg(any(unix, target_os = "wasi"))'.dependencies]
+ libc = { workspace = true }
+ 
+ [target.'cfg(target_os = "macos")'.dependencies]
+diff --git a/codex-rs/tui/src/ide_context/ipc.rs b/codex-rs/tui/src/ide_context/ipc.rs
+index 5fd76e0..d385752 100644
+--- a/codex-rs/tui/src/ide_context/ipc.rs
++++ b/codex-rs/tui/src/ide_context/ipc.rs
+@@ -146,7 +146,7 @@ pub(crate) fn fetch_ide_context(
+     let deadline = Instant::now() + IDE_CONTEXT_REQUEST_TIMEOUT;
+     let primary_socket_path = primary_ipc_socket_path(codex_home);
+     let uid = unsafe { libc::getuid() };
+-    let legacy_socket_paths = legacy_ipc_socket_paths(&std::env::temp_dir(), uid);
++    let legacy_socket_paths = legacy_ipc_socket_paths(&(if cfg!(target_os = "wasi") { std::path::PathBuf::from("/tmp") } else { std::env::temp_dir() }), uid);
+     fetch_ide_context_from_unix_socket_paths(
+         primary_socket_path,
+         legacy_socket_paths,
+diff --git a/codex-rs/tui/src/terminal_palette.rs b/codex-rs/tui/src/terminal_palette.rs
+index 7ff9b96..c9d3f7a 100644
+--- a/codex-rs/tui/src/terminal_palette.rs
++++ b/codex-rs/tui/src/terminal_palette.rs
+@@ -135,14 +135,14 @@ pub fn default_bg() -> Option<(u8, u8, u8)> {
+     default_colors().map(|c| c.bg)
+ }
+ 
+-#[cfg(any(unix, windows))]
++#[cfg(any(unix, target_os = "wasi", windows))]
+ pub(crate) fn set_default_colors_from_startup_probe(
+     colors: Option<crate::terminal_probe::DefaultColors>,
+ ) {
+     imp::set_default_colors_from_startup_probe(colors);
+ }
+ 
+-#[cfg(all(unix, not(test)))]
++#[cfg(all(any(unix, target_os = "wasi"), not(test)))]
+ mod imp {
+     use super::DefaultColors;
+     use std::sync::Mutex;
+@@ -275,7 +275,7 @@ mod imp {
+     }
+ }
+ 
+-#[cfg(not(any(all(unix, not(test)), windows)))]
++#[cfg(not(any(all(any(unix, target_os = "wasi"), not(test)), windows)))]
+ mod imp {
+     use super::DefaultColors;
+ 
+@@ -283,7 +283,7 @@ mod imp {
+         None
+     }
+ 
+-    #[cfg(any(unix, windows))]
++    #[cfg(any(unix, target_os = "wasi", windows))]
+     pub(super) fn set_default_colors_from_startup_probe(
+         _colors: Option<crate::terminal_probe::DefaultColors>,
+     ) {
+diff --git a/codex-rs/tui/src/terminal_probe.rs b/codex-rs/tui/src/terminal_probe.rs
+index f816935..ef4f30e 100644
+--- a/codex-rs/tui/src/terminal_probe.rs
++++ b/codex-rs/tui/src/terminal_probe.rs
+@@ -13,10 +13,10 @@
+ 
+ use std::time::Duration;
+ 
+-#[cfg(unix)]
++#[cfg(any(unix, target_os = "wasi"))]
+ mod startup_replay;
+ 
+-#[cfg(unix)]
++#[cfg(any(unix, target_os = "wasi"))]
+ mod terminal_identity;
+ 
+ #[cfg(any(windows, test))]
+@@ -35,7 +35,7 @@ pub(crate) struct DefaultColors {
+     pub(crate) bg: (u8, u8, u8),
+ }
+ 
+-#[cfg(unix)]
++#[cfg(any(unix, target_os = "wasi"))]
+ #[cfg_attr(test, allow(dead_code))]
+ mod imp {
+     use super::DefaultColors;
+@@ -96,7 +96,16 @@ mod imp {
+         /// backpressure. Falling back to `/dev/tty` keeps embedded or redirected environments
+         /// usable when they still expose a controlling terminal.
+         fn open() -> io::Result<Self> {
++            // wasm-term: wasi-libc has no `dup`. A second open of the terminal is
++            // the same thing there (the fallback below), so skip straight to it.
++            #[cfg(target_os = "wasi")]
++            let (stdio_reader, stdio_writer) = (
++                Err::<File, _>(io::Error::from(io::ErrorKind::Unsupported)),
++                Err::<File, _>(io::Error::from(io::ErrorKind::Unsupported)),
++            );
++            #[cfg(not(target_os = "wasi"))]
+             let stdio_reader = dup_file(libc::STDIN_FILENO);
++            #[cfg(not(target_os = "wasi"))]
+             let stdio_writer = dup_file(libc::STDOUT_FILENO);
+             match (stdio_reader, stdio_writer) {
+                 (Ok(reader), Ok(writer)) => Self::new(reader, writer),
+@@ -236,6 +245,7 @@ mod imp {
+     }
+ 
+     /// Duplicates a process stdio descriptor so probe cleanup owns only the duplicate.
++    #[cfg(not(target_os = "wasi"))]
+     fn dup_file(fd: libc::c_int) -> io::Result<File> {
+         let duplicated = unsafe { libc::dup(fd) };
+         if duplicated == -1 {
+@@ -797,7 +807,7 @@ mod imp {
+ #[path = "terminal_probe/windows.rs"]
+ mod imp;
+ 
+-#[cfg(any(unix, windows, test))]
++#[cfg(any(unix, target_os = "wasi", windows, test))]
+ fn parse_osc_color(buffer: &[u8], slot: u8) -> Option<(u8, u8, u8)> {
+     let prefix = format!("\x1B]{slot};");
+     let start = find_subslice(buffer, prefix.as_bytes())?;
+@@ -808,14 +818,14 @@ fn parse_osc_color(buffer: &[u8], slot: u8) -> Option<(u8, u8, u8)> {
+     parse_osc_rgb(payload)
+ }
+ 
+-#[cfg(any(unix, test))]
++#[cfg(any(unix, target_os = "wasi", test))]
+ fn parse_default_colors(buffer: &[u8]) -> Option<DefaultColors> {
+     let fg = parse_osc_color(buffer, /*slot*/ 10)?;
+     let bg = parse_osc_color(buffer, /*slot*/ 11)?;
+     Some(DefaultColors { fg, bg })
+ }
+ 
+-#[cfg(any(unix, windows, test))]
++#[cfg(any(unix, target_os = "wasi", windows, test))]
+ fn osc_payload_end(buffer: &[u8]) -> Option<(usize, usize)> {
+     let mut idx = 0;
+     while idx < buffer.len() {
+@@ -828,7 +838,7 @@ fn osc_payload_end(buffer: &[u8]) -> Option<(usize, usize)> {
+     None
+ }
+ 
+-#[cfg(any(unix, windows, test))]
++#[cfg(any(unix, target_os = "wasi", windows, test))]
+ fn parse_osc_rgb(payload: &str) -> Option<(u8, u8, u8)> {
+     let (prefix, values) = payload.trim().split_once(':')?;
+     if !prefix.eq_ignore_ascii_case("rgb") && !prefix.eq_ignore_ascii_case("rgba") {
+@@ -845,7 +855,7 @@ fn parse_osc_rgb(payload: &str) -> Option<(u8, u8, u8)> {
+     parts.next().is_none().then_some((r, g, b))
+ }
+ 
+-#[cfg(any(unix, windows, test))]
++#[cfg(any(unix, target_os = "wasi", windows, test))]
+ fn parse_osc_component(component: &str) -> Option<u8> {
+     if !(1..=4).contains(&component.len()) {
+         return None;
+@@ -856,14 +866,14 @@ fn parse_osc_component(component: &str) -> Option<u8> {
+     Some((value * u32::from(u8::MAX) / maximum) as u8)
+ }
+ 
+-#[cfg(any(unix, windows, test))]
++#[cfg(any(unix, target_os = "wasi", windows, test))]
+ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+     haystack
+         .windows(needle.len())
+         .position(|window| window == needle)
+ }
+ 
+-#[cfg(any(unix, windows))]
++#[cfg(any(unix, target_os = "wasi", windows))]
+ pub(crate) use imp::*;
+ 
+ #[cfg(test)]
+diff --git a/codex-rs/tui/src/tui.rs b/codex-rs/tui/src/tui.rs
+index 9f49da4..5627c06 100644
+--- a/codex-rs/tui/src/tui.rs
++++ b/codex-rs/tui/src/tui.rs
+@@ -24,7 +24,7 @@ use crossterm::event::EnableBracketedPaste;
+ use crossterm::event::EnableFocusChange;
+ use crossterm::event::KeyEvent;
+ use crossterm::event::MouseEvent;
+-#[cfg(not(unix))]
++#[cfg(not(any(unix, target_os = "wasi")))]
+ use crossterm::terminal::supports_keyboard_enhancement;
+ use ratatui::backend::Backend;
+ use ratatui::backend::CrosstermBackend;
+@@ -472,10 +472,10 @@ pub(crate) fn init() -> Result<InitializedTerminal> {
+ 
+     set_panic_hook();
+ 
+-    #[cfg(unix)]
++    #[cfg(any(unix, target_os = "wasi"))]
+     let backend = CrosstermBackend::new(stdout());
+ 
+-    #[cfg(unix)]
++    #[cfg(any(unix, target_os = "wasi"))]
+     let startup_probe = {
+         use crate::terminal_probe::StartupKeyboardEnhancementProbe;
+ 
+@@ -512,10 +512,10 @@ pub(crate) fn init() -> Result<InitializedTerminal> {
+         }
+     };
+ 
+-    #[cfg(unix)]
++    #[cfg(any(unix, target_os = "wasi"))]
+     crate::terminal_palette::set_default_colors_from_startup_probe(startup_probe.default_colors);
+ 
+-    #[cfg(unix)]
++    #[cfg(any(unix, target_os = "wasi"))]
+     let cursor_pos = match startup_probe.cursor_position {
+         Some(pos) => pos,
+         None => {
+@@ -524,18 +524,18 @@ pub(crate) fn init() -> Result<InitializedTerminal> {
+         }
+     };
+ 
+-    #[cfg(unix)]
++    #[cfg(any(unix, target_os = "wasi"))]
+     let enhanced_keys_supported = startup_probe
+         .keyboard_enhancement_supported
+         .unwrap_or(/*default*/ false);
+ 
+-    #[cfg(not(unix))]
++    #[cfg(not(any(unix, target_os = "wasi")))]
+     let mut backend = CrosstermBackend::new(stdout());
+ 
+-    #[cfg(not(unix))]
++    #[cfg(not(any(unix, target_os = "wasi")))]
+     let cursor_pos = cursor_position_with_crossterm(&mut backend);
+ 
+-    #[cfg(not(unix))]
++    #[cfg(not(any(unix, target_os = "wasi")))]
+     let enhanced_keys_supported =
+         !keyboard_modes::keyboard_enhancement_disabled() && detect_keyboard_enhancement_supported();
+ 
+@@ -549,11 +549,11 @@ pub(crate) fn init() -> Result<InitializedTerminal> {
+     let initialized_terminal = InitializedTerminal {
+         terminal: tui,
+         enhanced_keys_supported,
+-        #[cfg(unix)]
++        #[cfg(any(unix, target_os = "wasi"))]
+         terminal_app_over_ssh: startup_probe
+             .terminal_app_over_ssh
+             .unwrap_or(/*default*/ false),
+-        #[cfg(not(unix))]
++        #[cfg(not(any(unix, target_os = "wasi")))]
+         terminal_app_over_ssh: false,
+         stderr_guard,
+     };
+@@ -561,7 +561,7 @@ pub(crate) fn init() -> Result<InitializedTerminal> {
+     Ok(initialized_terminal)
+ }
+ 
+-#[cfg(not(unix))]
++#[cfg(not(any(unix, target_os = "wasi")))]
+ fn cursor_position_with_crossterm(backend: &mut CrosstermBackend<Stdout>) -> Position {
+     backend.get_cursor_position().unwrap_or_else(|err| {
+         tracing::warn!("failed to read initial cursor position; defaulting to origin: {err}");
+@@ -569,7 +569,7 @@ fn cursor_position_with_crossterm(backend: &mut CrosstermBackend<Stdout>) -> Pos
+     })
+ }
+ 
+-#[cfg(not(unix))]
++#[cfg(not(any(unix, target_os = "wasi")))]
+ fn detect_keyboard_enhancement_supported() -> bool {
+     // Non-Unix startup keeps the existing crossterm keyboard probe path because it already knows
+     // how to interpret platform-specific event sources.

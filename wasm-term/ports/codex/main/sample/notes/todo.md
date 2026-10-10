@@ -1,0 +1,3 @@
+- [ ] sort the report by item name (src/report.py)
+- [ ] make the low-stock threshold configurable (src/inventory.py)
+- [ ] add a farewell function to src/main.py and mention it in the README

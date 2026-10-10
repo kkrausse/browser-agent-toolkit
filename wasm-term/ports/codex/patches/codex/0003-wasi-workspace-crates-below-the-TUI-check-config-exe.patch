@@ -1,0 +1,451 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Fri, 9 Oct 2026 22:48:02 -0700
+Subject: [PATCH] wasi: workspace crates below the TUI check (config,
+ exec-server fs, history, daemon, core exit status)
+
+---
+ codex-rs/app-server-daemon/src/lib.rs         | 18 ++++++
+ codex-rs/app-server/src/lib.rs                |  8 +++
+ codex-rs/arg0/src/lib.rs                      |  2 +-
+ codex-rs/config/src/loader/mod.rs             |  6 +-
+ codex-rs/core/src/exec.rs                     | 12 ++++
+ codex-rs/exec-server/src/file_handle.rs       | 20 +++++++
+ codex-rs/exec-server/src/no_follow/mod.rs     | 12 ++--
+ codex-rs/exec-server/src/no_follow/wasi.rs    | 58 +++++++++++++++++++
+ .../exec-server/src/sandboxed_file_open.rs    | 11 ++++
+ codex-rs/git-utils/src/platform.rs            | 12 +++-
+ codex-rs/lmstudio/src/client.rs               |  6 +-
+ codex-rs/message-history/src/lib.rs           | 13 ++++-
+ codex-rs/rmcp-client/src/program_resolver.rs  |  2 +-
+ codex-rs/rmcp-client/src/utils.rs             |  2 +-
+ codex-rs/state/src/sqlite/validation.rs       | 10 ++++
+ 15 files changed, 176 insertions(+), 16 deletions(-)
+ create mode 100644 codex-rs/exec-server/src/no_follow/wasi.rs
+
+diff --git a/codex-rs/app-server-daemon/src/lib.rs b/codex-rs/app-server-daemon/src/lib.rs
+index 0fd3ed9..67ff115 100644
+--- a/codex-rs/app-server-daemon/src/lib.rs
++++ b/codex-rs/app-server-daemon/src/lib.rs
+@@ -22,7 +22,25 @@ mod remote_control_client;
+ mod settings;
+ pub mod telemetry;
+ mod thread_recovery;
++#[cfg(not(target_os = "wasi"))]
+ mod update_loop;
++// wasm-term port: the updater installs binaries and signals processes; none of it exists on WASI.
++#[cfg(target_os = "wasi")]
++mod update_loop {
++    pub(crate) async fn run(
++        _http_client_factory: codex_http_client::HttpClientFactory,
++        _restore_release: Option<String>,
++    ) -> anyhow::Result<()> {
++        anyhow::bail!("the app-server updater is not available on WASI")
++    }
++
++    pub(crate) async fn request_manual_update(
++        _daemon: &crate::Daemon,
++        _http_client_factory: codex_http_client::HttpClientFactory,
++    ) -> anyhow::Result<crate::UpdateOutput> {
++        anyhow::bail!("the app-server updater is not available on WASI")
++    }
++}
+ 
+ use std::collections::BTreeMap;
+ use std::path::Path;
+diff --git a/codex-rs/app-server/src/lib.rs b/codex-rs/app-server/src/lib.rs
+index 896aa66..fe3a5c6 100644
+--- a/codex-rs/app-server/src/lib.rs
++++ b/codex-rs/app-server/src/lib.rs
+@@ -216,6 +216,14 @@ enum ShutdownSignal {
+ }
+ 
+ async fn shutdown_signal() -> IoResult<ShutdownSignal> {
++    // wasm-term port: no process signals on WASI; the embedded server is never started there.
++    #[cfg(target_os = "wasi")]
++    {
++        tokio::signal::ctrl_c()
++            .await
++            .map(|_| ShutdownSignal::Forceable)
++    }
++
+     #[cfg(unix)]
+     {
+         use tokio::signal::unix::SignalKind;
+diff --git a/codex-rs/arg0/src/lib.rs b/codex-rs/arg0/src/lib.rs
+index c346736..6e60776 100644
+--- a/codex-rs/arg0/src/lib.rs
++++ b/codex-rs/arg0/src/lib.rs
+@@ -467,7 +467,7 @@ fn path_env_with_package_path_dir(
+ }
+ 
+ fn path_env_with_entry(path_entry: &Path, existing_path: Option<OsString>) -> OsString {
+-    #[cfg(unix)]
++    #[cfg(any(unix, target_os = "wasi"))]
+     const PATH_SEPARATOR: &str = ":";
+ 
+     #[cfg(windows)]
+diff --git a/codex-rs/config/src/loader/mod.rs b/codex-rs/config/src/loader/mod.rs
+index e524076..4c6e152 100644
+--- a/codex-rs/config/src/loader/mod.rs
++++ b/codex-rs/config/src/loader/mod.rs
+@@ -76,7 +76,7 @@ pub use windows::WindowsSystemConfigNamespaceProbe;
+ #[cfg(windows)]
+ pub use windows::probe_windows_system_config_namespace;
+ 
+-#[cfg(unix)]
++#[cfg(any(unix, target_os = "wasi"))]
+ const SYSTEM_CONFIG_TOML_FILE_UNIX: &str = "/etc/codex/config.toml";
+ 
+ #[cfg(windows)]
+@@ -722,7 +722,7 @@ pub async fn load_requirements_toml(
+     }
+ }
+ 
+-#[cfg(unix)]
++#[cfg(any(unix, target_os = "wasi"))]
+ fn system_requirements_toml_file() -> io::Result<AbsolutePathBuf> {
+     AbsolutePathBuf::from_absolute_path(Path::new("/etc/codex/requirements.toml"))
+ }
+@@ -777,7 +777,7 @@ fn has_local_managed_configuration_with_system_requirements_path(
+     Ok(false)
+ }
+ 
+-#[cfg(unix)]
++#[cfg(any(unix, target_os = "wasi"))]
+ pub fn system_config_toml_file() -> io::Result<AbsolutePathBuf> {
+     AbsolutePathBuf::from_absolute_path(Path::new(SYSTEM_CONFIG_TOML_FILE_UNIX))
+ }
+diff --git a/codex-rs/core/src/exec.rs b/codex-rs/core/src/exec.rs
+index fa458ed..e57ab6d 100644
+--- a/codex-rs/core/src/exec.rs
++++ b/codex-rs/core/src/exec.rs
+@@ -1271,6 +1271,18 @@ fn synthetic_exit_status_for_code(code: i32) -> ExitStatus {
+     synthetic_exit_status(code)
+ }
+ 
++// wasm-term port: nothing is ever spawned on WASI and std cannot build a
++// non-success `ExitStatus` there; these are type-level stand-ins.
++#[cfg(target_os = "wasi")]
++fn synthetic_exit_status(_code: i32) -> ExitStatus {
++    ExitStatus::default()
++}
++
++#[cfg(target_os = "wasi")]
++fn synthetic_exit_status_for_code(_code: i32) -> ExitStatus {
++    ExitStatus::default()
++}
++
+ #[cfg(test)]
+ #[path = "exec_tests.rs"]
+ mod tests;
+diff --git a/codex-rs/exec-server/src/file_handle.rs b/codex-rs/exec-server/src/file_handle.rs
+index a180b56..8f62a52 100644
+--- a/codex-rs/exec-server/src/file_handle.rs
++++ b/codex-rs/exec-server/src/file_handle.rs
+@@ -125,6 +125,16 @@ impl FileHandleManager {
+                     &bytes[written..],
+                     position,
+                 );
++                #[cfg(target_os = "wasi")]
++                let result = std::os::fd::AsFd::as_fd(file.as_ref())
++                    .try_clone_to_owned()
++                    .map(std::fs::File::from)
++                    .and_then(|mut file| {
++                        use std::io::Seek;
++                        use std::io::Write;
++                        file.seek(io::SeekFrom::Start(position))?;
++                        file.write(&bytes[written..])
++                    });
+                 #[cfg(windows)]
+                 let result = std::os::windows::fs::FileExt::seek_write(
+                     file.as_ref(),
+@@ -205,6 +215,16 @@ fn read_file_at(file: &File, bytes: &mut [u8], offset: u64) -> io::Result<usize>
+     std::os::unix::fs::FileExt::read_at(file, bytes, offset)
+ }
+ 
++// wasm-term port: positional I/O on WASI is unstable in std (`wasi_ext`); seek instead.
++#[cfg(target_os = "wasi")]
++fn read_file_at(file: &File, bytes: &mut [u8], offset: u64) -> io::Result<usize> {
++    use std::io::Read;
++    use std::io::Seek;
++    let mut file = file;
++    file.seek(io::SeekFrom::Start(offset))?;
++    file.read(bytes)
++}
++
+ #[cfg(windows)]
+ fn read_file_at(file: &File, bytes: &mut [u8], offset: u64) -> io::Result<usize> {
+     std::os::windows::fs::FileExt::seek_read(file, bytes, offset)
+diff --git a/codex-rs/exec-server/src/no_follow/mod.rs b/codex-rs/exec-server/src/no_follow/mod.rs
+index d7abd7f..0897644 100644
+--- a/codex-rs/exec-server/src/no_follow/mod.rs
++++ b/codex-rs/exec-server/src/no_follow/mod.rs
+@@ -1,18 +1,22 @@
+ use crate::FileMetadata;
+ use std::io;
+ use std::path::Path;
+-#[cfg(windows)]
++#[cfg(any(windows, target_os = "wasi"))]
+ use std::time::SystemTime;
+-#[cfg(windows)]
++#[cfg(any(windows, target_os = "wasi"))]
+ use std::time::UNIX_EPOCH;
+ 
+ #[cfg(unix)]
+ mod unix;
++#[cfg(target_os = "wasi")]
++mod wasi;
+ #[cfg(windows)]
+ mod windows;
+ 
+ #[cfg(unix)]
+ use unix as imp;
++#[cfg(target_os = "wasi")]
++use wasi as imp;
+ #[cfg(windows)]
+ use windows as imp;
+ 
+@@ -29,7 +33,7 @@ pub(crate) async fn metadata(path: &Path) -> io::Result<FileMetadata> {
+     imp::metadata(path.to_path_buf()).await
+ }
+ 
+-#[cfg(windows)]
++#[cfg(any(windows, target_os = "wasi"))]
+ pub(crate) async fn metadata(path: &Path) -> io::Result<FileMetadata> {
+     imp::metadata(path.to_path_buf())
+         .await
+@@ -43,7 +47,7 @@ pub(crate) async fn metadata(path: &Path) -> io::Result<FileMetadata> {
+         })
+ }
+ 
+-#[cfg(windows)]
++#[cfg(any(windows, target_os = "wasi"))]
+ fn system_time_to_unix_ms(time: SystemTime) -> i64 {
+     time.duration_since(UNIX_EPOCH)
+         .ok()
+diff --git a/codex-rs/exec-server/src/no_follow/wasi.rs b/codex-rs/exec-server/src/no_follow/wasi.rs
+new file mode 100644
+index 0000000..cb8bd9e
+--- /dev/null
++++ b/codex-rs/exec-server/src/no_follow/wasi.rs
+@@ -0,0 +1,58 @@
++//! wasm-term port: WASI has no `openat`-style API in std or rustix worth
++//! building a no-follow walk on, and the emulated machine's filesystem has no
++//! untrusted symlinks. Plain `std::fs`, run inline.
++use std::io;
++use std::io::Write;
++use std::path::Path;
++use std::path::PathBuf;
++
++pub(super) fn open_file_sync(path: &Path) -> io::Result<std::fs::File> {
++    let file = std::fs::File::open(path)?;
++    if !file.metadata()?.is_file() {
++        return Err(io::Error::new(
++            io::ErrorKind::InvalidInput,
++            "path is not a regular file",
++        ));
++    }
++    Ok(file)
++}
++
++pub(super) async fn write_file(path: PathBuf, contents: Vec<u8>) -> io::Result<()> {
++    let mut file = std::fs::OpenOptions::new()
++        .write(true)
++        .create(true)
++        .truncate(true)
++        .open(&path)?;
++    file.write_all(&contents)
++}
++
++pub(super) async fn metadata(path: PathBuf) -> io::Result<std::fs::Metadata> {
++    std::fs::symlink_metadata(&path)
++}
++
++pub(super) async fn create_directory(path: PathBuf, recursive: bool) -> io::Result<()> {
++    if recursive {
++        std::fs::create_dir_all(&path)
++    } else {
++        std::fs::create_dir(&path)
++    }
++}
++
++pub(super) async fn remove(path: PathBuf, recursive: bool, force: bool) -> io::Result<()> {
++    if recursive {
++        return Err(io::Error::new(
++            io::ErrorKind::Unsupported,
++            "recursive no-follow removal is unsupported",
++        ));
++    }
++    let metadata = match std::fs::symlink_metadata(&path) {
++        Ok(metadata) => metadata,
++        Err(error) if force && error.kind() == io::ErrorKind::NotFound => return Ok(()),
++        Err(error) => return Err(error),
++    };
++    if metadata.is_dir() {
++        std::fs::remove_dir(&path)
++    } else {
++        std::fs::remove_file(&path)
++    }
++}
+diff --git a/codex-rs/exec-server/src/sandboxed_file_open.rs b/codex-rs/exec-server/src/sandboxed_file_open.rs
+index bf21a06..fcadf86 100644
+--- a/codex-rs/exec-server/src/sandboxed_file_open.rs
++++ b/codex-rs/exec-server/src/sandboxed_file_open.rs
+@@ -69,6 +69,17 @@ async fn open_platform(
+ }
+ 
+ // Windows duplicates the helper's handle before letting it exit.
++// wasm-term port: no helper processes on WASI.
++#[cfg(target_os = "wasi")]
++async fn open_platform(
++    _command: SandboxExecRequest,
++    _request: Vec<u8>,
++) -> Result<tokio::fs::File, JSONRPCErrorError> {
++    Err(internal_error(
++        "sandboxed file open is not available on WASI".to_string(),
++    ))
++}
++
+ #[cfg(windows)]
+ async fn open_platform(
+     command: SandboxExecRequest,
+diff --git a/codex-rs/git-utils/src/platform.rs b/codex-rs/git-utils/src/platform.rs
+index 41d4e2e..4fa8cf4 100644
+--- a/codex-rs/git-utils/src/platform.rs
++++ b/codex-rs/git-utils/src/platform.rs
+@@ -33,5 +33,15 @@ pub fn create_symlink(
+     Ok(())
+ }
+ 
+-#[cfg(not(any(unix, windows)))]
++// wasm-term port: std has no stable symlink call on WASI and git tooling does not run there.
++#[cfg(target_os = "wasi")]
++pub fn create_symlink(
++    _source: &Path,
++    _link_target: &Path,
++    _destination: &Path,
++) -> Result<(), GitToolingError> {
++    Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "symlinks are not available on WASI").into())
++}
++
++#[cfg(not(any(unix, windows, target_os = "wasi")))]
+ compile_error!("codex-git symlink support is only implemented for Unix and Windows");
+diff --git a/codex-rs/lmstudio/src/client.rs b/codex-rs/lmstudio/src/client.rs
+index 8b0a89a..57ddeac 100644
+--- a/codex-rs/lmstudio/src/client.rs
++++ b/codex-rs/lmstudio/src/client.rs
+@@ -143,7 +143,7 @@ impl LMStudioClient {
+         let home = match home_dir {
+             Some(dir) => dir.to_string(),
+             None => {
+-                #[cfg(unix)]
++                #[cfg(any(unix, target_os = "wasi"))]
+                 {
+                     std::env::var("HOME").unwrap_or_default()
+                 }
+@@ -154,7 +154,7 @@ impl LMStudioClient {
+             }
+         };
+ 
+-        #[cfg(unix)]
++        #[cfg(any(unix, target_os = "wasi"))]
+         let fallback_path = format!("{home}/.lmstudio/bin/lms");
+ 
+         #[cfg(windows)]
+@@ -405,7 +405,7 @@ mod tests {
+     #[test]
+     fn test_find_lms_with_mock_home() {
+         // Test fallback path construction without touching env vars
+-        #[cfg(unix)]
++        #[cfg(any(unix, target_os = "wasi"))]
+         {
+             let result = LMStudioClient::find_lms_with_home_dir(Some("/test/home"));
+             if let Err(e) = result {
+diff --git a/codex-rs/message-history/src/lib.rs b/codex-rs/message-history/src/lib.rs
+index 4b2ce27..d6cca6a 100644
+--- a/codex-rs/message-history/src/lib.rs
++++ b/codex-rs/message-history/src/lib.rs
+@@ -160,7 +160,13 @@ pub async fn append_entry(
+     tokio::task::spawn_blocking(move || -> Result<()> {
+         // Retry a few times to avoid indefinite blocking when contended.
+         for _ in 0..MAX_RETRIES {
+-            match history_file.try_lock() {
++            // wasm-term port: std has no file locks on WASI (`Unsupported`) and the
++            // emulated machine runs one process, so the lock is ours by construction.
++            #[cfg(target_os = "wasi")]
++            let lock_result: std::result::Result<(), std::fs::TryLockError> = Ok(());
++            #[cfg(not(target_os = "wasi"))]
++            let lock_result = history_file.try_lock();
++            match lock_result {
+                 Ok(()) => {
+                     // While holding the exclusive lock, write the full line.
+                     // We do not open the file with `append(true)` on Windows, so ensure the
+@@ -318,7 +324,7 @@ async fn ensure_owner_only_permissions(file: &File) -> Result<()> {
+     Ok(())
+ }
+ 
+-#[cfg(windows)]
++#[cfg(any(windows, target_os = "wasi"))]
+ // On Windows, simply succeed.
+ async fn ensure_owner_only_permissions(_file: &File) -> Result<()> {
+     Ok(())
+@@ -382,7 +388,10 @@ fn lookup_history_entry(path: &Path, log_id: u64, offset: usize) -> Option<Histo
+     // Open & lock file for reading using a shared lock.
+     // Retry a few times to avoid indefinite blocking.
+     for _ in 0..MAX_RETRIES {
++        #[cfg(not(target_os = "wasi"))]
+         let lock_result = file.try_lock_shared();
++        #[cfg(target_os = "wasi")]
++        let lock_result: std::result::Result<(), std::fs::TryLockError> = Ok(());
+ 
+         match lock_result {
+             Ok(()) => {
+diff --git a/codex-rs/rmcp-client/src/program_resolver.rs b/codex-rs/rmcp-client/src/program_resolver.rs
+index 7f15fe8..d851eb3 100644
+--- a/codex-rs/rmcp-client/src/program_resolver.rs
++++ b/codex-rs/rmcp-client/src/program_resolver.rs
+@@ -19,7 +19,7 @@ use std::path::Path;
+ /// Unix systems handle PATH resolution and script execution natively through
+ /// the kernel's shebang (`#!`) mechanism, so this function simply returns
+ /// the program name unchanged.
+-#[cfg(unix)]
++#[cfg(any(unix, target_os = "wasi"))]
+ pub fn resolve(
+     program: OsString,
+     _env: &HashMap<OsString, OsString>,
+diff --git a/codex-rs/rmcp-client/src/utils.rs b/codex-rs/rmcp-client/src/utils.rs
+index dac42ca..83860bb 100644
+--- a/codex-rs/rmcp-client/src/utils.rs
++++ b/codex-rs/rmcp-client/src/utils.rs
+@@ -159,7 +159,7 @@ pub(crate) fn build_default_headers(
+     Ok(headers)
+ }
+ 
+-#[cfg(unix)]
++#[cfg(any(unix, target_os = "wasi"))]
+ pub(crate) const DEFAULT_ENV_VARS: &[&str] = &[
+     "HOME",
+     "LOGNAME",
+diff --git a/codex-rs/state/src/sqlite/validation.rs b/codex-rs/state/src/sqlite/validation.rs
+index f606d80..da5aedb 100644
+--- a/codex-rs/state/src/sqlite/validation.rs
++++ b/codex-rs/state/src/sqlite/validation.rs
+@@ -36,7 +36,17 @@ impl SqliteQuickCheckManager {
+         path: &Path,
+         budget: Duration,
+     ) -> anyhow::Result<QuickCheckOutcome> {
++        #[cfg(not(target_os = "wasi"))]
+         let id = file_id::get_file_id(path)?;
++        // wasm-term port: the file-id crate has no WASI arm; identify the file by path.
++        #[cfg(target_os = "wasi")]
++        let id = {
++            use std::hash::Hash;
++            use std::hash::Hasher;
++            let mut hasher = std::collections::hash_map::DefaultHasher::new();
++            path.hash(&mut hasher);
++            FileId::new_inode(0, hasher.finish())
++        };
+ 
+         if !self.0.lock().await.insert(id) {
+             // Only check each file once for this owner.

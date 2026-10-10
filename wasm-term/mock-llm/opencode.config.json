@@ -1,0 +1,23 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "mock/mock-model",
+  "small_model": "mock/mock-small",
+  "autoupdate": false,
+  "share": "disabled",
+  "permission": { "bash": "ask", "edit": "ask" },
+  "provider": {
+    "mock": {
+      "name": "Mock LLM",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://mock:4791/v1",
+        "apiKey": "mock-key-not-real"
+      },
+      "models": {
+        "mock-model": { "name": "Mock Model", "limit": { "context": 200000, "output": 8192 } },
+        "mock-small": { "name": "Mock Small", "limit": { "context": 200000, "output": 8192 } },
+        "mock-reasoning": { "name": "Mock Reasoning", "reasoning": true, "limit": { "context": 200000, "output": 8192 } }
+      }
+    }
+  }
+}

@@ -1,0 +1,89 @@
+# Token-free backend for wasm-term, fully containerised. Start with ./up.sh.
+#
+#   workspace-init  one-shot, seeds the workspace volume (no network)
+#   mock      scripted model API                         (internal only)
+#   opencode  pinned `opencode serve`                    (internal only)
+#   codex     pinned `codex app-server` + Origin proxy   (internal only)
+#   edge      byte forwarder for the published ports     (internal + published)
+#
+# `backend` is an internal network in isolated gateway mode: mock/opencode/codex
+# have no route to the internet and none to the host either. Docker does not publish ports from an
+# internal network, which is why `edge` exists: it sits on both networks and
+# forwards 127.0.0.1:4791/4792/4793/4796 inwards. It runs no agent and no tool.
+name: wasm-term-mock
+
+x-common: &common
+  image: wasm-term-mock:local
+  init: true
+  restart: "no"
+
+services:
+  mock:
+    <<: *common
+    # The one image is built here; the other services reuse it by name.
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: ["mock"]
+    networks: [backend]
+    environment:
+      MOCK_LLM_DELAY_MS: ${MOCK_LLM_DELAY_MS:-15}
+
+  # One-shot: creates the throwaway git repo on the workspace volume if absent.
+  workspace-init:
+    <<: *common
+    command: ["workspace-init"]
+    network_mode: none
+    volumes:
+      - workspace:/tmp/wasm-term-workspace
+
+  opencode:
+    <<: *common
+    command: ["opencode"]
+    networks: [backend]
+    depends_on:
+      mock: { condition: service_started }
+      workspace-init: { condition: service_completed_successfully }
+    environment:
+      # Not a secret: fixed so the server, the native client and a browser agree.
+      OPENCODE_SERVER_PASSWORD: ${MOCK_OPENCODE_PASSWORD:-wasm-term-mock}
+      # Space-separated extra origins for `opencode serve --cors` (localhost and
+      # 127.0.0.1 on any port are always allowed).
+      MOCK_CORS_ORIGINS: ${MOCK_CORS_ORIGINS:-}
+      OPENCODE_LOG_LEVEL: ${OPENCODE_LOG_LEVEL:-info}
+    volumes:
+      - workspace:/tmp/wasm-term-workspace
+
+  codex:
+    <<: *common
+    command: ["codex"]
+    networks: [backend]
+    depends_on:
+      mock: { condition: service_started }
+      workspace-init: { condition: service_completed_successfully }
+    volumes:
+      - workspace:/tmp/wasm-term-workspace
+
+  edge:
+    <<: *common
+    command: ["edge"]
+    networks: [backend, published]
+    depends_on: [mock, opencode, codex]
+    ports:
+      - "${MOCK_BIND:-127.0.0.1}:4791:4791"
+      - "${MOCK_BIND:-127.0.0.1}:4792:4792"
+      - "${MOCK_BIND:-127.0.0.1}:4793:4793"
+      - "${MOCK_BIND:-127.0.0.1}:4796:4796"
+
+networks:
+  backend:
+    internal: true
+    # Without this the host still has an address on the bridge, and containers
+    # can reach host services that listen on 0.0.0.0 (sshd answered). "isolated"
+    # gives the bridge no host address at all. Needs Docker Engine 28+.
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: isolated
+  published: {}
+
+volumes:
+  workspace: {}

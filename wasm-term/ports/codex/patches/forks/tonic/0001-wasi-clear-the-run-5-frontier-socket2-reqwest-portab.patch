@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Fri, 9 Oct 2026 22:39:16 -0700
+Subject: [PATCH] wasi: clear the run-5 frontier (socket2, reqwest,
+ portable-pty, rama, tonic, otel, gates)
+
+---
+ src/transport/channel/uds_connector.rs | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/transport/channel/uds_connector.rs b/src/transport/channel/uds_connector.rs
+index a67c4a4..6b6e87b 100644
+--- a/src/transport/channel/uds_connector.rs
++++ b/src/transport/channel/uds_connector.rs
+@@ -9,10 +9,10 @@ use tower::Service;
+ 
+ use crate::status::ConnectError;
+ 
+-#[cfg(not(target_os = "windows"))]
++#[cfg(not(any(target_os = "windows", target_os = "wasi")))]
+ use tokio::net::UnixStream;
+ 
+-#[cfg(not(target_os = "windows"))]
++#[cfg(not(any(target_os = "windows", target_os = "wasi")))]
+ async fn connect_uds(uds_path: String) -> Result<UnixStream, ConnectError> {
+     UnixStream::connect(uds_path)
+         .await
+@@ -21,11 +21,11 @@ async fn connect_uds(uds_path: String) -> Result<UnixStream, ConnectError> {
+ 
+ // Dummy type that will allow us to compile and match trait bounds
+ // but is never used.
+-#[cfg(target_os = "windows")]
++#[cfg(any(target_os = "windows", target_os = "wasi"))]
+ #[allow(dead_code)]
+ type UnixStream = tokio::io::DuplexStream;
+ 
+-#[cfg(target_os = "windows")]
++#[cfg(any(target_os = "windows", target_os = "wasi"))]
+ async fn connect_uds(_uds_path: String) -> Result<UnixStream, ConnectError> {
+     Err(ConnectError(
+         "uds connections are not allowed on windows".into(),

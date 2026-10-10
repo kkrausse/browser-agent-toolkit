@@ -1,0 +1,40 @@
+
+
+› please use a tool
+
+
+• I will run a shell command.
+
+• Ran echo mock-llm-tool-ok && pwd
+  └ mock-llm-tool-ok
+    /home/kkrausse/devfs/repos/kkrausse/random/.claude/worktrees/wasm-term/wasm-term/.state/workspace
+
+• Tool result received (218 chars). First line: mock-llm-tool-ok
+
+  The shell scenario is complete. MOCK-TOOL-DONE
+
+  Worked for <1s • 10:06 PM
+
+
+› run with approval
+
+
+• I need approval to run a command outside the sandbox.
+
+• Running echo mock-llm-escalated-ok && pwd
+
+
+  Would you like to run the following command?
+
+  Environment: local
+
+  Reason: mock-llm wants to run this outside the sandbox. Allow?
+
+  $ echo mock-llm-escalated-ok && pwd
+
+
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for commands that start with `echo mock-llm-escalated-ok` (p)
+  3. No, and tell Codex what to do differently (esc)
+
+  Press enter to confirm or esc to cancel

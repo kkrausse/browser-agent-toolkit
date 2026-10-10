@@ -1,0 +1,339 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Sat, 10 Oct 2026 08:49:35 -0700
+Subject: [PATCH] wasi: codex-local: embedded app-server behind a link-time
+ hook, process seam, HTTP through the host's fetch, single-thread fixes
+
+---
+ Cargo.toml               |   5 +
+ src/async_impl/client.rs |  37 +++++++
+ src/async_impl/mod.rs    |   3 +
+ src/async_impl/wasi.rs   | 232 +++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 277 insertions(+)
+ create mode 100644 src/async_impl/wasi.rs
+
+diff --git a/Cargo.toml b/Cargo.toml
+index d69872d..9506b41 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -507,3 +507,8 @@ version = "0.3"
+ level = "warn"
+ priority = 0
+ check-cfg = ["cfg(reqwest_unstable)"]
++
++# wasm-term port: the WASI transport (src/async_impl/wasi.rs) sends requests
++# through the host's `http_open`, made async by this crate.
++[target.'cfg(target_os = "wasi")'.dependencies.wasm-term-tokio]
++path = "../../../guests/wasm-term-tokio"
+diff --git a/src/async_impl/client.rs b/src/async_impl/client.rs
+index 6daf2ed..28a33a2 100644
+--- a/src/async_impl/client.rs
++++ b/src/async_impl/client.rs
+@@ -2610,6 +2610,23 @@ impl Client {
+             .uri(uri)
+             .version(version);
+ 
++        // wasm-term port: no sockets on WASI; the host's `fetch` carries the request.
++        // Cookies are applied here because the hyper stack's cookie layer is bypassed.
++        #[cfg(target_os = "wasi")]
++        let in_flight = {
++            let _ = (builder, version);
++            let mut wire_headers = headers.clone();
++            #[cfg(feature = "cookies")]
++            if let Some(store) = self.inner.cookie_store.as_ref() {
++                if !wire_headers.contains_key(http::header::COOKIE) {
++                    if let Some(value) = store.cookies(&url) {
++                        wire_headers.insert(http::header::COOKIE, value);
++                    }
++                }
++            }
++            ResponseFuture::Wasi(super::wasi::send(method.clone(), url.clone(), wire_headers, body))
++        };
++        #[cfg(not(target_os = "wasi"))]
+         let in_flight = match version {
+             #[cfg(feature = "http3")]
+             http::Version::HTTP_3 if self.inner.h3_client.is_some() => {
+@@ -2993,7 +3010,10 @@ pin_project! {
+ }
+ 
+ enum ResponseFuture {
++    #[cfg_attr(target_os = "wasi", allow(dead_code))]
+     Default(LayeredFuture<HyperService>),
++    #[cfg(target_os = "wasi")]
++    Wasi(super::wasi::WasiResponseFuture),
+     #[cfg(feature = "http3")]
+     H3(LayeredFuture<H3Client>),
+ }
+@@ -3072,6 +3092,23 @@ impl Future for PendingRequest {
+                 }
+                 Ok(res) => res.map(super::body::boxed),
+             },
++            #[cfg(target_os = "wasi")]
++            ResponseFuture::Wasi(r) => match ready!(r.as_mut().poll(cx)) {
++                Err(e) => {
++                    return Poll::Ready(Err(e.if_no_url(|| self.url.clone())));
++                }
++                Ok(res) => {
++                    #[cfg(feature = "cookies")]
++                    if let Some(store) = self.client.cookie_store.as_ref() {
++                        let mut cookies =
++                            cookie::extract_response_cookie_headers(res.headers()).peekable();
++                        if cookies.peek().is_some() {
++                            store.set_cookies(&mut cookies, &self.url);
++                        }
++                    }
++                    res
++                }
++            },
+         };
+ 
+         if let Some(url) = &res
+diff --git a/src/async_impl/mod.rs b/src/async_impl/mod.rs
+index d0de89d..31bc805 100644
+--- a/src/async_impl/mod.rs
++++ b/src/async_impl/mod.rs
+@@ -12,3 +12,6 @@ pub mod multipart;
+ pub(crate) mod request;
+ mod response;
+ mod upgrade;
++// wasm-term port: requests leave through the host's `http_open` (the browser's `fetch`).
++#[cfg(target_os = "wasi")]
++mod wasi;
+diff --git a/src/async_impl/wasi.rs b/src/async_impl/wasi.rs
+new file mode 100644
+index 0000000..41cf5ce
+--- /dev/null
++++ b/src/async_impl/wasi.rs
+@@ -0,0 +1,232 @@
++//! wasm-term port: the WASI transport.
++//!
++//! A WASI guest of the wasm-term machine has no sockets. Its only way out is
++//! the host's `http_open` import, which is the browser's `fetch`: a whole
++//! request goes in, the response head and then the body, as it arrives, come
++//! back on a pollable descriptor. This module is that transport, used by
++//! `Client::execute_request` instead of the hyper service stack.
++//!
++//! What differs from the native path, all of it forced by `fetch`:
++//! - the request body is collected and sent whole (no streaming uploads);
++//! - redirects, content decoding, connection reuse, TLS and proxies are the
++//!   browser's (and the relay's) business, so the builder's settings for them
++//!   are ignored;
++//! - a browser refuses to send some headers (`User-Agent`, `Cookie`,
++//!   `Origin`, ...), adds its own, and hides `Set-Cookie`. When a relay is
++//!   configured, every request header is therefore carried under an
++//!   `x-wasm-term-fwd-` prefix; the relay forwards exactly those, unwrapped,
++//!   and wraps the response headers a browser would hide or act on.
++//!
++//! Environment (read on every request, so a program can set them at start-up):
++//! - `WASM_TERM_HTTP_RELAY`: base URL of a same-origin pass-through relay, e.g.
++//!   `https://page.example/proxy/http`. `https://api.openai.com/v1/x?y` is then
++//!   requested as `<relay>/api.openai.com/v1/x?y` (a port stays in the host
++//!   segment: `<relay>/127.0.0.1:4791/v1/x`). The relay knows the scheme of each
++//!   host it allows. Unset: the URL is fetched as it is, which only works for
++//!   servers that answer the browser's CORS checks.
++
++use std::future::Future;
++use std::io;
++use std::pin::Pin;
++use std::task::{Context, Poll};
++
++use bytes::Bytes;
++use http::header::{HeaderMap, HeaderName, HeaderValue};
++use http::Method;
++use http_body_util::BodyExt;
++use url::Url;
++
++use super::body::{Body, ResponseBody};
++
++/// Prefix under which headers a browser will not send or show travel to and from the relay.
++const FORWARD_PREFIX: &str = "x-wasm-term-fwd-";
++
++/// Request headers `fetch` refuses or overrides (the Fetch standard's forbidden
++/// request-header names, plus `User-Agent`, which Chrome does not let a page set).
++fn browser_forbids(name: &str) -> bool {
++    matches!(
++        name,
++        "accept-charset"
++            | "accept-encoding"
++            | "access-control-request-headers"
++            | "access-control-request-method"
++            | "cookie"
++            | "cookie2"
++            | "date"
++            | "dnt"
++            | "expect"
++            | "origin"
++            | "referer"
++            | "set-cookie"
++            | "user-agent"
++            | "via"
++    ) || name.starts_with("sec-")
++        || name.starts_with("proxy-")
++}
++
++/// Headers that describe one connection; `fetch` writes its own.
++fn hop_header(name: &str) -> bool {
++    matches!(
++        name,
++        "connection" | "content-length" | "host" | "keep-alive" | "te" | "trailer" | "transfer-encoding" | "upgrade"
++    )
++}
++
++/// The relay base, without a trailing slash.
++fn relay_base() -> Option<String> {
++    let base = std::env::var("WASM_TERM_HTTP_RELAY").ok()?;
++    let base = base.trim().trim_end_matches('/');
++    (!base.is_empty()).then(|| base.to_string())
++}
++
++/// Where a request for `url` is really sent.
++fn outbound_url(url: &Url, relay: Option<&str>) -> String {
++    let Some(relay) = relay else {
++        return url.as_str().to_string();
++    };
++    // Already addressed to the relay's own origin (or below the relay path): leave it.
++    if let Ok(relay_url) = Url::parse(relay) {
++        if relay_url.origin() == url.origin() {
++            return url.as_str().to_string();
++        }
++    }
++    let Some(host) = url.host_str() else {
++        return url.as_str().to_string();
++    };
++    let mut out = format!("{relay}/{host}");
++    if let Some(port) = url.port() {
++        out.push_str(&format!(":{port}"));
++    }
++    out.push_str(url.path());
++    if let Some(query) = url.query() {
++        out.push('?');
++        out.push_str(query);
++    }
++    out
++}
++
++pub(super) type WasiResponseFuture =
++    Pin<Box<dyn Future<Output = Result<http::Response<ResponseBody>, crate::Error>> + Send>>;
++
++/// Sends one request through the host and resolves with the response head; the
++/// body streams afterwards.
++pub(super) fn send(method: Method, url: Url, headers: HeaderMap, body: Body) -> WasiResponseFuture {
++    Box::pin(async move {
++        let relay = relay_base();
++        let target = outbound_url(&url, relay.as_deref());
++        let body = body
++            .collect()
++            .await
++            .map_err(|err| crate::error::body(err).with_url(url.clone()))?
++            .to_bytes();
++        let mut pairs: Vec<(String, String)> = Vec::with_capacity(headers.len());
++        for (name, value) in &headers {
++            let name = name.as_str();
++            if hop_header(name) {
++                continue;
++            }
++            // Header values are bytes; `fetch` takes strings. Non-UTF-8 values are dropped.
++            let Ok(value) = std::str::from_utf8(value.as_bytes()) else {
++                continue;
++            };
++            match (relay.is_some(), browser_forbids(name)) {
++                // Through the relay every header travels in the envelope, so the relay can
++                // forward exactly what this program set and nothing the browser (or a proxy
++                // in front of the page) added on its own.
++                (true, _) => pairs.push((format!("{FORWARD_PREFIX}{name}"), value.to_string())),
++                (false, false) => pairs.push((name.to_string(), value.to_string())),
++                // Direct: the browser would refuse it, and supplies its own.
++                (false, true) => {}
++            }
++        }
++        let borrowed: Vec<(&str, &str)> = pairs.iter().map(|(name, value)| (name.as_str(), value.as_str())).collect();
++        let response = wasm_term_tokio::http(method.as_str(), &target, &borrowed, &body)
++            .await
++            .map_err(|err| crate::error::request(err).with_url(url.clone()))?;
++
++        let mut builder = http::Response::builder().status(response.status);
++        if let Some(out) = builder.headers_mut() {
++            for (name, value) in &response.headers {
++                // Enveloped by the relay: what a browser hides or acts on by itself
++                // (`set-cookie`, numbered when repeated: `-set-cookie-0`, `-1`; `www-authenticate`).
++                let name = match name.strip_prefix(FORWARD_PREFIX) {
++                    Some(rest) if rest.starts_with("set-cookie") => "set-cookie",
++                    Some(rest) => rest,
++                    None => name.as_str(),
++                };
++                // The browser already decoded the body and the length is of the encoded one.
++                if matches!(name, "content-encoding" | "content-length" | "transfer-encoding") {
++                    continue;
++                }
++                if let (Ok(name), Ok(value)) = (HeaderName::from_bytes(name.as_bytes()), HeaderValue::from_str(value)) {
++                    out.append(name, value);
++                }
++            }
++        }
++        let body = WasiBody { state: State::Idle(Some(response)) };
++        builder
++            .body(body.boxed())
++            .map_err(|err| crate::error::request(err).with_url(url))
++    })
++}
++
++type ReadFuture = Pin<Box<dyn Future<Output = (wasm_term_tokio::HttpResponse, io::Result<Bytes>)> + Send>>;
++
++enum State {
++    Idle(Option<wasm_term_tokio::HttpResponse>),
++    Reading(sync_wrapper::SyncWrapper<ReadFuture>),
++    Done,
++}
++
++/// The response body: chunks as the browser delivers them.
++struct WasiBody {
++    state: State,
++}
++
++impl http_body::Body for WasiBody {
++    type Data = Bytes;
++    type Error = Box<dyn std::error::Error + Send + Sync>;
++
++    fn poll_frame(
++        mut self: Pin<&mut Self>,
++        cx: &mut Context<'_>,
++    ) -> Poll<Option<Result<http_body::Frame<Bytes>, Self::Error>>> {
++        loop {
++            match &mut self.state {
++                State::Done => return Poll::Ready(None),
++                State::Idle(response) => {
++                    let mut response = response.take().expect("response present while idle");
++                    let future: ReadFuture = Box::pin(async move {
++                        let mut buf = vec![0u8; 16 * 1024];
++                        let result = response.read(&mut buf).await.map(|n| {
++                            buf.truncate(n);
++                            Bytes::from(buf)
++                        });
++                        (response, result)
++                    });
++                    self.state = State::Reading(sync_wrapper::SyncWrapper::new(future));
++                }
++                State::Reading(future) => {
++                    let (response, result) = match future.get_mut().as_mut().poll(cx) {
++                        Poll::Ready(done) => done,
++                        Poll::Pending => return Poll::Pending,
++                    };
++                    return match result {
++                        Ok(bytes) if bytes.is_empty() => {
++                            self.state = State::Done;
++                            Poll::Ready(None)
++                        }
++                        Ok(bytes) => {
++                            self.state = State::Idle(Some(response));
++                            Poll::Ready(Some(Ok(http_body::Frame::data(bytes))))
++                        }
++                        Err(err) => {
++                            self.state = State::Done;
++                            Poll::Ready(Some(Err(Box::new(err))))
++                        }
++                    };
++                }
++            }
++        }
++    }
++}

@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Fri, 9 Oct 2026 22:39:15 -0700
+Subject: [PATCH] wasi: clear the run-5 frontier (socket2, reqwest,
+ portable-pty, rama, tonic, otel, gates)
+
+---
+ src/server/listener.rs | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/src/server/listener.rs b/src/server/listener.rs
+index 84704a6..0a323d0 100644
+--- a/src/server/listener.rs
++++ b/src/server/listener.rs
+@@ -77,8 +77,8 @@ impl TcpListenerBuilder {
+         Ok(TcpListener { inner })
+     }
+ 
+-    #[cfg(any(target_os = "windows", target_family = "unix"))]
+-    #[cfg_attr(docsrs, doc(cfg(any(target_os = "windows", target_family = "unix"))))]
++    #[cfg(any(target_os = "windows", target_family = "unix", target_os = "wasi"))]
++    #[cfg_attr(docsrs, doc(cfg(any(target_os = "windows", target_family = "unix", target_os = "wasi"))))]
+     /// Creates a new TcpListener, which will be bound to the specified socket.
+     ///
+     /// The returned listener is ready for accepting connections.
+@@ -172,8 +172,8 @@ impl TcpListener {
+         TcpListenerBuilder::default().bind_address(addr).await
+     }
+ 
+-    #[cfg(any(target_os = "windows", target_family = "unix"))]
+-    #[cfg_attr(docsrs, doc(cfg(any(target_os = "windows", target_family = "unix"))))]
++    #[cfg(any(target_os = "windows", target_family = "unix", target_os = "wasi"))]
++    #[cfg_attr(docsrs, doc(cfg(any(target_os = "windows", target_family = "unix", target_os = "wasi"))))]
+     /// Creates a new TcpListener, which will be bound to the specified socket.
+     ///
+     /// The returned listener is ready for accepting connections.
+@@ -260,7 +260,7 @@ impl From<TokioTcpListener> for TcpListener {
+     }
+ }
+ 
+-#[cfg(any(target_os = "windows", target_family = "unix"))]
++#[cfg(any(target_os = "windows", target_family = "unix", target_os = "wasi"))]
+ impl TryFrom<rama_net::socket::core::Socket> for TcpListener {
+     type Error = std::io::Error;
+ 

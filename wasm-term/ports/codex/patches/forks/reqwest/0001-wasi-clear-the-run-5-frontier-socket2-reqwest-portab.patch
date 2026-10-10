@@ -1,0 +1,1322 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Fri, 9 Oct 2026 22:39:16 -0700
+Subject: [PATCH] wasi: clear the run-5 frontier (socket2, reqwest,
+ portable-pty, rama, tonic, otel, gates)
+
+---
+ Cargo.toml                | 100 +++++++++++++++++++-------------------
+ src/async_impl/client.rs  |  68 +++++++++++++-------------
+ src/async_impl/request.rs |   2 +-
+ src/blocking/client.rs    |  48 +++++++++---------
+ src/connect.rs            |  48 +++++++++---------
+ src/error.rs              |  32 ++++++------
+ src/into_url.rs           |   2 +-
+ src/lib.rs                |   6 +--
+ src/tls.rs                |  54 ++++++++++----------
+ src/util.rs               |   6 +--
+ 10 files changed, 183 insertions(+), 183 deletions(-)
+
+diff --git a/Cargo.toml b/Cargo.toml
+index e183085..d69872d 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -236,54 +236,54 @@ version = "0.5.2"
+ features = ["limit"]
+ default-features = false
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.cookie_crate]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.cookie_crate]
+ version = "0.18.0"
+ optional = true
+ package = "cookie"
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.cookie_store]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.cookie_store]
+ version = "0.22.0"
+ optional = true
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.encoding_rs]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.encoding_rs]
+ version = "0.8"
+ optional = true
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.futures-channel]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.futures-channel]
+ version = "0.3"
+ optional = true
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.h2]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.h2]
+ version = "0.4"
+ optional = true
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.h3]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.h3]
+ version = "0.0.8"
+ optional = true
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.h3-quinn]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.h3-quinn]
+ version = "0.0.10"
+ optional = true
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.hickory-resolver]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.hickory-resolver]
+ version = "0.25"
+ features = ["tokio"]
+ optional = true
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.http-body]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.http-body]
+ version = "1"
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.http-body-util]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.http-body-util]
+ version = "0.1.2"
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.hyper]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.hyper]
+ version = "1.1"
+ features = [
+     "http1",
+     "client",
+ ]
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.hyper-rustls]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.hyper-rustls]
+ version = "0.27.0"
+ features = [
+     "http1",
+@@ -292,11 +292,11 @@ features = [
+ optional = true
+ default-features = false
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.hyper-tls]
++[target.'cfg(not(any(target_os = "wasi", all(target_arch = "wasm32", target_os = "unknown"))))'.dependencies.hyper-tls]
+ version = "0.6"
+ optional = true
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.hyper-util]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.hyper-util]
+ version = "0.1.12"
+ features = [
+     "http1",
+@@ -306,29 +306,29 @@ features = [
+     "tokio",
+ ]
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.log]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.log]
+ version = "0.4.17"
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.mime]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.mime]
+ version = "0.3.16"
+ optional = true
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.native-tls-crate]
++[target.'cfg(not(any(target_os = "wasi", all(target_arch = "wasm32", target_os = "unknown"))))'.dependencies.native-tls-crate]
+ version = "0.2.10"
+ optional = true
+ package = "native-tls"
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.once_cell]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.once_cell]
+ version = "1.18"
+ optional = true
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.percent-encoding]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.percent-encoding]
+ version = "2.3"
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.pin-project-lite]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.pin-project-lite]
+ version = "0.2.11"
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.quinn]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.quinn]
+ version = "0.11.1"
+ features = [
+     "rustls",
+@@ -337,7 +337,7 @@ features = [
+ optional = true
+ default-features = false
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.rustls]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.rustls]
+ version = "0.23.4"
+ features = [
+     "std",
+@@ -346,16 +346,16 @@ features = [
+ optional = true
+ default-features = false
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.rustls-native-certs]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.rustls-native-certs]
+ version = "0.8.0"
+ optional = true
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.rustls-pki-types]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.rustls-pki-types]
+ version = "1.9.0"
+ features = ["std"]
+ optional = true
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.tokio]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.tokio]
+ version = "1.0"
+ features = [
+     "net",
+@@ -363,23 +363,23 @@ features = [
+ ]
+ default-features = false
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.tokio-native-tls]
++[target.'cfg(not(any(target_os = "wasi", all(target_arch = "wasm32", target_os = "unknown"))))'.dependencies.tokio-native-tls]
+ version = "0.3.0"
+ optional = true
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.tokio-rustls]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.tokio-rustls]
+ version = "0.26"
+ features = ["tls12"]
+ optional = true
+ default-features = false
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.tokio-util]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.tokio-util]
+ version = "0.7.9"
+ features = ["io"]
+ optional = true
+ default-features = false
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.tower]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.tower]
+ version = "0.5.2"
+ features = [
+     "retry",
+@@ -388,32 +388,32 @@ features = [
+ ]
+ default-features = false
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.tower-http]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.tower-http]
+ version = "0.6.8"
+ features = ["follow-redirect"]
+ default-features = false
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.tower-service]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.tower-service]
+ version = "0.3"
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.webpki-roots]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies.webpki-roots]
+ version = "1"
+ optional = true
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies.brotli_crate]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dev-dependencies.brotli_crate]
+ version = "8"
+ package = "brotli"
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies.doc-comment]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dev-dependencies.doc-comment]
+ version = "0.3"
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies.env_logger]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dev-dependencies.env_logger]
+ version = "0.10"
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies.flate2]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dev-dependencies.flate2]
+ version = "1.0.13"
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies.futures-util]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dev-dependencies.futures-util]
+ version = "0.3.28"
+ features = [
+     "std",
+@@ -421,7 +421,7 @@ features = [
+ ]
+ default-features = false
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies.hyper]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dev-dependencies.hyper]
+ version = "1.1.0"
+ features = [
+     "http1",
+@@ -431,7 +431,7 @@ features = [
+ ]
+ default-features = false
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies.hyper-util]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dev-dependencies.hyper-util]
+ version = "0.1.12"
+ features = [
+     "http1",
+@@ -443,11 +443,11 @@ features = [
+     "tokio",
+ ]
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies.serde]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dev-dependencies.serde]
+ version = "1.0"
+ features = ["derive"]
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies.tokio]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dev-dependencies.tokio]
+ version = "1.0"
+ features = [
+     "macros",
+@@ -455,27 +455,27 @@ features = [
+ ]
+ default-features = false
+ 
+-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies.zstd_crate]
++[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dev-dependencies.zstd_crate]
+ version = "0.13"
+ package = "zstd"
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies.js-sys]
++[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies.js-sys]
+ version = "0.3.77"
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies.serde_json]
++[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies.serde_json]
+ version = "1.0"
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies.wasm-bindgen]
++[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies.wasm-bindgen]
+ version = "0.2.89"
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies.wasm-bindgen-futures]
++[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies.wasm-bindgen-futures]
+ version = "0.4.18"
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies.wasm-streams]
++[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies.wasm-streams]
+ version = "0.4"
+ optional = true
+ 
+-[target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
++[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies.web-sys]
+ version = "0.3.28"
+ features = [
+     "AbortController",
+@@ -496,11 +496,11 @@ features = [
+     "RequestCache",
+ ]
+ 
+-[target.'cfg(target_arch = "wasm32")'.dev-dependencies.wasm-bindgen]
++[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dev-dependencies.wasm-bindgen]
+ version = "0.2.89"
+ features = ["serde-serialize"]
+ 
+-[target.'cfg(target_arch = "wasm32")'.dev-dependencies.wasm-bindgen-test]
++[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dev-dependencies.wasm-bindgen-test]
+ version = "0.3"
+ 
+ [lints.rust.unexpected_cfgs]
+diff --git a/src/async_impl/client.rs b/src/async_impl/client.rs
+index d6dc03a..6daf2ed 100644
+--- a/src/async_impl/client.rs
++++ b/src/async_impl/client.rs
+@@ -1,4 +1,4 @@
+-#[cfg(any(feature = "native-tls", feature = "__rustls",))]
++#[cfg(any(all(feature = "native-tls", not(target_os = "wasi")), feature = "__rustls",))]
+ use std::any::Any;
+ use std::future::Future;
+ use std::net::IpAddr;
+@@ -42,7 +42,7 @@ use crate::tls::CertificateRevocationList;
+ use crate::tls::{self, TlsBackend};
+ #[cfg(feature = "__tls")]
+ use crate::Certificate;
+-#[cfg(any(feature = "native-tls", feature = "__rustls"))]
++#[cfg(any(all(feature = "native-tls", not(target_os = "wasi")), feature = "__rustls"))]
+ use crate::Identity;
+ use crate::{IntoUrl, Method, Proxy, Url};
+ 
+@@ -50,7 +50,7 @@ use http::header::{Entry, HeaderMap, HeaderValue, ACCEPT, PROXY_AUTHORIZATION, U
+ use http::uri::Scheme;
+ use http::Uri;
+ use hyper_util::client::legacy::connect::HttpConnector;
+-#[cfg(feature = "default-tls")]
++#[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+ use native_tls_crate::TlsConnector;
+ use pin_project_lite::pin_project;
+ #[cfg(feature = "http3")]
+@@ -176,7 +176,7 @@ struct Config {
+     tcp_keepalive_retries: Option<u32>,
+     #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+     tcp_user_timeout: Option<Duration>,
+-    #[cfg(any(feature = "native-tls", feature = "__rustls"))]
++    #[cfg(any(all(feature = "native-tls", not(target_os = "wasi")), feature = "__rustls"))]
+     identity: Option<Identity>,
+     proxies: Vec<ProxyMatcher>,
+     auto_sys_proxy: bool,
+@@ -320,7 +320,7 @@ impl ClientBuilder {
+                 tls_built_in_certs_webpki: true,
+                 #[cfg(feature = "rustls-tls-native-roots-no-provider")]
+                 tls_built_in_certs_native: true,
+-                #[cfg(any(feature = "native-tls", feature = "__rustls"))]
++                #[cfg(any(all(feature = "native-tls", not(target_os = "wasi")), feature = "__rustls"))]
+                 identity: None,
+                 #[cfg(feature = "__rustls")]
+                 crls: vec![],
+@@ -524,7 +524,7 @@ impl ClientBuilder {
+ 
+             #[cfg(feature = "__tls")]
+             match config.tls {
+-                #[cfg(feature = "default-tls")]
++                #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+                 TlsBackend::Default => {
+                     let mut tls = TlsConnector::builder();
+ 
+@@ -556,13 +556,13 @@ impl ClientBuilder {
+                         cert.add_to_native_tls(&mut tls);
+                     }
+ 
+-                    #[cfg(feature = "native-tls")]
++                    #[cfg(all(feature = "native-tls", not(target_os = "wasi")))]
+                     {
+                         if let Some(id) = config.identity {
+                             id.add_to_native_tls(&mut tls)?;
+                         }
+                     }
+-                    #[cfg(all(feature = "__rustls", not(feature = "native-tls")))]
++                    #[cfg(all(feature = "__rustls", not(all(feature = "native-tls", not(target_os = "wasi")))))]
+                     {
+                         // Default backend + rustls Identity doesn't work.
+                         if let Some(_id) = config.identity {
+@@ -614,7 +614,7 @@ impl ClientBuilder {
+                         config.tls_info,
+                     )?
+                 }
+-                #[cfg(feature = "native-tls")]
++                #[cfg(all(feature = "native-tls", not(target_os = "wasi")))]
+                 TlsBackend::BuiltNativeTls(conn) => ConnectorBuilder::from_built_default_tls(
+                     http,
+                     conn,
+@@ -884,7 +884,7 @@ impl ClientBuilder {
+                         config.tls_info,
+                     )
+                 }
+-                #[cfg(any(feature = "native-tls", feature = "__rustls",))]
++                #[cfg(any(all(feature = "native-tls", not(target_os = "wasi")), feature = "__rustls",))]
+                 TlsBackend::UnknownPreconfigured => {
+                     return Err(crate::error::builder(
+                         "Unknown TLS backend passed to `use_preconfigured_tls`",
+@@ -1846,8 +1846,8 @@ impl ClientBuilder {
+     #[cfg_attr(
+         docsrs,
+         doc(cfg(any(
+-            feature = "default-tls",
+-            feature = "native-tls",
++            all(feature = "default-tls", not(target_os = "wasi")),
++            all(feature = "native-tls", not(target_os = "wasi")),
+             feature = "rustls-tls"
+         )))
+     )]
+@@ -1906,8 +1906,8 @@ impl ClientBuilder {
+     #[cfg_attr(
+         docsrs,
+         doc(cfg(any(
+-            feature = "default-tls",
+-            feature = "native-tls",
++            all(feature = "default-tls", not(target_os = "wasi")),
++            all(feature = "native-tls", not(target_os = "wasi")),
+             feature = "rustls-tls"
+         )))
+     )]
+@@ -1953,8 +1953,8 @@ impl ClientBuilder {
+     ///
+     /// This requires the optional `native-tls` or `rustls-tls(-...)` feature to be
+     /// enabled.
+-    #[cfg(any(feature = "native-tls", feature = "__rustls"))]
+-    #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls-tls"))))]
++    #[cfg(any(all(feature = "native-tls", not(target_os = "wasi")), feature = "__rustls"))]
++    #[cfg_attr(docsrs, doc(cfg(any(all(feature = "native-tls", not(target_os = "wasi")), feature = "rustls-tls"))))]
+     pub fn identity(mut self, identity: Identity) -> ClientBuilder {
+         self.config.identity = Some(identity);
+         self
+@@ -1979,8 +1979,8 @@ impl ClientBuilder {
+     #[cfg_attr(
+         docsrs,
+         doc(cfg(any(
+-            feature = "default-tls",
+-            feature = "native-tls",
++            all(feature = "default-tls", not(target_os = "wasi")),
++            all(feature = "native-tls", not(target_os = "wasi")),
+             feature = "rustls-tls"
+         )))
+     )]
+@@ -2012,8 +2012,8 @@ impl ClientBuilder {
+     #[cfg_attr(
+         docsrs,
+         doc(cfg(any(
+-            feature = "default-tls",
+-            feature = "native-tls",
++            all(feature = "default-tls", not(target_os = "wasi")),
++            all(feature = "native-tls", not(target_os = "wasi")),
+             feature = "rustls-tls"
+         )))
+     )]
+@@ -2034,8 +2034,8 @@ impl ClientBuilder {
+     #[cfg_attr(
+         docsrs,
+         doc(cfg(any(
+-            feature = "default-tls",
+-            feature = "native-tls",
++            all(feature = "default-tls", not(target_os = "wasi")),
++            all(feature = "native-tls", not(target_os = "wasi")),
+             feature = "rustls-tls"
+         )))
+     )]
+@@ -2063,8 +2063,8 @@ impl ClientBuilder {
+     #[cfg_attr(
+         docsrs,
+         doc(cfg(any(
+-            feature = "default-tls",
+-            feature = "native-tls",
++            all(feature = "default-tls", not(target_os = "wasi")),
++            all(feature = "native-tls", not(target_os = "wasi")),
+             feature = "rustls-tls"
+         )))
+     )]
+@@ -2095,8 +2095,8 @@ impl ClientBuilder {
+     #[cfg_attr(
+         docsrs,
+         doc(cfg(any(
+-            feature = "default-tls",
+-            feature = "native-tls",
++            all(feature = "default-tls", not(target_os = "wasi")),
++            all(feature = "native-tls", not(target_os = "wasi")),
+             feature = "rustls-tls"
+         )))
+     )]
+@@ -2113,8 +2113,8 @@ impl ClientBuilder {
+     /// # Optional
+     ///
+     /// This requires the optional `native-tls` feature to be enabled.
+-    #[cfg(feature = "native-tls")]
+-    #[cfg_attr(docsrs, doc(cfg(feature = "native-tls")))]
++    #[cfg(all(feature = "native-tls", not(target_os = "wasi")))]
++    #[cfg_attr(docsrs, doc(cfg(all(feature = "native-tls", not(target_os = "wasi")))))]
+     pub fn use_native_tls(mut self) -> ClientBuilder {
+         self.config.tls = TlsBackend::Default;
+         self
+@@ -2153,11 +2153,11 @@ impl ClientBuilder {
+     ///
+     /// This requires one of the optional features `native-tls` or
+     /// `rustls-tls(-...)` to be enabled.
+-    #[cfg(any(feature = "native-tls", feature = "__rustls",))]
+-    #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls-tls"))))]
++    #[cfg(any(all(feature = "native-tls", not(target_os = "wasi")), feature = "__rustls",))]
++    #[cfg_attr(docsrs, doc(cfg(any(all(feature = "native-tls", not(target_os = "wasi")), feature = "rustls-tls"))))]
+     pub fn use_preconfigured_tls(mut self, tls: impl Any) -> ClientBuilder {
+         let mut tls = Some(tls);
+-        #[cfg(feature = "native-tls")]
++        #[cfg(all(feature = "native-tls", not(target_os = "wasi")))]
+         {
+             if let Some(conn) = (&mut tls as &mut dyn Any).downcast_mut::<Option<TlsConnector>>() {
+                 let tls = conn.take().expect("is definitely Some");
+@@ -2193,8 +2193,8 @@ impl ClientBuilder {
+     #[cfg_attr(
+         docsrs,
+         doc(cfg(any(
+-            feature = "default-tls",
+-            feature = "native-tls",
++            all(feature = "default-tls", not(target_os = "wasi")),
++            all(feature = "native-tls", not(target_os = "wasi")),
+             feature = "rustls-tls"
+         )))
+     )]
+@@ -2855,7 +2855,7 @@ impl Config {
+             f.field("tls_info", &self.tls_info);
+         }
+ 
+-        #[cfg(all(feature = "default-tls", feature = "__rustls"))]
++        #[cfg(all(all(feature = "default-tls", not(target_os = "wasi")), feature = "__rustls"))]
+         {
+             f.field("tls_backend", &self.tls);
+         }
+diff --git a/src/async_impl/request.rs b/src/async_impl/request.rs
+index bcde795..65f95a3 100644
+--- a/src/async_impl/request.rs
++++ b/src/async_impl/request.rs
+@@ -472,7 +472,7 @@ impl RequestBuilder {
+     // is just to nudge people to reduce breakage. It may be removed in a
+     // future patch version.
+     #[doc(hidden)]
+-    #[cfg_attr(target_arch = "wasm32", deprecated)]
++    #[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), deprecated)]
+     pub fn fetch_mode_no_cors(self) -> RequestBuilder {
+         self
+     }
+diff --git a/src/blocking/client.rs b/src/blocking/client.rs
+index 255d9d8..b17bc1a 100644
+--- a/src/blocking/client.rs
++++ b/src/blocking/client.rs
+@@ -1,4 +1,4 @@
+-#[cfg(any(feature = "native-tls", feature = "__rustls",))]
++#[cfg(any(all(feature = "native-tls", not(target_os = "wasi")), feature = "__rustls",))]
+ use std::any::Any;
+ use std::convert::TryInto;
+ use std::fmt;
+@@ -31,7 +31,7 @@ use crate::tls;
+ use crate::tls::CertificateRevocationList;
+ #[cfg(feature = "__tls")]
+ use crate::Certificate;
+-#[cfg(any(feature = "native-tls", feature = "__rustls"))]
++#[cfg(any(all(feature = "native-tls", not(target_os = "wasi")), feature = "__rustls"))]
+ use crate::Identity;
+ use crate::{async_impl, header, redirect, IntoUrl, Method, Proxy};
+ 
+@@ -787,8 +787,8 @@ impl ClientBuilder {
+     #[cfg_attr(
+         docsrs,
+         doc(cfg(any(
+-            feature = "default-tls",
+-            feature = "native-tls",
++            all(feature = "default-tls", not(target_os = "wasi")),
++            all(feature = "native-tls", not(target_os = "wasi")),
+             feature = "rustls-tls"
+         )))
+     )]
+@@ -835,8 +835,8 @@ impl ClientBuilder {
+     #[cfg_attr(
+         docsrs,
+         doc(cfg(any(
+-            feature = "default-tls",
+-            feature = "native-tls",
++            all(feature = "default-tls", not(target_os = "wasi")),
++            all(feature = "native-tls", not(target_os = "wasi")),
+             feature = "rustls-tls"
+         )))
+     )]
+@@ -868,8 +868,8 @@ impl ClientBuilder {
+     ///
+     /// This requires the optional `native-tls` or `rustls-tls(-...)` feature to be
+     /// enabled.
+-    #[cfg(any(feature = "native-tls", feature = "__rustls"))]
+-    #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls-tls"))))]
++    #[cfg(any(all(feature = "native-tls", not(target_os = "wasi")), feature = "__rustls"))]
++    #[cfg_attr(docsrs, doc(cfg(any(all(feature = "native-tls", not(target_os = "wasi")), feature = "rustls-tls"))))]
+     pub fn identity(self, identity: Identity) -> ClientBuilder {
+         self.with_inner(move |inner| inner.identity(identity))
+     }
+@@ -893,8 +893,8 @@ impl ClientBuilder {
+     #[cfg_attr(
+         docsrs,
+         doc(cfg(any(
+-            feature = "default-tls",
+-            feature = "native-tls",
++            all(feature = "default-tls", not(target_os = "wasi")),
++            all(feature = "native-tls", not(target_os = "wasi")),
+             feature = "rustls-tls"
+         )))
+     )]
+@@ -917,8 +917,8 @@ impl ClientBuilder {
+     #[cfg_attr(
+         docsrs,
+         doc(cfg(any(
+-            feature = "default-tls",
+-            feature = "native-tls",
++            all(feature = "default-tls", not(target_os = "wasi")),
++            all(feature = "native-tls", not(target_os = "wasi")),
+             feature = "rustls-tls"
+         )))
+     )]
+@@ -933,8 +933,8 @@ impl ClientBuilder {
+     #[cfg_attr(
+         docsrs,
+         doc(cfg(any(
+-            feature = "default-tls",
+-            feature = "native-tls",
++            all(feature = "default-tls", not(target_os = "wasi")),
++            all(feature = "native-tls", not(target_os = "wasi")),
+             feature = "rustls-tls"
+         )))
+     )]
+@@ -961,8 +961,8 @@ impl ClientBuilder {
+     #[cfg_attr(
+         docsrs,
+         doc(cfg(any(
+-            feature = "default-tls",
+-            feature = "native-tls",
++            all(feature = "default-tls", not(target_os = "wasi")),
++            all(feature = "native-tls", not(target_os = "wasi")),
+             feature = "rustls-tls"
+         )))
+     )]
+@@ -989,8 +989,8 @@ impl ClientBuilder {
+     #[cfg_attr(
+         docsrs,
+         doc(cfg(any(
+-            feature = "default-tls",
+-            feature = "native-tls",
++            all(feature = "default-tls", not(target_os = "wasi")),
++            all(feature = "native-tls", not(target_os = "wasi")),
+             feature = "rustls-tls"
+         )))
+     )]
+@@ -1006,8 +1006,8 @@ impl ClientBuilder {
+     /// # Optional
+     ///
+     /// This requires the optional `native-tls` feature to be enabled.
+-    #[cfg(feature = "native-tls")]
+-    #[cfg_attr(docsrs, doc(cfg(feature = "native-tls")))]
++    #[cfg(all(feature = "native-tls", not(target_os = "wasi")))]
++    #[cfg_attr(docsrs, doc(cfg(all(feature = "native-tls", not(target_os = "wasi")))))]
+     pub fn use_native_tls(self) -> ClientBuilder {
+         self.with_inner(move |inner| inner.use_native_tls())
+     }
+@@ -1036,8 +1036,8 @@ impl ClientBuilder {
+     #[cfg_attr(
+         docsrs,
+         doc(cfg(any(
+-            feature = "default-tls",
+-            feature = "native-tls",
++            all(feature = "default-tls", not(target_os = "wasi")),
++            all(feature = "native-tls", not(target_os = "wasi")),
+             feature = "rustls-tls"
+         )))
+     )]
+@@ -1063,8 +1063,8 @@ impl ClientBuilder {
+     ///
+     /// This requires one of the optional features `native-tls` or
+     /// `rustls-tls(-...)` to be enabled.
+-    #[cfg(any(feature = "native-tls", feature = "__rustls",))]
+-    #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls-tls"))))]
++    #[cfg(any(all(feature = "native-tls", not(target_os = "wasi")), feature = "__rustls",))]
++    #[cfg_attr(docsrs, doc(cfg(any(all(feature = "native-tls", not(target_os = "wasi")), feature = "rustls-tls"))))]
+     pub fn use_preconfigured_tls(self, tls: impl Any) -> ClientBuilder {
+         self.with_inner(move |inner| inner.use_preconfigured_tls(tls))
+     }
+diff --git a/src/connect.rs b/src/connect.rs
+index 1636dbe..51f93a7 100644
+--- a/src/connect.rs
++++ b/src/connect.rs
+@@ -7,7 +7,7 @@ use hyper::rt::{Read, ReadBufCursor, Write};
+ use hyper_util::client::legacy::connect::{Connected, Connection};
+ #[cfg(any(feature = "socks", feature = "__tls", unix, target_os = "windows"))]
+ use hyper_util::rt::TokioIo;
+-#[cfg(feature = "default-tls")]
++#[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+ use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
+ use pin_project_lite::pin_project;
+ use tower::util::{BoxCloneSyncServiceLayer, MapRequestLayer};
+@@ -22,7 +22,7 @@ use std::sync::Arc;
+ use std::task::{Context, Poll};
+ use std::time::Duration;
+ 
+-#[cfg(feature = "default-tls")]
++#[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+ use self::native_tls_conn::NativeTlsConn;
+ #[cfg(feature = "__rustls")]
+ use self::rustls_tls_conn::RustlsTlsConn;
+@@ -222,7 +222,7 @@ where {
+         }
+     }
+ 
+-    #[cfg(feature = "default-tls")]
++    #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+     pub(crate) fn new_default_tls<T>(
+         http: HttpConnector,
+         tls: TlsConnectorBuilder,
+@@ -273,7 +273,7 @@ where {
+         ))
+     }
+ 
+-    #[cfg(feature = "default-tls")]
++    #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+     pub(crate) fn from_built_default_tls<T>(
+         mut http: HttpConnector,
+         tls: TlsConnector,
+@@ -420,7 +420,7 @@ where {
+ 
+     pub(crate) fn set_keepalive(&mut self, dur: Option<Duration>) {
+         match &mut self.inner {
+-            #[cfg(feature = "default-tls")]
++            #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+             Inner::DefaultTls(http, _tls) => http.set_keepalive(dur),
+             #[cfg(feature = "__rustls")]
+             Inner::RustlsTls { http, .. } => http.set_keepalive(dur),
+@@ -431,7 +431,7 @@ where {
+ 
+     pub(crate) fn set_keepalive_interval(&mut self, dur: Option<Duration>) {
+         match &mut self.inner {
+-            #[cfg(feature = "default-tls")]
++            #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+             Inner::DefaultTls(http, _tls) => http.set_keepalive_interval(dur),
+             #[cfg(feature = "__rustls")]
+             Inner::RustlsTls { http, .. } => http.set_keepalive_interval(dur),
+@@ -442,7 +442,7 @@ where {
+ 
+     pub(crate) fn set_keepalive_retries(&mut self, retries: Option<u32>) {
+         match &mut self.inner {
+-            #[cfg(feature = "default-tls")]
++            #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+             Inner::DefaultTls(http, _tls) => http.set_keepalive_retries(retries),
+             #[cfg(feature = "__rustls")]
+             Inner::RustlsTls { http, .. } => http.set_keepalive_retries(retries),
+@@ -459,7 +459,7 @@ where {
+     #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+     pub(crate) fn set_tcp_user_timeout(&mut self, dur: Option<Duration>) {
+         match &mut self.inner {
+-            #[cfg(feature = "default-tls")]
++            #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+             Inner::DefaultTls(http, _tls) => http.set_tcp_user_timeout(dur),
+             #[cfg(feature = "__rustls")]
+             Inner::RustlsTls { http, .. } => http.set_tcp_user_timeout(dur),
+@@ -509,7 +509,7 @@ pub(crate) struct ConnectorService {
+ enum Inner {
+     #[cfg(not(feature = "__tls"))]
+     Http(HttpConnector),
+-    #[cfg(feature = "default-tls")]
++    #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+     DefaultTls(HttpConnector, TlsConnector),
+     #[cfg(feature = "__rustls")]
+     RustlsTls {
+@@ -523,7 +523,7 @@ impl Inner {
+     #[cfg(feature = "socks")]
+     fn get_http_connector(&mut self) -> &mut crate::connect::HttpConnector {
+         match self {
+-            #[cfg(feature = "default-tls")]
++            #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+             Inner::DefaultTls(http, _) => http,
+             #[cfg(feature = "__rustls")]
+             Inner::RustlsTls { http, .. } => http,
+@@ -545,7 +545,7 @@ impl ConnectorService {
+         };
+ 
+         match &mut self.inner {
+-            #[cfg(feature = "default-tls")]
++            #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+             Inner::DefaultTls(http, tls) => {
+                 if dst.scheme() == Some(&Scheme::HTTPS) {
+                     let host = dst.host().ok_or("no host in url")?.to_string();
+@@ -621,7 +621,7 @@ impl ConnectorService {
+                     tls_info: false,
+                 })
+             }
+-            #[cfg(feature = "default-tls")]
++            #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+             Inner::DefaultTls(http, tls) => {
+                 let mut http = http.clone();
+ 
+@@ -738,7 +738,7 @@ impl ConnectorService {
+                     tls_info: false,
+                 })
+             }
+-            #[cfg(feature = "default-tls")]
++            #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+             Inner::DefaultTls(_, tls) => {
+                 let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
+                 let mut http = hyper_tls::HttpsConnector::from((svc, tls_connector));
+@@ -799,7 +799,7 @@ impl ConnectorService {
+         let misc = proxy.custom_headers().clone();
+ 
+         match &self.inner {
+-            #[cfg(feature = "default-tls")]
++            #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+             Inner::DefaultTls(http, tls) => {
+                 if dst.scheme() == Some(&Scheme::HTTPS) {
+                     log::trace!("tunneling HTTPS over proxy");
+@@ -975,7 +975,7 @@ impl TlsInfoFactory for tokio::net::TcpStream {
+     }
+ }
+ 
+-#[cfg(feature = "default-tls")]
++#[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+ impl TlsInfoFactory for tokio_native_tls::TlsStream<TokioIo<TokioIo<tokio::net::TcpStream>>> {
+     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+         let peer_certificate = self
+@@ -988,7 +988,7 @@ impl TlsInfoFactory for tokio_native_tls::TlsStream<TokioIo<TokioIo<tokio::net::
+     }
+ }
+ 
+-#[cfg(feature = "default-tls")]
++#[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+ impl TlsInfoFactory
+     for tokio_native_tls::TlsStream<
+         TokioIo<hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::TcpStream>>>,
+@@ -1005,7 +1005,7 @@ impl TlsInfoFactory
+     }
+ }
+ 
+-#[cfg(feature = "default-tls")]
++#[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+ impl TlsInfoFactory for hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::TcpStream>> {
+     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+         match self {
+@@ -1065,7 +1065,7 @@ impl TlsInfoFactory for tokio::net::UnixStream {
+     }
+ }
+ 
+-#[cfg(feature = "default-tls")]
++#[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+ #[cfg(unix)]
+ impl TlsInfoFactory for tokio_native_tls::TlsStream<TokioIo<TokioIo<tokio::net::UnixStream>>> {
+     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+@@ -1079,7 +1079,7 @@ impl TlsInfoFactory for tokio_native_tls::TlsStream<TokioIo<TokioIo<tokio::net::
+     }
+ }
+ 
+-#[cfg(feature = "default-tls")]
++#[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+ #[cfg(unix)]
+ impl TlsInfoFactory
+     for tokio_native_tls::TlsStream<
+@@ -1097,7 +1097,7 @@ impl TlsInfoFactory
+     }
+ }
+ 
+-#[cfg(feature = "default-tls")]
++#[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+ #[cfg(unix)]
+ impl TlsInfoFactory for hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::UnixStream>> {
+     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+@@ -1161,7 +1161,7 @@ impl TlsInfoFactory for tokio::net::windows::named_pipe::NamedPipeClient {
+     }
+ }
+ 
+-#[cfg(feature = "default-tls")]
++#[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+ #[cfg(target_os = "windows")]
+ impl TlsInfoFactory
+     for tokio_native_tls::TlsStream<
+@@ -1179,7 +1179,7 @@ impl TlsInfoFactory
+     }
+ }
+ 
+-#[cfg(feature = "default-tls")]
++#[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+ #[cfg(target_os = "windows")]
+ impl TlsInfoFactory
+     for tokio_native_tls::TlsStream<
+@@ -1199,7 +1199,7 @@ impl TlsInfoFactory
+     }
+ }
+ 
+-#[cfg(feature = "default-tls")]
++#[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+ #[cfg(target_os = "windows")]
+ impl TlsInfoFactory
+     for hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::windows::named_pipe::NamedPipeClient>>
+@@ -1452,7 +1452,7 @@ pub(crate) mod windows_named_pipe {
+ 
+ pub(crate) type Connecting = Pin<Box<dyn Future<Output = Result<Conn, BoxError>> + Send>>;
+ 
+-#[cfg(feature = "default-tls")]
++#[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+ mod native_tls_conn {
+     use super::TlsInfoFactory;
+     use hyper::rt::{Read, ReadBufCursor, Write};
+diff --git a/src/error.rs b/src/error.rs
+index 1128d63..4ad829f 100644
+--- a/src/error.rs
++++ b/src/error.rs
+@@ -1,4 +1,4 @@
+-#![cfg_attr(target_arch = "wasm32", allow(unused))]
++#![cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), allow(unused))]
+ use std::error::Error as StdError;
+ use std::fmt;
+ use std::io;
+@@ -102,11 +102,11 @@ impl Error {
+ 
+     /// Returns true if the error is from `Response::error_for_status`.
+     pub fn is_status(&self) -> bool {
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+         {
+             matches!(self.inner.kind, Kind::Status(_, _))
+         }
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+         {
+             matches!(self.inner.kind, Kind::Status(_))
+         }
+@@ -120,7 +120,7 @@ impl Error {
+             if err.is::<TimedOut>() {
+                 return true;
+             }
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+             if let Some(hyper_err) = err.downcast_ref::<hyper::Error>() {
+                 if hyper_err.is_timeout() {
+                     return true;
+@@ -142,7 +142,7 @@ impl Error {
+         matches!(self.inner.kind, Kind::Request)
+     }
+ 
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+     /// Returns true if the error is related to connect
+     pub fn is_connect(&self) -> bool {
+         let mut source = self.source();
+@@ -173,9 +173,9 @@ impl Error {
+     /// Returns the status code, if the error was generated from a response.
+     pub fn status(&self) -> Option<StatusCode> {
+         match self.inner.kind {
+-            #[cfg(target_arch = "wasm32")]
++            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+             Kind::Status(code) => Some(code),
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+             Kind::Status(code, _) => Some(code),
+             _ => None,
+         }
+@@ -198,7 +198,7 @@ impl Error {
+ /// internal equivalents.
+ ///
+ /// Currently only is used for `tower::timeout::error::Elapsed`.
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+ pub(crate) fn cast_to_internal_error(error: BoxError) -> BoxError {
+     if error.is::<tower::timeout::error::Elapsed>() {
+         Box::new(crate::error::TimedOut) as BoxError
+@@ -233,7 +233,7 @@ impl fmt::Display for Error {
+             Kind::Decode => f.write_str("error decoding response body")?,
+             Kind::Redirect => f.write_str("error following redirect")?,
+             Kind::Upgrade => f.write_str("error upgrading connection")?,
+-            #[cfg(target_arch = "wasm32")]
++            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+             Kind::Status(ref code) => {
+                 let prefix = if code.is_client_error() {
+                     "HTTP status client error"
+@@ -243,7 +243,7 @@ impl fmt::Display for Error {
+                 };
+                 write!(f, "{prefix} ({code})")?;
+             }
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+             Kind::Status(ref code, ref reason) => {
+                 let prefix = if code.is_client_error() {
+                     "HTTP status client error"
+@@ -278,14 +278,14 @@ impl StdError for Error {
+     }
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+ impl From<crate::error::Error> for wasm_bindgen::JsValue {
+     fn from(err: Error) -> wasm_bindgen::JsValue {
+         js_sys::Error::from(err).into()
+     }
+ }
+ 
+-#[cfg(target_arch = "wasm32")]
++#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+ impl From<crate::error::Error> for js_sys::Error {
+     fn from(err: Error) -> js_sys::Error {
+         js_sys::Error::new(&format!("{err}"))
+@@ -297,9 +297,9 @@ pub(crate) enum Kind {
+     Builder,
+     Request,
+     Redirect,
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+     Status(StatusCode, Option<hyper::ext::ReasonPhrase>),
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+     Status(StatusCode),
+     Body,
+     Decode,
+@@ -331,12 +331,12 @@ pub(crate) fn redirect<E: Into<BoxError>>(e: E, url: Url) -> Error {
+ pub(crate) fn status_code(
+     url: Url,
+     status: StatusCode,
+-    #[cfg(not(target_arch = "wasm32"))] reason: Option<hyper::ext::ReasonPhrase>,
++    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))] reason: Option<hyper::ext::ReasonPhrase>,
+ ) -> Error {
+     Error::new(
+         Kind::Status(
+             status,
+-            #[cfg(not(target_arch = "wasm32"))]
++            #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+             reason,
+         ),
+         None::<Error>,
+diff --git a/src/into_url.rs b/src/into_url.rs
+index 5191181..8257512 100644
+--- a/src/into_url.rs
++++ b/src/into_url.rs
+@@ -23,7 +23,7 @@ impl IntoUrlSealed for Url {
+     fn into_url(self) -> crate::Result<Url> {
+         // With blob url the `self.has_host()` check is always false, so we
+         // remove the `blob:` scheme and check again if the url is valid.
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+         if self.scheme() == "blob"
+             && self.path().starts_with("http") // Check if the path starts with http or https to avoid validating a `blob:blob:...` url.
+             && self.as_str()[5..].into_url().is_ok()
+diff --git a/src/lib.rs b/src/lib.rs
+index 99a7efc..1eb45aa 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -262,14 +262,14 @@ use sync_wrapper as _;
+ 
+ macro_rules! if_wasm {
+     ($($item:item)*) => {$(
+-        #[cfg(target_arch = "wasm32")]
++        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+         $item
+     )*}
+ }
+ 
+ macro_rules! if_hyper {
+     ($($item:item)*) => {$(
+-        #[cfg(not(target_arch = "wasm32"))]
++        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+         $item
+     )*}
+ }
+@@ -336,7 +336,7 @@ fn _assert_impls() {
+     assert_send::<Request>();
+     assert_send::<RequestBuilder>();
+ 
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+     {
+         assert_send::<Response>();
+     }
+diff --git a/src/tls.rs b/src/tls.rs
+index e14d310..cf43a83 100644
+--- a/src/tls.rs
++++ b/src/tls.rs
+@@ -69,7 +69,7 @@ pub struct CertificateRevocationList {
+ /// Represents a server X509 certificate.
+ #[derive(Clone)]
+ pub struct Certificate {
+-    #[cfg(feature = "default-tls")]
++    #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+     native: native_tls_crate::Certificate,
+     #[cfg(feature = "__rustls")]
+     original: Cert,
+@@ -85,14 +85,14 @@ enum Cert {
+ /// Represents a private key and X509 cert as a client certificate.
+ #[derive(Clone)]
+ pub struct Identity {
+-    #[cfg_attr(not(any(feature = "native-tls", feature = "__rustls")), allow(unused))]
++    #[cfg_attr(not(any(all(feature = "native-tls", not(target_os = "wasi")), feature = "__rustls")), allow(unused))]
+     inner: ClientCert,
+ }
+ 
+ enum ClientCert {
+-    #[cfg(feature = "native-tls")]
++    #[cfg(all(feature = "native-tls", not(target_os = "wasi")))]
+     Pkcs12(native_tls_crate::Identity),
+-    #[cfg(feature = "native-tls")]
++    #[cfg(all(feature = "native-tls", not(target_os = "wasi")))]
+     Pkcs8(native_tls_crate::Identity),
+     #[cfg(feature = "__rustls")]
+     Pem {
+@@ -104,9 +104,9 @@ enum ClientCert {
+ impl Clone for ClientCert {
+     fn clone(&self) -> Self {
+         match self {
+-            #[cfg(feature = "native-tls")]
++            #[cfg(all(feature = "native-tls", not(target_os = "wasi")))]
+             Self::Pkcs8(i) => Self::Pkcs8(i.clone()),
+-            #[cfg(feature = "native-tls")]
++            #[cfg(all(feature = "native-tls", not(target_os = "wasi")))]
+             Self::Pkcs12(i) => Self::Pkcs12(i.clone()),
+             #[cfg(feature = "__rustls")]
+             ClientCert::Pem { key, certs } => ClientCert::Pem {
+@@ -114,7 +114,7 @@ impl Clone for ClientCert {
+                 certs: certs.clone(),
+             },
+             #[cfg_attr(
+-                any(feature = "native-tls", feature = "__rustls"),
++                any(all(feature = "native-tls", not(target_os = "wasi")), feature = "__rustls"),
+                 allow(unreachable_patterns)
+             )]
+             _ => unreachable!(),
+@@ -141,7 +141,7 @@ impl Certificate {
+     /// ```
+     pub fn from_der(der: &[u8]) -> crate::Result<Certificate> {
+         Ok(Certificate {
+-            #[cfg(feature = "default-tls")]
++            #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+             native: native_tls_crate::Certificate::from_der(der).map_err(crate::error::builder)?,
+             #[cfg(feature = "__rustls")]
+             original: Cert::Der(der.to_owned()),
+@@ -166,7 +166,7 @@ impl Certificate {
+     /// ```
+     pub fn from_pem(pem: &[u8]) -> crate::Result<Certificate> {
+         Ok(Certificate {
+-            #[cfg(feature = "default-tls")]
++            #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+             native: native_tls_crate::Certificate::from_pem(pem).map_err(crate::error::builder)?,
+             #[cfg(feature = "__rustls")]
+             original: Cert::Pem(pem.to_owned()),
+@@ -199,7 +199,7 @@ impl Certificate {
+             .collect::<crate::Result<Vec<Certificate>>>()
+     }
+ 
+-    #[cfg(feature = "default-tls")]
++    #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+     pub(crate) fn add_to_native_tls(self, tls: &mut native_tls_crate::TlsConnectorBuilder) {
+         tls.add_root_certificate(self.native);
+     }
+@@ -270,7 +270,7 @@ impl Identity {
+     /// # Optional
+     ///
+     /// This requires the `native-tls` Cargo feature enabled.
+-    #[cfg(feature = "native-tls")]
++    #[cfg(all(feature = "native-tls", not(target_os = "wasi")))]
+     pub fn from_pkcs12_der(der: &[u8], password: &str) -> crate::Result<Identity> {
+         Ok(Identity {
+             inner: ClientCert::Pkcs12(
+@@ -304,7 +304,7 @@ impl Identity {
+     /// # Optional
+     ///
+     /// This requires the `native-tls` Cargo feature enabled.
+-    #[cfg(feature = "native-tls")]
++    #[cfg(all(feature = "native-tls", not(target_os = "wasi")))]
+     pub fn from_pkcs8_pem(pem: &[u8], key: &[u8]) -> crate::Result<Identity> {
+         Ok(Identity {
+             inner: ClientCert::Pkcs8(
+@@ -382,7 +382,7 @@ impl Identity {
+         })
+     }
+ 
+-    #[cfg(feature = "native-tls")]
++    #[cfg(all(feature = "native-tls", not(target_os = "wasi")))]
+     pub(crate) fn add_to_native_tls(
+         self,
+         tls: &mut native_tls_crate::TlsConnectorBuilder,
+@@ -410,7 +410,7 @@ impl Identity {
+             ClientCert::Pem { key, certs } => config_builder
+                 .with_client_auth_cert(certs, key)
+                 .map_err(crate::error::builder),
+-            #[cfg(feature = "native-tls")]
++            #[cfg(all(feature = "native-tls", not(target_os = "wasi")))]
+             ClientCert::Pkcs12(..) | ClientCert::Pkcs8(..) => {
+                 Err(crate::error::builder("incompatible TLS identity type"))
+             }
+@@ -529,7 +529,7 @@ impl Version {
+     /// Version 1.3 of the TLS protocol.
+     pub const TLS_1_3: Version = Version(InnerVersion::Tls1_3);
+ 
+-    #[cfg(feature = "default-tls")]
++    #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+     pub(crate) fn to_native_tls(self) -> Option<native_tls_crate::Protocol> {
+         match self.0 {
+             InnerVersion::Tls1_0 => Some(native_tls_crate::Protocol::Tlsv10),
+@@ -556,30 +556,30 @@ impl Version {
+ pub(crate) enum TlsBackend {
+     // This is the default and HTTP/3 feature does not use it so suppress it.
+     #[allow(dead_code)]
+-    #[cfg(feature = "default-tls")]
++    #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+     Default,
+-    #[cfg(feature = "native-tls")]
++    #[cfg(all(feature = "native-tls", not(target_os = "wasi")))]
+     BuiltNativeTls(native_tls_crate::TlsConnector),
+     #[cfg(feature = "__rustls")]
+     Rustls,
+     #[cfg(feature = "__rustls")]
+     BuiltRustls(rustls::ClientConfig),
+-    #[cfg(any(feature = "native-tls", feature = "__rustls",))]
++    #[cfg(any(all(feature = "native-tls", not(target_os = "wasi")), feature = "__rustls",))]
+     UnknownPreconfigured,
+ }
+ 
+ impl fmt::Debug for TlsBackend {
+     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+         match self {
+-            #[cfg(feature = "default-tls")]
++            #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+             TlsBackend::Default => write!(f, "Default"),
+-            #[cfg(feature = "native-tls")]
++            #[cfg(all(feature = "native-tls", not(target_os = "wasi")))]
+             TlsBackend::BuiltNativeTls(_) => write!(f, "BuiltNativeTls"),
+             #[cfg(feature = "__rustls")]
+             TlsBackend::Rustls => write!(f, "Rustls"),
+             #[cfg(feature = "__rustls")]
+             TlsBackend::BuiltRustls(_) => write!(f, "BuiltRustls"),
+-            #[cfg(any(feature = "native-tls", feature = "__rustls",))]
++            #[cfg(any(all(feature = "native-tls", not(target_os = "wasi")), feature = "__rustls",))]
+             TlsBackend::UnknownPreconfigured => write!(f, "UnknownPreconfigured"),
+         }
+     }
+@@ -588,13 +588,13 @@ impl fmt::Debug for TlsBackend {
+ #[allow(clippy::derivable_impls)]
+ impl Default for TlsBackend {
+     fn default() -> TlsBackend {
+-        #[cfg(all(feature = "default-tls", not(feature = "http3")))]
++        #[cfg(all(all(feature = "default-tls", not(target_os = "wasi")), not(feature = "http3")))]
+         {
+             TlsBackend::Default
+         }
+ 
+         #[cfg(any(
+-            all(feature = "__rustls", not(feature = "default-tls")),
++            all(feature = "__rustls", not(all(feature = "default-tls", not(target_os = "wasi")))),
+             feature = "http3"
+         ))]
+         {
+@@ -746,25 +746,25 @@ impl std::fmt::Debug for TlsInfo {
+ mod tests {
+     use super::*;
+ 
+-    #[cfg(feature = "default-tls")]
++    #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+     #[test]
+     fn certificate_from_der_invalid() {
+         Certificate::from_der(b"not der").unwrap_err();
+     }
+ 
+-    #[cfg(feature = "default-tls")]
++    #[cfg(all(feature = "default-tls", not(target_os = "wasi")))]
+     #[test]
+     fn certificate_from_pem_invalid() {
+         Certificate::from_pem(b"not pem").unwrap_err();
+     }
+ 
+-    #[cfg(feature = "native-tls")]
++    #[cfg(all(feature = "native-tls", not(target_os = "wasi")))]
+     #[test]
+     fn identity_from_pkcs12_der_invalid() {
+         Identity::from_pkcs12_der(b"not der", "nope").unwrap_err();
+     }
+ 
+-    #[cfg(feature = "native-tls")]
++    #[cfg(all(feature = "native-tls", not(target_os = "wasi")))]
+     #[test]
+     fn identity_from_pkcs8_pem_invalid() {
+         Identity::from_pkcs8_pem(b"not pem", b"not key").unwrap_err();
+diff --git a/src/util.rs b/src/util.rs
+index 02873f7..04377ac 100644
+--- a/src/util.rs
++++ b/src/util.rs
+@@ -24,7 +24,7 @@ where
+     header
+ }
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+ pub(crate) fn fast_random() -> u64 {
+     use std::cell::Cell;
+     use std::collections::hash_map::RandomState;
+@@ -77,7 +77,7 @@ pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
+ }
+ 
+ #[cfg(feature = "cookies")]
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+ pub(crate) fn add_cookie_header(
+     headers: &mut HeaderMap,
+     cookie_store: &dyn crate::cookie::CookieStore,
+@@ -90,7 +90,7 @@ pub(crate) fn add_cookie_header(
+ 
+ pub(crate) struct Escape<'a>(&'a [u8]);
+ 
+-#[cfg(not(target_arch = "wasm32"))]
++#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+ impl<'a> Escape<'a> {
+     pub(crate) fn new(bytes: &'a [u8]) -> Self {
+         Escape(bytes)

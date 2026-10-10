@@ -1,0 +1,85 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Fri, 9 Oct 2026 22:49:22 -0700
+Subject: [PATCH] wasi: codex-tui lib checks: clipboard gated like Android,
+ agents overview enabled
+
+---
+ codex-rs/tui/src/app.rs             | 2 +-
+ codex-rs/tui/src/clock_format.rs    | 8 ++++----
+ codex-rs/tui/src/ide_context/ipc.rs | 4 ++--
+ 3 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/codex-rs/tui/src/app.rs b/codex-rs/tui/src/app.rs
+index 5dfc3ad..3f88dc2 100644
+--- a/codex-rs/tui/src/app.rs
++++ b/codex-rs/tui/src/app.rs
+@@ -199,7 +199,7 @@ mod agent_message_consolidation;
+ mod agent_navigation;
+ mod agent_picker;
+ mod agent_status_feed;
+-#[cfg(any(unix, windows))]
++#[cfg(any(unix, windows, target_os = "wasi"))]
+ mod agents_overview;
+ mod agents_overview_actions;
+ mod agents_overview_details;
+diff --git a/codex-rs/tui/src/clock_format.rs b/codex-rs/tui/src/clock_format.rs
+index 6ebc7f2..8c4977a 100644
+--- a/codex-rs/tui/src/clock_format.rs
++++ b/codex-rs/tui/src/clock_format.rs
+@@ -30,7 +30,7 @@ impl ClockFormat {
+     }
+ }
+ 
+-#[cfg(any(target_os = "linux", any(target_os = "android", target_os = "wasi"), test))]
++#[cfg(any(target_os = "linux", target_os = "android", test))]
+ fn time_locale(
+     mut get: impl FnMut(&str) -> Option<std::ffi::OsString>,
+ ) -> Option<std::ffi::OsString> {
+@@ -39,13 +39,13 @@ fn time_locale(
+         .find_map(|name| get(name).filter(|value| !value.is_empty()))
+ }
+ 
+-#[cfg(any(target_os = "linux", any(target_os = "android", target_os = "wasi")))]
++#[cfg(any(target_os = "linux", target_os = "android"))]
+ fn detect() -> Option<ClockFormat> {
+     let locale = time_locale(|name| std::env::var_os(name))?;
+     detect_time_locale(locale.to_str()?)
+ }
+ 
+-#[cfg(any(target_os = "linux", any(target_os = "android", target_os = "wasi"), test))]
++#[cfg(any(target_os = "linux", target_os = "android", test))]
+ fn detect_time_locale(locale: &str) -> Option<ClockFormat> {
+     if matches!(locale, "C" | "POSIX" | "C.UTF-8" | "C.utf8") {
+         return Some(ClockFormat::TwentyFourHour);
+@@ -185,7 +185,7 @@ fn parse_native_pattern(pattern: &str, hour_symbols: &str) -> Option<ClockFormat
+ 
+ #[cfg(not(any(
+     target_os = "linux",
+-    any(target_os = "android", target_os = "wasi"),
++    target_os = "android",
+     target_os = "macos",
+     windows
+ )))]
+diff --git a/codex-rs/tui/src/ide_context/ipc.rs b/codex-rs/tui/src/ide_context/ipc.rs
+index 1be98f7..5fd76e0 100644
+--- a/codex-rs/tui/src/ide_context/ipc.rs
++++ b/codex-rs/tui/src/ide_context/ipc.rs
+@@ -562,7 +562,7 @@ fn validate_unix_socket_path(socket_path: &Path) -> std::io::Result<()> {
+     Ok(())
+ }
+ 
+-#[cfg(any(target_os = "linux", any(target_os = "android", target_os = "wasi")))]
++#[cfg(any(target_os = "linux", target_os = "android"))]
+ fn validate_unix_peer_owner(stream: &std::os::unix::net::UnixStream) -> std::io::Result<()> {
+     use std::os::fd::AsRawFd;
+ 
+@@ -614,7 +614,7 @@ fn validate_unix_peer_owner(stream: &std::os::unix::net::UnixStream) -> std::io:
+     unix,
+     not(any(
+         target_os = "linux",
+-        any(target_os = "android", target_os = "wasi"),
++        target_os = "android",
+         target_os = "macos",
+         target_os = "freebsd",
+         target_os = "openbsd",
