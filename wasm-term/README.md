@@ -66,19 +66,20 @@ Testing never calls a real model: `mock-llm/` serves scripted responses.
 | Port | Use |
 | --- | --- |
 | 4790 | `web/` dev server |
-| 4791 | mock model server |
-| 4792 | isolated `opencode serve` |
-| 4793 | isolated `codex app-server` |
-| 4794 | egress trap (refuse-and-log HTTP proxy) |
-| 4795 | logging tap in front of opencode |
-| 4796 | logging tap in front of codex; also strips `Origin`, which `codex app-server` rejects, so browsers connect here |
+| 4791 | mock model server (container) |
+| 4792 | `opencode serve` (container) |
+| 4793 | `codex app-server` (container) |
+| 4796 | browser-facing codex proxy (container); strips `Origin`, which `codex app-server` rejects |
+| 4798, 4799 | per-port dev servers in `ports/opencode`, `ports/codex` |
 
 ## Rules for working here
 
-- Never touch the user's real opencode/codex state or background service. Run
-  both with isolated homes under `wasm-term/.state/` (gitignored):
-  `CODEX_HOME`, `XDG_CONFIG_HOME`/`XDG_DATA_HOME`/`XDG_STATE_HOME`/`XDG_CACHE_HOME`,
-  and `opencode --standalone` / `opencode serve`.
+- Never touch the user's real opencode/codex state or background service, and
+  never run the host's opencode/codex as a server. The servers run in Docker
+  with their own pinned installs: `mock-llm/up.sh` / `mock-llm/down.sh` (see
+  `mock-llm/README.md`). The project directory clients must send is
+  `/tmp/wasm-term-workspace`. Host binaries are only used as native clients
+  for baseline comparison, with isolated homes under `wasm-term/.state/`.
 - Never call a real model provider. No real API keys in configs.
 - Toolchains that are not installed (zig, wasi-sdk, …) go under
   `wasm-term/vendor/tools/`, not system-wide.
