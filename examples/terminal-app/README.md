@@ -26,7 +26,8 @@ client shows the read and the edit, the file changes in the tab's filesystem and
 hot-reloads. ``run `echo hi` `` makes the mock call the shell tool, which this page's
 configuration allows only after asking: the client shows its permission dialog. Page parameters: `?model=<base URL>`, `?modelId=<id>` (default `scripted`),
 `?reset=1` (forget this browser's workspace and the client's saved state first),
-`?diag=<url>` (where the page posts its diagnostics; `0` turns them off).
+`?diag=<url>` (where the page posts its diagnostics; `0` turns them off),
+`?tunnel=<wss URL>` (a TCP relay for [the hosts a tab cannot read](#the-tunnel); `0` for none).
 
 After a setup, `bun run editor` in this directory repeats only the example's own steps
 (`wasm-term`, `prepare:editor`, `build` into `dist/`, `start`); set `BAT_PREPARE` when `bat-prepare` is not
@@ -43,6 +44,7 @@ MODEL_URL=https://<mock host>:4311/v1 OUT_DIR=dist-published bun run build
 is 45 MB): copy it to a file shelf and open its URL. `MODEL_URL` is the built page's default
 `?model=` and, at `/diag` of the same host, its diagnostics collector; without it the default
 is port 4311 of the page's own host, which only suits a page served beside its mock.
+`TUNNEL_URL=wss://<relay>/tcp` is the built page's default `?tunnel=`.
 
 What a server used to do is done in the tab:
 
@@ -71,6 +73,7 @@ page wiring (`web/embed.ts`, `host/js-worker.ts`) and copies its built files int
 | --- | --- |
 | terminal client → OpenCode server | the client is given the address `http://opencode.in-tab`; wasm-term relays its `fetch` calls under that prefix to the page (`pageFetch`), which answers with `runtime.endpoint(4096).fetch` and adds the server's per-start Basic credential. The event stream stays a stream |
 | OpenCode server → model | the runtime hands any non-guest URL to the browser's `fetch`, so the request goes from the tab straight to `?model=`. A loopback endpoint (the mock) is named in `BAT_HOST_LOOPBACK_PORTS`, since loopback otherwise means a guest listener |
+| OpenCode server → `api.openai.com` | with a tunnel configured, not the browser's fetch: the runtime's own TLS and HTTP/1.1 over a WebSocket to a TCP relay ([below](#the-tunnel)) |
 | app in the frame → `/api` | the service worker, to the guest program on port 3001 (`setGuestPaths`) |
 
 `src/opencode.ts` starts and configures the OpenCode server itself, against the runtime
@@ -87,7 +90,9 @@ React chat stay on 2.0.3).
 **Diagnostics.** The server runs with `BAT_FETCH_DIAG=1`: every request of it that the
 browser's fetch rejected, or that was answered 400 or more, is one stderr line
 (`[bat fetch] POST https://host/path -> HTTP 401`, never the query, headers or bodies), which
-the page logs and posts with the rest. From the collector's file:
+the page logs and posts with the rest. A tunnelled request leaves a line whatever its outcome
+(`-> HTTP 200 (tunnel via <relay>, TLSv1_3 …)`, or which of the relay, TLS and HTTP failed).
+From the collector's file:
 
 ```sh
 jq -r 'select(.kind == "log" and (.data | test("bat fetch|sign-in"))) | "\(.at) \(.id) \(.data)"' /tmp/bat-terminal-diag.jsonl
@@ -121,12 +126,47 @@ browser tab can reach. So the last step is by hand (`src/signin.ts`):
    server exchanges the code at `auth.openai.com` and checks the identity token. The bar, the
    log and the client say how it went.
 
-What the server then calls, all straight from the tab: `auth.openai.com/api/accounts/oauth/token`
-(exchange and refresh) and `api.openai.com/v1/responses`; both answer preflights for any
-origin. `auth.openai.com/.well-known/jwks.json`, which the identity check reads, sends no CORS
-headers, so `build.ts` ships a copy (`openai-jwks.json`) and the runtime answers the server's
-request with it (`BAT_FETCH_MAP`). When OpenAI rotates those keys the check fails ("invalid ID
-token") until the page is built again.
+What the server then calls: `auth.openai.com/api/accounts/oauth/token` (exchange and refresh),
+straight from the tab, which that endpoint allows for any origin; and two things a tab cannot
+read, because they are answered without `Access-Control-Allow-Origin`:
+`api.openai.com/v1/responses` with the plan's token, and
+`auth.openai.com/.well-known/jwks.json`, which the identity check reads. Those need
+[the tunnel](#the-tunnel). Without one, the keys come from a copy `build.ts` ships
+(`openai-jwks.json`, `BAT_FETCH_MAP`; when OpenAI rotates them the check fails with "invalid ID
+token" until the page is built again), the sign-in completes, and every model call fails.
+
+### The tunnel
+
+`?tunnel=wss://<relay>/tcp` (or the build's `TUNNEL_URL`) names a TCP relay:
+[`wasm-term/web/tcp-relay-main.ts`](../../wasm-term/web/tcp-relay-main.ts), a program of its
+own that carries one TCP connection per WebSocket and never looks at the bytes.
+
+```sh
+# on a machine the browser can reach over https (the page is https, so the relay is wss)
+cd wasm-term/web && RELAY_ORIGINS='https://<page origin> https://<another>' PORT=4799 bun tcp-relay-main.ts
+```
+
+With it, the server's requests to `api.openai.com` and for the keys document are made by the
+runtime itself (`BAT_FETCH_TUNNEL`): TLS runs in the tab (rustls as Wasm, certificates checked
+against the Mozilla roots built into `editor/runtime/bat_tls.wasm`; nothing in the page or its
+address can turn the check off or add a root), then HTTP/1.1, one request per connection. The
+title and the log say which relay is in use.
+
+- **What the relay sees**: which of its allowed hosts was called (the same name is in the TLS
+  ClientHello), when, and how many bytes went each way; one log line per connection
+  (`tcp api.openai.com:443 -> closed by the page up=3754 down=2201 0.2s`). **Never** the
+  token, the prompt or the reply: it has TLS records only. OpenAI sees the relay machine's
+  address, and a request that is the server's own: no `Origin`, no cookies.
+- **What keeps it from being an open proxy**: `RELAY_ORIGINS` (a WebSocket is not subject to
+  CORS, so the relay checks the page's origin itself), an allowlist of destinations (default
+  `api.openai.com`, `chatgpt.com`, `auth.openai.com`, port 443), no private addresses, and
+  limits per connection. Whoever can open the page from an allowed origin can use the relay
+  to reach those hosts, with their own credentials.
+- **Not done**: HTTP/2, connection reuse (each request is a new TCP and TLS handshake, about
+  0.1–0.2 s), and the Responses WebSocket transport. OpenCode's OpenAI provider tries that
+  first, is answered as a plain GET, logs "session websocket connect failed; using http" and
+  posts; that warning is expected with every OpenAI prompt.
+- **Roots** change only with a new `bat_tls.wasm` (`runtime/src/net/tls/native/build.sh`).
 
 The tokens are a row of the server's database, `/workspace/.server/data/opencode.sqlite`, in
 plain text: in this browser's storage for this page (OPFS), kept across reloads, removed by

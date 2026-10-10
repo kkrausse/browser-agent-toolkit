@@ -934,3 +934,75 @@ no server of its own. Measured in Chrome 154.
   `exited` unresolved after 8 s; the same on the build before these changes). The servers
   here never exit on their own, so nothing depended on it.
 
+## 2026-10-10 guest HTTPS through a TCP relay, TLS in the tab (`BAT_FETCH_TUNNEL`)
+
+For hosts that answer without `Access-Control-Allow-Origin`, which the browser's fetch can
+call but whose answers it will not show: `api.openai.com/v1/responses` with a ChatGPT-plan
+token (200 and a stream outside a browser, "Failed to fetch" in a tab), and
+`auth.openai.com/.well-known/jwks.json`.
+
+- **A third route for guest HTTP, chosen per process.** `BAT_FETCH_TUNNEL` (host names, or
+  `https://host/path` prefixes) with `BAT_FETCH_TUNNEL_URL` (`wss://relay/tcp`): such a request
+  is made by the runtime's own client (`runtime/src/net/tunnel.ts`), from the global `fetch`
+  and from `node:http(s)` alike. The relay is `wasm-term/web/tcp-relay.ts` unchanged: one
+  WebSocket is one TCP connection, ack flow control with a 256 KiB window, an origin and a
+  destination allowlist. It sees the destination host, timing and byte counts, and TLS
+  records; never a token, a prompt or a reply. Everything not named keeps its route.
+- **TLS is rustls compiled to Wasm, not a TypeScript client on WebCrypto.** `subtls` exists
+  for exactly "TLS over a WebSocket from a browser" and would have been less work (no Wasm,
+  no toolchain), MIT, last release 2025-01. Its README calls it a proof of concept not meant
+  for production: TLS 1.3 with one cipher suite and one key exchange, no chain building, no
+  alerts, unaudited certificate code. These connections carry a bearer token, so the
+  verifier is the part that has to be right. rustls 0.23 with `ring` builds for
+  `wasm32-wasip1` with wasi-sdk's clang; a C ABI of fourteen functions
+  (`runtime/src/net/tls/native/src/lib.rs`) moves ciphertext and plaintext in and out and
+  does no I/O. The file is committed (`bat_tls.wasm`, 647 KB, 300 KB gzipped) like the other
+  Wasm that needs a toolchain a setup does not have, and is fetched only by a process that
+  tunnels. It imports six WASI calls (random, clock, stderr for a panic), which `tunnel.ts`
+  supplies. `rustls-rustcrypto` (pure Rust, no clang) was the fallback had `ring` not built;
+  it calls itself alpha.
+- **No way to skip verification, and none to add a trust anchor at run time.** The roots are
+  `webpki-roots` (Mozilla's list) compiled in; the ABI has no call for either. A test needs
+  a certificate of its own, so the crate has a cargo feature that compiles one more anchor
+  in from a file (`BAT_TLS_TEST_ROOT`), refuses to overwrite the committed file, and makes
+  the module answer 1 to `tls_test_build`, which the runtime prints on the process's stderr.
+  The published site ships the committed file (same sha256). New roots or a rustls fix
+  mean `cargo update`, a rebuild and a commit.
+- **Its own HTTP/1.1 client, one request per connection.** The kernel's codec parses a
+  socket's ring in place and cannot be given a byte stream that is not a kernel socket, so
+  `tunnel.ts` has a response parser (content-length, chunked, until-close, 1xx skipped) and
+  writes requests with `connection: close`. ALPN offers `http/1.1` only. An until-close
+  body is complete only on TLS close_notify; a stream that just stops is an error. Not
+  done: connection reuse (each request pays a TCP and TLS handshake, measured 90–160 ms
+  to api.openai.com from here), HTTP/2, and upgrades: a WebSocket handshake to a tunnelled
+  host is sent as a plain GET and answered accordingly.
+- **A tunnelled `fetch` is Node's, not the browser's.** No `Origin`, no cookies, no
+  preflight; the program's headers as written (they are read from `init.headers`, since a
+  `Request` would drop the forbidden ones); `accept`, `user-agent: node` and
+  `accept-encoding: identity` added when absent; redirects followed here, credentials
+  dropped across origins. That is the point for an API that rejects browsers, and it means
+  the relay's allowlists are the only thing between a page and those hosts.
+- **Backpressure reaches the far end.** Received bytes are acknowledged to the relay when
+  TLS has taken them, and TLS is fed only while the response body's reader wants more
+  (1 MiB high-water mark): 3 MiB sent to a reader that does not read stops at 1.5 MiB.
+  Abort and body cancel close the WebSocket, which closes the TCP connection.
+- **`BAT_FETCH_DIAG` says more for these.** One line per tunnelled request whatever its
+  outcome, naming the relay and the negotiated suite, or the layer that failed: `the relay
+  refused example.com:443 (denied: not in the relay's allowlist)`, `TLS with host: invalid
+  peer certificate: UnknownIssuer`, `the relay at host did not accept the WebSocket`.
+- **Found on the way: the OpenCode server died on any OpenAI-provider prompt.** Its OpenAI
+  provider tries a WebSocket transport first (`GET /v1/responses`); `ws` aborts that
+  request on an answer other than 101, and the runtime turned the resulting "aborted" on
+  the response into an uncaught exception (`runtime/src/net/http.ts` now emits a
+  response's error only to listeners, as Node does). With that the server logs "session
+  websocket connect failed; using http" and posts.
+- **Measured** (Chrome 154, harness guest and the terminal example): unauthenticated
+  `GET /v1/models` and `POST /v1/responses` come back as OpenAI's 401 JSON, TLS 1.3
+  `TLS13_AES_256_GCM_SHA384`; the JWKS document as 200. Against a local TLS server behind a
+  relay alias, with a throwaway CA in a test build: five events 300 ms apart arrive 300 ms
+  apart; an abort after two events of an endless stream closes the server's side; a 300 KiB
+  streamed upload arrives chunked; a certificate for another name and one from an unknown
+  CA are rejected, as is the throwaway CA by the committed build.
+- **The terminal example** takes `?tunnel=` / `TUNNEL_URL` and tunnels `api.openai.com` and
+  `https://auth.openai.com/.well-known/` (the keys; the shipped copy and `BAT_FETCH_MAP` are
+  then unused). The token exchange stays with the browser's fetch, where it was seen to work.
