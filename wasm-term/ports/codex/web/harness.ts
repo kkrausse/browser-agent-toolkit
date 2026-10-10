@@ -8,7 +8,10 @@
 // Steps run in order after the program starts:
 //   wait:MS        sleep
 //   until:TEXT     wait (up to 30 s) until TEXT is on the screen
-//   type:TEXT      send TEXT as keystrokes
+//   type:TEXT      send TEXT one key at a time, 25 ms apart (codex treats an
+//                  unbracketed burst as a paste, where Enter is a newline)
+//   paste:TEXT     send TEXT at once inside bracketed-paste markers
+//   burst:TEXT     send TEXT at once, unbracketed
 //   key:NAME       enter | esc | tab | up | down | left | right | ctrl-c | ctrl-d | backspace
 //   resize:CxR     change the window size
 //   screen         print the screen
@@ -85,7 +88,7 @@ const flushed = () => new Promise<void>(resolve => terminal.write("", resolve));
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const KEYS: Record<string, string> = {
   enter: "\r", esc: "\x1b", tab: "\t", up: "\x1b[A", down: "\x1b[B", right: "\x1b[C", left: "\x1b[D",
-  "ctrl-c": "\x03", "ctrl-d": "\x04", backspace: "\x7f",
+  "ctrl-c": "\x03", "ctrl-d": "\x04", backspace: "\x7f", f2: "\x1bOQ",
 };
 
 async function show(title: string): Promise<void> {
@@ -106,7 +109,13 @@ for (const step of steps) {
       await sleep(100);
     }
     if (!screen().includes(value)) console.log(`(until: "${value}" did not appear)`);
-  } else if (kind === "type") program.write(value);
+  } else if (kind === "type") {
+    for (const char of value) {
+      program.write(char);
+      await sleep(25);
+    }
+  } else if (kind === "paste") program.write(`\x1b[200~${value}\x1b[201~`);
+  else if (kind === "burst") program.write(value);
   else if (kind === "key") program.write(KEYS[value] ?? value);
   else if (kind === "resize") {
     const [c, r] = value.split("x").map(Number);

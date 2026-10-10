@@ -24,22 +24,27 @@ How each statement was established is marked:
 2. a thin `cfg(target_os = "wasi")` patch series on the codex workspace that cuts the
    embedded app-server out and stubs what cannot exist in a browser.
 
-It is a large port, not a small one. At this tag the TUI crate still type-depends on
-`codex-core` (through `codex_app_server_client::legacy_core::config`), so the whole
-workspace graph is in play: 133 workspace crates, 928 packages. **41 of the 133 check for
-wasm today** after this work (36 before). The rest are blocked behind seven third-party
-leaves and two C libraries listed in section 7; the TUI crate itself has not been reached
-by the compiler yet.
+It is a large port, not a small one, but it is done as far as "runs": at this tag the TUI crate
+type-depends on `codex-core` (through `codex_app_server_client::legacy_core::config`), so the
+whole workspace graph is in play: 133 workspace crates, 928 packages. **All of them now build
+for `wasm32-wasip1`, the port links to one module, and the real TUI runs in a browser Worker on
+the wasm-term kernel**, connected to `codex app-server` through the Origin-stripping proxy:
+start screen, prompt and streamed reply, tool call, approval prompt, resize, `/quit`.
 
-What exists and works now, all reproducible with `scripts/setup.sh` and `scripts/check.sh`:
+What it took, all reproducible (section 7 has the commands, the burn-down table, what is
+stubbed, what was observed and what is still open):
 
-- the crossterm fork codex pins, with a backend on the wasm-term ABI, checking clean for
-  `wasm32-wasip1`, `wasm32-wasip1-threads` and native;
-- tokio 1.52.3 with all the features codex enables checking for `wasm32-wasip1`;
-- a wasi-sdk C toolchain setup under which the C dependencies that matter (aws-lc, ring,
-  sqlite, oniguruma, zstd, bzip2, tree-sitter) get through their build scripts.
+- 13 small crates.io forks (cfg arms and stand-ins; `scripts/forks.txt`) and a tokio fork that
+  adds API-compatible `process` / `signal` / socket stand-ins and an inline blocking pool;
+- crossterm from `wasm-term/guests/crossterm-wasi` (the kernel side's backend, used as is);
+- a patch series of 36 files on the codex workspace, mostly third `cfg` arms, plus one
+  new file that carries the WebSocket;
+- a 110-line `main` (`ports/codex/main`) and a wasi-sdk C toolchain for aws-lc, ring, sqlite,
+  oniguruma, zstd, bzip2 and tree-sitter.
 
-Nothing has been linked or executed in the kernel yet.
+The first session's text below (sections 2-6) is kept as written; where the second session
+found otherwise it says so in section 7. In short: no part of the graph had to be cut out, and
+single-threaded was enough.
 
 ## 2. Crate graph (question 1)
 
@@ -377,6 +382,9 @@ be a blocking-pool thread). The inline blocking pool turns those into deadlocks 
 
 ## 6. What the emulated machine must provide
 
+(First-session expectations. What happened when the module ran on the machine, and what is
+still requested, is in `HOST-REQUESTS.md`.)
+
 Already in the ABI (`wasm-term/guests/wasm-term-sys/src/lib.rs`; `docs/abi.md` was not
 written yet when this was) and used by the port: `wasm_term.tcgetattr/tcsetattr/winsize_get`,
 `sig_action` + `sig_fd`, `ws_open/ws_send/ws_recv/ws_close`, `poll_oneoff` over terminal,
@@ -427,127 +435,284 @@ Additional requirements, in order of how certain I am that the port needs them. 
 10. Not needed at all: processes, Unix sockets, inbound network, job control (the port
     should swallow Ctrl-Z).
 
-## 7. Build attempt and burn-down
+## 7. Build, burn-down, and how to run it
+
+State at the end of the second session: **the TUI crate compiles, the port links to one
+`wasm32-wasip1` module, and it runs**: on the real kernel headless under Bun, and in Chrome on a
+dev page, against mock-llm through the 4796 proxy, completing prompt/reply, tool-call and
+approval-prompt turns. Approach (a), single-threaded, held; nothing forced a move to threads.
 
 ### Layout
 
 ```
 wasm-term/ports/codex/
-  NOTES.md
+  NOTES.md, HOST-REQUESTS.md
+  main/                      the browser `main` (crate codex-wasm-term, a member of the patched codex workspace)
+  web/server.ts              dev page on 4799: wasm-term's page + Worker runtime, codex as the guest
+  web/harness.ts             headless run of any guest under Bun on the real kernel, xterm-headless as the terminal
+  dist/                      (gitignored) codex.wasm, codex-small.wasm
   scripts/env.sh             build environment (target, wasi-sdk, tokio_unstable, jobs=6)
   scripts/setup.sh           recreate vendor/ trees from upstream pins + patches/
-  scripts/check.sh           cargo check the TUI lib for the wasm target, summarise failures
-  scripts/export-patches.sh  regenerate patches/ from the port branches in vendor/
-  scripts/fork-crate.sh      start a new crates.io fork under vendor/forks/
-  scripts/unixify.sh         rewrite cfg(unix) -> cfg(any(unix, target_os = "wasi")) in a file
+  scripts/check.sh <label>   cargo check the TUI lib for wasm, log to vendor/check-<target>-<label>.log
+  scripts/errs.sh <label>    the errors of that log, paths shortened
+  scripts/count.sh           how many workspace crates have checked
+  scripts/build.sh           link the module into dist/ (PROFILE=wasm | wasm-small)
+  scripts/commit-vendor.sh   commit dirty vendor trees to their port branches and re-export patches/
+  scripts/export-patches.sh  regenerate patches/ from the port branches
+  scripts/fork-crate.sh      start a crates.io fork under vendor/forks/ (records it in forks.txt)
+  scripts/forks.txt          "<crate> <version>" for every fork
+  scripts/unixify.sh, unixify-line.sh   cfg(unix) -> cfg(any(unix, target_os = "wasi")), whole file or given lines
   patches/codex/             against openai/codex rust-v0.162.0
-  patches/crossterm/         against openai-oss-forks/crossterm ed1cdab
   patches/tokio/             against tokio 1.52.3 (crates.io)
-  patches/forks/<crate>/     against the crates.io version in Cargo.lock
-wasm-term/vendor/            (gitignored) codex/, crossterm/, tokio/, forks/*, tools/wasi-sdk,
-                             tools/emsdk, codex-target/, check-*.log
+  patches/forks/<crate>/     against the crates.io version in forks.txt
+wasm-term/vendor/            (gitignored) codex/, tokio/, forks/*, tools/wasi-sdk, codex-target/, check-*.log, build-*.log
 ```
 
-Each tree under `vendor/` is a git repo with a pristine base (`upstream` branch or the
-upstream tag) and a `wasm-term-port` branch; `patches/` is `git format-patch` of the
-difference. **[ran]** every series re-applies cleanly to its pristine base and reproduces
-the port branch exactly.
+Each tree under `vendor/` is a git repo with a pristine base (`upstream` branch or the upstream
+tag) and a `wasm-term-port` branch; `patches/` is `git format-patch` of the difference.
+**[ran]** at the end of this session: every series was applied to a fresh worktree of its base
+with `git am` and compared equal to the port branch (codex, tokio, 13 forks).
 
-Reproduce:
+### Reproduce each stage
 
 ```sh
 cd wasm-term/ports/codex
-scripts/setup.sh                      # only needed on a machine without vendor/
-scripts/check.sh mylabel              # wasm32-wasip1; ~1 min warm, ~10 min cold, 6 jobs
-WASM_TARGET=wasm32-wasip1-threads scripts/check.sh mylabel
+scripts/setup.sh                       # only on a machine without vendor/
+scripts/check.sh mylabel               # type-check: ~1 min warm, ~10 min cold, 6 jobs
+scripts/count.sh                       # "131 of 133" (the other two are proc macros, built for the host)
+scripts/build.sh                       # link dist/codex.wasm: 16 min cold, 15 s after a change to main/,
+                                       # 4-8 min after a change to a low workspace crate
+PROFILE=wasm-small scripts/build.sh    # dist/codex-small.wasm
+
+../../mock-llm/up.sh                   # backend in Docker (re-read mock-llm/README.md first)
+
+# headless, on the real kernel (Bun): prints the screen as text
+cd web && bun install
+bun harness.ts @@ --remote ws://127.0.0.1:4796 -c 'sandbox_mode="danger-full-access"' \
+  ::: "until:Ask Codex" type:"hello there" wait:300 key:enter "until:Worked for" screen
+
+# in a browser
+bun server.ts                          # http://127.0.0.1:4799/
+# http://127.0.0.1:4799/?guest=codex&remote=ws://127.0.0.1:4796&persist=0&arg=-c&arg=sandbox_mode%3D%22danger-full-access%22
 ```
 
-Upstream pins rust 1.95.0; the checks ran on stable 1.99.0 (`RUSTUP_TOOLCHAIN=stable`)
-because that is where the wasm targets are installed. No toolchain-version errors appeared.
+`@@` starts the guest's arguments and `:::` the harness steps (Bun swallows a bare `--`).
+Upstream pins rust 1.95.0; everything here ran on stable 1.99.0 (`RUSTUP_TOOLCHAIN=stable`),
+where the wasm targets are installed.
 
-### Done
+### Burn-down
 
-| Piece | State | How verified |
-| --- | --- | --- |
-| crossterm fork + `src/wasi_compat.rs` | raw mode, window size, SIGWINCH via `sig_fd`, input via `poll_oneoff`, threadless `EventStream` with `wasi_compat::input_fds()` / `notify_input_ready()` hooks for the embedder's reactor. The unix code is reused: the module offers look-alikes of the rustix/mio/signal-hook pieces it calls, pulled in with one `use` per file | **[ran]** `cargo check` for wasip1, wasip1-threads, native. Not executed |
-| tokio fork | `tokio::process` (API-compatible, every spawn fails `Unsupported`), `tokio::signal::ctrl_c` (never completes), `TcpStream::connect` (fails), blocking pool runs inline when the target has no threads | **[ran]** checks for wasip1 with fs, io-std, io-util, macros, net, process, rt, rt-multi-thread, signal, sync, time. Not executed |
-| gethostname, gix-fs, rustls-native-certs, tokio-graceful | third `cfg` arm each | **[ran]** check as part of the graph |
-| workspace: `utils/path-uri`, `utils/path-utils`, `uds` | WASI arms (uds: same shape, every call `Unsupported`) | **[ran]** |
-| `[patch.crates-io]` in `codex-rs/Cargo.toml` | points crossterm, tokio and the four leaves at `vendor/` | **[ran]** |
-| C toolchain | wasi-sdk 34 via `CC_/CFLAGS_wasm32_wasip1*`; aws-lc-sys, ring, libsqlite3-sys, onig_sys, zstd-sys, bzip2-sys, tree-sitter* build scripts pass for wasip1 | **[ran]**; linking not attempted |
+Workspace crates (of the 133 in the TUI's wasm graph) that type-check. Each run is
+`scripts/check.sh <n>`, log `vendor/check-wasm32-wasip1-<n>.log`. All **[ran]**.
 
-Workspace crates that check for `wasm32-wasip1`: **41 of 133** (`vendor/ok-crates-5.txt`).
-Gained by the port: ansi-escape, file-search, uds, utils/path-uri, utils/path-utils, plus
-third-party crossterm, ratatui-crossterm, process-wrap, sqlx-core, tokio-tungstenite.
-
-Another agent is building a crossterm WASI backend for the same fork revision under
-`wasm-term/guests/crossterm-wasi/` in parallel, against the live kernel. There should be one.
-Theirs will have been run; mine additionally keeps the unix parser path and has the
-`EventStream` hooks tokio needs. Reconcile before either is depended on.
-
-### Current frontier (run 5, `vendor/check-wasm32-wasip1-5.log`) **[ran]**
-
-| Blocker | Exact error | Reaches the TUI through | Intended fix |
+| Run | Pass | What changed before it | Frontier it exposed |
 | --- | --- | --- | --- |
-| socket2 0.6.3 | `src/lib.rs:187: error: Socket2 doesn't support the compile target` | hyper-util, rama-net, codex-shell-escalation (-> codex-arg0) | fork with a `sys/wasi.rs` whose every call is `Unsupported`; gate shell-escalation out of arg0 on WASI |
-| hickory-proto 0.25.2 | `src/runtime.rs:122: error[E0432]: unresolved imports tokio::net::TcpSocket, tokio::net::UdpSocket` | hickory-resolver <- rama-dns <- rama-tcp <- codex-network-proxy <- codex-config, codex-protocol | make `codex-network-proxy` types-only on WASI (config and protocol use about a dozen plain types and two helper functions from it), dropping rama |
-| opentelemetry-http 0.31.0 | `src/lib.rs:96: error: future cannot be sent between threads safely` (reqwest's wasm backend) | codex-otel | reqwest decision below |
-| openssl-sys 0.9.111 | `Could not find directory of OpenSSL installation` | native-tls <- codex-http-client | make `native-tls` a non-WASI dependency of http-client |
-| lzma-sys 0.1.20 | `signal.h: error: "wasm lacks signal support"`, `call to undeclared function 'pthread_sigmask'` | xz2 <- zip <- codex-core-plugins | disable zip's `xz`/`lzma` feature on WASI, or gate plugin archive handling |
-| filedescriptor 0.8.3, serial2 0.2.33 | `cannot find type RawFileDescriptor`, `cannot find type SerialPort in module sys` | portable-pty <- codex-utils-pty <- core, exec-server, arg0 | gate portable-pty in `utils/pty` on WASI; spawn functions return `Unsupported` |
-| wxc_common | `src/exec_stream.rs:62: cannot find interruptible_reader in the crate root` | codex-mxc-sandbox <- codex-sandboxing | gate mxc-sandbox on WASI |
-| arboard 3.6.1 | `src/lib.rs:82: cannot find Clipboard in platform` | codex-tui directly | widen the existing `cfg(not(target_os = "android"))` gates in the TUI to exclude WASI; OSC 52 path remains |
+| 0 | 36 | nothing | tokio, crossterm, socket2, C build scripts, ... (section 2) |
+| 1-5 | 41 | first session: wasi-sdk, tokio and crossterm forks, four leaf forks, path-uri / path-utils / uds arms | socket2, hickory-proto, opentelemetry-http, openssl-sys, lzma-sys, filedescriptor + serial2, wxc_common, arboard |
+| 6 | 41 | re-run to confirm the starting point | same eight |
+| 7 | - | socket2 fork (wasip1 arm), tokio `TcpSocket` / `UdpSocket` / `TcpListener::bind` stand-ins, reqwest 0.12 fork (wasm-bindgen backend only on wasm32-unknown), portable-pty fork, gates for wxc_common, native-tls, zip's xz, arboard | rama-net (socket options socket2 lacks on WASI), tonic (`tokio::net::UnixStream`), openssl-sys again (reqwest's default-tls) |
+| 8 | - | rama-net and tonic forks; reqwest fork drops native-tls on WASI | rama-tcp, rama-udp (`tokio_util::udp`), opentelemetry-otlp (blocking client impl missing on wasm32) |
+| 9 | 71 | rama-tcp, rama-udp, tokio-util, opentelemetry-http forks | codex-git-utils (symlink), codex-state (`file_id`) |
+| 10 | - | those two arms | codex-config (system config paths) |
+| 11 | - | config loader unixified | codex-exec-server (no-follow fs, positional I/O, fd passing), codex-message-history |
+| 12 | - | exec-server WASI fs module, history permissions and locking | codex-arg0, codex-rmcp-client |
+| 13 | - | three `cfg(unix)` lines | **codex-core**: 5 errors, all `synthetic_exit_status*` in `exec.rs` |
+| 14 | - | exit-status stand-ins | codex-app-server (1 error), codex-app-server-daemon (updater), codex-lmstudio |
+| 15-16 | 130 | daemon updater stub, app-server shutdown signal, lmstudio | **codex-tui**: clipboard and `agents_overview` gating only |
+| 17-18 | **131** | clipboard gated like Android, `agents_overview` enabled | none: `Finished` |
+| 19 | 131 | crossterm switched to `guests/crossterm-wasi` | none |
+| link | - | `main/`, WebSocket relay in app-server-client, `wasm` profile | none: `Finished wasm profile in 15m 58s`, 202 MB |
+
+The second NOTES prediction that turned out wrong in the good direction: section 7 of the first
+session expected steps 4 and 5 (cut the embedded app-server out, reduce `codex-core` to its
+`config` module) to be necessary and the riskiest. Neither was needed. Once the third-party
+leaves compiled, all of `codex-core` and `codex-app-server` type-checked with a handful of
+stand-ins, because the tokio fork's `process` API makes the ~60 files that spawn things compile
+unchanged. The whole graph is linked in; the embedded server is simply never started.
+
+### What exists
+
+| Piece | State | Verified |
+| --- | --- | --- |
+| crossterm | `guests/crossterm-wasi/crossterm` (the kernel side's fork of the same revision). See "crossterm reconciliation" | **[ran]** in the module, headless and in Chrome |
+| tokio fork (1.52.3) | `tokio::process` (every spawn fails `Unsupported`), `tokio::signal::ctrl_c` (never completes), `TcpStream::connect` / `TcpListener::bind` (fail), `TcpSocket` and `UdpSocket` types (every call fails), blocking pool runs closures inline when the thread cannot be spawned | **[ran]**: the TUI's `spawn_blocking` / `tokio::fs` paths execute in the module |
+| socket2 fork | wasip1 takes the unix backend over a private copy of libc's wasip2 socket definitions whose functions all fail `ENOTSUP` | **[ran]** compile; a connect attempt fails cleanly at run time **[inferred]** from the TUI staying up while its HTTP requests fail |
+| reqwest 0.12, opentelemetry-http, tokio-util forks | `target_arch = "wasm32"` narrowed to `all(wasm32, target_os = "unknown")`, so WASI takes the native hyper path; reqwest also drops hyper-tls/native-tls on WASI | **[ran]** compile and link; no `__wbindgen_*` imports in the module |
+| portable-pty fork | no serial, no filedescriptor; `native_pty_system().openpty()` fails | **[ran]** compile |
+| rama-net / rama-tcp / rama-udp, tonic forks | a few cfg lines each | **[ran]** compile |
+| gethostname, gix-fs, rustls-native-certs, tokio-graceful forks | first session | **[ran]** compile |
+| codex workspace patch | 7 commits, 36 files (683 lines added); list below | **[ran]** |
+| `main/` | current-thread runtime, `--remote` / `CODEX_REMOTE_ADDR`, prepares the emulated home | **[ran]** |
+| C toolchain | wasi-sdk 34; aws-lc-sys, ring, libsqlite3-sys, onig_sys, zstd-sys, bzip2-sys, tree-sitter* compile **and link** | **[ran]** |
+
+### What is stubbed (fails at run time on WASI), and what was changed to work
+
+Stubs, none reachable in remote mode without a user action:
+
+- processes of any kind (`tokio::process`, `std::process`): shell tools, git, MCP stdio servers,
+  external editor, `tmux`/`tput` probes, the app-server daemon updater, sandbox helpers;
+- ptys (`portable-pty`), Unix sockets (`codex-uds`, tonic's UDS connector), TCP/UDP sockets
+  (socket2, tokio net), so also every HTTP request the TUI makes itself: the announcement tip,
+  update check, cloud config, OTEL export, analytics. They fail fast and are tolerated;
+- the embedded (in-process) app-server: linked, never started; `shutdown_signal` only waits on
+  the `ctrl_c` stand-in;
+- system clipboard (`arboard`): compiled out as on Android. Copy still goes out as OSC 52;
+- native-tls, keyring-style platform integrations, `wxc_common` (Windows MXC), zip's xz;
+- symlink creation in `codex-git-utils`; sandboxed file open in `codex-exec-server`;
+- `--remote-auth-token-env`: refused with an explanation (a browser cannot send the header);
+- the unix-only parts of the TUI that already have a non-unix fallback upstream: job control
+  (Ctrl-Z), the batched startup probe (so no OSC 10/11 default-colour query; cursor position and
+  keyboard enhancement go through crossterm's own queries instead), the terminal-size monitor.
+
+Made to work:
+
+- `codex-exec-server`'s local filesystem (`no_follow/wasi.rs` on plain `std::fs`; positional
+  reads and writes by seek). All TUI config I/O goes through this;
+- config loader system paths (`/etc/codex/*`), and its packaged-defaults label without
+  `current_exe()`;
+- `history.jsonl`: append mode; the advisory lock is treated as held;
+- `codex-state` quick-check identity by path hash (no `file-id` on WASI);
+- the transport, below.
+
+Three std holes on WASI that are handled in `main/` rather than patched at each use, **[ran]**
+(`vendor`-less probe program under the harness): `std::env::temp_dir()` **panics**
+(`not supported by WASI yet`), so `tempfile::env::override_temp_dir("/tmp")` is called first;
+`std::env::current_exe()` is `Unsupported`, so a nominal `codex_self_exe` is passed in;
+`dirs::home_dir()` is `None`, so `CODEX_HOME` is set explicitly. `std::fs::canonicalize` works.
+Any code path that calls `std::env::temp_dir()` directly will still abort the module; there are
+about 15 non-test call sites in the workspace (hooks output spill, MCP runtime, exec-server),
+none hit in the runs here.
+
+### Transport
+
+`app-server-client/src/remote.rs` is written against `tokio_tungstenite::WebSocketStream<S>` and
+only ever does `next()`, `send(Message::Text)`, `close()`. Instead of re-typing it (what the
+first session planned), `remote_wasi.rs` gives it an `S`: the client end of an in-memory
+`tokio::io::duplex`. A task on the other end runs tungstenite in the server role with no
+handshake and relays whole messages to and from `wasm_term_tokio::WebSocket`. The upstream file
+changes by one `cfg`'d function and a few gated imports. Costs: each message is framed and
+masked once more in memory, and both directions share 4 MiB pipes, so a message larger than that
+in one direction while the other direction is also blocked would stall; not observed, and
+client-to-server messages are small.
+
+### crossterm reconciliation
+
+Two WASI backends existed for the same fork revision: the first session's (in this patch
+series) and `guests/crossterm-wasi` (kernel side). Both reuse the unix parser path. The codex
+port now uses **the guests one**, unmodified, by path
+(`crossterm = { path = "../../../guests/crossterm-wasi/crossterm" }` in the workspace
+`[patch.crates-io]`; `setup.sh` runs `guests/crossterm-wasi/setup.sh` if the tree is missing).
+The port-local patch and `vendor/crossterm` are gone. Reasons: it had been run in the browser;
+its `EventStream` registers with tokio's reactor itself, so the port needs no glue task
+(the first session's `input_fds()` / `notify_input_ready()` hooks are unnecessary); and one
+backend is one thing to keep working. Nothing in the guests needs to change. One thing the
+guests side should know: it works with this port's tokio fork as well as with stock tokio.
+
+### tokio: can the fork shrink?
+
+The `async-tui` guest shows stock tokio is enough for the runtime, timers and the reactor. The
+fork is still needed here for what codex's dependency graph names or calls:
+
+- `tokio::process` as a module (about 60 workspace files, plus process-wrap under rmcp);
+- `tokio::signal::ctrl_c`, `TcpStream::connect`, `TcpListener::bind`, `TcpSocket`, `UdpSocket`
+  (hyper-util, hickory, rama, sqlx, tokio-tungstenite name them);
+- `spawn_blocking` / `tokio::fs` on a target with no threads. Stock tokio returns an error from
+  every such call on wasip1; the TUI does its config I/O, `tui::init()` and history lookups
+  that way, so the inline blocking pool is what makes startup work at all.
+
+So it cannot shrink to nothing, but it is additive (648 lines, nine files, three of them new) and touches no
+scheduler or driver code.
+
+### Module
+
+| Build | Size | Notes |
+| --- | --- | --- |
+| `scripts/build.sh` (`wasm` profile: opt-level 1 for workspace crates, `s` for dependencies, names kept) | 202 MB (code 131 MB, name section 54 MB, data 16 MB) | 15m58s cold on 6 jobs with other agents building |
+| `PROFILE=wasm-small` (opt-level `s`, stripped) | 118 MB (38 MB with `gzip -1`) | 11m42s cold; runs the same turns headless |
+
+Not tried: LTO, `wasm-opt`, cutting the embedded server out of the graph (the last is where the
+real saving is: `codex-app-server`, `codex-core`'s non-config modules and their dependencies are
+dead weight in a remote-only client).
+
+### Observed running
+
+All **[ran]** against mock-llm (Docker, `up.sh`) through `ws://127.0.0.1:4796`.
+
+Headless (`web/harness.ts`, 100x30):
+
+- start screen identical in content to `mock-llm/baseline/codex-plain.txt` (banner, the five
+  slash-command hints, composer, `mock-model default · <cwd>` footer); the cwd shown is the
+  server's (`/tmp/wasm-term-workspace`);
+- `hello there` -> the scripted reply, `Worked for <1s`;
+- `please use a tool` -> `Ran echo mock-llm-tool-ok && pwd`, result, `MOCK-TOOL-DONE`;
+- `run with approval` with `sandbox_mode="workspace-write"` -> the approval prompt
+  ("Would you like to run the following command?"), `y`, "You approved codex to run ...", result;
+- F2 opens the warnings view; `/quit` prints the resume hint and exits with code 0.
+
+Chrome (Xvfb, driven with the `browser-control` CLI; ghostty-web fell back to its canvas
+renderer because WebGL2 is unavailable there), 192x55:
+
+- page load to composer about 1.4 s; start screen with the large animated logo;
+- typed `hello there`, Enter: the reply rendered (screenshot kept by the reporting agent);
+- terminal replies seen by the program: `ESC[1;1R`, `ESC[?7u ESC[?62;22c`; Shift+Enter arrives
+  as a CSI-u key and inserts a newline;
+- viewport change to 90x29: re-laid out; `/quit`: `exit code 0`;
+- idle: 2 `poll_oneoff` calls in 4 s.
+
+Differences from native seen so far: times are UTC (HOST-REQUESTS 1); no default-colour probe,
+so anything derived from the terminal's background colour (the shaded user-message rows) uses
+the fallback; `~` is not abbreviated in paths because there is no home directory lookup.
+
+### Open problems
+
+1. **A stall of about 1.2 s on the only thread shortly after the first paint** **[ran]**. Found
+   through its symptom: in the harness, a burst of characters followed 1.5 s later by Enter
+   sometimes put a newline in the composer instead of submitting (3 of 5 runs submitted; spaced
+   keystrokes and bracketed pastes 5 of 5 each). With temporary logging of key events (removed
+   again), the failing runs show the event loop not running between about t=1.0 s and t=2.3 s
+   after start; the queued characters and Enter are then handled 1 ms apart, which codex's
+   paste-burst heuristic (`tui/src/bottom_pane/paste_burst.rs`, 120 ms Enter window) correctly
+   reads as a paste. No wake-up is lost and nothing is wrong with timers. The import trace
+   shows no syscalls during the gap, so it is computation. **[inferred]**: work that natively
+   runs on the blocking pool or another worker thread (syntax/theme set loading and similar
+   one-off initialisation) and here runs inline. The `wasm-small` build shows the same 3 of 5.
+   Effect for a person: input typed in the first couple of seconds after the screen appears is
+   applied late. Finding what it is needs a profile; `dist/codex.wasm` keeps its name section for that
+   (profiling it in Chrome was not tried).
+2. Direct `std::env::temp_dir()` callers (above).
+3. Nothing persisted across reloads was checked (`persist` is configured for `~/.codex` in
+   `web/server.ts`; the browser runs used `persist=0`).
+4. Only short sessions were run. Long transcripts, large history replays (multi-megabyte
+   frames), reconnect after a dropped socket, and mouse/alternate-screen overlays are untested.
 
 ### Ordered remaining work
 
-1. **Clear the frontier above** (eight items; each is a gate or a stub, none needs design
-   except reqwest). Expect each to expose another layer.
-2. **Decide reqwest.** Recommended: fork reqwest 0.12 and 0.13 so that the wasm-bindgen
-   backend is selected only for `target_os = "unknown"`, letting WASI take the native hyper
-   path, which then fails at connect time through the tokio/socket2 stand-ins. That keeps
-   every caller compiling unmodified. Wiring real HTTP to the kernel's `http_open` can come
-   later as a hyper connector; the remote TUI does not need it.
-3. **Get the data crates through**: codex-http-client, codex-network-proxy, codex-protocol,
-   codex-config, codex-app-server-protocol. At that point a protocol-level test guest is
-   possible, independent of the TUI.
-4. **Cut the embedded server**: in `codex-app-server-client`, make `codex-app-server` a
-   non-WASI dependency; on WASI provide same-named stand-ins for the handful of in-process
-   types the TUI names (`InProcessServerEvent`, `EmbeddedNetworkPolicy`, `StateDbHandle`,
-   `LogDbLayer`, `InProcessClientStartArgs`). This removes the largest crate and its
-   exclusive dependencies from the graph.
-5. **`codex-core` for its `config` module only**: gate the other top-level modules in
-   `core/src/lib.rs` on `not(target_os = "wasi")`, keeping `config`, `otel_init` and whatever
-   they reference in-crate (`windows_sandbox`, `unified_exec`, `path_utils`, `context`,
-   `responses_metadata` are named by `config/mod.rs`). This is the step with the most
-   uncertainty; if `config` drags too much of core with it, fall back to making all of core
-   type-check, which the tokio process stand-in was built to make possible.
-6. **The crates `core::config` and the TUI name**: mcp, rmcp-client, exec-server, sandboxing,
-   login (keyring), models-manager, model-provider, core-plugins, git-utils, state/rollout
-   (sqlx), otel, backend-client, feedback, cloud-config, connectors, realtime-webrtc,
-   worktree, arg0. Mostly pattern 1 and pattern 5 fixes; `scripts/unixify.sh` handles files
-   whose unix arms are std-only.
-7. **The TUI crate itself**: `terminal_probe.rs` (libc dup/fcntl/poll/read -> a WASI arm on
-   `poll_oneoff`), `tui/job_control.rs` (no suspend), `tui/terminal_stderr.rs`, clipboard,
-   `external_editor.rs`, `webbrowser`, `libc::tcflush` in `tui.rs:426-433`, history file
-   locking.
-8. **Transport**: re-type the three functions in `app-server-client/src/remote.rs` over a
-   message-level stream and add a WASI implementation on `wasm_term.ws_*` registered with
-   tokio's I/O driver; skip `ensure_rustls_crypto_provider` there.
-9. **A port `main`** (`ports/codex/` crate, not a patch): parse the endpoint, build a
-   current-thread runtime, call `codex_tui::run_main(.., Some(endpoint))`, and run the small
-   task that awaits readability of `crossterm::wasi_compat::input_fds()` and calls
-   `notify_input_ready()`. Link with a 16 MiB+ stack.
-10. **Link**, then measure module size; then run in the kernel against `mock-llm` through the
-    bridge and compare with `mock-llm/baseline/codex-*.txt`.
-11. Only then: threads or not, real HTTP or not, persistence.
-
-Steps 1-7 are type-checking work and can be measured with `scripts/check.sh` the whole way;
-8-10 are where unknown run-time problems will appear.
+1. Profile and remove or defer the startup stall (open problem 1).
+2. Fidelity: give the TUI's unix startup probe a WASI arm (`terminal_probe.rs`: wasi-libc has
+   `poll`, `read` and `fcntl(O_NONBLOCK)`; `dup` must become a second open of `/dev/tty`) so
+   default colours are detected; read the UTC offset once the host passes it; abbreviate `~`.
+3. Guard or replace the direct `temp_dir()` calls.
+4. Size: LTO and `wasm-opt`; then the real cut, building `codex-app-server-client` remote-only
+   on WASI so the embedded server leaves the graph (first-session steps 4-5, now an optimisation
+   rather than a prerequisite).
+5. Integration into the shared page on 4790 (someone else's): `web/server.ts` shows the whole
+   guest description (name, `remote` parameter, persist roots).
+6. HTTP for the TUI's own requests through `wasm_term.http_open` as a hyper connector, if the
+   announcement tip and update check are wanted.
+7. Upgrades: re-run `setup.sh` against the new tag, fix what no longer applies, `check.sh`,
+   `build.sh`, the harness line above. Check `grep -c legacy_core tui/src -r` first; when
+   upstream finishes that migration most of this graph disappears.
 
 ## 8. Rules followed
 
 `~/.codex` was not touched; nothing was executed that reads or writes a codex home, and no
-model provider was called. Toolchains added: wasi-sdk 34 and emsdk under
+model provider was called. Second session: the mock backend was only ever started with
+`mock-llm/up.sh` (it had been taken down by someone else mid-session); the native `codex` was run
+once as a client through `mock-llm/run-codex-client.sh` to compare paste behaviour; one npm
+package (`@xterm/headless`) was installed under `ports/codex/web/node_modules`. Nothing new was
+installed system-wide or into `~/.rustup`.
+
+Toolchains added (first session): wasi-sdk 34 and emsdk under
 `wasm-term/vendor/tools/`, and the `wasm32-unknown-emscripten` rust-std component for the
 stable toolchain via rustup (for the approach (c) measurement). Running rustup inside the
 checkout also made it sync the 1.95.0 toolchain that upstream's `rust-toolchain.toml` pins

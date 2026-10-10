@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Fri, 9 Oct 2026 23:57:02 -0700
+Subject: [PATCH] wasi: wasm-small profile
+
+---
+ codex-rs/Cargo.toml | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/codex-rs/Cargo.toml b/codex-rs/Cargo.toml
+index 4a273f7..446ccf8 100644
+--- a/codex-rs/Cargo.toml
++++ b/codex-rs/Cargo.toml
+@@ -651,6 +651,12 @@ incremental = false
+ [profile.wasm.package."*"]
+ opt-level = "s"
+ 
++# wasm-term port: the module to serve. Size-optimised and stripped; slower to build.
++[profile.wasm-small]
++inherits = "wasm"
++opt-level = "s"
++strip = true
++
+ [profile.ci-test]
+ # Reduce binary size to reduce disk pressure.
+ inherits = "test"
