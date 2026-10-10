@@ -157,7 +157,7 @@ pub(crate) fn push_oxc(
         .labels
         .iter()
         .next()
-        .map(|label| (label.offset() as u32, (label.offset() + label.len()) as u32))
+        .map(|label| (label.offset(), label.offset() + label.len()))
         .unwrap_or((0, 0));
     let severity = match diagnostic.severity {
         oxc_diagnostics::Severity::Error => Severity::Error,
