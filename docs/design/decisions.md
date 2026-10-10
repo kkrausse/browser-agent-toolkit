@@ -353,7 +353,7 @@ Numbers: `docs/experiments/2026-10-09-net.md`. Code: `crates/bat-kernel/src/{htt
 `runtime/src/{net,host,sw}/`.
 
 - **The HTTP and WebSocket codecs take an fd, not caller buffers** (kernel-abi.md §13
-  reserved buffer-fed shapes; §14 is what was built). A buffer-fed parser means ring →
+  reserved buffer-fed shapes; §15 is what was built). A buffer-fed parser means ring →
   kernel scratch → JS, two copies of every body byte. `bat_http_recv(parser, fd, …)` parses
   the socket's receive ring in place and reports body bytes as ranges *inside the ring*;
   JS copies them once into its own memory and the next call releases them. Sending is the
