@@ -5,10 +5,13 @@
 //   bun runtime/harness/cli.ts run -e '<code>' [args…]               inline CommonJS (use --esm for a module)
 //   bun runtime/harness/cli.ts run --guest /app/server.js [args…]    run a file that is already in the guest
 //   bun runtime/harness/cli.ts node <node args…>                     raw `node …` in the guest
+//   bun runtime/harness/cli.ts launch agent|preview [args…]          the manifest's launch (entry, args, cwd, env)
+//   bun runtime/harness/cli.ts start run|node|launch …                 same, in the background: prints the pid
+//   bun runtime/harness/cli.ts status <pid> | stop <pid>              output so far / kill and final output
 //   bun runtime/harness/cli.ts reload                                reboot the page (fresh kernel and overlay)
 //   bun runtime/harness/cli.ts eval '<js run in the page>'           e.g. 'batHarness.stats()'
 //
-// Options (before the script): --cwd DIR  --env K=V (repeatable)  --timeout MS  --trace  --json
+// Options (before the script): --cwd DIR  --env K=V (repeatable)  --timeout MS  --trace  --json  --stdin TEXT  --keep-stdin
 //   --reload (reboot first)  --build (run runtime/build.ts first)  --query 'v=3&spare=0' (page query; implies reload)
 //
 // The server (runtime/harness/server.ts, port 4102) is started if it is not running. The page
@@ -25,7 +28,7 @@ const here = import.meta.dir
 
 const argv = process.argv.slice(2)
 const command = argv.shift()
-const opts = { cwd: undefined as string | undefined, env: {} as Record<string, string>, timeout: 120000, trace: false, json: false, reload: false, build: false, query: undefined as string | undefined, esm: false, guest: false, stdin: undefined as string | undefined }
+const opts = { cwd: undefined as string | undefined, env: {} as Record<string, string>, timeout: 120000, trace: false, json: false, reload: false, build: false, query: undefined as string | undefined, esm: false, guest: false, stdin: undefined as string | undefined, keepStdin: false }
 let inline: string | undefined
 while (argv.length && argv[0].startsWith('-')) {
   const a = argv.shift()!
@@ -44,6 +47,7 @@ while (argv.length && argv[0].startsWith('-')) {
   } else if (a === '--esm') opts.esm = true
   else if (a === '--guest') opts.guest = true
   else if (a === '--stdin') opts.stdin = argv.shift()
+  else if (a === '--keep-stdin') opts.keepStdin = true
   else if (a === '-e') inline = argv.shift()
   else {
     argv.unshift(a)
@@ -123,9 +127,43 @@ async function main() {
     console.log(JSON.stringify(evaluate(argv.join(' ')), null, 1))
     return
   }
-  const run: any = { args: [], cwd: opts.cwd, env: opts.env, timeoutMs: opts.timeout, trace: opts.trace, files: {}, stdin: opts.stdin }
-  if (command === 'node') run.args = argv
-  else if (command === 'run') {
+  if (command === 'status' || command === 'stop') {
+    const r = evaluate(`batHarness.${command}(${Number(argv[0])})`)
+    if (!r) throw new Error(`no background process ${argv[0]}`)
+    if (r.stdout) process.stdout.write(r.stdout)
+    if (r.stderr) process.stderr.write(r.stderr)
+    console.error(`[harness] pid ${argv[0]} ${r.running ? 'running' : `exited ${r.code}`}`)
+    return
+  }
+  // `start <run|node|launch …>`: the same, but returns the pid at once and leaves the program running.
+  let background = false
+  let command2 = command
+  if (command === 'start') {
+    background = true
+    command2 = argv.shift()!
+    while (argv.length && argv[0].startsWith('--')) {
+      const a = argv.shift()!
+      if (a === '--env') {
+        const kv = argv.shift()!
+        opts.env[kv.slice(0, kv.indexOf('='))] = kv.slice(kv.indexOf('=') + 1)
+      } else if (a === '--cwd') opts.cwd = argv.shift()
+      else if (a === '--guest') opts.guest = true
+    }
+  }
+  const run: any = { args: [], cwd: opts.cwd, env: opts.env, timeoutMs: opts.timeout, trace: opts.trace, files: {}, stdin: opts.stdin, keepStdin: opts.keepStdin }
+  if (command2 === 'node') run.args = argv
+  else if (command2 === 'launch') {
+    // `launch agent|preview [extra args]`: entry, args, cwd and env from the manifest's launch block.
+    const launch = evaluate(`batHarness.manifest.launch[${JSON.stringify(argv[0])}]`)
+    if (!launch) throw new Error(`manifest has no launch.${argv[0]}`)
+    run.args = [launch.entry, ...launch.args, ...argv.slice(1)]
+    run.cwd = opts.cwd ?? launch.cwd
+    run.env = { ...launch.env, ...opts.env }
+    // What the host does before starting a program: its directories exist (HOME, XDG_*, TMPDIR).
+    run.dirs = Object.entries<string>(launch.env).filter(([k, v]) => /HOME$|^TMPDIR$/.test(k) && v.startsWith('/')).map(([, v]) => v)
+    if (argv[0] === 'agent') run.env = { OPENCODE_DATABASE_PATH: `${launch.env.XDG_DATA_HOME}/opencode.db`, OPENCODE_PASSWORD: 'harness', ...run.env }
+  }
+  else if (command2 === 'run') {
     if (inline !== undefined) {
       const name = `/workspace/.harness/inline-${Date.now().toString(36)}.${opts.esm ? 'mjs' : 'cjs'}`
       run.files[name] = inline
@@ -144,6 +182,11 @@ async function main() {
       run.args = [`/workspace/.harness/${basename(host)}`, ...argv]
     }
   } else throw new Error(`unknown command ${command}`)
+  if (background) {
+    run.timeoutMs = 0
+    console.log(browser(`return await page.evaluate(async (o) => { await window.batHarness.ready; return window.batHarness.start(o) }, ${JSON.stringify(run)})`))
+    return
+  }
   const result = browser(`return await page.evaluate(async (o) => { await window.batHarness.ready; return await window.batHarness.run(o) }, ${JSON.stringify(run)})`, opts.timeout + 30000)
   if (opts.json) {
     console.log(JSON.stringify(result))

@@ -435,7 +435,13 @@ registerBuiltin('stream/web', (rt) => {
 // registerBuiltin of the same name replaces these. They load, and say what is missing when used.
 for (const name of ['net', 'http', 'https', 'sqlite']) {
   registerBuiltin(name, (rt) => {
+    const said = new Set<string>()
     const missing = (what: string) => () => {
+      // Programs often catch and re-wrap this; say it once on stderr so the first missing piece is visible.
+      if (!said.has(what)) {
+        said.add(what)
+        rt.ctl?.writeFd(2, `[bat] node:${name} is not available in this build: ${what} was called\n`)
+      }
       throw Object.assign(new Error(`node:${name} is not available in this build of the runtime (${what} was called)`), { code: 'ERR_BAT_MODULE_UNAVAILABLE' })
     }
     const EventEmitter = rt.require('events')

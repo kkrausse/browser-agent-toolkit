@@ -15,3 +15,5 @@ console.log(JSON.stringify({
   root: config.root, base: config.base, mode: config.mode, configFile: config.configFile, cacheDir: config.cacheDir,
   plugins: config.plugins.map((p) => p.name),
 }, null, 1))
+// The React Router plugin keeps a watcher open; the measurement ends here.
+process.exit(0)

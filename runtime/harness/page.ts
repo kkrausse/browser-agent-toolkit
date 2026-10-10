@@ -14,7 +14,11 @@ export interface RunOptions {
   env?: Record<string, string>
   /** Files to write into the overlay first: guest path -> text. */
   files?: Record<string, string>
+  /** Directories to create first. */
+  dirs?: string[]
   stdin?: string
+  /** Leave the child's stdin open (servers that stop at stdin EOF). */
+  keepStdin?: boolean
   timeoutMs?: number
   trace?: boolean
 }
@@ -62,7 +66,7 @@ async function start() {
     kerneldUrl: asset('bat-kerneld.js'),
     processWorkerUrl: processWorkerUrl(new URL(asset('bat-process.js'), location.href).href, {
       nodelibUrl: 'bat-nodelib.js',
-      wasm: { modules: 'bat_modules.wasm', native: 'bat_node_native.wasm' },
+      wasm: { modules: 'bat_modules.wasm', native: 'bat_node_native.wasm', sqlite: 'sqlite3.wasm' },
       programs,
       trace: params.has('trace'),
     }),
@@ -130,7 +134,8 @@ function collect(fd: number) {
   return { text: () => text, finished: () => (done ? Promise.resolve() : new Promise<void>((r) => (wake = r))) }
 }
 
-async function run(o: RunOptions): Promise<RunResult> {
+async function run(o: RunOptions, started?: (pid: number, stdout: () => string, stderr: () => string) => void): Promise<RunResult> {
+  for (const dir of o.dirs ?? []) k.mkdir(dir, { recursive: true })
   for (const [path, text] of Object.entries(o.files ?? {})) {
     k.mkdir(path.slice(0, path.lastIndexOf('/')) || '/', { recursive: true })
     k.writeFile(path, text)
@@ -141,8 +146,9 @@ async function run(o: RunOptions): Promise<RunResult> {
   const p = k.spawn({ exec: o.exec ?? 'node', argv: o.exec ? [o.exec, ...o.args] : ['node', ...o.args], env, cwd: o.cwd ?? '/workspace', stdio: ['pipe', 'pipe', 'pipe'] })
   const stdout = collect(p.stdio[1])
   const stderr = collect(p.stdio[2])
+  started?.(p.pid, stdout.text, stderr.text)
   if (o.stdin) k.write(p.stdio[0], enc.encode(o.stdin))
-  k.close(p.stdio[0])
+  if (!o.keepStdin) k.close(p.stdio[0])
   let timedOut = false
   const status = await new Promise<number | null>((resolve) => {
     exits.set(p.pid, resolve)
@@ -166,6 +172,13 @@ async function run(o: RunOptions): Promise<RunResult> {
   } catch {
     // reaped
   }
+  if (o.keepStdin) {
+    try {
+      k.close(p.stdio[0])
+    } catch {
+      // closed
+    }
+  }
   let err = stderr.text()
   let trace: unknown
   const m = /\[bat-trace\] (.*)\n/.exec(err)
@@ -185,11 +198,40 @@ if (params.get('debug') === 'beat') {
   let n = 0
   setInterval(() => void fetch(`/beat?n=${n++}&procs=${encodeURIComponent(JSON.stringify(k?.procList?.() ?? []))}`).catch(() => {}), 250)
 }
+// Long-running programs (servers): started here, inspected and stopped by later commands.
+const background = new Map<number, { result?: RunResult; out: () => { stdout: string; stderr: string } }>()
+function startBackground(o: RunOptions): number {
+  let pid = 0
+  const live = { out: () => ({ stdout: '', stderr: '' }) } as { result?: RunResult; out: () => { stdout: string; stderr: string } }
+  void run({ ...o, keepStdin: true }, (p, stdout, stderr) => {
+    pid = p
+    live.out = () => ({ stdout: stdout(), stderr: stderr() })
+    background.set(p, live)
+  }).then((r) => (live.result = r))
+  return pid
+}
+function backgroundStatus(pid: number) {
+  const b = background.get(pid)
+  if (!b) return undefined
+  return b.result ? { running: false, ...b.result } : { running: true, pid, ...b.out() }
+}
+function stopBackground(pid: number, signal = 9) {
+  try {
+    k.kill(pid, signal)
+  } catch {
+    // gone
+  }
+  return backgroundStatus(pid)
+}
+
 const ready = start()
 ready.catch((e) => log(String(e?.stack ?? e), 'err'))
 ;(window as any).batHarness = {
   ready,
   run,
+  start: startBackground,
+  status: backgroundStatus,
+  stop: stopBackground,
   get kernel() {
     return k
   },
