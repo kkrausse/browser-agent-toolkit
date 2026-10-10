@@ -346,3 +346,109 @@ Measurements: `docs/experiments/2026-10-09-sqlite.md`.
 - **Buffers given to SQLite come from `sqlite3_malloc`**, not libc `malloc`: SQLite frees
   bound text and blobs with `sqlite3_free`, and the two are only the same allocator by
   build accident (found as a heap trap in the differential run).
+
+## 2026-10-09 networking and the page-side host (net agent)
+
+Numbers: `docs/experiments/2026-10-09-net.md`. Code: `crates/bat-kernel/src/{http,ws}.rs`,
+`runtime/src/{net,host,sw}/`.
+
+- **The HTTP and WebSocket codecs take an fd, not caller buffers** (kernel-abi.md §13
+  reserved buffer-fed shapes; §14 is what was built). A buffer-fed parser means ring →
+  kernel scratch → JS, two copies of every body byte. `bat_http_recv(parser, fd, …)` parses
+  the socket's receive ring in place and reports body bytes as ranges *inside the ring*;
+  JS copies them once into its own memory and the next call releases them. Sending is the
+  mirror: `bat_http_reserve` shows the free part of the send ring, JS writes there,
+  `bat_http_commit` publishes. It relies on a socket direction having one reader and one
+  writer; two writers on one socket would interleave, as they would with `write(2)`, but
+  here could also break chunk framing.
+- **Chunk size lines are fixed width** (`0000a3f2\r\n`, leading zeros are legal) so the
+  payload position is known before its length and the chunk can be written in place.
+- **Client WebSocket frames carry the MASK bit with an all-zero key.** RFC 6455 requires
+  the bit from clients; the key's purpose (defeating cache poisoning through proxies) does
+  not exist on a ring inside one tab, and a zero key makes masking a no-op, so payload is
+  never rewritten. The `ws` package accepts it (verified).
+- **Message heads are serialised in JavaScript** (string concatenation written straight
+  into the ring as Latin-1). §13 reserved `bat_http_write_head`; passing structured
+  strings into Wasm would cost more than building the string, and it is not parsing.
+- **`httparse` for heads** (no_std, no dependencies, +~10 KiB): the hand-written part is
+  only framing (lengths, chunks, keep-alive, upgrade).
+- **A separate bridge worker (`netd`) instead of routing preview traffic through kerneld
+  or the page.** The design said "through kerneld". kerneld does synchronous OPFS journal
+  writes on its loop, and the page's main thread renders the chat; a preview load is ~700
+  requests. netd is one more kernel host process with its own event word: frame → service
+  worker → netd → socket ring, and the page is on the path only once, to hand each side
+  its end of a MessageChannel. Cost: one more worker (it also runs the image download, so
+  it earns its start-up).
+- **Preview WebSockets bypass the service worker after the first message.** The frame's
+  shim sends one end of a MessageChannel through the service worker to netd; from then on
+  frames go frame ↔ netd directly, so an idle-killed service worker does not drop HMR.
+- **Request and response bodies cross service worker ↔ netd as transferred streams**,
+  except a response of announced length ≤ 256 KiB, which netd reads and posts as one
+  buffer. Measured: a transferred stream per response made a trivial request 5.1 ms
+  (load 17); with the small-body path 1.36 ms, against 0.90 ms for a response the service
+  worker synthesizes itself.
+- **The service worker's scope is `/preview/`**, not `/`: it never controls the page that
+  hosts the editor, so the host app's own requests, caching and any service worker of its
+  own are untouched. It needs `Service-Worker-Allowed: /` (the handler already sends it).
+- **First navigation**: `bootRuntime` resolves only after the worker is `activated` and
+  has its port, and the frame's URL does not exist before `bootRuntime` resolves. After an
+  idle restart the worker asks every window client for a new port (`bat-need-port`) and
+  holds the request up to 4 s.
+- **No 410 for stale listeners.** The old runtime bound a preview URL to a listener
+  identity. Here the URL names a port; a restarted guest server on the same port simply
+  serves, and nothing listening is a 503 page. The kernel still exposes the identity
+  (`bat_port_listener`) for `endpoint.ready`.
+- **Guest cookies live in the service worker.** `Set-Cookie` cannot be put on a
+  synthesized response and `Cookie` is not readable from a request, so the worker keeps a
+  jar per guest port (name → value; Max-Age/Expires only to delete) and adds `Cookie` to
+  guest requests. The page origin's real cookies therefore never reach a guest server
+  through the preview; they do travel on `hostPaths` and `host.internal` requests, which
+  are real same-origin requests. Not done: `document.cookie` in the frame does not see
+  guest cookies, and the jar is lost when the worker restarts.
+- **The WebSocket shim is injected inline after `<head>`** (or `<html>`, or the doctype;
+  never before the doctype, which would switch the document to quirks mode). The
+  transform holds back at most the bytes before `<head>`; the rest streams.
+- **`EventSource` is not shimmed**: its request is an ordinary fetch the service worker
+  streams (checked with the native class, 100 ms cadence preserved).
+- **`endpoint.fetch` keeps connections alive** (pool per port, at most 48 concurrent,
+  further requests queue). A connection the guest closed while idle is detected by its
+  hang-up; a request that still lands on one is retried on the next. A response body must
+  be read or cancelled to give its connection back, as with `fetch`.
+- **Guest HTTP server: `ServerResponse` is a `Writable`**, not Node's hand-rolled
+  `OutgoingMessage`. Finish/drain/destroy ordering then comes from Node's own stream code
+  (vendored), which is what `ws`, connect and Effect's `NodeHttpServer` observe. `end(body)`
+  before any write sends `Content-Length`; anything else is chunked.
+- **A client that half-closes is treated as gone** while the server is still producing the
+  response (Node does the same unless `httpAllowHalfOpen`). This is how an aborted
+  `fetch` or a closed SSE reader reaches `req.on('close')`.
+- **Readiness events are not trusted for their mask.** fd numbers are reused at once and an
+  event queued for a closed connection was delivered to the next one with the same
+  number; the server took it for a hang-up ("socket hang up" on roughly one run in three
+  of the benchmark). Fixed twice: the kernel drops queued events when an fd is closed,
+  and the server checks the current state (`bat_fd_poll`) before acting.
+- **Guest HTTP client goes through one router** (`net/fetch.ts`): loopback → kernel
+  socket, `host.internal` → the worker's own origin, anything else → the browser's
+  `fetch`. `http.request` buffers the request body until `end()`; responses stream. No
+  `Accept-Encoding` is ever added on the kernel path because nothing there decompresses.
+- **`host.internal` is only a name for the worker's own origin**: `hostOrigin` is
+  `<page scheme>://host.internal[:<page port>]`, and the router swaps the host name back,
+  so the request is same-origin (cookies, no mixed content) with the path the guest wrote.
+- **A pending guest `fetch` keeps the process alive; an unread response body does not.**
+  The response body is wrapped so the loop is ref'd only while a read is outstanding.
+- **Unix-domain paths are ports**: `listen(path)` and `connect(path)` hash the path into
+  20000–39999. No kernel object, visible to every process, collisions possible in theory.
+- **The image is hashed while it streams, by `bat_node_native.wasm`** (WebCrypto has no
+  incremental digest), in netd. Transport compression needs no client code: the handler
+  answers with `Content-Encoding: zstd|br` and the browser decodes. A stored image is
+  trusted by name and size afterwards (the name is its hash; a file only gets its name
+  once verified).
+- **Runtime assets are one flat directory**, `runtime/dist/`, copied by `prepare()` to
+  `<prepared>/runtime/`; every URL is taken relative to `host.js`'s own URL. The global
+  `fetch` router is installed by a hidden builtin (`bat:net-globals`) that the host puts
+  in the process worker's `prewarm` list, so the process runtime needed no change.
+- **Open, not understood:** once, a page spawn trapped in `fd::pipe` with "operation does
+  not support unaligned accesses", and a following debug loop of `pipe()` calls hung the
+  page (spinning on a lock). It was after an HTTP exchange and 16 file writes with the
+  journal on. Not reproduced in five repeats of the same sequence nor in a 2,400-write
+  stress with pipe allocation. It smells like heap corruption or a lock left held; the
+  ring code added here writes into kernel memory from JS and is the first suspect.

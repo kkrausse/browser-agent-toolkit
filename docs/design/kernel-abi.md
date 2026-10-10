@@ -417,13 +417,8 @@ Shapes are fixed here so callers can be designed for them; names may still gain 
 
 - **Resolver**: implemented; see section 14 (owned by the node-runtime agent, in
   `crates/bat-kernel/src/resolve.rs`, binding in `runtime/src/loader/resolve.ts`).
-- **HTTP/1.1 codec**: incremental, over caller buffers, no fds:
-  `bat_http_parser_new(kind) -> handle`, `bat_http_feed(handle, ptr, len, out, cap)` (events:
-  head with method/target/status/headers, body chunk ranges, message end),
-  `bat_http_parser_free`, and `bat_http_write_head(...) -> len` for serialisation. Used by the
-  guest `http` module and by the page for endpoint fetch.
-- **WebSocket**: `bat_ws_accept_key(key, len, out)`, `bat_ws_frame_header(opcode, len, mask, out) -> n`,
-  `bat_ws_parse(ptr, len, out) -> consumed`.
+- **HTTP/1.1 codec and WebSocket framing**: built, with a different shape from the one
+  first reserved here (fd-based, so the kernel never copies body bytes). See section 15.
 
 ## 14. Resolver
 
@@ -549,3 +544,46 @@ package's self-reference, own `exports` and `imports` keys, each dependency and 
 subpaths, from the package root and from a nested directory) plus a small fixture tree; all
 agree with Node 24.18, including the type byte and the nearest package.json, with
 `module-sync` passed in `conds`.
+
+## 15. HTTP/1.1 and WebSocket codecs, port identity
+
+`crates/bat-kernel/src/http.rs`, `ws.rs`; binding `runtime/src/net/codec.ts`. Both codecs
+work on a socket fd and read or write its rings in place. A socket direction must have one
+reader and one writer. Pointers reported in events point into the receive ring and stay
+valid until the next `*_recv` (or `bat_http_release`) on the same parser.
+
+Events are `u32` words written to a caller buffer:
+
+| Event | Words |
+| --- | --- |
+| `1` head | `1, total_words, flags, status, head_ptr, head_len, a_off, a_len, b_off, b_len, length_lo, length_hi, n`, then `n` × `name_off, name_len, value_off, value_len`. Offsets are into the head bytes at `head_ptr`. Request: `a` = method, `b` = target. Response: `a` = reason. |
+| `2` body | `2, ptr, len` |
+| `3` message end | `3, 0` |
+| `4` end of stream | `4, clean` (`1`: between messages, or after an until-close body) |
+| `5` error | `5, errno` (`71` EPROTO: malformed message) |
+| `6` WebSocket frame | `6, flags, len_lo, len_hi` (flags: opcode in bits 0..3, `0x100` FIN, `0x200` masked) |
+| `7` WebSocket payload | `7, ptr, len` (already unmasked) |
+| `8` WebSocket frame end | `8` |
+
+Head flags: `1` keep-alive, `2` chunked, `4` upgrade (the parser pauses), `8` has
+Content-Length, `16` Expect: 100-continue, `32` body runs until close, `64` HTTP/1.0,
+`128` no body by status or method.
+
+| Export | Result | Notes |
+| --- | --- | --- |
+| `bat_http_parser_new(kind)` | handle | `0` requests, `1` responses |
+| `bat_http_parser_free(handle)` | | |
+| `bat_http_recv(handle, fd, out, cap_words)` | words written | `0`: nothing new, wait for readability. At most one head per call. `cap_words` must fit a head (`13 + 4 × headers`); the binding uses 2048 |
+| `bat_http_release(handle, fd)` | 0 | release lent ranges without parsing further |
+| `bat_http_resume(handle, fd, raw)` | 0 | after a head with the upgrade flag: `raw != 0` ends the parser and leaves the bytes after the head in the ring for `bat_read`; `0` continues as HTTP |
+| `bat_http_expect_no_body(handle)` | 0 | the next response answers a HEAD request |
+| `bat_http_reserve(fd, flags, out)` | capacity | free part of the send ring: `out` = `cap, ptr1, len1, ptr2, len2`. `flags` bit 0: room is kept for chunk framing. `-EAGAIN` when full, `-EPIPE` when the peer is gone |
+| `bat_http_commit(fd, flags, n)` | n | publish `n` bytes written after reserve; with bit 0, as one chunk (`%08x\r\n` … `\r\n`) |
+| `bat_ws_new()`, `bat_ws_free(handle)` | handle | frame parser |
+| `bat_ws_recv(handle, fd, out, cap_words)` | words written | |
+| `bat_ws_reserve(fd, flags, len, out)` | n | writes a frame header for up to `len` (f64) payload bytes into the send ring, unpublished; `out` = `header_len, n, ptr1, len1, ptr2, len2`. `n < len`: the frame was cut and sent without FIN, continue with opcode 0. Flag `0x200` sets the MASK bit with a zero key |
+| `bat_ws_commit(fd, total)` | 0 | publish `header_len + n` bytes |
+| `bat_ws_accept_key(key, len, out)` | 28 | `Sec-WebSocket-Accept` text |
+| `bat_port_listener(port)` | id | identity of the listener on `port` (never reused), 0 if none; wait on the exported word `BAT_PORTS_WORD` for changes |
+
+`bat_close` now also drops readiness events still queued for that fd.
