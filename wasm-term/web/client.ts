@@ -68,6 +68,8 @@ function fatal(message: string): never {
  * relative to the page, so the directory works at any path; isolation and the compressed module come from the
  * page's service worker. On the dev server this is false and the server does both. */
 const STATIC = process.env.WASM_TERM_STATIC === "1";
+/** A standalone TCP relay named when the static build was made (TCP_RELAY, web/static.ts). */
+const BAKED_RELAY = STATIC ? process.env.WASM_TERM_TCP_RELAY || "" : "";
 if (STATIC) await isolate("sw.js", "./").catch(error => fatal(String((error as Error).message ?? error)));
 
 const params = new URLSearchParams(location.search);
@@ -75,7 +77,7 @@ const guests = (await (await fetch("guests.json", { cache: "no-store" })).json()
 // A static build is for one program: its launcher is the page itself.
 const guest = params.get("guest");
 if (guest === null) {
-  showLauncher(guests, STATIC ? { title: "codex in this tab", intro: "codex-cli 0.162.0 running entirely in this browser tab: the TUI, the agent and its tools. This page is a directory of static files; nothing of ours is behind it, and the program's requests go from this tab straight to OpenAI.", notes: [originNote(location.origin), ...(chatgptAllows(location.origin) ? [] : [await localhostNote()])] } : undefined);
+  showLauncher(guests, STATIC ? { title: "codex in this tab", intro: "codex-cli 0.162.0 running entirely in this browser tab: the TUI, the agent and its tools. This page is a directory of static files; nothing of ours is behind it, and the program's requests go from this tab " + (BAKED_RELAY ? `to OpenAI as TLS through ${BAKED_RELAY}, a relay that only carries the encrypted bytes.` : "straight to OpenAI."), notes: BAKED_RELAY ? [] : [originNote(location.origin), ...(chatgptAllows(location.origin) ? [] : [await localhostNote()])] } : undefined);
   // Nothing below applies without a program; a module cannot return, so wait forever.
   await new Promise(() => {});
   throw new Error("unreachable");
@@ -223,8 +225,8 @@ const program = startProgram({
   persist,
   // Where a program's `tcp_connect` goes: this server's TCP relay (web/tcp-relay.ts), allowlisted hosts only,
   // or with `&tcp=<wss://host/path>` a relay that runs by itself somewhere else (web/tcp-relay-main.ts).
-  // The static build has no server of its own, so there it is `&tcp=` or nothing.
-  tcpRelay: params.get("tcp") || (STATIC ? undefined : "/proxy/tcp"),
+  // The static build has no server of its own, so there it is `&tcp=`, the relay baked in at build time (TCP_RELAY, web/static.ts), or nothing.
+  tcpRelay: params.get("tcp") || (STATIC ? BAKED_RELAY || undefined : "/proxy/tcp"),
   http: {
     seen: requests.seen,
     blocked: direct ? request => explainBlocked(request) : undefined,

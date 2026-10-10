@@ -19,7 +19,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync,
 import { dirname, join, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 import type { Manifest } from "../ports/codex/scripts/package";
-import { codexLocalGuest, codexStaticGuest } from "../ports/codex/web/guest";
+import { codexLocalGuest, codexStaticGuestFor } from "../ports/codex/web/guest";
 import type { GuestInfo } from "./guests";
 
 const here = import.meta.dir;
@@ -68,8 +68,13 @@ for (const [path, source] of sources) {
   else writeFileSync(target, gzipSync(readFileSync(source), { level: 9 }));
 }
 
+// TCP_RELAY=wss://host/tcp bakes a standalone relay (web/tcp-relay-main.ts) into the page: net=tunnel becomes
+// the default and the page works from any origin. Without it the build is net=direct unless `&tcp=` is given.
+const tcpRelay = process.env.TCP_RELAY ?? "";
+if (tcpRelay && !/^wss?:\/\//.test(tcpRelay)) throw new Error(`TCP_RELAY must be a ws:// or wss:// URL, got ${tcpRelay}`);
+
 async function bundle(entries: string[], options: Partial<Parameters<typeof Bun.build>[0]> = {}): Promise<void> {
-  const result = await Bun.build({ entrypoints: entries, target: "browser", format: "esm", sourcemap: "none", minify: true, define: { "process.env.WASM_TERM_STATIC": '"1"' }, ...options });
+  const result = await Bun.build({ entrypoints: entries, target: "browser", format: "esm", sourcemap: "none", minify: true, define: { "process.env.WASM_TERM_STATIC": '"1"', "process.env.WASM_TERM_TCP_RELAY": JSON.stringify(tcpRelay) }, ...options });
   if (!result.success) throw new AggregateError(result.logs, `bundling ${entries.join(", ")} failed`);
   for (const output of result.outputs) write(output.path.split("/").pop()!.replace(/^static-/, ""), await output.text());
 }
@@ -80,7 +85,7 @@ await bundle([join(here, "static-sw.ts")], { format: "iife", define: { GZIPPED: 
 const page = readFileSync(join(here, "index.html"), "utf8");
 if (!page.includes('src="/client.js"')) throw new Error("index.html no longer loads /client.js: update static.ts");
 write("index.html", page.replace('src="/client.js"', 'src="client.js"').replace("<title>wasm-term</title>", "<title>codex in this tab</title>"));
-write("guests.json", JSON.stringify([{ ...codexStaticGuest, module: modulePath } satisfies GuestInfo]));
+write("guests.json", JSON.stringify([{ ...codexStaticGuestFor(tcpRelay || undefined), module: modulePath } satisfies GuestInfo]));
 write("README.txt", `codex-cli 0.162.0 in a browser tab, as static files (wasm-term, codex-local, net=direct).
 
 Serve this directory with any file server and open it. It needs a secure context for its

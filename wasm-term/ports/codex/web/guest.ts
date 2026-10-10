@@ -61,14 +61,20 @@ export const codexLocalGuest: WasmGuest = {
   persist: { roots: ["/home/user/.codex", "/home/user/project"], exclude: ["/home/user/.codex/tmp/", "/home/user/.codex/log/", ".sqlite", "/thread-writer-locks/"] },
 };
 
-// codex-local as the static build offers it (web/static.ts): no relay exists there, so `net` is `direct` and
-// nothing else, the backend is the real one, and the launcher asks for nothing but the project directory.
-export const codexStaticGuest: Omit<WasmGuest, "site" | "build"> = (({ site, build, fetchFiles, ...guest }) => ({
-  ...guest,
-  description: "codex-cli 0.162.0 entirely in this tab: TUI, app-server and agent core (wasm32-wasip1). Sign in inside the program (ChatGPT device code, or an API key); requests go from this tab straight to OpenAI; files and credentials stay in this browser's storage for this origin",
-  params: guest.params!.filter(param => param.query !== "relay").map(param =>
-    param.query === "backend" ? { ...param, default: "openai", hidden: true }
-    : param.query === "net" ? { ...param, default: "direct", hidden: true, only: ["direct"], hint: "this page is static files with no relay behind it; use the dev server (web/server.ts) for net=tunnel or net=fetch" }
-    : param.query === "seed" ? { ...param, hidden: true }
-    : param),
-}))(codexLocalGuest);
+// codex-local as the static build offers it (web/static.ts): the backend is the real one and the launcher asks
+// for nothing but the project directory. There is no server behind the page, so `net` is `direct` unless a TCP
+// relay that runs by itself (web/tcp-relay-main.ts) is named: baked in at build time (`relay`) or given as `&tcp=`.
+// With a relay the program's own TLS goes through it and no origin allowlist applies.
+export function codexStaticGuestFor(relay?: string): Omit<WasmGuest, "site" | "build"> {
+  const { site, build, fetchFiles, ...guest } = codexLocalGuest;
+  return {
+    ...guest,
+    description: `codex-cli 0.162.0 entirely in this tab: TUI, app-server and agent core (wasm32-wasip1). Sign in inside the program (ChatGPT device code, or an API key); requests go from this tab ${relay ? `to OpenAI as TLS through a relay that only carries bytes (${relay})` : "straight to OpenAI"}; files and credentials stay in this browser's storage for this origin`,
+    params: guest.params!.filter(param => param.query !== "relay").map(param =>
+      param.query === "backend" ? { ...param, default: "openai", hidden: true }
+      : param.query === "net" ? { ...param, default: relay ? "tunnel" : "direct", hidden: !relay, only: ["direct", "tunnel"], hint: "direct = the browser's fetch straight to OpenAI: an API key and sign-in work anywhere, a ChatGPT subscription only from http://localhost:3000 and a few other origins. tunnel = codex's own HTTP and TLS through a TCP relay that sees only ciphertext; needs a relay, baked into this build or given as &tcp=wss://host/tcp" }
+      : param.query === "seed" ? { ...param, hidden: true }
+      : param),
+  };
+}
+export const codexStaticGuest = codexStaticGuestFor();

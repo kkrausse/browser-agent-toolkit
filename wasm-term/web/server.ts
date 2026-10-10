@@ -69,7 +69,7 @@ async function bundle(): Promise<Map<string, Blob>> {
     format: "esm",
     sourcemap: "inline",
     // "1" in the static build (web/static.ts), where the page has no server behind it.
-    define: { "process.env.WASM_TERM_STATIC": '""' },
+    define: { "process.env.WASM_TERM_STATIC": '""', "process.env.WASM_TERM_TCP_RELAY": '""' },
   });
   if (!result.success) throw new AggregateError(result.logs, "bundle failed");
   const outputs = new Map<string, Blob>();
