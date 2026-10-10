@@ -36,9 +36,6 @@ export function createMachineProcess(host: TtyHost, env: Record<string, string>,
     isTTY: true,
     isRaw: false,
     readable: true,
-    get readableLength() {
-      return pending.reduce((total, chunk) => total + chunk.byteLength, 0)
-    },
     setRawMode(raw: boolean) {
       stdin.isRaw = raw
       host.setRawMode(raw)
@@ -63,18 +60,17 @@ export function createMachineProcess(host: TtyHost, env: Record<string, string>,
     destroy() {},
   })
 
+  // Live values must be accessors: Object.assign would copy a getter's current value.
+  Object.defineProperty(stdin, "readableLength", {
+    get: () => pending.reduce((total, chunk) => total + chunk.byteLength, 0),
+  })
+
   const output = (fd: number) => {
     const stream: any = new EventEmitter()
     Object.assign(stream, {
       fd,
       isTTY: true,
       writable: true,
-      get columns() {
-        return host.size().cols
-      },
-      get rows() {
-        return host.size().rows
-      },
       getWindowSize: () => [host.size().cols, host.size().rows],
       getColorDepth: () => 24,
       hasColors: () => true,
@@ -87,6 +83,10 @@ export function createMachineProcess(host: TtyHost, env: Record<string, string>,
       end() {},
       cork() {},
       uncork() {},
+    })
+    Object.defineProperties(stream, {
+      columns: { get: () => host.size().cols },
+      rows: { get: () => host.size().rows },
     })
     return stream
   }

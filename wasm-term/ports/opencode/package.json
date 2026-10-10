@@ -4,6 +4,11 @@
   "type": "module",
   "scripts": {
     "build:native": "sh native/build.sh",
-    "demo:core": "bun build/bundle.ts demos/core-hello.ts --target=bun && bun dist/core-hello.js"
+    "build:tui": "bun build/bundle-opencode.ts --target=browser",
+    "build:tui:bun": "bun build/bundle-opencode.ts --target=bun",
+    "serve": "bun web/server.ts",
+    "demo:core": "bun build/bundle.ts demos/core-hello.ts --target=bun && bun demos/run-bun.ts dist/core-hello.js",
+    "demo:opencode-bun": "bun build/bundle-opencode.ts --target=bun && demos/run-opencode-bun.sh",
+    "test:opentui": "cd ../../vendor/opentui/packages/core && bun test --preload ../../../../ports/opencode/build/test-preload.ts --path-ignore-patterns='src/zig/zig-pkg/**'"
   }
 }
