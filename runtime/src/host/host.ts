@@ -251,9 +251,9 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
         bytes: img.bytes,
         sha256: img.sha256,
         headBytes: img.headBytes,
+        firstBytes: img.firstBytes,
         sums: img.sums && { url: prepared(img.sums.file), blockBytes: img.sums.blockBytes, sha256: img.sums.sha256 },
         nativeWasmUrl: asset('bat_node_native.wasm'),
-        firstBytes: img.firstBytes,
       },
       [],
       (p: StoreImageProgress) => {
@@ -267,11 +267,11 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
     done.catch(() => {})
     return { img, ready: Promise.race([ready, done.then((r) => ({ file: r.file, arriving: false }))]), done, state }
   })
-  const cancelDownloads = () => {
-    for (const s of stores) void netd.call('cancel', { id: s.done.id })
   // An image with a start-up order pauses after it; `started()` or this timer lets it go on.
   const resumeImages = () => void netd.call('resumeImages').catch(() => {})
   setTimeout(resumeImages, 20_000)
+  const cancelDownloads = () => {
+    for (const s of stores) void netd.call('cancel', { id: s.done.id })
   }
 
   const programs: Record<string, string> = {}
@@ -653,6 +653,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
       hostPaths[port] = [...prefixes]
       toWorker({ t: 'bat-host-paths', hostPaths })
     },
+    started: resumeImages,
     flush: () => {
       try {
         live()
@@ -660,7 +661,6 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
         return Promise.reject(e)
       }
       return kernel.flush()
-    started: resumeImages,
     },
     close() {
       return (closing ??= (async () => {
