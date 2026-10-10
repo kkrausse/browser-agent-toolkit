@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ghostty Web — official WASM</title>
+<style>
+  body { margin: 16px; font-family: system-ui, sans-serif; }
+  #terminal { height: 60vh; margin: 12px 0; }
+  output { white-space: pre-wrap; overflow-wrap: anywhere; }
+</style>
+<h1>Ghostty Web</h1>
+<p>Official Ghostty WASM · local input echo demo · no shell</p>
+<button id="sample">Sample output</button>
+<button id="history">Scrollback sample</button>
+<button id="clear">Reset</button>
+<p id="status" role="status">Loading…</p>
+<div id="terminal"></div>
+<output id="input" aria-label="Last encoded input"></output>
+<script type="module" src="/client.js"></script>
+</html>

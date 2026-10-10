@@ -1,0 +1,10 @@
+# What third_party/ was taken from (third_party/sync.sh rewrites this file)
+repository=git@github.com:kkrausse/random.git
+commit=fae38631b15ad4d979d859088f9ca2656e2b424f
+subject=wasm-term: shell pinned to bat-rust 6427fd7 (rg, nl, diff, awk, timeout, arrays); docs, numbers, screenshots
+date=2026-10-10T10:57:03-07:00
+ghostty-web.last-change=75ed11ed3de7038a0b307bbd201320c626ac1b79 ghostty-web: literal Ctrl+V option, focus reports, hover motion code, mouse-tracking read
+ghostty-web.tree=b44f7ce2c4d1e02356d04cef758f4de4f80a39d2
+bun-web-terminal/src/touch.ts=52f6461c9b99d005403d3ed3aca9e1a1bc4b0460
+bun-web-terminal/src/viewport.ts=bf206af744dfde40f6c58e42621c4b84b991796c
+bun-web-terminal/src/scroll.ts=f3ac4cca6155e72d534aedbb36caa1bf0a8b4f50

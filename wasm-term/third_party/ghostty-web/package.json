@@ -1,0 +1,22 @@
+{
+  "name": "@random/ghostty-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ghostty": "./src/ghostty.ts",
+    "./ghostty-vt.wasm": "./vendor/ghostty-vt.wasm"
+  },
+  "scripts": {
+    "dev": "bun --watch scripts/dev.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test src"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "^15.11.0",
+    "@types/bun": "^1.3.14",
+    "typescript": "^5.9.3"
+  }
+}
