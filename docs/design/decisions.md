@@ -634,7 +634,7 @@ Numbers: `docs/experiments/2026-10-10-first-open-and-shell.md`.
   both stages' stderr captured) are concatenated per child.
 - **Own parser, no shell crate.** `brush-parser` and `deno_task_shell` bring an async
   executor or a parser generator and their own idea of a process; `yash-syntax` is GPL;
-  `conch-parser` is unmaintained. The grammar needed here is about 800 lines. The only
+  `conch-parser` is unmaintained. The parser written here is about 1,000 lines. The only
   dependency is `regex-lite` (MIT/Apache-2.0) for `grep`, `sed` and `=~`, chosen over
   `regex` for size; POSIX basic and extended expressions are translated to its syntax.
 - **`grep` is the shell's own, not the shipped `rg`**: a search of `src` is 1.5 ms inside
