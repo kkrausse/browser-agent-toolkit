@@ -23,7 +23,8 @@ const editor = createEditorHandler({
   // Optional public catalog file ({models, defaultModel}); never a key. An
   // unreadable or invalid file stops the server here instead of at first use.
   modelCatalog: modelCatalogPath ? await readModelCatalog(modelCatalogPath) : undefined,
-  providers: { opencode: { baseURL: 'https://opencode.ai/zen/v1', headers: {
+  // EDITOR_MODEL_BASE_URL: another OpenAI-style endpoint for the OpenCode chat (codex/check.ts points it at the scripted mock).
+  providers: { opencode: { baseURL: process.env.EDITOR_MODEL_BASE_URL || 'https://opencode.ai/zen/v1', headers: {
     authorization: `Bearer ${modelKey || 'public'}`,
     // Chromium replaces the guest's User-Agent. Restore the real app identity (pinned 2.0.3).
     'user-agent': 'opencode/stable/2.0.3/vivari-opencode-server',

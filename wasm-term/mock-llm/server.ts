@@ -396,12 +396,7 @@ const TODO_SCENARIOS: Scenario[] = [
   {
     name: "todo-heading",
     match: /\btodo-heading\b/i,
-    step: script("todo-heading", [
-      (t) => ({ say: "finding the heading.", tool: execCall(t, 'rg -n "<h1>" src/home.tsx') }),
-      (t) => ({ say: "reading around it.", tool: execCall(t, "nl -ba src/home.tsx | sed -n '20,24p'") }),
-      (t) => ({ say: "changing the heading.", tool: todoHeadingPatch(t) }),
-      (t) => ({ say: "checking the edit.", tool: execCall(t, 'rg -n "<h1>" src/home.tsx') }),
-    ], (turn) => `Heading now: \`${lastLine(outputOf(turn.toolResults[3] ?? "")).trim()}\``),
+    step: (turn) => (findTool(turn, ["exec_command"]) ? todoHeadingCodex : todoHeadingFileTools)(turn),
   },
   {
     // Programs: node itself, a script of the model's own on the project's files, the project's typecheck.
@@ -414,6 +409,27 @@ const TODO_SCENARIOS: Scenario[] = [
     ], (turn) => `Script: \`${lastLine(outputOf(turn.toolResults[1] ?? ""))}\`\nTypecheck: \`${lastLine(outputOf(turn.toolResults[2] ?? ""))}\``),
   },
 ];
+
+const todoHeadingCodex = script("todo-heading", [
+  (t) => ({ say: "finding the heading.", tool: execCall(t, 'rg -n "<h1>" src/home.tsx') }),
+  (t) => ({ say: "reading around it.", tool: execCall(t, "nl -ba src/home.tsx | sed -n '20,24p'") }),
+  (t) => ({ say: "changing the heading.", tool: todoHeadingPatch(t) }),
+  (t) => ({ say: "checking the edit.", tool: execCall(t, 'rg -n "<h1>" src/home.tsx') }),
+], (turn) => `Heading now: \`${lastLine(outputOf(turn.toolResults[3] ?? "")).trim()}\``);
+
+/** The same edit for a client with file tools and no shell (OpenCode in the same example): read, then `edit`. */
+const todoHeadingFileTools = script("todo-heading", [
+  (t) => ({ say: "reading the page.", tool: readCall(t, "src/home.tsx") }),
+  (t) => {
+    const tool = findTool(t, ["edit"]);
+    const before = /<h1>(.*)<\/h1>/.exec(t.toolResults[0] ?? "")?.[1];
+    if (!tool || before === undefined) return { say: "changing the heading.", tool: undefined };
+    const after = /"([^"\n]+)"/.exec(t.userText)?.[1] ?? "Edited by the agent";
+    const path = join(t.cwd, "src/home.tsx");
+    const args = { filePath: path, file_path: path, path, oldString: `<h1>${before}</h1>`, old_string: `<h1>${before}</h1>`, newString: `<h1>${after}</h1>`, new_string: `<h1>${after}</h1>` };
+    return { say: "changing the heading.", tool: { id: nextCallId(), name: tool.name, kind: "function", payload: fillArgs(tool, args) } };
+  },
+]);
 
 const SCENARIOS: Scenario[] = [
   {
