@@ -1,0 +1,16 @@
+[package]
+name = "wasm-term-kernel"
+version = "0.1.0"
+edition = "2021"
+description = "PTY pair + N_TTY-style line discipline for wasm-term, compiled to wasm and unit-tested natively"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+opt-level = "s"
+lto = true
+panic = "abort"
+
+[workspace]
