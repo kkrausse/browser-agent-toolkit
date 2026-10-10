@@ -43,6 +43,10 @@ pub mod raw {
             fd: *mut u32,
         ) -> u32;
         pub fn http_head(fd: u32, buf: *mut u8, buf_len: u32, out: *mut [u32; 2], flags: u32) -> u32;
+        pub fn proc_spawn(req: *const u8, req_len: u32, flags: u32, fd: *mut u32) -> u32;
+        pub fn proc_recv(fd: u32, buf: *mut u8, buf_len: u32, out: *mut [u32; 2], flags: u32) -> u32;
+        pub fn proc_send(fd: u32, data: *const u8, len: u32, flags: u32) -> u32;
+        pub fn proc_signal(fd: u32, signo: u32) -> u32;
     }
 
     #[link(wasm_import_module = "wasi_snapshot_preview1")]
@@ -563,5 +567,145 @@ pub mod net {
             }
         })?;
         Ok((response.status, data))
+    }
+}
+
+/// Child processes: commands run in the host's shell (`proc_*`, docs/abi.md 3.4).
+pub mod process {
+    use super::{check, last_error, raw, RawFd, ERRNO_AGAIN, ERRNO_RANGE};
+    use std::fs::File;
+    use std::io;
+    use std::os::fd::{AsRawFd, FromRawFd};
+    use std::time::Duration;
+
+    pub const SIGINT: u32 = 2;
+    pub const SIGKILL: u32 = 9;
+    pub const SIGTERM: u32 = 15;
+
+    /// What the host measured for a child that has ended.
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    pub struct Usage {
+        /// From `spawn` until a shell picked the command up.
+        pub queued: Duration,
+        /// From then until it ended.
+        pub ran: Duration,
+        /// Host calls (file operations, writes) the shell made.
+        pub host_calls: u32,
+    }
+
+    /// One event from a child, in the order they happened.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub enum ChildEvent {
+        Stdout(Vec<u8>),
+        Stderr(Vec<u8>),
+        /// The child ended; no further events follow. `status` is its exit
+        /// status, 128 + `signal` when a signal ended it (`signal` 0 otherwise).
+        Exit { status: i32, signal: i32, usage: Usage },
+    }
+
+    /// A running command. The descriptor is pollable: readable whenever
+    /// [`Child::try_recv`] would return an event. Dropping it kills the child.
+    #[derive(Debug)]
+    pub struct Child {
+        fd: RawFd,
+        buf: Vec<u8>,
+    }
+
+    impl Child {
+        /// Starts `argv` (`["/bin/bash", "-lc", "<command line>"]`, or a command
+        /// of the shell by itself) in `cwd` with exactly the environment `env`
+        /// (`NAME=value` strings). Returns at once. With `stdin` the child's
+        /// stdin stays open for [`Child::send`]; without, it reads end of file.
+        pub fn spawn<A: AsRef<str>, E: AsRef<str>>(argv: &[A], cwd: &str, env: &[E], stdin: bool) -> io::Result<Child> {
+            let mut request = Vec::new();
+            let put = |request: &mut Vec<u8>, text: &str| {
+                request.extend_from_slice(&(text.len() as u32).to_le_bytes());
+                request.extend_from_slice(text.as_bytes());
+            };
+            request.extend_from_slice(&(argv.len() as u32).to_le_bytes());
+            request.extend_from_slice(&(env.len() as u32).to_le_bytes());
+            put(&mut request, cwd);
+            argv.iter().for_each(|arg| put(&mut request, arg.as_ref()));
+            env.iter().for_each(|pair| put(&mut request, pair.as_ref()));
+            let mut fd = 0u32;
+            let errno = unsafe { raw::proc_spawn(request.as_ptr(), request.len() as u32, u32::from(stdin), &mut fd) };
+            if errno != 0 {
+                let os = io::Error::from_raw_os_error(errno as i32);
+                return Err(io::Error::new(os.kind(), last_error()));
+            }
+            Ok(Child { fd: fd as RawFd, buf: vec![0; 64 * 1024] })
+        }
+
+        fn recv_inner(&mut self, flags: u32) -> io::Result<Option<ChildEvent>> {
+            loop {
+                let mut out = [0u32; 2];
+                let errno = unsafe { raw::proc_recv(self.fd as u32, self.buf.as_mut_ptr(), self.buf.len() as u32, &mut out, flags) };
+                let [kind, len] = out;
+                match errno {
+                    0 => {}
+                    ERRNO_AGAIN => return Ok(None),
+                    ERRNO_RANGE => {
+                        self.buf.resize(len as usize, 0);
+                        continue;
+                    }
+                    other => return Err(io::Error::from_raw_os_error(other as i32)),
+                }
+                let data = &self.buf[..len as usize];
+                let word = |at: usize| u32::from_le_bytes([data[at], data[at + 1], data[at + 2], data[at + 3]]);
+                return Ok(Some(match kind {
+                    1 => ChildEvent::Stdout(data.to_vec()),
+                    2 => ChildEvent::Stderr(data.to_vec()),
+                    _ => ChildEvent::Exit {
+                        status: word(0) as i32,
+                        signal: word(4) as i32,
+                        usage: Usage {
+                            queued: Duration::from_micros(u64::from(word(8))),
+                            ran: Duration::from_micros(u64::from(word(12))),
+                            host_calls: word(16),
+                        },
+                    },
+                }));
+            }
+        }
+
+        /// Blocks until the next event. After `Exit` has been returned, fails
+        /// with `ErrorKind::NotConnected`.
+        pub fn recv(&mut self) -> io::Result<ChildEvent> {
+            Ok(self.recv_inner(0)?.expect("blocking proc_recv returned EAGAIN"))
+        }
+
+        /// Returns the next event if one is queued.
+        pub fn try_recv(&mut self) -> io::Result<Option<ChildEvent>> {
+            self.recv_inner(1)
+        }
+
+        /// Queues bytes for the child's stdin. Fails with `BrokenPipe` when
+        /// stdin was not opened, has been closed, or the child has ended.
+        pub fn send(&self, data: &[u8]) -> io::Result<()> {
+            check(unsafe { raw::proc_send(self.fd as u32, data.as_ptr(), data.len() as u32, 0) })
+        }
+
+        /// Ends the child's stdin: it reads end of file after what was sent.
+        pub fn close_stdin(&self) -> io::Result<()> {
+            check(unsafe { raw::proc_send(self.fd as u32, [].as_ptr(), 0, 1) })
+        }
+
+        /// Sends [`SIGINT`], [`SIGTERM`] or [`SIGKILL`]: the child ends with
+        /// status 128 + signal, at its next host call or within about 250 ms.
+        pub fn signal(&self, signo: u32) -> io::Result<()> {
+            check(unsafe { raw::proc_signal(self.fd as u32, signo) })
+        }
+    }
+
+    impl AsRawFd for Child {
+        fn as_raw_fd(&self) -> RawFd {
+            self.fd
+        }
+    }
+
+    impl Drop for Child {
+        fn drop(&mut self) {
+            drop(unsafe { File::from_raw_fd(self.fd) });
+        }
     }
 }

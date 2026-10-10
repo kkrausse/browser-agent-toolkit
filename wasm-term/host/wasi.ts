@@ -4,7 +4,9 @@
 
 import { TERMIOS_SIZE } from "./kernel";
 import { type HttpHandle, type Machine, NSIG, ProcessExit, SIG_CATCH, SIGKILL, type SignalQueue, type WsHandle } from "./machine";
+import { type Proc, type Processes, SPAWN_STDIN } from "./proc";
 import { WS_BINARY, WS_TEXT } from "./protocol";
+import { MAX_JOB_BYTES } from "./sh/channel";
 import { type DirNode, ERRNO, type FileNode, type Vfs, type VfsNode } from "./vfs";
 
 const FILETYPE = { UNKNOWN: 0, CHARACTER_DEVICE: 2, DIRECTORY: 3, REGULAR_FILE: 4, SOCKET_STREAM: 6, SYMBOLIC_LINK: 7 } as const;
@@ -31,7 +33,8 @@ type Fd =
   | { kind: "dir"; flags: number; node: DirNode; preopen?: string }
   | { kind: "sig"; flags: number; queue: SignalQueue }
   | { kind: "ws"; flags: number; handle: WsHandle }
-  | { kind: "http"; flags: number; handle: HttpHandle; headTaken: boolean };
+  | { kind: "http"; flags: number; handle: HttpHandle; headTaken: boolean }
+  | { kind: "proc"; flags: number; proc: Proc };
 
 export interface WasiOptions {
   args: string[];
@@ -40,6 +43,8 @@ export interface WasiOptions {
   vfs: Vfs;
   /** Called after a call that may have changed files (close, sync, rename, unlink): the persistence hook. */
   onFsChange?: () => void;
+  /** The process table behind `proc_*`; without it `proc_spawn` fails with NOSYS. */
+  processes?: Processes;
 }
 
 export interface Wasi {
@@ -48,7 +53,7 @@ export interface Wasi {
   setMemory(memory: WebAssembly.Memory): void;
 }
 
-export function createWasi({ args, env, machine, vfs, onFsChange }: WasiOptions): Wasi {
+export function createWasi({ args, env, machine, vfs, onFsChange, processes }: WasiOptions): Wasi {
   let memory: WebAssembly.Memory;
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
@@ -148,6 +153,7 @@ export function createWasi({ args, env, machine, vfs, onFsChange }: WasiOptions)
       case "sig": return sigRead(fd.queue, cap, nonblocking(fd));
       case "http": return httpRead(fdNumber, fd, cap);
       case "ws": return ERRNO.INVAL; // message boundaries matter: use wasm_term.ws_recv
+      case "proc": return ERRNO.INVAL; // events, not a byte stream: use wasm_term.proc_recv
     }
   }
 
@@ -366,6 +372,7 @@ export function createWasi({ args, env, machine, vfs, onFsChange }: WasiOptions)
       const fd = fds.get(fdNumber);
       if (!fd) return ERRNO.BADF;
       if (fd.kind === "sig") machine.closeSignalQueue(fd.queue);
+      if (fd.kind === "proc") processes?.close(fd.proc);
       if (fd.kind === "ws" || fd.kind === "http") {
         machine.net.delete(fdNumber);
         machine.post({ t: "net_close", handle: fdNumber });
@@ -595,6 +602,7 @@ export function createWasi({ args, env, machine, vfs, onFsChange }: WasiOptions)
           case "http":
             if (fd.handle.chunks[0]) return fd.handle.chunks[0].length;
             return (!fd.headTaken && fd.handle.head !== null) || fd.handle.ended ? 1 : 0;
+          case "proc": return fd.proc.events[0] ? Math.max(1, fd.proc.events[0].data.length) : 0;
           case "file": return Math.max(1, fd.node.size - fd.pos);
           default: return 1;
         }
@@ -615,12 +623,12 @@ export function createWasi({ args, env, machine, vfs, onFsChange }: WasiOptions)
             else if (ready > 0) events.push({ sub, errno: 0, nbytes: ready });
           } else {
             // Descriptors that cannot be written with fd_write never poll
-            // writable: signal, WebSocket and HTTP descriptors, and a terminal
+            // writable: signal, WebSocket, HTTP and process descriptors, and a terminal
             // opened read-only. Reporting them writable would make a
             // level-triggered reactor (mio on wasi, under tokio) spin.
             const fd = fds.get(sub.fd);
             if (!fd) events.push({ sub, errno: ERRNO.BADF });
-            else if (!(fd.kind === "sig" || fd.kind === "ws" || fd.kind === "http" || (fd.kind === "tty" && fd.readOnly))) events.push({ sub, errno: 0 });
+            else if (!(fd.kind === "sig" || fd.kind === "ws" || fd.kind === "http" || fd.kind === "proc" || (fd.kind === "tty" && fd.readOnly))) events.push({ sub, errno: 0 });
           }
         }
         if (events.length > 0) {
@@ -796,6 +804,62 @@ export function createWasi({ args, env, machine, vfs, onFsChange }: WasiOptions)
         fd.headTaken = true;
         return ERRNO.SUCCESS;
       });
+    },
+
+    // ---- child processes (docs/abi.md 3.4) ----------------------------------
+
+    proc_spawn(reqPtr: number, reqLen: number, flags: number, fdPtr: number) {
+      if (!processes) {
+        machine.lastError = "proc_spawn: this machine has no shell";
+        return ERRNO.NOSYS;
+      }
+      if (reqLen > MAX_JOB_BYTES) {
+        machine.lastError = `proc_spawn: request of ${reqLen} bytes is larger than ${MAX_JOB_BYTES}`;
+        return ERRNO.INVAL;
+      }
+      machine.pump();
+      const proc = processes.spawn(bytes(reqPtr, reqLen), flags & SPAWN_STDIN);
+      if (typeof proc === "number") {
+        machine.lastError = "proc_spawn: malformed request";
+        return proc;
+      }
+      view().setUint32(fdPtr, allocFd({ kind: "proc", flags: 0, proc }), true);
+      return ERRNO.SUCCESS;
+    },
+    proc_recv(fdNumber: number, bufPtr: number, bufLen: number, outPtr: number, flags: number) {
+      const fd = fds.get(fdNumber);
+      if (!fd) return ERRNO.BADF;
+      if (fd.kind !== "proc" || !processes) return ERRNO.INVAL;
+      const { proc } = fd;
+      const nonblock = (flags & NET_NONBLOCK) !== 0 || nonblocking(fd);
+      return blockOn(nonblock, () => {
+        const next = proc.events[0];
+        // After the exit event nothing more arrives.
+        if (!next) return proc.done ? ERRNO.NOTCONN : undefined;
+        const v = view();
+        v.setUint32(outPtr, next.kind, true);
+        v.setUint32(outPtr + 4, next.data.length, true);
+        const event = processes.take(proc, candidate => candidate.data.length <= bufLen);
+        if (!event) return ERRNO.RANGE;
+        bytes(bufPtr, event.data.length).set(event.data);
+        return ERRNO.SUCCESS;
+      });
+    },
+    proc_send(fdNumber: number, ptr: number, len: number, flags: number) {
+      const fd = fds.get(fdNumber);
+      if (!fd) return ERRNO.BADF;
+      if (fd.kind !== "proc" || !processes) return ERRNO.INVAL;
+      const errno = processes.send(fd.proc, bytes(ptr, len).slice(), (flags & 1) !== 0);
+      machine.pump(); // a shell waiting in a read of stdin gets it now
+      return errno;
+    },
+    proc_signal(fdNumber: number, signo: number) {
+      const fd = fds.get(fdNumber);
+      if (!fd) return ERRNO.BADF;
+      if (fd.kind !== "proc" || !processes) return ERRNO.INVAL;
+      const errno = processes.signal(fd.proc, signo);
+      machine.pump();
+      return errno;
     },
   };
 

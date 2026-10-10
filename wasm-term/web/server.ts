@@ -39,6 +39,8 @@ const root = join(import.meta.dir, "..");
 const port = Number(process.env.PORT ?? 4790);
 const kernelWasm = join(root, "kernel/target/wasm32-unknown-unknown/release/wasm_term_kernel.wasm");
 const guestsDir = join(root, "guests/dist");
+/** bat-rust's shell, built from a pinned commit by host/sh/build.sh. */
+const shellWasm = join(root, "host/sh/dist/bat_sh.wasm");
 const ghosttyWasm = Bun.fileURLToPath(import.meta.resolve("@random/ghostty-web/ghostty-vt.wasm"));
 
 const isolation = {
@@ -60,14 +62,15 @@ function file(path: string, type: string): Response {
 /** Bundles the page and the worker. Rebuilt on every page load so edits show up on refresh. */
 async function bundle(): Promise<Map<string, Blob>> {
   const result = await Bun.build({
-    entrypoints: [join(import.meta.dir, "client.ts"), join(root, "host/worker.ts"), join(root, "host/js-worker.ts")],
+    entrypoints: [join(import.meta.dir, "client.ts"), join(root, "host/worker.ts"), join(root, "host/js-worker.ts"), join(root, "host/shell-worker.ts")],
     target: "browser",
     format: "esm",
     sourcemap: "inline",
   });
   if (!result.success) throw new AggregateError(result.logs, "bundle failed");
   const outputs = new Map<string, Blob>();
-  // Outputs are named after their entry point: /client.js, /worker.js (wasm guests), /js-worker.js (JavaScript guests).
+  // Outputs are named after their entry point: /client.js, /worker.js (wasm guests), /js-worker.js (JavaScript guests),
+  // /shell-worker.js (the shell a wasm guest's `proc_*` calls run).
   for (const output of result.outputs) outputs.set(`/${basename(output.path)}`, output);
   return outputs;
 }
@@ -338,6 +341,7 @@ const server = Bun.serve<SocketData>({
     if (bundled) return respond(bundled, "text/javascript");
     if (path === "/ghostty-vt.wasm") return file(ghosttyWasm, "application/wasm");
     if (path === "/kernel.wasm") return file(kernelWasm, "application/wasm");
+    if (path === "/bat_sh.wasm") return existsSync(shellWasm) ? respond(Bun.file(shellWasm), "application/wasm") : respond(`Not built: ${shellWasm}\nRun wasm-term/host/sh/build.sh\n`, "text/plain", {}, 404);
     const guest = /^\/guests\/([\w-]+)\.wasm$/.exec(path);
     if (guest) return file(join(guestsDir, `${guest[1]}.wasm`), "application/wasm");
     if (path === "/guests.json") return respond(JSON.stringify(guestList()), "application/json");

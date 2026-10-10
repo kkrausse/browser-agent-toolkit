@@ -4,8 +4,8 @@
 
 import type { Pty } from "./kernel";
 import {
-  FRAME_CLIPBOARD, FRAME_FILE, FRAME_INPUT, FRAME_NET, FRAME_RESIZE, FRAME_SIGNAL, H_OUT_ACK, HTTP_BODY, HTTP_END, HTTP_ERROR, HTTP_HEAD,
-  OUT_WINDOW, WS_CLOSE, WS_ERROR, type WorkerMessage,
+  FRAME_CLIPBOARD, FRAME_FILE, FRAME_INPUT, FRAME_NET, FRAME_PROC, FRAME_RESIZE, FRAME_SIGNAL, H_OUT_ACK, H_OUT_WAITING, H_READ, H_WAKE, H_WRITE,
+  HTTP_BODY, HTTP_END, HTTP_ERROR, HTTP_HEAD, OUT_WINDOW, WS_CLOSE, WS_ERROR, type WorkerMessage,
 } from "./protocol";
 import type { RingReader } from "./ring";
 
@@ -56,6 +56,18 @@ export interface SignalQueue {
 
 export type NetHandle = WsHandle | HttpHandle;
 
+/** Something besides the page that the program's Worker must answer while it is blocked:
+ * the shell Workers of `proc.ts`, whose file calls arrive over shared memory. A source wakes
+ * the Worker by bumping the ring's wake counter (`H_WAKE`) after it has posted its request. */
+export interface WakeSource {
+  /** Answers everything that can be answered now. Called from `pump()` and from every wait. Must not call `pump()` or `flushOutput()`. */
+  serve(): void;
+  /** True while something is waiting that `serve()` could answer right now: the Worker must not sleep. */
+  pending(): boolean;
+  /** A time (performance.now base) at which `serve()` wants to run even if nothing arrives; Infinity = none. */
+  deadline(): number;
+}
+
 export interface Machine {
   pty: Pty;
   /** The inbound ring; a non-blocking consumer waits on its wake counter (`H_WAKE`). */
@@ -64,14 +76,16 @@ export interface Machine {
    * discipline, resizes, network events, signals. Flushes echo to the page.
    * Throws ProcessExit when a signal with default disposition is fatal. */
   pump(): void;
-  /** Blocks until the page sends something or `deadlineMs` (performance.now
-   * time base; Infinity = no deadline) passes. Does not pump. */
+  /** Blocks until the page sends something, a wake source has work, or `deadlineMs`
+   * (performance.now time base; Infinity = no deadline) passes. Does not pump. */
   waitUntil(deadlineMs: number): void;
   /** Sends pending pty output to the page (applies output flow control). */
   flushOutput(): void;
   /** Bytes sent to the page so far, and how many times a flush had to wait for the page to catch up. */
   outputStats(): { bytes: number; waits: number };
   post(message: WorkerMessage, transfer?: Transferable[]): void;
+  /** Registers a wake source (see `WakeSource`). */
+  addWakeSource(source: WakeSource): void;
 
   /** Returns the previous disposition. */
   setDisposition(signo: number, disposition: number): number;
@@ -88,6 +102,8 @@ export interface Machine {
   onClipboard: ((id: number, ok: boolean, text: string) => void) | null;
   /** Called from `pump()` when the page asks for a file or a directory listing (`Program.readFile` / `listFiles`). */
   onFile: ((id: number, op: number, path: string) => void) | null;
+  /** Called from `pump()` when the page reports on a shell Worker it was asked for (`proc.ts`). */
+  onProcWorker: ((slot: number, ok: boolean) => void) | null;
 }
 
 export function createMachine(pty: Pty, ring: RingReader, postMessage: (message: WorkerMessage, transfer: Transferable[]) => void): Machine {
@@ -98,6 +114,18 @@ export function createMachine(pty: Pty, ring: RingReader, postMessage: (message:
   let outBytes = 0;
   let outWaits = 0;
   const net = new Map<number, NetHandle>();
+  const sources: WakeSource[] = [];
+  const header = ring.header;
+
+  function serveSources(): void {
+    for (const source of sources) source.serve();
+  }
+  const sourcesPending = () => sources.some(source => source.pending());
+  function sourcesDeadline(): number {
+    let deadline = Infinity;
+    for (const source of sources) deadline = Math.min(deadline, source.deadline());
+    return deadline;
+  }
 
   function post(message: WorkerMessage, transfer: Transferable[] = []): void {
     postMessage(message, transfer);
@@ -111,12 +139,25 @@ export function createMachine(pty: Pty, ring: RingReader, postMessage: (message:
     post({ t: "out", data }, [data.buffer]);
     // Flow control: a program that prints in a tight loop must not queue
     // unbounded messages on the page. Wait for the page to catch up.
+    // The wait is on the ring's wake counter, not on the ack word, so that a shell Worker's
+    // file call is answered here too: a program blocked on its own output must not stall its
+    // children. The page bumps the wake counter with an ack only while H_OUT_WAITING is set.
+    let waiting = false;
     for (;;) {
-      const acked = Atomics.load(ring.header, H_OUT_ACK) >>> 0;
+      const acked = Atomics.load(header, H_OUT_ACK) >>> 0;
       if (((outSent - acked) >>> 0) < OUT_WINDOW) break;
-      outWaits++;
-      Atomics.wait(ring.header, H_OUT_ACK, acked | 0, 100);
+      if (!waiting) {
+        waiting = true;
+        outWaits++;
+        Atomics.store(header, H_OUT_WAITING, 1);
+      }
+      const seen = Atomics.load(header, H_WAKE);
+      if ((Atomics.load(header, H_OUT_ACK) >>> 0) !== acked) continue;
+      serveSources();
+      if (sourcesPending()) continue;
+      Atomics.wait(header, H_WAKE, seen, Math.max(1, Math.min(100, sourcesDeadline() - performance.now())));
     }
+    if (waiting) Atomics.store(header, H_OUT_WAITING, 0);
   }
 
   function deliver(signo: number): void {
@@ -179,6 +220,9 @@ export function createMachine(pty: Pty, ring: RingReader, postMessage: (message:
       } else if (frame.type === FRAME_FILE) {
         const view = new DataView(frame.payload.buffer, frame.payload.byteOffset);
         machine.onFile?.(view.getUint32(0, true), view.getUint32(4, true), new TextDecoder().decode(frame.payload.subarray(8)));
+      } else if (frame.type === FRAME_PROC) {
+        const view = new DataView(frame.payload.buffer, frame.payload.byteOffset);
+        machine.onProcWorker?.(view.getUint32(0, true), view.getUint32(4, true) === 1);
       }
     }
     if (consumed && ring.writerWaiting()) post({ t: "drain" });
@@ -188,6 +232,7 @@ export function createMachine(pty: Pty, ring: RingReader, postMessage: (message:
       if (mask & (1 << signo)) signals.push(signo);
     }
     for (const signo of signals) deliver(signo);
+    serveSources();
   }
 
   const machine: Machine = {
@@ -195,11 +240,26 @@ export function createMachine(pty: Pty, ring: RingReader, postMessage: (message:
     ring,
     pump,
     waitUntil(deadlineMs) {
-      ring.wait(deadlineMs === Infinity ? Infinity : deadlineMs - performance.now());
+      if (sources.length === 0) {
+        ring.wait(deadlineMs === Infinity ? Infinity : deadlineMs - performance.now());
+        return;
+      }
+      // A source bumps the wake counter after posting its request, so sampling the counter
+      // before looking at the sources cannot miss one.
+      const seen = Atomics.load(header, H_WAKE);
+      if (Atomics.load(header, H_READ) !== Atomics.load(header, H_WRITE)) return;
+      if (sourcesPending()) return;
+      const wake = Math.min(deadlineMs, sourcesDeadline());
+      const timeout = wake - performance.now();
+      if (timeout <= 0) return;
+      Atomics.wait(header, H_WAKE, seen, wake === Infinity ? undefined : timeout);
     },
     flushOutput,
     outputStats: () => ({ bytes: outBytes, waits: outWaits }),
     post,
+    addWakeSource(source) {
+      sources.push(source);
+    },
     setDisposition(signo, disposition) {
       const previous = dispositions.get(signo) ?? SIG_DFL;
       dispositions.set(signo, disposition);
@@ -219,6 +279,7 @@ export function createMachine(pty: Pty, ring: RingReader, postMessage: (message:
     lastError: "",
     onClipboard: null,
     onFile: null,
+    onProcWorker: null,
   };
   return machine;
 }

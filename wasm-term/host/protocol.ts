@@ -12,6 +12,7 @@ export const H_READ = 1; // bytes ever read
 export const H_WAKE = 2; // bumped + notified on every write; the Worker waits on it
 export const H_WRITER_WAITING = 3; // 1 while the main thread has frames it could not fit
 export const H_OUT_ACK = 4; // terminal output bytes the page has consumed (flow control)
+export const H_OUT_WAITING = 5; // 1 while the Worker waits for H_OUT_ACK to advance: the page then also bumps H_WAKE with each ack
 export const HEADER_INTS = 16;
 export const HEADER_BYTES = HEADER_INTS * 4;
 
@@ -30,6 +31,7 @@ export const FRAME_SIGNAL = 3; // payload: u32 signo (sent by the page, e.g. kil
 export const FRAME_NET = 4; // payload: u32 handle, u32 kind, data
 export const FRAME_CLIPBOARD = 5; // payload: u32 request id, u32 ok (1/0), then the text or the error (utf-8)
 export const FRAME_FILE = 6; // payload: u32 request id, u32 op (FILE_READ / FILE_LIST), then the path (utf-8)
+export const FRAME_PROC = 7; // payload: u32 slot, u32 ok (1/0): whether the shell Worker asked for with `proc_need` / `proc_replace` could be started
 export const FRAME_MORE = 0x80;
 
 export const FILE_READ = 0;
@@ -61,6 +63,31 @@ export interface InitMessage {
   files?: Record<string, Uint8Array | string>;
   /** Directories whose files are reported to the page (`persist` messages) whenever they change. */
   persist?: PersistRoots;
+  /** Child processes (`proc_*`): the shell the guest may run commands in. Absent: `proc_spawn` fails with NOSYS. */
+  proc?: ProcInit;
+}
+
+export interface ProcInit {
+  /** `bat_sh.wasm`, compiled by the page. */
+  module: WebAssembly.Module;
+  /** `worker`: each child in a shell Worker the page starts on request. `inline`: inside `proc_spawn`, in the guest's own Worker. */
+  mode: "worker" | "inline";
+  /** Shell Workers at most, so children that run at once; more wait their turn. */
+  slots: number;
+  /** Shell Workers asked for before the first command. */
+  prewarm: number;
+  /** How long each side of a channel stays awake for the other's next move before sleeping, in microseconds. */
+  spinUs: number;
+}
+
+/** What the page sends a shell Worker (host/shell-worker.ts) it has just created. */
+export interface ShellWorkerInit {
+  t: "shell-init";
+  channel: SharedArrayBuffer;
+  /** The program's page->Worker ring: its header holds the wake counter the shell bumps. */
+  parent: SharedArrayBuffer;
+  module: WebAssembly.Module;
+  spinUs: number;
 }
 
 export interface PersistRoots {
@@ -89,6 +116,12 @@ export type WorkerMessage =
   | { t: "clipboard_read"; id: number }
   /** Answer to a FRAME_FILE frame (or, after exit, a `file` message): the file's bytes, a JSON listing, or null when there is no such path. */
   | { t: "file"; id: number; data: Uint8Array | null }
+  /** No shell Worker serves this channel yet: the page starts one (`ShellWorkerInit`). */
+  | { t: "proc_need"; slot: number; channel: SharedArrayBuffer }
+  /** The shell Worker of this slot will not stop: the page terminates it and starts another on the new channel. */
+  | { t: "proc_replace"; slot: number; channel: SharedArrayBuffer }
+  /** One child ended: what it was and what it cost (`Program.procs`, for measurements and tests). */
+  | { t: "proc_stat"; command: string; status: number; signal: number; calls: number; queueMs: number; runMs: number }
   /** Where a wasm guest is in starting up: fetching the module (bytes so far, of `total` when known), compiling it, running. */
   | { t: "load"; phase: "download" | "compile" | "start"; loaded: number; total: number };
 

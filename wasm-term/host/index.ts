@@ -8,8 +8,8 @@
 import { createNetBridge } from "./net";
 import { openPersistStore, type PersistStore } from "./persist-store";
 import {
-  FILE_LIST, FILE_READ, FRAME_CLIPBOARD, FRAME_FILE, FRAME_INPUT, FRAME_RESIZE, FRAME_SIGNAL, H_OUT_ACK, HEADER_BYTES,
-  type FileRequest, type InitMessage, type WorkerMessage,
+  FILE_LIST, FILE_READ, FRAME_CLIPBOARD, FRAME_FILE, FRAME_INPUT, FRAME_PROC, FRAME_RESIZE, FRAME_SIGNAL, H_OUT_ACK, H_OUT_WAITING, H_WAKE, HEADER_BYTES,
+  type FileRequest, type InitMessage, type ShellWorkerInit, type WorkerMessage,
 } from "./protocol";
 import { createRingWriter, createShared } from "./ring";
 
@@ -36,6 +36,32 @@ export interface PersistOptions {
   exclude?: string[];
 }
 
+/** A shell for the program's `proc_*` calls (wasm guests): bat-rust's `bat_sh.wasm`, see `proc.ts`. */
+export interface ShellOptions {
+  /** `bat_sh.wasm`. */
+  moduleUrl: string;
+  /** The bundled `host/shell-worker.ts`. */
+  workerUrl: string;
+  /** Default: `worker`, or `inline` on a machine with at most two cores. */
+  mode?: "worker" | "inline";
+  /** Commands that run at once (shell Workers); default 4. */
+  slots?: number;
+  /** Microseconds each side of a channel spins before it sleeps; default 50. */
+  spinUs?: number;
+}
+
+/** One finished child process. */
+export interface ProcStat {
+  command: string;
+  status: number;
+  signal: number;
+  /** Host calls (file operations, writes) the shell made. */
+  calls: number;
+  /** From `proc_spawn` until a shell picked the command up, and from then until it ended, in ms. */
+  queueMs: number;
+  runMs: number;
+}
+
 export interface ProgramOptions {
   /** A wasm32-wasip1 module (with `host/worker.ts`) or a JavaScript guest module (with `host/js-worker.ts`). */
   guestUrl: string;
@@ -51,6 +77,8 @@ export interface ProgramOptions {
   files?: Record<string, Uint8Array | string>;
   /** Keeps the named directories in IndexedDB across reloads. Stored files win over `files`. */
   persist?: PersistOptions;
+  /** Gives the program a shell to run commands in (`proc_*`). */
+  shell?: ShellOptions;
   /** Clipboard for programs that ask the host for it. Default: `navigator.clipboard`. */
   clipboard?: ClipboardBridge;
   /** Bytes for the terminal emulator (pty master output). */
@@ -80,6 +108,9 @@ export interface Program {
   readFile(path: string): Promise<Uint8Array | null>;
   /** Every regular file below a directory of the program's filesystem. */
   listFiles(directory: string): Promise<{ path: string; size: number }[]>;
+  /** The child processes that have ended, oldest first (the last 500), and when each shell Worker was started and why. */
+  procs: ProcStat[];
+  shellWorkers: { slot: number; why: "need" | "replace"; at: number }[];
   exited: Promise<ExitStatus>;
 }
 
@@ -140,6 +171,35 @@ export function startProgram(options: ProgramOptions): Program {
   let lingering = false;
   let fileRequests = 0;
   const fileWaiters = new Map<number, (data: Uint8Array | null) => void>();
+  // Shell Workers, by channel slot. Created here because this thread is the only one that is never blocked.
+  const shells = new Map<number, Worker>();
+  const procs: ProcStat[] = [];
+  const shellWorkers: Program["shellWorkers"] = [];
+  let shellModule: WebAssembly.Module | undefined;
+  function startShell(slot: number, channel: SharedArrayBuffer, why: "need" | "replace"): void {
+    shells.get(slot)?.terminate();
+    shells.delete(slot);
+    const report = (ok: boolean) => ring.send(FRAME_PROC, new Uint8Array(new Uint32Array([slot, ok ? 1 : 0]).buffer));
+    if (finished || !options.shell || !shellModule) return report(false);
+    try {
+      const shell = new Worker(options.shell.workerUrl, { type: "module", name: `wasm-term:shell:${slot}` });
+      shell.addEventListener("error", event => {
+        console.warn("wasm-term: shell worker failed", event.message);
+        if (shells.get(slot) === shell) report(false);
+      });
+      shell.postMessage({ t: "shell-init", channel, parent: sab, module: shellModule, spinUs: options.shell.spinUs ?? 50 } satisfies ShellWorkerInit);
+      shells.set(slot, shell);
+      shellWorkers.push({ slot, why, at: performance.now() });
+    } catch (error) {
+      console.warn("wasm-term: could not start a shell worker", error);
+      report(false);
+    }
+  }
+  function dropShells(): void {
+    for (const shell of shells.values()) shell.terminate();
+    shells.clear();
+  }
+
   function dropWorker(): void {
     lingering = false;
     worker.terminate();
@@ -151,6 +211,7 @@ export function startProgram(options: ProgramOptions): Program {
     if (finished) return;
     finished = true;
     net.dispose();
+    dropShells();
     if (lingers) lingering = true;
     else dropWorker();
     options.onExit?.(status);
@@ -178,7 +239,11 @@ export function startProgram(options: ProgramOptions): Program {
     if (message.t === "out") {
       options.onOutput(message.data);
       Atomics.add(header, H_OUT_ACK, message.data.length);
-      Atomics.notify(header, H_OUT_ACK);
+      // The Worker waits for acks on its wake counter (it also answers its shell Workers there).
+      if (Atomics.load(header, H_OUT_WAITING) === 1) {
+        Atomics.add(header, H_WAKE, 1);
+        Atomics.notify(header, H_WAKE);
+      }
     } else if (message.t === "drain") {
       ring.flush();
     } else if (message.t === "exit") {
@@ -190,6 +255,12 @@ export function startProgram(options: ProgramOptions): Program {
       options.onLoad?.({ phase: message.phase, loaded: message.loaded, total: message.total });
     } else if (message.t === "log") {
       console.log(message.text);
+    } else if (message.t === "proc_need" || message.t === "proc_replace") {
+      startShell(message.slot, message.channel, message.t === "proc_need" ? "need" : "replace");
+    } else if (message.t === "proc_stat") {
+      const { t: _, ...stat } = message;
+      procs.push(stat);
+      if (procs.length > 500) procs.shift();
     } else if (message.t === "persist") {
       store?.save(message.path, message.data);
     } else if (message.t === "clipboard_write") {
@@ -219,14 +290,33 @@ export function startProgram(options: ProgramOptions): Program {
     files: options.files,
     persist: options.persist && { roots: options.persist.roots, exclude: options.persist.exclude },
   };
-  // Input, resizes and signals sent before the stored files have loaded wait in the ring.
-  if (!store) worker.postMessage(init);
-  else {
-    store.load().catch(error => (console.warn("wasm-term: could not read persisted files", error), {})).then(stored => {
-      init.files = { ...options.files, ...stored };
-      if (!finished) worker.postMessage(init);
-    });
-  }
+  // Input, resizes and signals sent before the stored files and the shell module have loaded wait in the ring.
+  const stored = store
+    ? store.load().catch(error => (console.warn("wasm-term: could not read persisted files", error), {} as Record<string, Uint8Array>))
+    : Promise.resolve(undefined);
+  const shell = options.shell
+    ? fetch(new URL(options.shell.moduleUrl, location.href))
+      .then(async response => {
+        if (!response.ok) throw new Error(`${options.shell!.moduleUrl}: HTTP ${response.status} ${(await response.text()).slice(0, 200)}`);
+        return WebAssembly.compile(await response.arrayBuffer());
+      })
+      .catch(error => (console.warn("wasm-term: no shell", error), undefined))
+    : Promise.resolve(undefined);
+  Promise.all([stored, shell]).then(([files, module]) => {
+    if (files) init.files = { ...options.files, ...files };
+    if (module && options.shell) {
+      shellModule = module;
+      const cores = globalThis.navigator?.hardwareConcurrency ?? 4;
+      init.proc = {
+        module,
+        mode: options.shell.mode ?? (cores <= 2 ? "inline" : "worker"),
+        slots: options.shell.slots ?? 4,
+        prewarm: 1,
+        spinUs: options.shell.spinUs ?? 50,
+      };
+    }
+    if (!finished) worker.postMessage(init);
+  });
 
   return {
     write(data) {
@@ -250,6 +340,8 @@ export function startProgram(options: ProgramOptions): Program {
       const data = await requestFile(FILE_LIST, directory);
       return data ? (JSON.parse(new TextDecoder().decode(data)) as { path: string; size: number }[]) : [];
     },
+    procs,
+    shellWorkers,
     exited,
   };
 }

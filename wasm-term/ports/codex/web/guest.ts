@@ -41,6 +41,8 @@ export const codexLocalGuest: WasmGuest = {
     { query: "seed", env: "CODEX_WASM_SEED", label: "Seed a sample project", default: "1", hint: "1 = write a few sample files into the project directory if it is empty; 0 = leave it empty" },
   ],
   env: { TERM_PROGRAM: "ghostty", CODEX_HOME: "/home/user/.codex" },
+  // Commands (the model's exec_command, the user's !command) run in the page's shell: main/src/shell.rs on `proc_*`.
+  shell: true,
   // Where sign-in leaves its tokens or API key (cli_auth_credentials_store = "file").
   credentials: ["/home/user/.codex/auth.json"],
   // CODEX_HOME (config.toml, auth.json, history.jsonl, sessions/) and the project. Not scratch, logs, or SQLite files (never opened here; they would be rewritten whole on every change).

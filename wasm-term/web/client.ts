@@ -9,6 +9,7 @@
 //                                to this origin's reverse proxy
 //   &build=<name>                another build of a packaged guest (codex: names)
 //   &renderer=canvas|webgl       which terminal renderer (default: WebGL unless it is software-emulated)
+//   &shell=worker|inline|off     how a guest with a shell runs commands (default: shell Workers; inline on a machine with at most two cores)
 //   &persist=0                   do not load or store the guest's persistent directories
 //   &reset=1                     forget what was stored for this guest first
 //   &signout=1                   forget only the guest's stored credentials first (codex-local: auth.json)
@@ -185,6 +186,9 @@ const program = startProgram({
   xpixel: Math.round(pixels.width * terminal.cols),
   ypixel: Math.round(pixels.height * terminal.rows),
   persist,
+  shell: info.kind === "wasm" && (info.shell || params.has("shell")) && params.get("shell") !== "off"
+    ? { moduleUrl: "/bat_sh.wasm", workerUrl: "/shell-worker.js", mode: params.get("shell") === "inline" ? "inline" : params.get("shell") === "worker" ? "worker" : undefined }
+    : undefined,
   // Indirect, so that replacing window.wasmTerm.clipboard takes effect.
   clipboard: {
     readText: () => window.wasmTerm.clipboard.readText(),

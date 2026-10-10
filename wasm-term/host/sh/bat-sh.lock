@@ -1,0 +1,6 @@
+# bat-rust commit host/sh/dist/bat_sh.wasm is built from (host/sh/build.sh <commit> rewrites this file)
+commit=a2e480db9ad3e13c34e97a5e7cf95ccde710a985
+subject=bat-sh: codex shell-tool coverage cases, and 'bash -euo pipefail -c'
+sha256=fb8cf45705d2c1d7a4e5536634701d8cf1350dd96d1d434c8274a1bf7ccd0424
+size=481320
+rustc=rustc 1.99.0 (b940084d7 2026-09-28)

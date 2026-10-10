@@ -5,9 +5,13 @@ import { loadKernel } from "./kernel";
 import { createMachine, ProcessExit } from "./machine";
 import type { FileRequest, InitMessage, WorkerMessage } from "./protocol";
 import { createPersister } from "./persist";
+import { createProcesses } from "./proc";
 import { createRingReader } from "./ring";
 import { createVfs, serveFile, type Vfs } from "./vfs";
 import { createWasi } from "./wasi";
+
+/** Where a program expects to find a shell (codex: `/bin/bash`, then `/bin/sh`). */
+const SHELL_STUBS = ["/bin/sh", "/bin/bash", "/usr/bin/bash", "/usr/bin/env"];
 
 const post = (message: WorkerMessage, transfer: Transferable[] = []) =>
   (self as unknown as { postMessage(message: unknown, transfer: Transferable[]): void }).postMessage(message, transfer);
@@ -111,6 +115,8 @@ async function run(init: InitMessage): Promise<void> {
     vfs.writeFile(path, typeof contents === "string" ? encoder.encode(contents) : contents);
   }
   if (init.env.HOME) vfs.mkdirp(init.env.HOME);
+  // With a shell, the paths programs look for one at exist (as empty files: `proc_spawn` runs the shell, nothing executes them).
+  if (init.proc) for (const stub of SHELL_STUBS) if (!vfs.readFile(stub)) vfs.writeFile(stub, new Uint8Array(0));
 
   const persister = init.persist ? createPersister(vfs, init.persist, post) : null;
   machine.onFile = (id, op, path) => {
@@ -118,7 +124,8 @@ async function run(init: InitMessage): Promise<void> {
     post({ t: "file", id, data }, data ? [data.buffer] : []);
   };
 
-  const wasi = createWasi({ args: init.args, env: init.env, machine, vfs, onFsChange: persister?.sync });
+  const processes = init.proc ? createProcesses({ machine, vfs, init: init.proc, onFsChange: persister?.sync }) : undefined;
+  const wasi = createWasi({ args: init.args, env: init.env, machine, vfs, onFsChange: persister?.sync, processes });
   if (init.env.WASM_TERM_TRACE) traceImports(wasi.imports);
   const instance = await WebAssembly.instantiate(guestModule, wasi.imports);
   const exports = instance.exports as { memory: WebAssembly.Memory; _start(): void };

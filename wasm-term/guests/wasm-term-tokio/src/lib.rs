@@ -6,7 +6,8 @@
 //! `current_thread` runtime can wait on all of them and on timers at once.
 //!
 //! [`Readiness`] is the building block (an `AsyncFd` for wasi); [`WebSocket`]
-//! and [`HttpResponse`] are the network primitives made async with it.
+//! and [`HttpResponse`] are the network primitives made async with it, and
+//! [`Child`] a command running in the host's shell.
 #![cfg(target_os = "wasi")]
 
 use std::fs::File;
@@ -18,6 +19,8 @@ use tokio::io::Interest;
 use tokio::net::TcpStream;
 use wasm_term_sys::net;
 pub use wasm_term_sys::net::WsEvent;
+use wasm_term_sys::process;
+pub use wasm_term_sys::process::{ChildEvent, Usage, SIGINT, SIGKILL, SIGTERM};
 
 /// Async readability for a descriptor that something else owns.
 ///
@@ -144,5 +147,47 @@ impl HttpResponse {
             self.ready.clear();
             self.ready.readable().await?;
         }
+    }
+}
+
+/// A command running in the host's shell, its output and exit status awaited
+/// like any other descriptor. Dropping it kills the command.
+#[derive(Debug)]
+pub struct Child {
+    // Declared first so it deregisters before `inner` closes the descriptor.
+    ready: Readiness,
+    inner: process::Child,
+}
+
+impl Child {
+    /// See [`process::Child::spawn`]. Must be called inside a tokio runtime
+    /// with I/O enabled. Returns at once; the command runs beside the caller.
+    pub fn spawn<A: AsRef<str>, E: AsRef<str>>(argv: &[A], cwd: &str, env: &[E], stdin: bool) -> io::Result<Child> {
+        let inner = process::Child::spawn(argv, cwd, env, stdin)?;
+        Ok(Child { ready: Readiness::new(inner.as_raw_fd())?, inner })
+    }
+
+    /// The next event: output as the command produces it, then `Exit`.
+    /// Cancel-safe: an event is only removed from the queue when it is returned.
+    pub async fn recv(&mut self) -> io::Result<ChildEvent> {
+        loop {
+            if let Some(event) = self.inner.try_recv()? {
+                return Ok(event);
+            }
+            self.ready.clear();
+            self.ready.readable().await?;
+        }
+    }
+
+    pub fn send(&self, data: &[u8]) -> io::Result<()> {
+        self.inner.send(data)
+    }
+
+    pub fn close_stdin(&self) -> io::Result<()> {
+        self.inner.close_stdin()
+    }
+
+    pub fn signal(&self, signo: u32) -> io::Result<()> {
+        self.inner.signal(signo)
     }
 }
