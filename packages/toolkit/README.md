@@ -108,6 +108,9 @@ caches; not the dependency image); it rejects while the editor is open in any ta
 only when this browser holds no workspace (a first open, or after `resetWorkspace`) and may
 resolve with `{ files, sessions?, selectedSession? }` to start from a saved workspace
 instead of the prepared source; `chat: { startNewSession: true }` opens on a fresh chat.
+`chat: { attach: false }` starts no chat controller at all, for an app that brings its own
+OpenCode client and talks to the server through `editor.agent.endpoint.fetch` (which adds the
+server's credential); `examples/terminal-app` attaches the real OpenCode TUI that way.
 
 Saving and restoring a workspace is the app's feature (storage, naming, UI); the two ends
 are here:

@@ -1,0 +1,5 @@
+node_modules/
+.editor/
+.wasm-term/
+.build/
+.env.local

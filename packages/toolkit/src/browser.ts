@@ -48,6 +48,7 @@ export interface Editor {
   readonly fs: RuntimeFs;
   readonly preview: Service;
   readonly agent: Service;
+  /** Throws when the editor was opened with `chat: { attach: false }`. */
   readonly chat: ChatController;
   /** Resolves when preview, agent and chat are all up; rejects with the first failure. The
    * editor stays usable after a failure: read the snapshot, restart a service, or close. */
@@ -91,8 +92,11 @@ export interface OpenEditorOptions {
    * `prepared` is the prepared source, for files the app wants to take from it. A rejection
    * fails the open and leaves the workspace empty, so the next open asks again. */
   initialWorkspace?(context: { prepared: Readonly<Record<string, SourceFile>>; signal?: AbortSignal }): Promise<InitialWorkspace | undefined | void> | InitialWorkspace | undefined | void;
-  /** `startNewSession`: open on a new chat session instead of the most recent one. */
-  chat?: { startNewSession?: boolean };
+  /** `startNewSession`: open on a new chat session instead of the most recent one.
+   * `attach: false`: no chat controller at all (no session is created, no event stream is
+   * held): the app brings its own OpenCode client and reaches the server through
+   * `editor.agent.endpoint.fetch`, which adds the server's credential. */
+  chat?: { startNewSession?: boolean; attach?: boolean };
   /** Every step, log line and state change, from the first moment of the open. */
   onEvent?(event: EditorEvent): void;
   /** Aborting closes the editor. */
@@ -474,7 +478,7 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
     await agentUp;
     return authorized(path, init);
   };
-  const chat = createChatController({
+  const chat = options.chat?.attach === false ? undefined : createChatController({
     endpoint: { fetch: agentFetch }, directory: openCode.directory, autoCreateSession: true,
     startNewSession: options.chat?.startNewSession && !initial?.selectedSession,
     // Counted from now, and the agent has not been started yet.
@@ -485,6 +489,7 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
   const startAgentAndChat = async () => {
     agentStarted = true;
     await startAgent().ready;
+    if (!chat) return;
     await chat.ready;
     if (selectedSession && chat.getSnapshot().sessionID !== selectedSession) await chat.selectSession(selectedSession);
     mark('chat.ready');
@@ -492,7 +497,7 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
   const order = preview.start();
   const ready = startupOrder(order, startAgentAndChat);
   void ready.then(
-    () => publish({ status: 'ready', message: 'Ready. Ask the agent to change the app; changes stay local to this browser.', error: undefined }),
+    () => publish({ status: 'ready', message: chat ? 'Ready. Ask the agent to change the app; changes stay local to this browser.' : 'Ready.', error: undefined }),
     error => { if (!lifetime.signal.aborted) publish({ status: 'failed', message: 'The editor did not start completely.', error: errorText(error) }); },
   );
   // Up or failed: nothing waits for the network any more, the image's remainder may use it.
@@ -509,7 +514,7 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
       } else {
         agentStarted = true;
         await startAgent().ready;
-        await chat.reconnect();
+        await chat?.reconnect();
       }
       publish({ status: 'ready', message: 'Ready.', error: undefined });
     } catch (error) {
@@ -522,7 +527,10 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
     fs: host.fs,
     preview: { endpoint: preview.endpoint, get ready() { return preview.ready; }, stop: preview.stop },
     agent: { endpoint: { url: agent.endpoint.url, fetch: agentFetch }, get ready() { return agentUp; }, stop: agent.stop },
-    chat,
+    get chat(): ChatController {
+      if (!chat) throw Error('This editor was opened without a chat (`chat: { attach: false }`)');
+      return chat;
+    },
     ready,
     setHostPaths: prefixes => host.setHostPaths(manifest.launch.preview.port, prefixes),
     restartPreview: () => restart('preview'),
@@ -532,7 +540,7 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
       return closing ??= (async () => {
         lifetime.abort(Error('The editor was closed'));
         const errors: unknown[] = [];
-        await chat.dispose().catch(error => errors.push(error));
+        await chat?.dispose().catch(error => errors.push(error));
         await Promise.all([preview.stop(), agent.stop()]).catch(error => errors.push(error));
         await host.close().catch(error => errors.push(error));
         state = { ...state, status: 'closed', message: 'Closed.', preview: 'stopped', agent: 'stopped' };
@@ -545,10 +553,10 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
     sessions: {
       export: () => exportSessions({ fetch: agentFetch }, openCode.directory),
       async import(bundles) {
-        const hold = chat.hold('Importing sessions');
+        const hold = chat?.hold('Importing sessions');
         try { await importSessions({ fetch: agentFetch }, openCode.directory, bundles); }
-        finally { hold.release(); }
-        await chat.reconnect();
+        finally { hold?.release(); }
+        await chat?.reconnect();
       },
     },
     mark,
