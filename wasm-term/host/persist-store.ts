@@ -32,6 +32,8 @@ export interface PersistStore {
   save(path: string, data: Uint8Array | null): void;
   /** Removes every file of the namespace. */
   clear(): Promise<void>;
+  /** Resolves when every `save` so far has been applied. */
+  flush(): Promise<void>;
 }
 
 export function openPersistStore(namespace: string): PersistStore {
@@ -65,6 +67,7 @@ export function openPersistStore(namespace: string): PersistStore {
         })
         .catch(error => console.warn(`wasm-term: could not persist ${path}`, error));
     },
+    flush: () => queue,
     async clear() {
       await queue;
       const transaction = (await db()).transaction(STORE, "readwrite");

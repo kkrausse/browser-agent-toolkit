@@ -200,6 +200,16 @@ function writeCall(turn: Turn, relPath: string, content: string): ToolCall | und
   return shellCall(turn, `cat > ${relPath} <<'MOCK_EOF'\n${content.replace(/\n$/, "")}\nMOCK_EOF`);
 }
 
+/** Replaces a file's first line, which the prompt quotes ("..."), with the same line plus a marker. */
+function changeCall(turn: Turn, relPath: string): ToolCall | undefined {
+  const before = /"([^"\n]+)"/.exec(turn.userText)?.[1];
+  const patchTool = findTool(turn, ["apply_patch"]);
+  if (!before || !patchTool) return writeCall(turn, relPath, "changed by mock-llm\n");
+  const patch = ["*** Begin Patch", `*** Update File: ${relPath}`, "@@", `-${before}`, `+${before} (changed by mock-llm)`, "*** End Patch", ""].join("\n");
+  const payload = patchTool.kind === "custom" ? patch : fillArgs(patchTool, { input: patch, patch });
+  return { id: nextCallId(), name: patchTool.name, kind: patchTool.kind, payload };
+}
+
 /** A scenario that makes one tool call and then answers once the result is back. */
 function toolThenAnswer(
   label: string,
@@ -240,6 +250,13 @@ const SCENARIOS: Scenario[] = [
       if (n === 1) return { text: "Step 2 of 2: writing a file.", tool: writeCall(turn, "mock-output.txt", "written by mock-llm (multi-tool)\n") };
       return { text: `Both tool calls returned (${turn.toolResults.map((r) => r.length).join(" and ")} chars). MOCK-TOOL-DONE` };
     },
+  },
+  {
+    name: "change",
+    // Rewrites the first line of hello.txt in place (codex: an apply_patch "Update File";
+    // the line is taken from the prompt: `change hello.txt "<old first line>"`).
+    match: /\bchange\b/i,
+    step: toolThenAnswer("change", "I will change the first line of `hello.txt`.", (t) => changeCall(t, "hello.txt")),
   },
   {
     name: "write",
@@ -595,6 +612,153 @@ function log(line: string): void {
   if (LOG_FILE) appendFileSync(LOG_FILE, `${stamped}\n`);
 }
 
+// ---------------------------------------------------------------------------
+// Fake sign-in: the endpoints codex's device-code login, token refresh, logout
+// and post-login account check talk to, so the whole flow can run with no real
+// account. Nothing here is a secret; every "token" says mock in it.
+//
+//   issuer            <this server>/auth       (CODEX_APP_SERVER_LOGIN_ISSUER)
+//   refresh           <this server>/auth/oauth/token (CODEX_REFRESH_TOKEN_URL_OVERRIDE)
+//   chatgpt_base_url  <this server>/backend-api/
+//
+//   POST /auth/api/accounts/deviceauth/usercode   -> { device_auth_id, user_code, interval }
+//   GET  /auth/codex/device[?user_code=CODE]      the "verification page": with a code, approves it
+//   POST /auth/api/accounts/deviceauth/token      403 until approved, then { authorization_code, code_challenge, code_verifier }
+//   POST /auth/oauth/token                        form authorization_code -> tokens; JSON refresh_token -> new tokens
+//   POST /auth/oauth/revoke                       records the token
+//   GET  /backend-api/wham/accounts/check         one account, for a request with a current access token (401 otherwise)
+//   GET  /auth/state                              everything above as JSON, plus the credentials the last model requests carried
+//   POST /auth/reset                              forget it all
+//
+// The first access token of a login is already inside codex's refresh window
+// (it expires in 2 minutes; codex refreshes within 5), so the first use of the
+// credentials exercises the refresh endpoint as well.
+// ---------------------------------------------------------------------------
+
+interface DeviceLogin {
+  deviceAuthId: string;
+  userCode: string;
+  approved: boolean;
+  polls: number;
+  authorizationCode?: string;
+}
+
+const ACCOUNT_ID = "acct_mock_0001";
+const auth = {
+  logins: [] as DeviceLogin[],
+  /** Access-token generation per refresh token family: bumped by every refresh. */
+  generation: 0,
+  exchanges: 0,
+  refreshes: 0,
+  revoked: [] as string[],
+  accountChecks: [] as { authorization: string; status: number }[],
+  modelRequests: [] as { path: string; authorization: string; account: string; userAgent: string; originator: string; contentEncoding: string }[],
+  requests: [] as string[],
+};
+
+const b64url = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+/** Shaped like a JWT (codex reads `exp` and the auth claims out of the payload); not signed by anything. */
+function fakeJwt(kind: string, generation: number, lifetimeSeconds: number): string {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    iss: "mock-llm", sub: "user_mock_0001", mock: `${kind}-${generation}`, iat: now, exp: now + lifetimeSeconds,
+    email: "mock-user@example.invalid",
+    "https://api.openai.com/auth": { chatgpt_plan_type: "plus", chatgpt_user_id: "user_mock_0001", chatgpt_account_id: ACCOUNT_ID },
+  };
+  return `${b64url({ alg: "none", typ: "JWT" })}.${b64url(payload)}.mock-signature`;
+}
+function tokens(generation: number, accessLifetimeSeconds: number): Json {
+  return { id_token: fakeJwt("id", generation, 3600), access_token: fakeJwt("access", generation, accessLifetimeSeconds), refresh_token: `mock-refresh-${generation}` };
+}
+/** `access-<n>` of a bearer token minted here, or what was sent if it is something else. */
+function describeAuthorization(header: string | null): string {
+  if (!header) return "(none)";
+  const token = header.replace(/^Bearer\s+/i, "");
+  try {
+    const mock = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString()).mock;
+    if (typeof mock === "string") return `Bearer mock ${mock}`;
+  } catch {}
+  return header.length > 24 ? `${header.slice(0, 24)}...` : header;
+}
+
+async function handleAuth(req: Request, path: string, url: URL): Promise<Response | null> {
+  if (!path.startsWith("/auth/") && !path.startsWith("/backend-api/")) return null;
+  if (path !== "/auth/state") auth.requests.push(`${req.method} ${path}`);
+  if (path === "/auth/state") return json(auth);
+  if (path === "/auth/reset" && req.method === "POST") {
+    Object.assign(auth, { logins: [], generation: 0, exchanges: 0, refreshes: 0, revoked: [], accountChecks: [], modelRequests: [], requests: [] });
+    return json({ ok: true });
+  }
+  if (path === "/auth/api/accounts/deviceauth/usercode" && req.method === "POST") {
+    const n = auth.logins.length + 1;
+    const login: DeviceLogin = { deviceAuthId: `deviceauth_mock_${n}`, userCode: `MOCK-${String(1000 + n)}`, approved: false, polls: 0 };
+    auth.logins.push(login);
+    log(`auth: device code ${login.userCode} issued`);
+    // `interval` is a string on the real server too.
+    return json({ device_auth_id: login.deviceAuthId, user_code: login.userCode, interval: "1" });
+  }
+  if (path === "/auth/codex/device") {
+    const code = url.searchParams.get("user_code");
+    const login = auth.logins.find((candidate) => candidate.userCode === code);
+    if (login) {
+      login.approved = true;
+      log(`auth: device code ${login.userCode} approved`);
+    }
+    const body = login ? `Approved ${login.userCode}. Return to codex.` : `mock-llm device sign-in. Approve a code with ?user_code=CODE. Pending: ${auth.logins.filter((l) => !l.approved).map((l) => l.userCode).join(", ") || "none"}`;
+    return new Response(`${body}\n`, { status: code && !login ? 404 : 200, headers: { ...CORS, "content-type": "text/plain" } });
+  }
+  if (path === "/auth/api/accounts/deviceauth/token" && req.method === "POST") {
+    const body = (await req.json().catch(() => ({}))) as Json;
+    const login = auth.logins.find((candidate) => candidate.deviceAuthId === body.device_auth_id && candidate.userCode === body.user_code);
+    if (!login) return json({ error: "unknown device code" }, 404);
+    login.polls++;
+    if (!login.approved) return json({ error: "authorization_pending" }, 403);
+    login.authorizationCode = `mock-authorization-code-${login.deviceAuthId}`;
+    return json({ authorization_code: login.authorizationCode, code_challenge: "mock-challenge", code_verifier: "mock-verifier" });
+  }
+  if (path === "/auth/oauth/token" && req.method === "POST") {
+    const raw = await req.text();
+    const type = req.headers.get("content-type") ?? "";
+    const body: Json = type.includes("json") ? JSON.parse(raw || "{}") : Object.fromEntries(new URLSearchParams(raw));
+    if (body.grant_type === "authorization_code") {
+      const login = auth.logins.find((candidate) => candidate.authorizationCode === body.code);
+      if (!login || body.code_verifier !== "mock-verifier") return json({ error: "invalid_grant" }, 400);
+      auth.exchanges++;
+      auth.generation++;
+      log(`auth: code exchanged, token generation ${auth.generation} (redirect_uri ${body.redirect_uri})`);
+      return json(tokens(auth.generation, 120));
+    }
+    if (body.grant_type === "refresh_token") {
+      if (body.refresh_token !== `mock-refresh-${auth.generation}` || auth.revoked.includes(body.refresh_token)) return json({ error: { code: "refresh_token_invalidated" } }, 401);
+      auth.refreshes++;
+      auth.generation++;
+      log(`auth: refreshed, token generation ${auth.generation}`);
+      return json(tokens(auth.generation, 3600));
+    }
+    return json({ error: "unsupported_grant_type" }, 400);
+  }
+  if (path === "/auth/oauth/revoke" && req.method === "POST") {
+    const body = (await req.json().catch(() => ({}))) as Json;
+    auth.revoked.push(String(body.token));
+    log(`auth: revoked a ${body.token_type_hint}`);
+    return json({});
+  }
+  if (path === "/backend-api/wham/accounts/check" && req.method === "GET") {
+    const authorization = describeAuthorization(req.headers.get("authorization"));
+    const ok = authorization === `Bearer mock access-${auth.generation}` && auth.generation > 0;
+    auth.accountChecks.push({ authorization, status: ok ? 200 : 401 });
+    if (!ok) return json({ error: "unauthorized" }, 401);
+    return json({
+      // The list form: codex takes the workspace's backend from here ("NO_CONSTRAINT" = stay on chatgpt_base_url).
+      accounts: [{ id: ACCOUNT_ID, plan_type: "plus", workspace_backend_origin: "NO_CONSTRAINT", account_routing_override: "NO_CONSTRAINT", name: "Mock workspace", structure: "personal" }],
+      account_ordering: [ACCOUNT_ID],
+      default_account_id: ACCOUNT_ID,
+    });
+  }
+  log(`!! unhandled ${req.method} ${path}${url.search}`);
+  return json({ error: { message: `mock-llm: no handler for ${req.method} ${path}` } }, 404);
+}
+
 const MODELS = ["mock-model", "mock-small", "mock-reasoning"];
 let requestSeq = 0;
 
@@ -605,9 +769,13 @@ function clip(s: string, max = 80): string {
 
 async function handleModel(req: Request, path: string, parse: (b: Json, raw: string) => Turn, reply: (t: Turn, s: Step) => Response): Promise<Response> {
   const n = ++requestSeq;
-  const raw = await req.text();
+  // codex compresses request bodies with zstd when signed in with ChatGPT.
+  const bytes = new Uint8Array(await req.arrayBuffer());
+  const encoding = req.headers.get("content-encoding") ?? "";
+  let raw = "";
   let body: Json;
   try {
+    raw = new TextDecoder().decode(encoding.includes("zstd") ? Bun.zstdDecompressSync(bytes) : bytes);
     body = JSON.parse(raw);
   } catch {
     log(`#${n} POST ${path} !! invalid JSON (${raw.length} bytes)`);
@@ -618,6 +786,15 @@ async function handleModel(req: Request, path: string, parse: (b: Json, raw: str
     const headers = Object.fromEntries(req.headers.entries());
     writeFileSync(join(DUMP_DIR, `${String(n).padStart(4, "0")}-${path.replace(/\W+/g, "_")}.json`), JSON.stringify({ path, headers, body }, null, 2));
   }
+  auth.modelRequests.push({
+    path,
+    authorization: describeAuthorization(req.headers.get("authorization")),
+    account: req.headers.get("chatgpt-account-id") ?? "",
+    userAgent: req.headers.get("user-agent") ?? "",
+    originator: req.headers.get("originator") ?? "",
+    contentEncoding: encoding,
+  });
+  if (auth.modelRequests.length > 50) auth.modelRequests.shift();
   const turn = parse(body, raw);
   const scenario = pickScenario(turn);
   const toolNames = turn.tools.map((t) => t.name);
@@ -653,6 +830,8 @@ const server = Bun.serve({
       log(`GET ${path}${url.search}`);
       return json({ object: "list", data: MODELS.map((id) => ({ id, object: "model", created: 0, owned_by: "mock-llm" })) });
     }
+    const authResponse = await handleAuth(req, path, url);
+    if (authResponse) return authResponse;
     if (req.method === "POST" && /^(\/v1)?\/chat\/completions$/.test(path)) return handleModel(req, path, parseChat, chatReply);
     if (req.method === "POST" && /^(\/v1)?\/responses$/.test(path)) return handleModel(req, path, parseResponses, responsesReply);
     if (req.method === "POST" && /^(\/v1)?\/messages$/.test(path)) return handleModel(req, path, parseAnthropic, anthropicReply);

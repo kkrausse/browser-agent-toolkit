@@ -16,11 +16,11 @@ use clap::Parser;
 use codex_arg0::Arg0DispatchPaths;
 use codex_config::LoaderOverrides;
 use codex_tui::Cli;
-use codex_tui::ExitReason;
 use codex_tui::RemoteAppServerEndpoint;
 use codex_tui::run_main;
 use codex_utils_cli::CliConfigOverrides;
-use std::io::Write;
+
+mod shared;
 
 #[derive(Parser, Debug)]
 #[command(name = "codex")]
@@ -54,7 +54,7 @@ fn main() -> anyhow::Result<()> {
         .raw_overrides
         .splice(0..0, top_cli.config_overrides.raw_overrides);
 
-    prepare_emulated_home()
+    shared::prepare_emulated_home()
         .map_err(|err| anyhow::anyhow!("failed to prepare the home directory: {err}"))?;
 
     let runtime = tokio::runtime::Builder::new_current_thread()
@@ -74,24 +74,7 @@ fn main() -> anyhow::Result<()> {
     ))
     .map_err(|err| anyhow::anyhow!("codex TUI failed: {err:?}"))?;
 
-    let is_fatal = match &exit_info.exit_reason {
-        ExitReason::Fatal(message) => {
-            eprintln!("ERROR: {message}");
-            true
-        }
-        ExitReason::UserRequested
-        | ExitReason::Archived(_)
-        | ExitReason::TurnInterrupted
-        | ExitReason::ThreadRemoved => false,
-    };
-    for line in exit_info.format_exit_messages(/*color_enabled*/ true) {
-        println!("{line}");
-    }
-    std::io::stdout().flush()?;
-    if is_fatal {
-        std::process::exit(1);
-    }
-    Ok(())
+    shared::finish(exit_info)
 }
 
 /// Upstream only takes `ws://host:port` with nothing after it. A browser never
@@ -106,34 +89,4 @@ fn resolve_endpoint(remote: &str) -> anyhow::Result<RemoteAppServerEndpoint> {
         });
     }
     codex_tui::resolve_remote_addr(remote).map_err(|err| anyhow::anyhow!("{err}"))
-}
-
-/// The emulated machine starts every program in `/` with an empty home. The TUI
-/// requires `$CODEX_HOME` (default `$HOME/.codex`) to be an existing directory
-/// and resolves config layers from the working directory upwards.
-fn prepare_emulated_home() -> anyhow::Result<()> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/home/user".to_string());
-    let codex_home = std::env::var("CODEX_HOME").unwrap_or_else(|_| format!("{home}/.codex"));
-    std::fs::create_dir_all(&codex_home)?;
-    // `dirs::home_dir()` has no WASI arm, so the default (`~/.codex`) cannot be derived.
-    // SAFETY: single-threaded, before anything reads the environment concurrently.
-    unsafe { std::env::set_var("CODEX_HOME", &codex_home) };
-    // `std::env::temp_dir()` panics on WASI ("not supported by WASI yet"); the
-    // tempfile crate asks it unless told where to go.
-    let _ = tempfile::env::override_temp_dir(std::path::Path::new("/tmp"));
-    // The TUI reports its own working directory to the server as the project
-    // directory (as the native client does with `codex --remote`). Here that is
-    // a path on the server's machine, named by the page; it only has to exist.
-    match std::env::var("CODEX_WASM_CWD").ok().filter(|dir| dir.starts_with('/')) {
-        Some(dir) => {
-            std::fs::create_dir_all(&dir)?;
-            std::env::set_current_dir(&dir)?;
-        }
-        None => {
-            if std::env::current_dir().is_ok_and(|cwd| cwd == std::path::Path::new("/")) {
-                std::env::set_current_dir(&home)?;
-            }
-        }
-    }
-    Ok(())
 }

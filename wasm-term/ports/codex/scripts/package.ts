@@ -3,8 +3,9 @@
 // file is current. The hash in the name is of the module's bytes, so the URL
 // can be cached forever and a rebuild is a new URL.
 //
-//   bun scripts/package.ts [--quality N] <build>=<path.wasm>...
+//   bun scripts/package.ts [--quality N] [--site DIR] <build>=<path.wasm>...
 //   bun scripts/package.ts default=dist/codex-ship.wasm names=dist/codex.wasm
+//   bun scripts/package.ts --site dist/site-local default=dist/codex-local-ship-opt.wasm   (the codex-local guest)
 //
 // `default` is what `?guest=codex` loads; other builds are `&build=<name>`
 // (`names` keeps the name section, for profiling and readable traps).
@@ -27,16 +28,17 @@ export interface PackagedBuild {
 }
 export type Manifest = Record<string, PackagedBuild>;
 
-const site = join(import.meta.dir, "../dist/site");
+let site = join(import.meta.dir, "../dist/site");
 const argv = process.argv.slice(2);
 let quality = 9;
 const builds: [string, string][] = [];
 while (argv.length) {
   const arg = argv.shift()!;
   if (arg === "--quality") quality = Number(argv.shift());
+  else if (arg === "--site") site = join(import.meta.dir, "..", argv.shift()!);
   else builds.push([arg.slice(0, arg.indexOf("=")), arg.slice(arg.indexOf("=") + 1)]);
 }
-if (!builds.length) throw new Error("usage: bun scripts/package.ts [--quality N] <build>=<path.wasm>...");
+if (!builds.length) throw new Error("usage: bun scripts/package.ts [--quality N] [--site DIR] <build>=<path.wasm>...");
 
 mkdirSync(site, { recursive: true });
 const manifestPath = join(site, "manifest.json");

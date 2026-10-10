@@ -11,17 +11,18 @@
 // over https, one port to expose):
 //   /proxy/opencode/...  ->  OPENCODE_UPSTREAM  (default http://127.0.0.1:4792), streamed
 //   /proxy/codex         ->  CODEX_UPSTREAM     (default ws://127.0.0.1:4796), WebSocket
+//   /proxy/http/<host>/  ->  the named host, if allowlisted: the pass-through relay (below)
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, extname, join, normalize } from "node:path";
 import { nodeShimsPlugin } from "../host/node/bun-plugin";
 import type { Manifest } from "../ports/codex/scripts/package";
-import { codexGuest } from "../ports/codex/web/guest";
+import { codexGuest, codexLocalGuest } from "../ports/codex/web/guest";
 import { opencodeGuest } from "../ports/opencode/web/guest";
 import type { GuestInfo, JsGuest, WasmGuest } from "./guests";
 
 /** Wasm guests that are ports: a packaged directory each (content-hashed, precompressed), served under /guests/<name>/. */
-const wasmGuests: WasmGuest[] = [codexGuest];
+const wasmGuests: WasmGuest[] = [codexGuest, codexLocalGuest];
 
 /** JavaScript guests (ports). Each is served from its own directory under /guests/<name>/. */
 const jsGuests: JsGuest[] = [
@@ -211,6 +212,106 @@ async function proxyHttp(request: Request, upstream: string, rest: string, searc
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers: out });
 }
 
+// ---- pass-through HTTP relay ---------------------------------------------------
+//
+//   /proxy/http/<host>[:<port>]/<path>?<query>  ->  <scheme>://<host>[:<port>]/<path>?<query>
+//
+// For a guest that makes its own HTTP requests to servers that do not answer a
+// browser's CORS checks, or that need headers a page cannot set (codex-local:
+// the model API and the sign-in endpoints). The relay is stateless and adds
+// nothing: no credentials, no cookies, no identity. Rules:
+// - only hosts in the allowlist below, each with a fixed upstream origin;
+// - only the headers the guest wrapped as `x-wasm-term-fwd-<name>` go up, under
+//   their real names. Everything else on the incoming request is the browser's
+//   (User-Agent, Origin, Cookie, Sec-*) or a front proxy's (X-Forwarded-*,
+//   Tailscale-User-*) and is dropped;
+// - the answer streams back as it arrives. `Set-Cookie` and `WWW-Authenticate`
+//   come back wrapped the same way, because a browser hides the first and acts
+//   on the second;
+// - a redirect to another allowed host is rewritten to stay on the relay; one
+//   to anywhere else is refused;
+// - one log line per request: method, host, path without its query, status.
+//   Never a header value, never a body.
+
+const FORWARD_PREFIX = "x-wasm-term-fwd-";
+
+/** host[:port] as the guest names it -> the origin requests really go to. */
+const relayHosts = new Map<string, string>([
+  // mock-llm: the scripted model API and the fake device-code/token/account endpoints (tests; nothing real).
+  ["127.0.0.1:4791", "http://127.0.0.1:4791"],
+  // The same server under an https name: codex insists on https for its ChatGPT backend URL.
+  ["mock-llm.test", process.env.MOCK_LLM_UPSTREAM ?? "http://127.0.0.1:4791"],
+  // What codex contacts when really signed in:
+  ["api.openai.com", "https://api.openai.com"], // API key: /v1/responses
+  ["chatgpt.com", "https://chatgpt.com"], // ChatGPT sign-in: /backend-api/codex/responses, /backend-api/codex/models, /backend-api/wham/*
+  ["auth.openai.com", "https://auth.openai.com"], // device-code sign-in, token refresh, revoke
+]);
+// HTTP_RELAY_ALLOW="host[:port][=origin] ..." adds entries (https://<host> unless an origin is given).
+for (const entry of (process.env.HTTP_RELAY_ALLOW ?? "").split(/[\s,]+/).filter(Boolean)) {
+  const [host, origin] = entry.split("=");
+  relayHosts.set(host!.toLowerCase(), origin ?? `https://${host}`);
+}
+const relayOrigins = new Map([...relayHosts].map(([host, origin]) => [origin, host]));
+
+function relayLog(method: string, host: string, path: string, status: number | string): void {
+  if (process.env.HTTP_RELAY_QUIET) return;
+  console.log(`relay ${method} ${host}${path} -> ${status}`);
+}
+
+async function relayHttp(request: Request, rest: string, search: string): Promise<Response> {
+  const slash = rest.indexOf("/", 1);
+  const host = decodeURIComponent(slash < 0 ? rest.slice(1) : rest.slice(1, slash)).toLowerCase();
+  const path = slash < 0 ? "/" : rest.slice(slash);
+  const origin = relayHosts.get(host);
+  if (!origin) {
+    relayLog(request.method, host, path, "refused (host not allowed)");
+    return respond(`wasm-term relay: host ${host} is not in the allowlist\n`, "text/plain", {}, 403);
+  }
+  const headers = new Headers();
+  for (const [name, value] of request.headers) {
+    if (!name.startsWith(FORWARD_PREFIX)) continue;
+    const real = name.slice(FORWARD_PREFIX.length);
+    if (real && !HOP_HEADERS.includes(real) && real !== "content-length") headers.append(real, value);
+  }
+  // Bun's fetch decodes the body, so ask for it plain rather than decode and re-encode a stream.
+  headers.set("accept-encoding", "identity");
+  let response: Response;
+  try {
+    response = await fetch(`${origin}${path}${search}`, {
+      method: request.method,
+      headers,
+      body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+      redirect: "manual",
+      signal: request.signal,
+    });
+  } catch (error) {
+    if (request.signal.aborted) return respond(null, "text/plain", {}, 499);
+    relayLog(request.method, host, path, `unreachable (${(error as Error).name})`);
+    return respond(`wasm-term relay: ${host} is not reachable (${(error as Error).message})\n`, "text/plain", {}, 502);
+  }
+  relayLog(request.method, host, path, response.status);
+  const out = new Headers();
+  let cookies = 0;
+  for (const [name, value] of response.headers) {
+    if (HOP_HEADERS.includes(name) || name === "content-encoding" || name === "content-length" || name.startsWith("access-control-")) continue;
+    if (name in { "cross-origin-opener-policy": 1, "cross-origin-embedder-policy": 1, "cross-origin-resource-policy": 1 }) continue;
+    if (name === "set-cookie") continue; // below, one header each
+    if (name === "www-authenticate") out.append(`${FORWARD_PREFIX}${name}`, value);
+    else if (name === "location") {
+      // Followed by the browser's fetch, so it has to point back at the relay.
+      let target: URL | null = null;
+      try { target = new URL(value, `${origin}${path}`); } catch {}
+      const back = target && relayOrigins.get(target.origin);
+      if (target && back) out.set("location", `/proxy/http/${back}${target.pathname}${target.search}`);
+      else return respond(`wasm-term relay: ${host} redirected to a host that is not in the allowlist\n`, "text/plain", {}, 502);
+    } else out.append(name, value);
+  }
+  for (const cookie of response.headers.getSetCookie()) out.append(`${FORWARD_PREFIX}set-cookie-${cookies++}`, cookie);
+  for (const [name, value] of Object.entries(isolation)) if (name !== "Cache-Control" || !out.has("cache-control")) out.set(name, value);
+  if ((out.get("content-type") ?? "").startsWith("text/event-stream")) out.set("X-Accel-Buffering", "no");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers: out });
+}
+
 /** One browser WebSocket relayed to an upstream one. */
 interface Relay {
   kind: "relay";
@@ -264,6 +365,11 @@ const server = Bun.serve<SocketData>({
       // No idle timeout: the event stream may be quiet for longer than any limit.
       server.timeout(request, 0);
       return proxyHttp(request, opencodeUpstream, path.slice("/proxy/opencode".length) || "/", url.search);
+    }
+    if (path.startsWith("/proxy/http/")) {
+      // No idle timeout: a model's event stream may pause for longer than any limit.
+      server.timeout(request, 0);
+      return relayHttp(request, path.slice("/proxy/http".length), url.search);
     }
     if (path === "/proxy/codex" || path.startsWith("/proxy/codex/")) {
       const protocols = (request.headers.get("sec-websocket-protocol") ?? "").split(",").map(part => part.trim()).filter(Boolean);

@@ -1,0 +1,741 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: port <port@local>
+Date: Sat, 10 Oct 2026 08:49:35 -0700
+Subject: [PATCH] wasi: codex-local: embedded app-server behind a link-time
+ hook, process seam, HTTP through the host's fetch, single-thread fixes
+
+---
+ codex-rs/Cargo.lock                    |   3 +
+ codex-rs/app-server-client/src/lib.rs  |  48 ++++++--
+ codex-rs/core/src/client.rs            |   6 +
+ codex-rs/core/src/exec.rs              | 157 +++++++++++++++++++++++++
+ codex-rs/core/src/installation_id.rs   |   2 +
+ codex-rs/file-search/src/lib.rs        |   5 +
+ codex-rs/rollout/src/recorder.rs       |  13 ++
+ codex-rs/rollout/src/writer_lock.rs    |  30 ++++-
+ codex-rs/thread-store/src/local/mod.rs |   9 +-
+ codex-rs/tui/src/app_server_session.rs |   8 +-
+ codex-rs/tui/src/lib.rs                |   8 ++
+ codex-rs/tui/src/onboarding/auth.rs    |   9 +-
+ codex-rs/utils/cache/src/lib.rs        |  10 ++
+ codex-rs/utils/pty/src/backend.rs      | 109 +++++++++++++++++
+ codex-rs/utils/pty/src/lib.rs          |   2 +
+ codex-rs/utils/pty/src/pipe.rs         |  14 +++
+ codex-rs/utils/pty/src/pty.rs          |  12 ++
+ 17 files changed, 428 insertions(+), 17 deletions(-)
+ create mode 100644 codex-rs/utils/pty/src/backend.rs
+
+diff --git a/codex-rs/Cargo.lock b/codex-rs/Cargo.lock
+index 2302256..16682d0 100644
+--- a/codex-rs/Cargo.lock
++++ b/codex-rs/Cargo.lock
+@@ -5275,11 +5275,13 @@ version = "0.162.0"
+ dependencies = [
+  "anyhow",
+  "clap",
++ "codex-app-server-client",
+  "codex-arg0",
+  "codex-build-info",
+  "codex-config",
+  "codex-tui",
+  "codex-utils-cli",
++ "codex-utils-pty",
+  "tempfile",
+  "tokio",
+ ]
+@@ -12998,6 +13000,7 @@ dependencies = [
+  "wasm-bindgen",
+  "wasm-bindgen-futures",
+  "wasm-streams 0.4.2",
++ "wasm-term-tokio",
+  "web-sys",
+  "webpki-roots",
+ ]
+diff --git a/codex-rs/app-server-client/src/lib.rs b/codex-rs/app-server-client/src/lib.rs
+index a860a16..bdbca03 100644
+--- a/codex-rs/app-server-client/src/lib.rs
++++ b/codex-rs/app-server-client/src/lib.rs
+@@ -349,27 +349,55 @@ pub enum AppServerClient {
+     Remote(RemoteAppServerClient),
+ }
+ 
++#[cfg(target_os = "wasi")]
++type WasiInProcessStart = fn(
++    InProcessClientStartArgs,
++) -> std::pin::Pin<
++    Box<dyn std::future::Future<Output = IoResult<InProcessAppServerClient>> + Send>,
++>;
++
++#[cfg(target_os = "wasi")]
++static WASI_IN_PROCESS_START: std::sync::OnceLock<WasiInProcessStart> = std::sync::OnceLock::new();
++
++/// wasm-term: makes `InProcessAppServerClient::start` start the embedded
++/// app-server on WASI (see the comment there). Calling this is what links the
++/// server into the module.
++#[cfg(target_os = "wasi")]
++pub fn enable_in_process_app_server() {
++    let _ = WASI_IN_PROCESS_START
++        .set(|args| Box::pin(InProcessAppServerClient::start_embedded(args)));
++}
++
+ impl InProcessAppServerClient {
+     /// Starts the in-process runtime and facade worker task.
+     ///
+     /// The returned client is ready for requests and ordered event consumption.
+     /// Request queues remain bounded without blocking on unread notifications.
+-    // wasm-term: the browser build is remote-only. This is the one place the
+-    // client enters `codex_app_server`; without it the embedded server, and
+-    // everything in `codex-core` that only the server runs, is unreachable and
+-    // the linker drops it from the module.
++    // wasm-term: one module source, two browser builds. The body below is the
++    // one place the client enters `codex_app_server`. On WASI it is only
++    // reachable through `enable_in_process_app_server()`: a build whose `main`
++    // never calls that (the remote-only `codex` guest) has no reference to the
++    // embedded server, and the linker drops it and everything in `codex-core`
++    // that only the server runs (half the module). The `codex-local` guest's
++    // `main` calls it once at start-up.
+     #[cfg(target_os = "wasi")]
+     pub async fn start(args: InProcessClientStartArgs) -> IoResult<Self> {
+-        let _ = args;
+-        Err(std::io::Error::new(
+-            std::io::ErrorKind::Unsupported,
+-            "the embedded app-server is not part of the browser build; connect to a remote one",
+-        ))
++        match WASI_IN_PROCESS_START.get() {
++            Some(start) => start(args).await,
++            None => Err(std::io::Error::new(
++                std::io::ErrorKind::Unsupported,
++                "the embedded app-server is not part of this browser build; connect to a remote one",
++            )),
++        }
+     }
+ 
+-    /// See the native `start` above.
++    /// See `start`.
+     #[cfg(not(target_os = "wasi"))]
+     pub async fn start(args: InProcessClientStartArgs) -> IoResult<Self> {
++        Self::start_embedded(args).await
++    }
++
++    async fn start_embedded(args: InProcessClientStartArgs) -> IoResult<Self> {
+         let channel_capacity = args.channel_capacity.max(1);
+         let mut handle =
+             codex_app_server::in_process::start(args.into_runtime_start_args()).await?;
+diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
+index 24f2964..005b9dc 100644
+--- a/codex-rs/core/src/client.rs
++++ b/codex-rs/core/src/client.rs
+@@ -1028,6 +1028,12 @@ impl ModelClient {
+     ///
+     /// WebSocket use is controlled by provider capability and session-scoped fallback state.
+     pub fn responses_websocket_enabled(&self) -> bool {
++        // wasm-term: a browser WebSocket cannot carry the `Authorization` header this
++        // transport authenticates with, and there are no sockets to dial with. Use the
++        // HTTP (SSE) transport from the start instead of after a failed retry budget.
++        if cfg!(target_os = "wasi") {
++            return false;
++        }
+         if !self.state.provider.info().supports_websockets
+             || self.state.disable_websockets.load(Ordering::Relaxed)
+         {
+diff --git a/codex-rs/core/src/exec.rs b/codex-rs/core/src/exec.rs
+index e57ab6d..c494399 100644
+--- a/codex-rs/core/src/exec.rs
++++ b/codex-rs/core/src/exec.rs
+@@ -776,6 +776,8 @@ async fn exec_windows_sandbox(
+         stderr,
+         aggregated_output,
+         timed_out: capture.timed_out,
++        #[cfg(target_os = "wasi")]
++        wasi_exit_code: None,
+     })
+ }
+ 
+@@ -802,6 +804,10 @@ fn finalize_exec_result(
+             }
+ 
+             let mut exit_code = raw_output.exit_status.code().unwrap_or(-1);
++            #[cfg(target_os = "wasi")]
++            if let Some(code) = raw_output.wasi_exit_code {
++                exit_code = code;
++            }
+             if timed_out {
+                 exit_code = EXEC_TIMEOUT_EXIT_CODE;
+             }
+@@ -850,6 +856,10 @@ struct RawExecToolCallOutput {
+     pub stderr: StreamOutput<Vec<u8>>,
+     pub aggregated_output: StreamOutput<Vec<u8>>,
+     pub timed_out: bool,
++    /// wasm-term: std cannot build a non-success `ExitStatus` on WASI, so the code a
++    /// process backend reported travels next to it.
++    #[cfg(target_os = "wasi")]
++    pub wasi_exit_code: Option<i32>,
+ }
+ 
+ #[inline]
+@@ -955,6 +965,25 @@ async fn exec(
+             "command args are empty",
+         ))
+     })?;
++    // wasm-term: nothing can be spawned on WASI. This path (the user's `!command`,
++    // the app-server's `command/exec`) goes through the same process seam as the
++    // model's tool calls: `codex_utils_pty::backend`.
++    #[cfg(target_os = "wasi")]
++    {
++        let _ = network_sandbox_policy;
++        return wasi_exec::run(
++            program,
++            args,
++            &cwd,
++            &env,
++            &arg0,
++            expiration,
++            capture_policy,
++            stdout_stream,
++            after_spawn,
++        )
++        .await;
++    }
+     let arg0_ref = arg0.as_deref();
+     let child = spawn_child_async(SpawnChildRequest {
+         program: PathBuf::from(program),
+@@ -1187,6 +1216,8 @@ async fn consume_output(
+         stderr,
+         aggregated_output,
+         timed_out,
++        #[cfg(target_os = "wasi")]
++        wasi_exit_code: None,
+     })
+ }
+ 
+@@ -1283,6 +1314,132 @@ fn synthetic_exit_status_for_code(_code: i32) -> ExitStatus {
+     ExitStatus::default()
+ }
+ 
++/// wasm-term: `exec` for a target without processes. The command runs on whatever
++/// `codex_utils_pty::backend` has installed (by default nothing: the spawn fails with
++/// the "no shell in this build" error); output, deltas, expiration and the exit code
++/// are handled as the native path does with a child process.
++#[cfg(target_os = "wasi")]
++mod wasi_exec {
++    use super::*;
++    use codex_utils_pty::SpawnedProcess;
++
++    fn delta(stream: &StdoutStream, is_stderr: bool, chunk: Vec<u8>) -> Event {
++        Event {
++            id: stream.sub_id.clone(),
++            msg: EventMsg::ExecCommandOutputDelta(ExecCommandOutputDeltaEvent {
++                call_id: stream.call_id.clone(),
++                stream: if is_stderr {
++                    ExecOutputStream::Stderr
++                } else {
++                    ExecOutputStream::Stdout
++                },
++                chunk,
++            }),
++        }
++    }
++
++    #[allow(clippy::too_many_arguments)]
++    pub(super) async fn run(
++        program: &str,
++        args: &[String],
++        cwd: &AbsolutePathBuf,
++        env: &HashMap<String, String>,
++        arg0: &Option<String>,
++        expiration: ExecExpiration,
++        capture_policy: ExecCapturePolicy,
++        stdout_stream: Option<StdoutStream>,
++        after_spawn: Option<Box<dyn FnOnce() + Send>>,
++    ) -> Result<RawExecToolCallOutput> {
++        let spawned =
++            codex_utils_pty::spawn_pipe_process_no_stdin(program, args, cwd.as_path(), env, arg0, &[])
++                .await
++                .map_err(|err| {
++                    CodexErr::Io(io::Error::new(io::ErrorKind::Unsupported, err.to_string()))
++                })?;
++        if let Some(after_spawn) = after_spawn {
++            after_spawn();
++        }
++        let SpawnedProcess {
++            session,
++            mut stdout_rx,
++            mut stderr_rx,
++            mut exit_rx,
++        } = spawned;
++        let cap = capture_policy.retained_bytes_cap();
++        let mut stdout = Vec::new();
++        let mut stderr = Vec::new();
++        let mut deltas = 0usize;
++        let mut take = |buf: &mut Vec<u8>, is_stderr: bool, chunk: Vec<u8>| {
++            match cap {
++                Some(cap) => append_capped(buf, &chunk, cap),
++                None => buf.extend_from_slice(&chunk),
++            }
++            (deltas < MAX_EXEC_OUTPUT_DELTAS_PER_CALL)
++                .then(|| {
++                    deltas += 1;
++                    stdout_stream.as_ref().map(|stream| delta(stream, is_stderr, chunk))
++                })
++                .flatten()
++        };
++        let expiration_wait = async {
++            if capture_policy.uses_expiration() {
++                expiration.wait_with_outcome().await
++            } else {
++                std::future::pending::<ExecExpirationOutcome>().await
++            }
++        };
++        tokio::pin!(expiration_wait);
++        let (mut stdout_open, mut stderr_open) = (true, true);
++        let mut exit_code: Option<i32> = None;
++        let mut timed_out = false;
++        let mut stopped = false;
++        // Until the process has exited and both streams are closed (the backend closes
++        // them after its last byte), or the expiration fires.
++        while exit_code.is_none() || stdout_open || stderr_open {
++            let event = tokio::select! {
++                chunk = stdout_rx.recv(), if stdout_open => match chunk {
++                    Some(chunk) => take(&mut stdout, false, chunk),
++                    None => { stdout_open = false; None }
++                },
++                chunk = stderr_rx.recv(), if stderr_open => match chunk {
++                    Some(chunk) => take(&mut stderr, true, chunk),
++                    None => { stderr_open = false; None }
++                },
++                code = &mut exit_rx, if exit_code.is_none() => {
++                    exit_code = Some(code.unwrap_or(-1));
++                    None
++                },
++                outcome = &mut expiration_wait, if !stopped => {
++                    stopped = true;
++                    timed_out = matches!(outcome, ExecExpirationOutcome::TimedOut);
++                    // Killed, not waited for: whatever arrived so far is the output.
++                    session.terminate();
++                    break;
++                },
++            };
++            if let (Some(event), Some(stream)) = (event, stdout_stream.as_ref()) {
++                let _ = stream.tx_event.send(event).await;
++            }
++        }
++        let code = match (timed_out, stopped) {
++            (true, _) => EXIT_CODE_SIGNAL_BASE + TIMEOUT_CODE,
++            (false, true) => 1,
++            (false, false) => exit_code.unwrap_or(-1),
++        };
++        let stdout = StreamOutput { text: stdout, truncated_after_lines: None };
++        let stderr = StreamOutput { text: stderr, truncated_after_lines: None };
++        let aggregated_output = aggregate_output(&stdout, &stderr, cap);
++        Ok(RawExecToolCallOutput {
++            exit_status: ExitStatus::default(),
++            stdout,
++            stderr,
++            aggregated_output,
++            timed_out,
++            wasi_exit_code: Some(code),
++        })
++    }
++}
++
+ #[cfg(test)]
+ #[path = "exec_tests.rs"]
+ mod tests;
+diff --git a/codex-rs/core/src/installation_id.rs b/codex-rs/core/src/installation_id.rs
+index a42e6b6..bdae5b3 100644
+--- a/codex-rs/core/src/installation_id.rs
++++ b/codex-rs/core/src/installation_id.rs
+@@ -29,6 +29,8 @@ pub async fn resolve_installation_id(codex_home: &AbsolutePathBuf) -> Result<Str
+         }
+ 
+         let mut file = options.open(&path)?;
++        // wasm-term: no file locks on WASI, and no second process to race with.
++        #[cfg(not(target_os = "wasi"))]
+         file.lock()?;
+ 
+         #[cfg(unix)]
+diff --git a/codex-rs/file-search/src/lib.rs b/codex-rs/file-search/src/lib.rs
+index c189646..52676a4 100644
+--- a/codex-rs/file-search/src/lib.rs
++++ b/codex-rs/file-search/src/lib.rs
+@@ -180,6 +180,11 @@ pub fn create_session(
+         respect_gitignore,
+     } = options;
+ 
++    // wasm-term: the matcher builds a thread pool and the session runs two worker
++    // threads; WASI has one thread and both would panic (abort) the module.
++    if cfg!(target_os = "wasi") {
++        anyhow::bail!("file search is not available in this build (it needs threads)");
++    }
+     let Some(primary_search_directory) = search_directories.first() else {
+         anyhow::bail!("at least one search directory is required");
+     };
+diff --git a/codex-rs/rollout/src/recorder.rs b/codex-rs/rollout/src/recorder.rs
+index f99f2c5..36a75a5 100644
+--- a/codex-rs/rollout/src/recorder.rs
++++ b/codex-rs/rollout/src/recorder.rs
+@@ -1743,6 +1743,19 @@ fn precompute_new_rollout_path(
+     rollout_id_override: Option<RolloutId>,
+ ) -> std::io::Result<(PathBuf, OffsetDateTime)> {
+     // Resolve ~/.codex/sessions/YYYY/MM/DD path.
++    // wasm-term: the `time` crate cannot find the local offset on WASI. The host
++    // passes the browser's in `WASM_TERM_UTC_OFFSET_MINUTES` (as the chrono fork reads it).
++    #[cfg(target_os = "wasi")]
++    let timestamp = {
++        let minutes = std::env::var("WASM_TERM_UTC_OFFSET_MINUTES")
++            .ok()
++            .and_then(|value| value.parse::<i32>().ok())
++            .unwrap_or(0);
++        let offset = time::UtcOffset::from_whole_seconds(minutes * 60)
++            .map_err(|e| IoError::other(format!("failed to get local time: {e}")))?;
++        OffsetDateTime::now_utc().to_offset(offset)
++    };
++    #[cfg(not(target_os = "wasi"))]
+     let timestamp = OffsetDateTime::now_local()
+         .map_err(|e| IoError::other(format!("failed to get local time: {e}")))?;
+     let mut dir = config.codex_home().to_path_buf();
+diff --git a/codex-rs/rollout/src/writer_lock.rs b/codex-rs/rollout/src/writer_lock.rs
+index ceae18e..83ee58b 100644
+--- a/codex-rs/rollout/src/writer_lock.rs
++++ b/codex-rs/rollout/src/writer_lock.rs
+@@ -62,7 +62,7 @@ impl WriterLockCoordinator {
+                 ))
+             })?;
+ 
+-        match file.try_lock() {
++        match try_lock_file(&file) {
+             Ok(()) => {}
+             Err(std::fs::TryLockError::WouldBlock) => {
+                 return Err(io::Error::new(
+@@ -95,7 +95,7 @@ impl WriterLockCoordinator {
+         let coordination_lock = self.lock_coordination()?;
+         let path = self.directory.join(format!("{thread_id}.lock"));
+         match OpenOptions::new().read(true).write(true).open(path) {
+-            Ok(file) => match file.try_lock() {
++            Ok(file) => match try_lock_file(&file) {
+                 Ok(()) => Ok(Some(coordination_lock)),
+                 Err(std::fs::TryLockError::WouldBlock) => Ok(None),
+                 Err(std::fs::TryLockError::Error(err)) => Err(err),
+@@ -113,7 +113,7 @@ impl WriterLockCoordinator {
+             .create(true)
+             .truncate(false)
+             .open(self.directory.join(COORDINATION_LOCK_FILE))?;
+-        file.lock().map_err(|err| {
++        lock_file(&file).map_err(|err| {
+             io::Error::other(format!(
+                 "failed to acquire thread writer coordination lock: {err}"
+             ))
+@@ -146,7 +146,7 @@ impl WriterLockCoordinator {
+                     continue;
+                 }
+             };
+-            match file.try_lock() {
++            match try_lock_file(&file) {
+                 Ok(()) => {
+                     drop(file);
+                     if let Err(err) = fs::remove_file(&path)
+@@ -198,3 +198,25 @@ impl Drop for WriterLockGuard {
+ #[cfg(test)]
+ #[path = "writer_lock_tests.rs"]
+ mod tests;
++
++// wasm-term: std has no file locks on WASI (`Unsupported`). The emulated machine runs
++// one process with one thread, so every lock is free and taking it is a no-op.
++#[cfg(not(target_os = "wasi"))]
++fn lock_file(file: &File) -> io::Result<()> {
++    file.lock()
++}
++
++#[cfg(target_os = "wasi")]
++fn lock_file(_file: &File) -> io::Result<()> {
++    Ok(())
++}
++
++#[cfg(not(target_os = "wasi"))]
++fn try_lock_file(file: &File) -> Result<(), std::fs::TryLockError> {
++    file.try_lock()
++}
++
++#[cfg(target_os = "wasi")]
++fn try_lock_file(_file: &File) -> Result<(), std::fs::TryLockError> {
++    Ok(())
++}
+diff --git a/codex-rs/thread-store/src/local/mod.rs b/codex-rs/thread-store/src/local/mod.rs
+index 1380ff5..953d500 100644
+--- a/codex-rs/thread-store/src/local/mod.rs
++++ b/codex-rs/thread-store/src/local/mod.rs
+@@ -479,7 +479,14 @@ impl LocalThreadStore {
+ 
+ impl ThreadStore for LocalThreadStore {
+     fn default_history_mode(&self) -> ThreadHistoryMode {
+-        ThreadHistoryMode::Paginated
++        // wasm-term: paginated history lives in SQLite. Without a state database (WASI:
++        // sqlx needs threads) a paginated thread could be written but never read back,
++        // so new threads are legacy ones, replayed from their rollout file.
++        if self.state_db.is_some() {
++            ThreadHistoryMode::Paginated
++        } else {
++            ThreadHistoryMode::Legacy
++        }
+     }
+ 
+     fn as_any(&self) -> &dyn std::any::Any {
+diff --git a/codex-rs/tui/src/app_server_session.rs b/codex-rs/tui/src/app_server_session.rs
+index 6d15c85..54c2b10 100644
+--- a/codex-rs/tui/src/app_server_session.rs
++++ b/codex-rs/tui/src/app_server_session.rs
+@@ -2167,7 +2167,13 @@ pub(crate) fn thread_start_params_from_config(
+         permissions,
+         config: config_request_overrides_from_config(config, thread_params_mode),
+         ephemeral: Some(config.ephemeral),
+-        history_mode: (!config.ephemeral).then_some(ThreadHistoryMode::Paginated),
++        // wasm-term: paginated history is served from SQLite, which the embedded
++        // server cannot open on WASI (no threads for sqlx). Legacy threads are
++        // replayed from their rollout file, so resume works without it.
++        history_mode: (!config.ephemeral
++            && !(cfg!(target_os = "wasi")
++                && matches!(thread_params_mode, ThreadParamsMode::Embedded)))
++        .then_some(ThreadHistoryMode::Paginated),
+         session_start_source,
+         thread_source: Some(ThreadSource::User),
+         developer_instructions: with_terminal_visualization_instructions(
+diff --git a/codex-rs/tui/src/lib.rs b/codex-rs/tui/src/lib.rs
+index dc0fbd0..1705d44 100644
+--- a/codex-rs/tui/src/lib.rs
++++ b/codex-rs/tui/src/lib.rs
+@@ -390,6 +390,14 @@ async fn init_state_db_for_app_server_target(
+     app_server_target: &AppServerTarget,
+ ) -> std::io::Result<Option<StateDbHandle>> {
+     match app_server_target {
++        // wasm-term: sqlx's SQLite driver runs each connection on its own OS thread, and
++        // WASI has none. Opening does not fail (the pools connect lazily); every query
++        // would. Natively a missing state database is fatal for the embedded server;
++        // here it runs without one: threads are listed by scanning the rollout files and
++        // their history is replayed from them ("legacy" history mode).
++        #[cfg(target_os = "wasi")]
++        AppServerTarget::Embedded => Ok(None),
++        #[cfg(not(target_os = "wasi"))]
+         AppServerTarget::Embedded => state_db::try_init(config).await.map(Some).map_err(|err| {
+             let database_path = codex_state::runtime_db_path_for_corruption_error(&err)
+                 .unwrap_or_else(|| config.sqlite_config().state_db_path());
+diff --git a/codex-rs/tui/src/onboarding/auth.rs b/codex-rs/tui/src/onboarding/auth.rs
+index 2cdc98c..5ee2b8c 100644
+--- a/codex-rs/tui/src/onboarding/auth.rs
++++ b/codex-rs/tui/src/onboarding/auth.rs
+@@ -404,7 +404,14 @@ impl AuthModeWidget {
+         match option {
+             SignInOption::ChatGpt => {
+                 if self.is_chatgpt_login_allowed() {
+-                    self.start_chatgpt_login();
++                    // wasm-term: the browser flow ends on a localhost callback server,
++                    // which a tab cannot run. The device-code flow needs only outbound
++                    // requests, so "Sign in with ChatGPT" is that flow here.
++                    if cfg!(target_os = "wasi") {
++                        self.start_device_code_login();
++                    } else {
++                        self.start_chatgpt_login();
++                    }
+                 }
+             }
+             SignInOption::DeviceCode => {
+diff --git a/codex-rs/utils/cache/src/lib.rs b/codex-rs/utils/cache/src/lib.rs
+index 5375a0f..1433887 100644
+--- a/codex-rs/utils/cache/src/lib.rs
++++ b/codex-rs/utils/cache/src/lib.rs
+@@ -136,6 +136,11 @@ where
+         if let Some(value) = entry.get() {
+             return value.clone();
+         }
++        // wasm-term: `block_in_place` panics on a current-thread runtime, the only kind
++        // WASI has. Nothing else can run meanwhile, so initialise in place.
++        #[cfg(target_os = "wasi")]
++        return entry.get_or_init(value).clone();
++        #[cfg(not(target_os = "wasi"))]
+         tokio::task::block_in_place(|| entry.get_or_init(value).clone())
+     }
+ }
+@@ -145,6 +150,11 @@ where
+     K: Eq + Hash,
+ {
+     tokio::runtime::Handle::try_current().ok()?;
++    // wasm-term: one thread, so the lock is free unless a task holds it across an
++    // await; then behave as if there were no cache rather than block (see above).
++    #[cfg(target_os = "wasi")]
++    return m.try_lock().ok();
++    #[cfg(not(target_os = "wasi"))]
+     Some(tokio::task::block_in_place(|| m.blocking_lock()))
+ }
+ 
+diff --git a/codex-rs/utils/pty/src/backend.rs b/codex-rs/utils/pty/src/backend.rs
+new file mode 100644
+index 0000000..9aa6b1a
+--- /dev/null
++++ b/codex-rs/utils/pty/src/backend.rs
+@@ -0,0 +1,109 @@
++//! wasm-term: the process seam.
++//!
++//! On WASI nothing can be spawned: there is no `fork`/`exec`, no pty and no
++//! pipe. Every place codex starts a command and collects its output ends in one
++//! of this crate's three spawn functions (`pty::spawn_process`,
++//! `pipe::spawn_process`, `pipe::spawn_process_no_stdin`); on WASI all three
++//! hand the request to the [`ProcessBackend`] installed here instead of the
++//! operating system. The default backend, [`NoShell`], refuses every request
++//! with an error the model can read. An emulated shell plugs in by
++//! implementing the trait and calling [`set_process_backend`] once at
++//! start-up, before the first turn.
++//!
++//! The contract (also in `wasm-term/ports/codex/NOTES.md`, "The spawn seam"):
++//!
++//! - A request is argv (`program` + `args`), the working directory, the
++//!   complete environment (nothing is inherited), an optional `arg0`, and how
++//!   stdio is wired: a pty of a given size, or pipes with stdin open or closed.
++//!   There is no timeout in the request; callers enforce their own and call
++//!   the terminator.
++//! - The backend answers at once with a [`ProcessDriver`]: a sender the caller
++//!   writes stdin bytes to, broadcast receivers the backend publishes stdout
++//!   and stderr chunks on (a pty has one stream: leave `stderr_rx` `None`), a
++//!   oneshot that resolves with the exit code, a `terminator` closure (kill
++//!   now; must lead to the exit code being sent), and for a pty a `resizer`.
++//! - The backend must drop its output senders when it has forwarded the last
++//!   byte: readers keep waiting for that after the exit code arrives.
++//! - `spawn` runs on the only thread, inside the tokio runtime. It must not
++//!   block; long work belongs in a task it spawns (`tokio::spawn` is fine).
++
++use std::collections::HashMap;
++use std::ffi::OsString;
++use std::io;
++use std::path::PathBuf;
++use std::sync::Arc;
++use std::sync::RwLock;
++
++use crate::ProcessDriver;
++use crate::SpawnedProcess;
++use crate::TerminalSize;
++use crate::spawn_from_driver;
++
++/// What the model is told when it asks for a command and no shell is installed.
++pub const NO_SHELL_MESSAGE: &str = "no shell in this build: codex is running inside a browser tab, where commands cannot be executed. \
++Do not retry; work with the file tools (apply_patch) or ask the user to run the command elsewhere.";
++
++/// How the process's standard streams are wired.
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub enum ProcessStdio {
++    /// One terminal for stdin, stdout and stderr.
++    Pty { size: TerminalSize },
++    /// Separate stdout and stderr; `stdin` says whether stdin stays open for
++    /// writes (false: the process sees end-of-file at once).
++    Pipes { stdin: bool },
++}
++
++/// One command to run.
++#[derive(Debug, Clone)]
++pub struct ProcessSpawnRequest {
++    pub program: OsString,
++    pub args: Vec<String>,
++    pub cwd: PathBuf,
++    /// The whole environment of the process.
++    pub env: HashMap<String, String>,
++    /// `argv[0]`, when it differs from `program`.
++    pub arg0: Option<String>,
++    pub stdio: ProcessStdio,
++}
++
++pub trait ProcessBackend: Send + Sync + 'static {
++    fn spawn(&self, request: ProcessSpawnRequest) -> io::Result<ProcessDriver>;
++}
++
++/// The default backend: there is no shell.
++#[derive(Debug, Default, Clone, Copy)]
++pub struct NoShell;
++
++impl ProcessBackend for NoShell {
++    fn spawn(&self, _request: ProcessSpawnRequest) -> io::Result<ProcessDriver> {
++        Err(io::Error::new(io::ErrorKind::Unsupported, NO_SHELL_MESSAGE))
++    }
++}
++
++static BACKEND: RwLock<Option<Arc<dyn ProcessBackend>>> = RwLock::new(None);
++
++/// Installs the backend every later spawn goes to. Returns the previous one.
++pub fn set_process_backend(backend: Arc<dyn ProcessBackend>) -> Option<Arc<dyn ProcessBackend>> {
++    match BACKEND.write() {
++        Ok(mut slot) => slot.replace(backend),
++        Err(poisoned) => poisoned.into_inner().replace(backend),
++    }
++}
++
++/// The installed backend, or [`NoShell`].
++pub fn process_backend() -> Arc<dyn ProcessBackend> {
++    BACKEND
++        .read()
++        .ok()
++        .and_then(|slot| slot.clone())
++        .unwrap_or_else(|| Arc::new(NoShell))
++}
++
++/// Runs `request` on the installed backend and adapts the result to what the
++/// native spawn functions return.
++pub fn spawn_with_backend(request: ProcessSpawnRequest) -> anyhow::Result<SpawnedProcess> {
++    let driver = process_backend()
++        .spawn(request)
++        .map_err(|err| anyhow::anyhow!("{err}"))?;
++    Ok(spawn_from_driver(driver))
++}
+diff --git a/codex-rs/utils/pty/src/lib.rs b/codex-rs/utils/pty/src/lib.rs
+index c2a0629..ae28590 100644
+--- a/codex-rs/utils/pty/src/lib.rs
++++ b/codex-rs/utils/pty/src/lib.rs
+@@ -1,3 +1,5 @@
++// wasm-term: where commands go on a target that cannot spawn any (WASI).
++pub mod backend;
+ mod child;
+ pub use child::Child;
+ mod child_command;
+diff --git a/codex-rs/utils/pty/src/pipe.rs b/codex-rs/utils/pty/src/pipe.rs
+index 802dfa5..bcb821c 100644
+--- a/codex-rs/utils/pty/src/pipe.rs
++++ b/codex-rs/utils/pty/src/pipe.rs
+@@ -143,6 +143,20 @@ async fn spawn_process_with_stdin_mode(
+         anyhow::bail!("missing program for pipe spawn");
+     }
+ 
++    // wasm-term: no pipes and no processes on WASI; see `backend`.
++    if cfg!(target_os = "wasi") {
++        return crate::backend::spawn_with_backend(crate::backend::ProcessSpawnRequest {
++            program: program.to_os_string(),
++            args: args.to_vec(),
++            cwd: cwd.to_path_buf(),
++            env: env.clone(),
++            arg0: arg0.clone(),
++            stdio: crate::backend::ProcessStdio::Pipes {
++                stdin: matches!(stdin_mode, PipeStdinMode::Piped),
++            },
++        });
++    }
++
+     #[cfg(not(unix))]
+     let _ = inherited_fds;
+ 
+diff --git a/codex-rs/utils/pty/src/pty.rs b/codex-rs/utils/pty/src/pty.rs
+index 035fad8..b4cd2fe 100644
+--- a/codex-rs/utils/pty/src/pty.rs
++++ b/codex-rs/utils/pty/src/pty.rs
+@@ -157,6 +157,18 @@ pub async fn spawn_process(
+         anyhow::bail!("missing program for PTY spawn");
+     }
+ 
++    // wasm-term: no ptys and no processes on WASI; see `backend`.
++    if cfg!(target_os = "wasi") {
++        return crate::backend::spawn_with_backend(crate::backend::ProcessSpawnRequest {
++            program: program.into(),
++            args: args.to_vec(),
++            cwd: cwd.to_path_buf(),
++            env: env.clone(),
++            arg0: arg0.clone(),
++            stdio: crate::backend::ProcessStdio::Pty { size },
++        });
++    }
++
+     #[cfg(not(unix))]
+     let _ = inherited_fds;
+ 

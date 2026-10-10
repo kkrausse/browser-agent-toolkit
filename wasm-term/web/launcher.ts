@@ -47,7 +47,18 @@ export function showLauncher(guests: GuestInfo[]): void {
       await openPersistStore(guest.name).clear();
       forget.textContent = "Forgotten";
     });
-    form.append(element("div", { className: "row" }, [element("button", { type: "submit", textContent: `Run ${guest.name}` }), forget]));
+    const row = element("div", { className: "row" }, [element("button", { type: "submit", textContent: `Run ${guest.name}` }), forget]);
+    if (guest.credentials?.length) {
+      const signOut = element("button", { type: "button", className: "quiet", textContent: "Clear stored credentials" });
+      signOut.addEventListener("click", async () => {
+        const store = openPersistStore(guest.name);
+        for (const path of guest.credentials ?? []) store.save(path, null);
+        await store.flush();
+        signOut.textContent = "Credentials cleared";
+      });
+      row.append(signOut);
+    }
+    form.append(row);
     main.append(element("section", {}, [
       element("h2", { textContent: guest.name }),
       ...(guest.description ? [element("small", { textContent: guest.description })] : []),

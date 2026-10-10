@@ -26,6 +26,8 @@ export interface GuestInfo {
   params?: GuestParam[];
   /** Directories kept across reloads (default for wasm guests: the home directory). */
   persist?: { roots: string[]; exclude?: string[] };
+  /** Persisted files that hold credentials: `&signout=1` and the launcher's "Clear stored credentials" delete exactly these. */
+  credentials?: string[];
   /** Environment the guest always gets (the page's `?env=` wins). */
   env?: Record<string, string>;
   /** A wasm guest's module, when it is not /guests/<name>.wasm; other builds of it by name (`?build=`). */

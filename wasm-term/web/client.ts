@@ -11,6 +11,7 @@
 //   &renderer=canvas|webgl       which terminal renderer (default: WebGL unless it is software-emulated)
 //   &persist=0                   do not load or store the guest's persistent directories
 //   &reset=1                     forget what was stored for this guest first
+//   &signout=1                   forget only the guest's stored credentials first (codex-local: auth.json)
 //
 // The wiring is the whole point of this file:
 //   terminal.onData  → program.write   (pty master input)
@@ -145,6 +146,12 @@ const persist = params.get("persist") === "0"
   ? undefined
   : { namespace: guest, ...(info.persist ?? { roots: ["/home/user"] }) };
 if (persist && params.get("reset") === "1") await openPersistStore(persist.namespace).clear();
+// Sign out without the program's help: forget the stored credential files, keep everything else.
+if (persist && params.get("signout") === "1") {
+  const store = openPersistStore(persist.namespace);
+  for (const path of info.credentials ?? []) store.save(path, null);
+  await store.flush();
+}
 
 const clipboard: ClipboardBridge = {
   readText: () => navigator.clipboard.readText(),

@@ -24,3 +24,25 @@ export const codexGuest: WasmGuest = {
   // CODEX_HOME: config.toml, history.jsonl. Not its scratch or log directories.
   persist: { roots: ["/home/user/.codex"], exclude: ["/home/user/.codex/tmp/", "/home/user/.codex/log/"] },
 };
+
+// The same TUI with the embedded app-server and agent core in the module
+// (main/src/local.rs): nothing behind it but the page server's pass-through
+// HTTP relay. Built by `BIN=local scripts/ship.sh` into dist/site-local/.
+export const codexLocalGuest: WasmGuest = {
+  name: "codex-local",
+  kind: "wasm",
+  description: "codex-cli 0.162.0 entirely in this tab: TUI, app-server and agent core (wasm32-wasip1). Model and sign-in requests leave through this page's relay; files live in the tab",
+  site: join(import.meta.dir, "../dist/site-local"),
+  build: "cd wasm-term/ports/codex && BIN=local scripts/ship.sh",
+  params: [
+    { query: "backend", env: "CODEX_WASM_BACKEND", label: "Backend", default: "mock", hint: "mock = the scripted model server from mock-llm, no sign-in, no tokens. openai = the real service: sign in with ChatGPT (device code) or an API key in the TUI. mock-auth = codex's real sign-in flow against mock-llm's fake auth server" },
+    { query: "relay", env: "WASM_TERM_HTTP_RELAY", label: "HTTP relay", default: "/proxy/http", url: true, hint: "/proxy/http = this page's server forwards the program's HTTP requests to an allowlist of hosts (web/server.ts). Empty = the browser fetches them directly, which only works for servers that allow this page's origin (CORS)" },
+    { query: "dir", env: "CODEX_WASM_CWD", label: "Project directory", default: "/home/user/project", hint: "a directory in this tab's filesystem; kept across reloads when it is below /home/user/project" },
+    { query: "seed", env: "CODEX_WASM_SEED", label: "Seed a sample project", default: "1", hint: "1 = write a few sample files into the project directory if it is empty; 0 = leave it empty" },
+  ],
+  env: { TERM_PROGRAM: "ghostty", CODEX_HOME: "/home/user/.codex" },
+  // Where sign-in leaves its tokens or API key (cli_auth_credentials_store = "file").
+  credentials: ["/home/user/.codex/auth.json"],
+  // CODEX_HOME (config.toml, auth.json, history.jsonl, sessions/) and the project. Not scratch, logs, or SQLite files (never opened here; they would be rewritten whole on every change).
+  persist: { roots: ["/home/user/.codex", "/home/user/project"], exclude: ["/home/user/.codex/tmp/", "/home/user/.codex/log/", ".sqlite", "/thread-writer-locks/"] },
+};
