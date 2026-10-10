@@ -19,9 +19,8 @@
 # The sha256 is only comparable in a checkout at the same absolute path: cargo
 # hashes the path of the bat-sh crate into its symbol names, which decides the
 # order of some functions in the module (the same source gave 4 different
-# modules at 8 paths, 857,466 or 857,471 bytes, the same functions in another
-# order). So the lock also records where it was built, and a build somewhere
-# else is reported, not failed.
+# modules at 8 paths). So the lock also records where it was built, and a build
+# somewhere else is reported, not failed.
 # Needs cargo with the wasm32-unknown-unknown target; wasm-opt comes from
 # vendor/tools/binaryen (fetched on first use, as ports/codex/scripts/ship.sh does).
 set -eu
