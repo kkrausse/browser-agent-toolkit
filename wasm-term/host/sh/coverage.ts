@@ -23,21 +23,22 @@ const filter = new RegExp(process.argv[2] ?? ".");
 const module = new WebAssembly.Module(readFileSync(join(import.meta.dir, "dist/bat_sh.wasm")));
 const cases = readFileSync(join(tests, "codex-cases.tsv"), "utf8").split("\n")
   .filter(line => line && !line.startsWith("#")).map(line => line.split("\t")).map(([group, label, command]) => ({ group: group!, label: label!, command: command!.replaceAll("¶", "\n") }));
-// `setup() { ... }` out of the bash runner: one definition of the fixture for both runners.
-const setup = /^setup\(\) \{\n[\s\S]*?\n\}/m.exec(readFileSync(join(tests, "codex-coverage.sh"), "utf8"))?.[0];
-if (!setup) throw new Error("no setup() in codex-coverage.sh");
+// `setup() { ... }` (and its helpers, `setup_*`) out of the bash runner: one definition of the fixture for both runners.
+const setup = (readFileSync(join(tests, "codex-coverage.sh"), "utf8").match(/^setup\w*\(\) \{\n[\s\S]*?\n\}/gm) ?? []).join("\n");
+if (!setup.includes("setup() {")) throw new Error("no setup() in codex-coverage.sh");
 
 const tmp = mkdtempSync("/tmp/wasm-term-sh-cov-");
 const work = join(tmp, "w");
-function makeFixture(): void {
+const LANG = process.env.LANG ?? "C.UTF-8";
+function makeFixture(group: string): void {
   rmSync(work, { recursive: true, force: true });
-  const made = Bun.spawnSync(["bash", "-c", `${setup}\nsetup "$1"`, "setup", work]);
+  const made = Bun.spawnSync(["bash", "-c", `${setup}\nsetup "$1" "$2"`, "setup", work, group]);
   if (made.exitCode !== 0) throw new Error(`fixture setup failed: ${made.stderr}`);
 }
 
-function reference(command: string): { out: string; err: string; status: number } {
-  makeFixture();
-  const run = Bun.spawnSync(["bash", "-c", command], { cwd: work, env: { PATH: process.env.PATH!, TZ: "UTC", HOME: work }, stdin: "ignore" });
+function reference(group: string, command: string): { out: string; err: string; status: number } {
+  makeFixture(group);
+  const run = Bun.spawnSync(["bash", "-c", command], { cwd: work, env: { PATH: process.env.PATH!, TZ: "UTC", HOME: work, LANG }, stdin: "ignore" });
   return { out: run.stdout.toString(), err: run.stderr.toString(), status: run.exitCode };
 }
 
@@ -52,8 +53,8 @@ function load(vfs: Vfs, from: string, to: string): void {
   }
 }
 
-function ours(command: string): { out: string; err: string; status: number } {
-  makeFixture();
+function ours(group: string, command: string): { out: string; err: string; status: number } {
+  makeFixture(group);
   const vfs = createVfs();
   const encoder = new TextEncoder();
   for (const stub of ["/bin/sh", "/bin/bash", "/usr/bin/bash", "/usr/bin/env"]) vfs.writeFile(stub, new Uint8Array(0));
@@ -68,7 +69,7 @@ function ours(command: string): { out: string; err: string; status: number } {
   const runner = createShRunner({ module, call: host.call, checkpoint, sleep: ms => (checkpoint(), Bun.sleepSync(ms)) });
   let status: number;
   try {
-    status = runner.run({ argv: ["bash", "-c", command], env: ["PATH=/usr/bin:/bin", "TZ=UTC", `HOME=${work}`], cwd: work });
+    status = runner.run({ argv: ["bash", "-c", command], env: ["PATH=/usr/bin:/bin", "TZ=UTC", `HOME=${work}`, `LANG=${LANG}`], cwd: work });
   } catch (thrown) {
     status = 134;
     chunks[1].push(encoder.encode(String(thrown)));
@@ -80,8 +81,8 @@ function ours(command: string): { out: string; err: string; status: number } {
 const count = { same: 0, differs: 0, missing: 0, "no-ref": 0 };
 for (const { group, label, command } of cases) {
   if (!filter.test(`${group}/${label}`)) continue;
-  const expected = reference(command);
-  const got = ours(command);
+  const expected = reference(group, command);
+  const got = ours(group, command);
   const verdict = /command not found/.test(got.err) && got.status === 127 ? "missing"
     : /command not found/.test(expected.err) ? "no-ref"
     : expected.out === got.out && expected.status === got.status ? "same" : "differs";

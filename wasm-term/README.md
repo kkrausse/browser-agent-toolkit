@@ -40,6 +40,10 @@ Testing never calls a real model: `mock-llm/` serves scripted responses.
   custom import module for what WASI lacks: termios get/set, window size,
   signal delivery (SIGWINCH/SIGINT), and outbound network. The exact ABI is
   documented in `docs/abi.md` and is the contract between host and guests.
+- **Commands**: a guest can run shell commands as child processes
+  (`proc_spawn` and friends). The shell is bat-rust's `bat-sh` (bash-like,
+  coreutils and `rg` built in) in its own Worker, on the guest's own
+  filesystem. There are no other programs: no git, python or node.
 - **Blocking syscalls**: the guest blocks in the Worker with
   `SharedArrayBuffer` + `Atomics.wait`; the page is served cross-origin
   isolated (COOP/COEP). This works in Safari/iOS, unlike JSPI.
@@ -54,7 +58,7 @@ Testing never calls a real model: `mock-llm/` serves scripted responses.
 | Path | What |
 | --- | --- |
 | `kernel/` | Rust crate(s): pty + line discipline, compiled to wasm |
-| `host/` | TypeScript: worker runtime, WASI + custom imports, vfs, net bridge, persistence; `host/node/` runs JavaScript programs on the same machine (node-style `process`, `fs`, ...) |
+| `host/` | TypeScript: worker runtime, WASI + custom imports, vfs, net bridge, persistence; `host/node/` runs JavaScript programs on the same machine (node-style `process`, `fs`, ...); `host/proc.ts`, `host/sh/`, `host/shell-worker.ts` are child processes: the shell (`host/sh/build.sh` builds it from a pinned bat-rust commit) |
 | `web/` | Bun dev server (COOP/COEP), the launcher and the page wiring ghostty-web to a program; `web/verify/` browser checks |
 | `guests/` | Test programs built for the guest ABI |
 | `mock-llm/` | Scripted model server + isolated opencode/codex server configs |
@@ -74,12 +78,14 @@ Testing never calls a real model: `mock-llm/` serves scripted responses.
 ## Run it
 
 Needs bun, cargo with the `wasm32-unknown-unknown` and `wasm32-wasip1`
-targets, and network access once (to clone the crossterm fork).
+targets, network access once (to clone the crossterm fork), and for the shell a
+checkout of bat-rust that has the commit named in `host/sh/bat-sh.lock`
+(`BAT_RUST_REPO`, default the `codex-shell` worktree on this machine).
 
 ```sh
 cd wasm-term/kernel && cargo test          # line discipline against termios behaviour
 cd ../web && bun install
-bun run build                               # kernel wasm + guests -> guests/dist/*.wasm
+bun run build                               # kernel wasm + guests -> guests/dist/*.wasm, the shell -> host/sh/dist/bat_sh.wasm
 bun run dev                                 # http://127.0.0.1:4790/
 ```
 
@@ -92,6 +98,7 @@ runs one directly.
 | `tui` | ratatui on crossterm, raw mode, mouse |
 | `async-tui` | tokio + crossterm `EventStream` + WebSocket |
 | `net`, `events` | network descriptors; raw event dump |
+| `proc` | child processes: checks and timings of `proc_*` (`&shell=worker` or `&shell=inline&arg=inline`; `&arg=quick` skips the timings) |
 | `js-demo` | a JavaScript program on the node-style shim (`host/node/demo-guest.ts`) |
 | `opencode` | the real opencode 2.0.26 TUI, attached to a remote `opencode serve` |
 | `codex` | the real codex-cli 0.162.0 TUI (Rust, `wasm32-wasip1`), attached to a remote `codex app-server` |
@@ -102,13 +109,17 @@ syscall rates, and stretches in which the program computed without reading
 input, to the console), `&persist=0` (no saved files), `&reset=1` (forget the
 guest's saved files first), `&signout=1` (forget only its stored credentials first), `&renderer=canvas|webgl` (the terminal renderer;
 by default WebGL, or the 2D canvas when the browser only emulates WebGL in
-software). Each guest's home directory is kept in IndexedDB across reloads;
+software), `&shell=worker|inline|off` (how a guest with a shell runs commands:
+in shell Workers, inside its own Worker, or not at all; default Workers, inline
+on a machine with at most two cores). Each guest's home directory is kept in IndexedDB across reloads;
 opencode keeps its config and state directories, codex its `CODEX_HOME`, codex-local its
 `CODEX_HOME` and its project directory.
 
 In the page's console, `await wasmTerm.readFile(path)`, `wasmTerm.listFiles(dir)`
 and `wasmTerm.download(path)` read files out of the program's filesystem (its
 log, the configuration it wrote), also after it has exited.
+`wasmTerm.program.procs` lists the commands the program has run (status, how
+long each waited for a shell and ran, how many host calls it made).
 
 ### opencode in the browser
 
@@ -195,22 +206,41 @@ Open <http://127.0.0.1:4790/?guest=codex-local>, or the launcher.
 | `backend` | `mock` | `mock`: the scripted model server, no sign-in, no tokens. `openai`: the real service; the TUI asks you to sign in. `mock-auth`: codex's real sign-in flow and ChatGPT-style requests against mock-llm's fake auth server (what `web/verify/codex-local.js` uses) |
 | `relay` | `/proxy/http` | where the program's HTTP requests go: this page's server, which forwards them to an allowlist of hosts. Empty = the browser fetches directly (only servers that allow this origin by CORS) |
 | `dir` | `/home/user/project` | the project directory, in the tab's own filesystem |
-| `seed` | `1` | write a small sample project (`README.md`, `hello.txt`, `src/main.py`, `notes/todo.md`) into the project directory if it is empty |
+| `seed` | `1` | write the sample project (`ports/codex/main/sample/`: a README, three Python files in `src/`, a test, a CSV, notes) into the project directory if it is empty |
 
 The project and `CODEX_HOME` (`/home/user/.codex`: `config.toml`, `auth.json`, `history.jsonl`,
 `sessions/`) are kept in IndexedDB across reloads. Look at them from the page's console:
 `await wasmTerm.listFiles("/home/user/project")`, `await wasmTerm.readFile("/home/user/project/hello.txt")`,
 `wasmTerm.download(path)`. `/resume` in the TUI lists earlier sessions.
 
-The module is 20.2 MB over the wire (brotli) and 70.4 MB to compile, against 11.3 and 38.4
-for the remote `codex` guest.
+**Your own files.** On the launcher, under codex-local: "Import folder" and "Import .zip" copy
+a folder or an archive into `/home/user/project` in this browser's storage (nothing is uploaded;
+`.git`, `node_modules`, `target` and files over 8 MB are left out, at most 5,000 files and 64 MB;
+"replace what is there" empties the project first). Then run codex-local. "Forget saved state"
+empties everything, and the sample project comes back on the next start. Files come out again
+with `wasmTerm.download(path)`.
 
-What works: prompts and streamed replies, `apply_patch` (file edits land in the tab's
-filesystem), sessions and resume, sign-in. What does not: **there is no shell**. The model's
-`exec_command` gets a "no shell in this build" error it can read, and since codex 0.162 has no
-file-reading tool of its own (models use `cat`/`ls`), an agent here can write files but not
-read them. `ports/codex/NOTES.md`, section 8, has the seam a shell plugs into, and the rest of
-what is stubbed. `&env=CODEX_WASM_DEMO_SHELL=1` installs a stand-in that echoes each command.
+The module is 20.3 MB over the wire (brotli) and 70.4 MB to compile, against 11.3 and 38.4
+for the remote `codex` guest; the shell is another 0.86 MB (`/bat_sh.wasm`).
+
+**What works**: prompts and streamed replies, sessions and resume, sign-in, `apply_patch`
+(edits land in the tab's filesystem), and **commands**: the model's `exec_command` and
+`write_stdin`, and your own `!command` in the composer, run in the page's shell
+(`host/proc.ts`; `ports/codex/main/src/shell.rs`) on the same files. A model here can list,
+search and read a project (`rg`, `rg --files`, `grep`, `find`, `ls`, `tree`, `cat`, `nl -ba`,
+`sed -n`, `head`, `tail`, `wc`, `diff`), edit it (`apply_patch`, `sed -i`, redirects,
+`mkdir`/`mv`/`cp`/`rm`) and check its edits. Output streams, exit statuses are real, a command
+can be interrupted (Ctrl-C through `write_stdin`, `/stop` for one left running), and files a
+command writes are persisted like any other.
+
+**What does not**: running anything that is not in the shell. There is no `git`, `python`,
+`node`, `npm`, `cargo`, `make`, compiler or network tool, so an agent can read and change code
+but not run or test it; those commands fail at once with "command not found" (127) or the
+shell's "not available" message. Codex is told so in a short developer message
+(`ports/codex/main/src/environment.md`). `tty: true` gets pipes with a minimal line discipline,
+not a terminal. `ports/codex/NOTES.md`, section 8, has the details, the coverage against real
+bash and the numbers. `&shell=off&env=CODEX_WASM_SHELL=0` runs without a shell (the model's
+commands then get a "no shell in this build" error it can read).
 
 **The relay** (`/proxy/http/<host>[:port]/<path>` on :4790) forwards a request to
 `<origin of host>/<path>` if the host is one of: `127.0.0.1:4791` and `mock-llm.test` (both the
@@ -303,11 +333,20 @@ native captures, markdown, a long reply with wheel scrolling, resize, the
 slash popup, `/status`, the warnings viewer, paste, Shift+Enter, the
 filesystem helpers, history across a reload, a line typed in one burst, the
 approval dialog and `/quit`; `codex-local` runs the embedded build through the relay against the
-mock: plain, markdown and long replies, `apply_patch` edits read back from the filesystem, the
-"no shell" tool error, reload, history and `/resume`, the process seam with a stand-in backend,
-the whole device-code sign-in against mock-llm's fake auth server (code shown, approval, tokens
-stored, refresh, authenticated model request), `/logout`, the API-key path, `&signout=1`, and one
-unauthenticated request for a device code to the real `auth.openai.com`. Screenshots land in
+mock: plain, markdown and long replies, `apply_patch` edits read back from the filesystem, then
+the shell: a command's output and status reaching the model, a turn of six reads (`rg --files`,
+`rg -n`, `nl -ba | sed -n`, `sed -n`, `cat`, `ls -la`), a read / `apply_patch` / verify turn,
+failing commands and missing programs (`git`, `python3`), 60,000 lines of output, `timeout`, a
+running command interrupted by the model (Ctrl-C through `write_stdin`), an interactive process
+typed into with `write_stdin`, Esc during a running command and `/stop`, the user's `!command`,
+persistence of a shell-written file across a reload, history and `/resume`, the no-shell error
+with `&shell=off`, the inline shell, the launcher's zip and folder import and "Forget saved
+state", then the whole device-code sign-in against mock-llm's fake auth server (code shown,
+approval, tokens stored, refresh, authenticated model request), `/logout`, the API-key path and
+`&signout=1`. It also returns what the commands cost (`numbers`). Nothing in it reaches a real
+host unless `CODEX_LOCAL_REAL_AUTH=1` is set, which adds one unauthenticated request for a
+device code to the real `auth.openai.com`. `WASM_TERM_BUILD=names` runs the codex guests' build
+with wasm names. `terminal-functions` also runs the `proc` guest in both shell modes. Screenshots land in
 `docs/screenshots/`.
 
 `cd web && bun verify/profile.ts '<page URL>&build=names'` profiles a guest's
@@ -320,12 +359,14 @@ Both run against another base URL with `WASM_TERM_URL`, e.g. the tailnet one:
 
 `web/webkit/smoke.sh [base URL]` runs the page headless in Playwright's WebKit
 build, at a desktop viewport and with an iPhone device profile (`PROFILE=desktop`
-or `iphone` for one; `GUESTS=opencode` or `codex` for one guest): isolation,
+or `iphone` for one; `GUESTS=opencode,codex,proc,codex-local` to choose guests): isolation,
 the Worker, the opencode home screen, a prompt and its reply; in the iPhone
 profile also the keys row, focus, swipe scrolling and refitting to a
 keyboard-sized viewport. Then the codex guest: that the module downloads,
 compiles and starts at all, a prompt and its reply, `/quit`, and in the iPhone
-profile the keys row against codex (arrow up, Shift+Enter, Ctrl, Esc). Once before:
+profile the keys row against codex (arrow up, Shift+Enter, Ctrl, Esc). Then
+child processes: the `proc` guest's checks in both shell modes, and codex-local
+taking two turns whose tool calls run in the shell. Once before:
 `web/webkit/install.sh`, which puts the browser under
 `vendor/playwright-browsers` and the system libraries it lacks under
 `vendor/webkit-syslibs` (downloaded Ubuntu packages, unpacked; nothing

@@ -9,6 +9,53 @@ Paths used below: **WT** = this worktree's `wasm-term/`; **BR** = the bat-rust w
 `codex-shell`, off `rewrite/rust`). "Ran" means I ran it; "read" means I read the code and
 did not run it; "inferred" means neither.
 
+## 0. Status: built (2026-10-10, later the same day)
+
+Shape d is implemented and is what `?guest=codex-local` runs. This document stays as the
+record of why; what exists is described where it lives:
+
+| Part of the design | Where it is now |
+| --- | --- |
+| 5.1 the `proc_*` imports and the descriptor | `host/proc.ts`, `host/wasi.ts`; the contract is `docs/abi.md` 3.4 |
+| 5.2 `bat_sh.wasm` | built from a pinned bat-rust commit by `host/sh/build.sh` (`host/sh/bat-sh.lock`); bound in `host/sh/wasm.ts`, `host/sh/host.ts` |
+| 5.3 the channel, shell Workers | `host/sh/channel.ts`, `host/shell-worker.ts`, the supervisor in `host/index.ts` |
+| the Rust side | `guests/wasm-term-sys` (`process::Child`), `guests/wasm-term-tokio` (`Child`) |
+| codex | `ports/codex/main/src/shell.rs`, a `ProcessBackend` (NOTES.md section 8) |
+| section 6, the prototype | **removed** (`ports/shell-proto/`, last in commit `156426a`): its host code became `host/sh/` and `host/proc.ts`, its guest `guests/proc`, its coverage runner `host/sh/coverage.ts`. Its measurements below are the prototype's and are kept as the record; current ones are in NOTES.md |
+| section 7 step 5, the missing programs | bat-rust branch `codex-shell` (NOTES.md has the coverage) |
+
+Where the build differs from sections 5 to 7, and why:
+
+- `proc_send` takes a `flags` word (bit 0 = close stdin after these bytes): end of file
+  needs saying, and a zero-length send alone would be ambiguous.
+- The exit event carries `status, signal, queue_us, run_us, host_calls` (20 bytes), so the
+  guest and the page can see what a command cost without a second channel.
+- `proc_spawn` never answers `NOENT`: an unknown `argv[0]` runs and exits 127 with the
+  shell's message, like any unknown command inside a command line. One rule instead of two.
+- Killing a child that will not stop does not reset its channel: the guest's Worker makes
+  a **new** `SharedArrayBuffer` and hands it to the page with `proc_replace`. The dying
+  Worker may still write a request; with a reset channel that request could have been
+  taken for the next child's.
+- A killed child reports `128 + the signal it was sent` also when its Worker had to be
+  terminated (the prototype said 137 for that case whatever was sent).
+- `machine.ts` got wake sources (`addWakeSource`), as planned, and the output flow-control
+  wait was the place the prototype did not cover: it used to sleep on the ack word, where a
+  shell's call could not wake it. It now sleeps on the wake counter; the page bumps that
+  with an ack only while the Worker says it is waiting (`H_OUT_WAITING`), so other guests
+  see no extra wake-ups.
+- One pass of answering shells is capped at 4 ms. Without the cap a command making tens
+  of thousands of file calls kept the guest (codex's TUI) from its own events for the
+  whole run.
+- Consecutive writes of one stream are merged up to 64 KiB per event: a loop of `echo`
+  was one tokio wake-up per line.
+- stdin and a terminal stand-in were step 6 ("when something needs them"); codex's
+  `write_stdin` needs them, so they are in: `proc_send`, and in `shell.rs` a small line
+  discipline for `tty: true` (echo, CR as newline, a line at a time, Ctrl-C, Ctrl-D).
+- `tty: true` is not refused with `NOTSUP`; the interrupt for a process without a terminal
+  goes through a wasi-only `interrupter` on codex's `ProcessDriver` (patch 0011) instead of
+  through the non-unix arms of `utils/pty/src/pipe.rs`, which the seam bypasses.
+- JavaScript guests (the opencode TUI) do not get `proc_*`: nothing asks for it yet.
+
 ## 1. Short answer
 
 Run bat-rust's shell **as it is already built** (`bat_sh.wasm`, 521 KiB, one file) as a

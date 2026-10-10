@@ -880,7 +880,10 @@ measurement. Not established: how a phone's real GPU behaves under the same anim
 A second guest, `?guest=codex-local`: the same TUI with the **embedded app-server and the agent
 core running in the same module, on the one thread**, model and sign-in requests leaving the tab
 through `fetch`. The remote `codex` guest is unchanged in behaviour and size. Everything in this
-section is **[ran]** in Chrome through `web/verify/run.sh codex-local` (39 checks) unless marked.
+section is **[ran]** in Chrome through `web/verify/run.sh codex-local` (54 checks) unless marked.
+
+Fifth session: **commands run.** The process seam below has a real backend, the page's shell
+("The shell behind the seam"), so the agent can read what it edits.
 
 ### Two builds from one source tree
 
@@ -910,7 +913,8 @@ still wins) and leaves `$CODEX_HOME/config.toml` alone:
 | `approval_policy="never"` | nothing to approve without a sandbox; also keeps the guardian reviewer (a thread) out |
 | `cli_auth_credentials_store="file"` | the keyring crate's fallback on this target is an in-memory mock |
 | `features.daemon_auto_start=false` | the embedded path otherwise tries to start a daemon process and treats failure as fatal |
-| `features.shell_snapshot=false`, `plugins`, `remote_plugin`, `plugin_sharing`, `apps` = false | each spawns a process or a thread at start-up, or phones home |
+| `developer_instructions=<main/src/environment.md>` | what this machine is, for the model: which commands exist and which do not (below, "What the model is told"). Not with `CODEX_WASM_SHELL=0` |
+| `features.shell_snapshot=false`, `plugins`, `remote_plugin`, `plugin_sharing`, `apps` = false | each spawns a process or a thread at start-up, or phones home. The snapshot would run a dump script (`declare -f`, `alias -p`, `export -p`) in a login shell and source its result before every command: nothing in it applies to bat-sh |
 | `check_for_update_on_startup=false`, `analytics.enabled=false`, `feedback.enabled=false` | no update check, no analytics; `/feedback` would panic (nested `block_on`) |
 
 `CODEX_WASM_BACKEND` (the page's `backend=`) adds the rest:
@@ -922,7 +926,11 @@ still wins) and leaves `$CODEX_HOME/config.toml` alone:
 | `openai` | nothing: the real service |
 
 Other environment: `CODEX_WASM_CWD` (project directory in the vfs), `CODEX_WASM_SEED=1` (write
-four sample files there if it is empty), `CODEX_WASM_DEMO_SHELL=1` (below), `CODEX_WASM_MOCK_URL`.
+the sample project of `main/sample/` there if it is empty), `CODEX_WASM_SHELL=0` (leave the
+no-shell default backend in place), `CODEX_WASM_MOCK_URL`. `PATH` is deliberately **not** set
+for codex itself: `std::env::split_paths` panics on WASI (`library/std/src/sys/paths/unsupported.rs`),
+and with a `PATH` every lookup of a program (`which`) calls it **[ran]**: the module aborted at
+start-up. Commands get `PATH=/usr/local/bin:/usr/bin:/bin` from the backend.
 
 ### HTTP: the reqwest fork's WASI transport, and the relay
 
@@ -1064,23 +1072,179 @@ pub fn set_process_backend(backend: Arc<dyn ProcessBackend>) -> Option<Arc<dyn P
 - **Exit codes** on WASI: std cannot build a non-success `ExitStatus`, so `exec()`'s result
   carries the code beside it (`RawExecToolCallOutput::wasi_exit_code`). Unified exec uses plain
   `i32` throughout.
+- **Interrupt** (fifth session, patch 0011). Upstream's driver has a terminator and nothing
+  else; `write_stdin("\u{3}")` to a process without a terminal ends in
+  `ClosureTerminator::signal`, which answers "unsupported" for every driver. On WASI
+  `ProcessDriver` has one more field, `interrupter: Option<Box<dyn FnMut() + Send + Sync>>`,
+  and `signal(Interrupt)` calls it.
 - **The default**, `NoShell`, fails every spawn with `NO_SHELL_MESSAGE`. The model reads
   `exec_command failed: CreateProcess { message: "Rejected(\"Failed to create unified exec
   process: no shell in this build: codex is running inside a browser tab, where commands cannot
   be executed. Do not retry; ...\")" }`, the TUI shows `Failed (exit -1)` with the message,
-  and the turn goes on **[ran]**.
-- **A worked example**: `ports/codex/main/src/demo_shell.rs` (60 lines), installed by
-  `CODEX_WASM_DEMO_SHELL=1`. It runs nothing: it answers each command with one stdout line that
-  repeats the request, one stderr line and exit code 0. **[ran]** the model's `exec_command`
-  through it: `Ran echo mock-llm-tool-ok && pwd`, the line
-  `demo-shell: argv=["/bin/sh", "-lc", "echo mock-llm-tool-ok && pwd"] cwd=/home/user/project env=23 vars stdio=Pipes { stdin: false }`
-  as the tool result, turn completed. Not run: `Pty`, `write_stdin`, termination, `!command`
-  (`wasi_exec`).
-- **Where a real shell plugs in**: `local.rs`, before the runtime starts:
-  `codex_utils_pty::backend::set_process_backend(Arc::new(MyShell))`.
+  and the turn goes on **[ran]** (`&shell=off&env=CODEX_WASM_SHELL=0`).
+- **Where the shell plugs in**: `local.rs`, before the runtime starts: `shell::install()`,
+  which is `codex_utils_pty::backend::set_process_backend(Arc::new(PageShell))`.
 
 One thing the shell effort gets for free: `exec_command` with an `apply_patch <<'EOF'` heredoc
 never reaches the seam; codex intercepts it and applies the patch in-process.
+
+### The shell behind the seam (fifth session)
+
+`ports/codex/main/src/shell.rs` (about 220 lines) implements `ProcessBackend` on the wasm-term
+host's child processes (`proc_spawn` / `proc_recv` / `proc_send` / `proc_signal`,
+`docs/abi.md` 3.4, through `wasm_term_tokio::Child`). The host runs each command in bat-rust's
+`bat-sh` (a bash-like shell with the coreutils, `rg`, `diff` and so on built in; one 0.86 MB wasm
+module pinned by `host/sh/bat-sh.lock`) in a shell Worker, on the vfs codex's own file tools
+use. `SHELL-DESIGN.md` is the why; section 0 there lists where the build differs from the plan.
+
+What codex asks for, and what it gets **[ran]** unless marked:
+
+| Request | From | What the backend does |
+| --- | --- | --- |
+| `Pipes { stdin: false }`, argv `["/bin/bash", "-lc", "<command>"]` | every `exec_command` without `tty` (the default), the user's `!command` (`wasi_exec`), `command/exec` | `proc_spawn` without stdin. One task per child forwards stdout and stderr events to the driver's two broadcast channels in 8,192-byte chunks, then drops both senders and sends the exit code |
+| `Pty { size }` | `exec_command` with `tty: true`; only such a process accepts `write_stdin` text | a **pipe-backed stand-in**: `proc_spawn` with stdin; stdout and stderr merged into the one stream a pty has; a small line discipline in front of stdin (below). `resize` is accepted and ignored |
+| `Pipes { stdin: true }` | exec-server and app-server process APIs **[read]**; not reached by the TUI | as the first, with `writer_tx` forwarded to `proc_send` and end of file when the sender is dropped. Not run through codex; `guests/proc` runs the same host path |
+| terminator | `/stop`, session shutdown, dropping the handle, `wasi_exec`'s timeout | `proc_signal(KILL)`: the child ends at its next host call, or its Worker is replaced after 250 ms; status 137 |
+| interrupter | `write_stdin("\u{3}")` to a process without a terminal | `proc_signal(INT)`: status 130 |
+
+The terminal stand-in, and how it differs from a pty:
+
+- input is echoed to the output, `\r` and `\n` both end a line, and input reaches the child a
+  line at a time (canonical mode); backspace edits the pending line; **Ctrl-C** (0x03) echoes
+  `^C` and sends SIGINT; **Ctrl-D** (0x04) on an empty line is end of file, otherwise it
+  delivers the pending line without a newline;
+- not there: `isatty` is false in the child, no window size (`stty size`, `$COLUMNS`), no raw
+  mode (a program that wants single keys gets lines), output newlines are `\n` not `\r\n`,
+  no job control (Ctrl-Z), no terminal queries answered by the child's side. bat-sh has no
+  full-screen programs, so in practice the difference is the missing `\r`.
+
+How codex finds the shell: `shell-command`'s detection has no `$SHELL` path on a non-unix
+target, tries `which("bash")` (no `PATH`: nothing) and then the fixed paths; the host plants
+empty files at `/bin/bash`, `/bin/sh`, `/usr/bin/bash`, `/usr/bin/env`, so it settles on
+`/bin/bash` and sends `["/bin/bash", "-lc", cmd]`. The login flag means nothing to bat-sh.
+The environment is codex's own (the page's `HOME`, `USER`, `TERM`, `LANG`, `TZ`, ...) plus
+unified exec's `NO_COLOR=1 TERM=dumb PAGER=cat GIT_PAGER=cat CODEX_CI=1 ...`, plus `PATH`.
+
+Behaviour worth knowing **[ran]** (`web/verify/codex-local.js`, mock scenarios `shell-*`):
+
+- A command's output streams into codex while it runs; the TUI stays live (spinner, Esc).
+  **Esc does not kill a running command**: as natively, the turn is interrupted and the
+  process stays as "1 background terminal running"; `/stop` (or `/ps`) closes it, which is
+  the terminator.
+- `exec_command` has **no timeout parameter** in 0.162 (`timeout_ms` is not in the schema the
+  model sees). A command that outlives `yield_time_ms` (default 10 s) comes back "Process
+  running with session ID n"; the model polls it with `write_stdin("")`, interrupts it with
+  `"\u{3}"`, or uses the shell's own `timeout`.
+- Output is truncated for the model by codex as natively (60,000 lines of `seq`: "Warning:
+  truncated output (original token count: 87224)", 40 kB kept); every byte is still produced
+  and carried, with back-pressure from codex's reader to the shell's `write`.
+- `git` is not there, so everything in codex that shells out to git (repo detection, turn
+  diffs, `/review`, ghost commits) finds no repository, as in any directory without one.
+  Those go through `tokio::process`, not the seam, and fail `Unsupported` before reaching
+  the shell.
+- Files a command writes are reported to the page's persistence when the command ends (only
+  if it changed anything), so `!echo x > f` survives a reload.
+- Inline mode (`&shell=inline`, or automatically with at most two cores, or when a Worker
+  cannot start): the command runs inside `proc_spawn`. The TUI is frozen for its length, a
+  process cannot be typed into, and nothing can interrupt it. Reads are sub-millisecond
+  either way; it is a fallback, not a mode to choose.
+
+#### What the model is told
+
+`main/src/environment.md`, passed as `developer_instructions` (codex's own config key; it
+becomes a developer message at the start of every thread, beside AGENTS.md handling, without
+putting a file into the user's project). It says: a browser tab, an emulated shell with
+built-in tools (the list), no git/python/node/compilers/network tools, read with
+`rg`/`sed -n`/`nl -ba`, edit with `apply_patch`, cannot run or test code. **[ran]** that the
+text reaches the model request (the mock records the instructions it receives); what a real
+model does with it is **[inferred]**: no real model was called.
+
+#### Coverage against real bash
+
+bat-rust's differential cases (`crates/bat-sh/tests/codex-cases.tsv`, branch `codex-shell`):
+each command line is run by the machine's bash, with the machine's real `rg` 15.1, GNU `diff`,
+`nl`, gawk and so on, and by bat-sh, on the same files; "same" means equal stdout and exit status.
+
+| | cases | same | differs | missing ("command not found") |
+| --- | --- | --- | --- | --- |
+| the 215 cases of the design study, before this session | 215 | 147 | 28 | 40 |
+| the same 215 now (native bat-sh, `codex-coverage.sh`) | 215 | 173 | 19 | 23 |
+| 312 cases added with the new commands | 312 | 297 | 15 | 0 |
+| all, native | 527 | 470 | 34 | 23 |
+| all, **through this integration** (pinned `bat_sh.wasm` on the vfs, `bun host/sh/coverage.ts`) | 527 | 468 | 36 | 23 |
+
+All **[ran]**. Added, each compared with the real tool: `rg` (102 cases, 99 same), `nl` (15),
+`diff` (37, 36 same), `awk` (66; 64 same natively, 62 through the adapter), `timeout` (12),
+arrays / `<( )` / `BASH_REMATCH` (24), and `base64`, `sha256sum`/`sha1sum`/`md5sum`, `tree`,
+`cmp`, `paste`, `comm`, `expr`, `fold`, `column -t`, `od`, `xxd`, `hexdump -C`,
+`find -regex/-printf` (47 together).
+
+What differs or is missing, by how much a model will notice:
+
+- **Programs that are not there** (missing, 127 at once): `git` (with its own message: "git:
+  not available in this environment (no git; use rg/find/ls/diff)"), `python`/`python3`,
+  `node`, `pip`, `cargo`, `make`, `gcc`, `perl`, `ruby`, `jq`, `curl`, `wget`, `sudo`, `tar`,
+  `gzip`, `bc`, `file`, `dd`, `strings`, `split`, `truncate`, `pushd`/`popd`. `npm test` runs
+  the package.json script through the shell (bat-rust's stub); `npm install` says it cannot.
+- **`rg`**: output order is always sorted by path (real rg's is not deterministic); `.gitignore`
+  applies even without a `.git` directory; `-U`/`--multiline`, `--json`, `--pre`, `-z`,
+  `--passthru`, `--stats` are refused with status 2; the regex engine (regex-lite) has no
+  look-around, no back-references, no `\p{..}`, and `\w \d \s (?i)` are ASCII-only; `-w` is
+  `\b...\b`; a NUL anywhere makes a file binary. Types use ripgrep's names (`-t rust`, `-t py`).
+- **`diff`**: normal and unified output only (`-c`, `-y`, `-p` refused with status 2). Hunks
+  match GNU diff's (a port of its steps; about 2,000 generated pairs compared by the bat-sh
+  work, **[not rerun here]**).
+- **`awk`**: no `getline` (refused, status 2), no arrays of arrays, `BEGINFILE`/`ENDFILE`,
+  `switch`; `for (k in a)` order is insertion order. Everything refused fails loudly rather
+  than printing something else.
+- **`timeout`** ends `sleep`, loops, `awk`, `rg`, `find` and anything between two commands,
+  not one builtin in the middle of its work (`sort` of a huge input) and not a read of stdin.
+- **Shell**: pipelines run stage after stage (`yes | head` never ends: use codex's interrupt),
+  `sort -k2,2nr` (flags attached to a key) is wrong, `head -c N /dev/zero` never returns,
+  `tree` sorts by byte (as `LC_COLLATE=C`).
+- Version strings (`npm --version`, `awk --version`) are bat-sh's own.
+
+The bat-rust branch is `codex-shell`, 9 commits on `a2e480d` (the last is `6427fd7`), not
+pushed; none of it is on bat-rust's `main` or its `rewrite/rust` branch. `bat_sh.wasm` grew
+from 0.48 MB to 0.86 MB as built here (awk is about 180 kB of that), 0.36 MB gzipped.
+
+#### Numbers
+
+All **[ran]** on diesel2 (12 cores, shared Chrome 154 under Xvfb, canvas renderer), the shipped
+`codex-local` build, during `web/verify/run.sh codex-local`; the page records every child
+(`wasmTerm.program.procs`: time from `proc_spawn` until a shell had it, run time, host calls).
+
+| As codex sees it (22 commands of the verify run) | |
+| --- | --- |
+| waiting for a shell (spawn latency): `proc_spawn` until the command is running | median 0.08 ms, 0.05 to 0.45 ms |
+| `rg -n TODO src` over the sample project (9 files): spawn to exit | 1.1 ms, 38 host calls |
+| `rg -n "^def " src` | 2.0 ms, 38 calls |
+| `rg --files \| sort` | 3.0 ms, 23 calls |
+| `rg -n greet src` (the user's `!command`) | 1.4 ms, 38 calls |
+| the five `rg` runs together | 1.0 to 3.0 ms, median 1.9 |
+| the same two reads with the inline shell (`&shell=inline`) | 0.5 and 1.2 ms |
+| `/stop` typed until the background `sleep 120` is dead | 0.63 s, nearly all of it typing and the TUI |
+| a shell Worker | one, started before the first command; none replaced |
+
+The model-visible cost of a command is therefore codex's own: a tool call that runs `rg`
+shows "Worked for <1s", and a six-command turn against the mock takes about a second, almost
+all of it the mock's streaming delay.
+
+The host by itself (`guests/proc` in the same browser, `web/verify/run.sh terminal-functions`):
+
+| | Chrome 154 | WebKit 27.2 (Playwright, Linux), desktop / iPhone profile |
+| --- | --- | --- |
+| `echo hi`: spawn to exit event (n = 300) | median 0.11 ms (0.07 to 0.9) | 0.10 / 0.12 ms |
+| of which until the shell is running | 0.015 ms | |
+| the very first command of a page | 28 ms, 8.5 of it waiting for the Worker | |
+| `find tree -type f \| wc -l`, 2,000 files (2,083 calls) | 20 ms | |
+| `grep -rn NEEDLE tree \| wc -l`, 2,000 files, 6.5 MB (10,043 calls) | 219 ms | 260 / 250 ms |
+| kill of `sleep 30`: signal to exit event | 2.5 ms | |
+| kill of `while :; do :; done` (Worker replaced) | 251.5 ms | 252 ms |
+| 8 MiB of output with a reader that starts 200 ms late | 244 ms, 33 events | |
+
+In WebKit, codex-local's own `rg` calls took 1.7 to 9.4 ms (the first one of a page is the
+slow one). Nothing was measured on a phone or on a machine with fewer cores.
 
 ### Tools
 
@@ -1089,10 +1253,10 @@ never reaches the seam; codex intercepts it and applies the patch in-process.
   existing file and add of a new one, read back with `wasmTerm.readFile`, still there after a
   reload.
 - `view_image`: plain I/O **[read]**; not run.
-- There is **no `read_file`, `list_dir` or `grep_files` tool in 0.162**: models read and list
-  through the shell (`cat`, `ls`, `rg`). Until a shell is plugged in, a model can only write
-  blind or work from what the user pastes. `AGENTS.md` and the environment context are still
-  read by codex itself.
+- `exec_command`, `write_stdin`: the shell above. There is **no `read_file`, `list_dir` or
+  `grep_files` tool in 0.162**: models read and list through the shell (`cat`, `ls`, `rg`),
+  which is why the shell mattered. `AGENTS.md` and the environment context are still read by
+  codex itself.
 - `update_plan`, `request_user_input`: no I/O; not run.
 
 ### Sign-in
@@ -1144,10 +1308,12 @@ brotli; 38.7 / 11.4 before).
 | --- | --- | --- | --- |
 | `codex-local`, `wasm` (names kept; `&build=names`) | 201.3 | 45.6 | 39.5 (quality 3) |
 | `codex-local`, `wasm-ship` (fat LTO) | 82.1 | | |
-| `codex-local`, `wasm-ship` + `wasm-opt -Oz`, **shipped** | 70.4 | 26.6 | 20.2 |
+| `codex-local`, `wasm-ship` + `wasm-opt -Oz`, **shipped** | 70.4 | 26.6 | 20.3 |
 | `codex` (remote), shipped, for comparison | 38.4 | 14.7 | 11.3 |
 
-So running the agent in the tab costs 32 MB of module (8.9 MB over the wire). `ship.sh` for the
+So running the agent in the tab costs 32 MB of module (9.0 MB over the wire). The shell
+backend, the larger sample project and the instruction text added 12 kB to the module
+(70,426,037 to 70,438,302 bytes); the shell itself is a separate 0.86 MB download (`/bat_sh.wasm`, 0.36 MB gzipped). `ship.sh` for the
 local build took about 16 minutes here with the dependencies already compiled for the profile.
 
 In Chrome on this machine (shared Chrome under Xvfb, canvas renderer, module served from
@@ -1160,17 +1326,29 @@ phone.
 
 ### Remaining work, in order
 
-1. A shell behind the seam (`ports/codex/SHELL-DESIGN.md`, a separate effort). Without it the
-   agent can write files and cannot read them.
-2. A real sign-in by the user (the steps are in the README); then what Cloudflare does, and
-   which model the plan defaults to.
-3. `@` file search without threads (a single-threaded walk and match).
-4. The state database: either sqlx's SQLite worker made to run inline, or leave it out. Without
-   it: no paginated history, no goals, no queue, no thread search by name.
-5. Size: the local module is about twice the remote one; the cuts listed under "Module" in
+1. **Programs.** The agent can read and edit, not run: no interpreter, compiler, test
+   runner or git. Each needs either a real program as a wasm guest (shape c of
+   SHELL-DESIGN.md: `sh_spawn`/`sh_pipe`/`sh_wait` are bound to "no such program" in
+   `host/sh/wasm.ts`) or bat-rust's kernel for `node`. `git` first: codex itself wants it
+   (repo detection, diffs, `/review`), and models reach for `git diff` after editing.
+2. A real sign-in by the user (the steps are in the README); then what Cloudflare does,
+   which model the plan defaults to (a code-mode model needs a host process), and what a
+   real model does in this environment: everything here was run against the scripted mock.
+3. A real terminal for `tty: true` only if something needs it: bat-sh has no full-screen
+   program, so the line-discipline stand-in covers what there is.
+4. Persistence of a large project: files are stored whole in IndexedDB, and the scan after a
+   command that changed something walks every persistent file. Fine for the sample and for
+   imports within the launcher's limits (5,000 files, 64 MB); a cloned repository needs
+   bat-rust's image-and-journal store or OPFS.
+5. `@` file search without threads (a single-threaded walk and match).
+6. The state database: either sqlx's SQLite worker made to run inline, or leave it out.
+   Without it: no paginated history, no goals, no queue, no thread search by name.
+7. JavaScript guests (the opencode TUI) have no `proc_*`: their Worker waits with
+   `Atomics.waitAsync` and would need the same serving in its loop.
+8. Size: the local module is about twice the remote one; the cuts listed under "Module" in
    section 7 (network proxy, starlark) apply here too.
-6. Rollout files are saved whole on every sync (the persistence layer stores whole files):
-   long sessions rewrite a growing file. Fine at the sizes run here.
+9. Nothing was measured on a phone. A real iPhone has fewer fast cores than this machine,
+   and the shell's speed depends on two threads handing calls back and forth.
 
 ## 9. Rules followed
 
@@ -1188,6 +1366,20 @@ measurements used a private headless Chrome started by Playwright from `web/node
 the shared one. binaryen 123 was added under `wasm-term/vendor/tools/binaryen`; nothing was
 installed system-wide. The dev server unit was restarted several times and is running; the
 Docker backend and the tailscale serve entry were left as they were.
+
+Fifth session (the shell): `~/.codex` and the user's opencode/codex state were not touched; no
+model provider was called and no real auth host was contacted (the verify script's one request to
+`auth.openai.com` is now opt-in, `CODEX_LOCAL_REAL_AUTH=1`, and was not set); everything ran
+against mock-llm. The mock container was rebuilt twice with `mock-llm/up.sh` for the new
+scenarios, the dev server unit restarted several times; both are running, as is the one tailscale
+serve entry, untouched. A second copy of the mock ran on loopback port 47951 for the Bun harness
+and was stopped. bat-rust was changed only in its `codex-shell` worktree and branch, nothing
+pushed. One thing that should not have happened: the first version of the new differential cases
+for missing programs ran `pip install x` and `curl -s https://example.com` once under the
+machine's real bash (pip exited 1; curl fetched the page); the cases now only ask for
+`--version`. Every patch series was re-applied to a fresh worktree of its base and compared equal
+to its port branch again (codex with patch 0011, tokio, 15 forks). Toolchains: nothing new;
+`vendor/bat-sh-src` and `vendor/bat-sh-target` are the shell's sources and build directory.
 
 Re-applying the series (what "confirmed" means above):
 
