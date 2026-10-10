@@ -1,0 +1,11 @@
+<!doctype html><meta charset="utf-8"><title>esbuild shim in Chrome</title><pre id="out">running…</pre>
+<script type="module">
+// Each measurement in a new worker (a new "process"), shim and esbuild-wasm alternating.
+const runs = +(new URLSearchParams(location.search).get('n') ?? 5);
+const once = kind => new Promise((done, fail) => { const worker = new Worker('worker.js?' + kind); worker.onmessage = e => { worker.terminate(); done(e.data); }; worker.onerror = e => fail(new Error(e.message)); worker.postMessage(kind); });
+const results = { userAgent: navigator.userAgent, isolated: crossOriginIsolated, shim: [], old: [] };
+for (let i = 0; i < runs; i++) { results.shim.push(await once('shim')); results.old.push(await once('old')); }
+document.getElementById('out').textContent = JSON.stringify(results, null, 1);
+await fetch('/result', { method: 'POST', body: JSON.stringify(results) });
+window.__done = results;
+</script>
