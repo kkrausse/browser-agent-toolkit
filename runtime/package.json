@@ -1,0 +1,10 @@
+{
+  "name": "@bat/runtime",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun build.ts",
+    "harness": "bun harness/server.ts",
+    "typecheck": "tsc --noEmit -p ."
+  }
+}
