@@ -97,7 +97,12 @@ async function spawn(pid: number) {
  * (it parks at its next lock acquisition), wait until it holds none, then
  * terminate. The stack is freed later, once the worker is certainly gone.
  */
+const retired = new WeakSet<Proc>()
 function retire(proc: Proc, graceMs: number) {
+  // Once only: a worker can be reported both by its own message and by the kernel, and a
+  // second pass freed the thread record twice (the page then spun on a kernel lock).
+  if (retired.has(proc)) return
+  retired.add(proc)
   if (procs.get(proc.pid) === proc) procs.delete(proc.pid)
   const x = k.x
   const finish = () => {
