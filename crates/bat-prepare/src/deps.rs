@@ -132,6 +132,10 @@ pub struct DepsReport {
     pub removed_packages: Vec<String>,
     /// Workspace mode: store packages only other members needed, dropped before `before`.
     pub unreachable_packages: u64,
+    /// Store ids of packages that are not from the lockfile (workspace members, `file:`
+    /// directories); they live in `node_modules/.linked` and travel in the layer image.
+    #[serde(default)]
+    pub local_packages: Vec<String>,
     pub removed_files: u64,
     pub removed_dangling_links: u64,
     pub install_ms: u64,
@@ -595,6 +599,82 @@ fn relocate_workspace(stage_root: &Path, project: &Project, guest: &Path) -> Res
     Ok((node_modules, unreachable))
 }
 
+/// Directory, beside the package store, that holds the packages which do not come from
+/// the lockfile (see [`split_local`]). It is packed as its own small image.
+pub const LOCAL_STORE: &str = ".linked";
+
+/// Is this store entry a package built from local files rather than fetched at a locked
+/// version? Workspace members (`<name>@workspace`, written by `relocate_workspace`) and
+/// `file:` dependencies; the policy's shim packages are local too but are part of the
+/// tool, not of the app, and stay in the store.
+fn is_local_store_id(id: &str) -> bool {
+    id.ends_with("@workspace") || (id.contains("@file+") && !id.contains("@file+.bat-shims+"))
+}
+
+/// Move the store entries of local packages from `node_modules/.bun/<id>` to
+/// `node_modules/.linked/<id>` and re-point every relative link that crosses the move.
+///
+/// What a visitor's browser keeps is one image per content hash. A workspace-linked
+/// package (the app's own library, rebuilt all the time) inside the 240 MB dependency
+/// image gave that image a new hash on every rebuild; with its files in a directory of
+/// their own, they can travel in a second, small image mounted there, and the big one
+/// depends only on the lockfile and the policy. The package's own dependency links stay
+/// beside it (`.linked/<id>/node_modules/<dep>` → `../../../.bun/<dep id>/…`), so
+/// resolution from inside the package is unchanged.
+/// Returns the moved ids.
+pub fn split_local(node_modules: &Path) -> Result<Vec<String>> {
+    let store = node_modules.join(".bun");
+    let local = node_modules.join(LOCAL_STORE);
+    let mut ids = Vec::new();
+    if let Ok(entries) = fs::read_dir(&store) {
+        for entry in entries {
+            let entry = entry?;
+            let id = entry.file_name().to_string_lossy().into_owned();
+            if entry.file_type()?.is_dir() && is_local_store_id(&id) {
+                ids.push(id);
+            }
+        }
+    }
+    ids.sort();
+    if ids.is_empty() {
+        return Ok(ids);
+    }
+    let moved = |path: &Path| -> PathBuf {
+        match path.strip_prefix(&store) {
+            Ok(rest) if rest.components().next().is_some_and(|c| ids.iter().any(|id| c.as_os_str() == id.as_str())) => local.join(rest),
+            _ => path.to_path_buf(),
+        }
+    };
+    // Every relative link, with what it points at, before anything moves.
+    let mut links: Vec<(PathBuf, PathBuf, PathBuf)> = Vec::new();
+    visit(node_modules, &mut |path, meta| {
+        if meta.file_type().is_symlink() {
+            let target = fs::read_link(path)?;
+            if target.is_relative() {
+                let resolved = normalize(&path.parent().expect("link parent").join(&target));
+                links.push((path.to_path_buf(), target, resolved));
+            }
+        }
+        Ok(())
+    })?;
+    fs::create_dir_all(&local)?;
+    for id in &ids {
+        fs::rename(store.join(id), local.join(id)).with_context(|| format!("move local package {id}"))?;
+    }
+    for (link, target, resolved) in links {
+        let (new_link, new_resolved) = (moved(&link), moved(&resolved));
+        if new_link == link && new_resolved == resolved {
+            continue;
+        }
+        let new_target = relative_to(new_link.parent().expect("link parent"), &new_resolved);
+        if new_target != target {
+            fs::remove_file(&new_link)?;
+            std::os::unix::fs::symlink(&new_target, &new_link)?;
+        }
+    }
+    Ok(ids)
+}
+
 /// Real package directories in an isolated-linker tree: `.bun/<id>/node_modules/<name>`.
 fn package_roots(node_modules: &Path) -> Result<Vec<(PathBuf, PathBuf)>> {
     let store = node_modules.join(".bun");
@@ -734,6 +814,7 @@ pub fn prepare(options: DepsOptions) -> Result<Deps> {
     } else {
         (stage.join("node_modules"), Vec::new())
     };
+    let local_packages = split_local(&node_modules)?;
     let before = tree_stats(&node_modules)?;
     let prune_started = Instant::now();
 
@@ -855,7 +936,7 @@ pub fn prepare(options: DepsOptions) -> Result<Deps> {
         node_modules,
         report: DepsReport {
             installer, workspace: project.is_workspace(), before, after, substitutions: applied, removed_packages,
-            unreachable_packages: unreachable_packages.len() as u64, removed_files, removed_dangling_links,
+            unreachable_packages: unreachable_packages.len() as u64, local_packages, removed_files, removed_dangling_links,
             install_ms, prune_ms: prune_started.elapsed().as_millis() as u64,
         },
     })

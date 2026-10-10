@@ -25,6 +25,10 @@ export interface EditorManifest {
   format: 'bat-prepared-v1';
   /** Absent only in a manifest written for the development fake host. */
   image?: { file: string; bytes: number; sha256: string; mount: string } & Record<string, unknown>;
+  /** Images mounted over `image`, in order: the packages that are not from the lockfile
+   * (workspace members, `file:` directories), so that rebuilding one of them does not give
+   * the large dependency image a new identity. */
+  layers?: ({ file: string; bytes: number; sha256: string; mount: string } & Record<string, unknown>)[];
   programs?: { name: string; file: string; modules: string[] }[];
   launch: { preview: LaunchDescription; agent?: LaunchDescription };
   /** Guest directory the project lives in. */

@@ -129,7 +129,7 @@ const validPath = (path: string) => path.startsWith('/') && !path.split('/').sli
 export async function installDerived(fs: RuntimeFs, manifest: EditorManifest, manifestUrl: string, signal?: AbortSignal): Promise<{ installed: number }> {
   const derived = manifest.derived;
   if (!derived) return { installed: 0 };
-  const identity = `${derived.file} ${manifest.image?.file ?? ''}`;
+  const identity = [derived.file, manifest.image?.file ?? '', ...(manifest.layers ?? []).map(layer => layer.file)].join(' ');
   const have = await fs.readFile(derivedMarker).then(bytes => new TextDecoder().decode(bytes), () => '');
   if (have === identity) return { installed: 0 };
   const response = await fetch(new URL(derived.file, manifestUrl), { signal });

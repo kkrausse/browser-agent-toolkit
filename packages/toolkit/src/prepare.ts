@@ -28,6 +28,14 @@ export interface PrepareOptions {
    * `$BAT_RUNTIME_DIR`, then `runtime/` beside this module (the published package), then
    * `runtime/dist` in an enclosing repository (`bun runtime/build.ts`). */
   runtimeDir?: string;
+  /** A start-up order file (`bat-prepare order`, from a recorded first open): the file
+   * bodies a start-up reads are laid out first in the image, so a visitor's first open can
+   * start while the rest of the image is still downloading. Paths the tree no longer has
+   * are ignored. Changing it gives the image a new identity. */
+  startupOrder?: string;
+  /** zstd level (1–19) of the copy of the image browsers download. Default 9; 19 is about
+   * 14% smaller and takes tens of seconds when the dependency tree changes. */
+  compressionLevel?: number;
   /** Write only the manifest (launches and project files), no image: for development
    * against the fake host (`./fake`), which runs the programs natively. */
   manifestOnly?: boolean;
@@ -128,6 +136,8 @@ export async function prepare(options: PrepareOptions): Promise<EditorManifest> 
     ...Object.entries(options.files ?? {}).flatMap(([guest, local]) => ['--file', `${guest}=${resolve(local)}`]),
     ...(options.preview ? ['--preview', JSON.stringify(options.preview)] : []),
     ...(options.openCodeDir ? ['--opencode', resolve(options.openCodeDir)] : []),
+    ...(options.startupOrder ? ['--order', resolve(options.startupOrder)] : []),
+    ...(options.compressionLevel ? ['--zstd-level', String(options.compressionLevel)] : []),
   ]);
   await installRuntime(outDir, findRuntime(options.runtimeDir));
   return JSON.parse(await readFile(manifestPath, 'utf8'));

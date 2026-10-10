@@ -83,6 +83,9 @@ pub struct PackOptions<'a> {
     /// Guest paths whose compiled code goes to a program script instead of the image:
     /// the entry keeps facts and blob, gets `IN_PROGRAM`, and the code is returned.
     pub program_modules: HashSet<String>,
+    /// Bodies to lay out first, in order: `(guest path, original body, module record)`.
+    /// Paths the image does not have are ignored (a start-up trace outlives a version bump).
+    pub first: Vec<(String, bool, bool)>,
 }
 
 pub struct PackOutput {
@@ -105,6 +108,9 @@ pub struct PackStats {
     /// Modules with facts but no second body (compiled text equals the source, or JSON).
     pub facts_only_modules: u64,
     pub program_modules: u64,
+    /// Entries of the start-up order that were found and laid out first.
+    #[serde(default)]
+    pub first_files: u64,
     pub facts_bytes: u64,
     pub head_bytes: u64,
     pub image_bytes: u64,
@@ -216,7 +222,7 @@ pub fn write_image(items: &[Item], options: PackOptions, out: &Path) -> Result<P
     let mut ids: Vec<Option<FileId>> = Vec::with_capacity(items.len());
     let mut stats = PackStats {
         entries: 0, files: 0, dirs: 0, symlinks: 0, body_bytes: 0, compiled_modules: 0, compiled_bytes: 0,
-        failed_modules: 0, facts_only_modules: 0, program_modules: 0, facts_bytes: 0, head_bytes: 0, image_bytes: 0, sha256: String::new(), transform_ms, write_ms: 0, hash_ms: 0,
+        failed_modules: 0, facts_only_modules: 0, program_modules: 0, first_files: 0, facts_bytes: 0, head_bytes: 0, image_bytes: 0, sha256: String::new(), transform_ms, write_ms: 0, hash_ms: 0,
     };
     for (item, prep) in items.iter().zip(&prepared) {
         let err = |e| anyhow!("{}: {e}", item.path);
@@ -250,6 +256,15 @@ pub fn write_image(items: &[Item], options: PackOptions, out: &Path) -> Result<P
                 stats.files += 1;
                 stats.body_bytes += len;
                 ids.push(Some(id));
+            }
+        }
+    }
+    if !options.first.is_empty() {
+        let by_path: HashMap<String, FileId> = items.iter().zip(&ids).filter_map(|(item, id)| Some((guest_path(&options.root, &item.path), (*id)?))).collect();
+        for (path, body, record) in &options.first {
+            if let Some(&id) = by_path.get(path) {
+                builder.first(id, *body, *record);
+                stats.first_files += 1;
             }
         }
     }

@@ -36,6 +36,33 @@ pub struct AppOptions {
     pub verify: bool,
     /// JSON merged over the policy's `launch.preview`.
     pub preview: Option<Value>,
+    /// Start-up order (`bat-prepare order`): bodies a start-up reads, laid out first.
+    pub order: Option<PathBuf>,
+    /// zstd level of the transfer copies (`<image>.zst`), 1..=19.
+    pub zstd_level: i32,
+}
+
+/// Size of the blocks the image's integrity sums cover.
+pub const SUM_BLOCK: usize = 1 << 20;
+
+/// The compressed copy a browser downloads (`Content-Encoding: zstd`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Transfer {
+    pub file: String,
+    pub bytes: u64,
+    pub level: i32,
+}
+
+/// SHA-256 of every `block_bytes` of the image, 32 bytes each, in one file. The browser
+/// checks each block of a download before it writes it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Sums {
+    pub file: String,
+    pub block_bytes: u64,
+    /// SHA-256 of the sums file itself.
+    pub sha256: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,6 +75,10 @@ pub struct ImageRecord {
     pub mount: String,
     pub entries: u64,
     pub head_bytes: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub zstd: Option<Transfer>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sums: Option<Sums>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,6 +86,9 @@ pub struct ImageRecord {
 struct State {
     fingerprint: String,
     image: ImageRecord,
+    /// Images mounted over the first, in order: packages that are not from the lockfile.
+    #[serde(default)]
+    layers: Vec<ImageRecord>,
     programs: Vec<ProgramRecord>,
     dependencies: DepsReport,
     pack: PackStats,
@@ -262,6 +296,9 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
             fp.tree(&format!("application:{name}"), &dir.join(name))?;
         }
     }
+    if let Some(order) = &options.order {
+        fp.field("order", &fs::read(order).with_context(|| format!("read start-up order {}", order.display()))?);
+    }
     let fingerprint = pack::hex(&fp.0.finalize());
     let fingerprint_ms = ms(started);
 
@@ -274,10 +311,11 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
             let present = |file: &str, bytes: u64| fs::metadata(options.out.join(file)).is_ok_and(|m| m.len() == bytes);
             state.fingerprint == fingerprint
                 && present(&state.image.file, state.image.bytes)
+                && state.layers.iter().all(|l| present(&l.file, l.bytes))
                 && state.programs.iter().all(|p| present(&p.file, p.bytes))
         });
     let reused = cached.is_some();
-    let state = match cached {
+    let mut state = match cached {
         Some(state) => state,
         None => {
             let state = build_image(&options, &app, &policy, &pinned, &workspace, &fingerprint)?;
@@ -286,6 +324,17 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
         }
     };
     let image_ms = ms(started) - fingerprint_ms;
+    // Transfer copies and integrity sums belong to an image's bytes, not to this build:
+    // an image that comes out with the hash it had before keeps the ones it has.
+    let transfer_started = Instant::now();
+    let mut transfer_changed = false;
+    for record in std::iter::once(&mut state.image).chain(state.layers.iter_mut()) {
+        transfer_changed |= ensure_transfer(&options.out, record, options.zstd_level)?;
+    }
+    if transfer_changed {
+        fs::write(&state_path, serde_json::to_vec_pretty(&state)?)?;
+    }
+    let transfer_ms = ms(transfer_started);
 
     // ---- Manifest: launch descriptions and project files. Always recomputed.
     let manifest_started = Instant::now();
@@ -340,6 +389,7 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
     let manifest = json!({
         "format": "bat-prepared-v1",
         "image": state.image,
+        "layers": state.layers,
         "programs": state.programs,
         "launch": launch,
         "workspace": workspace,
@@ -354,12 +404,18 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
     let manifest_changed = write_if_changed(&options.out.join("manifest.json"), &manifest_bytes)?;
 
     // Drop outputs of earlier builds.
-    let keep: HashSet<&str> = std::iter::once(state.image.file.as_str()).chain(state.programs.iter().map(|p| p.file.as_str())).chain(manifest["derived"]["file"].as_str()).collect();
+    let keep: HashSet<&str> = std::iter::once(state.image.file.as_str())
+        .chain(state.layers.iter().map(|l| l.file.as_str()))
+        .chain(state.programs.iter().map(|p| p.file.as_str()))
+        .chain(manifest["derived"]["file"].as_str())
+        .collect();
     for entry in fs::read_dir(&options.out)? {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().into_owned();
-        let ours = (name.starts_with("image-") && name.ends_with(".batimg")) || (name.starts_with("program-") && name.ends_with(".js")) || (name.starts_with("derived-") && name.ends_with(".json"));
-        if ours && !keep.contains(name.as_str()) {
+        // `image-<hash>.batimg`, with its `.zst` and `.sums` beside it.
+        let image = name.starts_with("image-").then(|| name.find(".batimg").map(|at| &name[..at + ".batimg".len()])).flatten();
+        let ours = image.is_some() || (name.starts_with("program-") && name.ends_with(".js")) || (name.starts_with("derived-") && name.ends_with(".json"));
+        if ours && !keep.contains(image.unwrap_or(name.as_str())) {
             fs::remove_file(entry.path())?;
         }
     }
@@ -369,13 +425,14 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
         "imageReused": reused,
         "manifestChanged": manifest_changed,
         "image": state.image,
+        "layers": state.layers,
         "programs": state.programs,
         "projectFiles": project_len(&manifest),
         "manifestBytes": manifest_bytes.len(),
         "dependencies": state.dependencies,
         "pack": state.pack,
         "buildMs": state.build_ms,
-        "ms": { "fingerprint": fingerprint_ms, "image": image_ms, "manifest": ms(manifest_started), "total": ms(started) },
+        "ms": { "fingerprint": fingerprint_ms, "image": image_ms, "transfer": transfer_ms, "manifest": ms(manifest_started), "total": ms(started) },
     }))
 }
 
@@ -413,6 +470,7 @@ fn run_project_scripts(policy: &Policy, options: &AppOptions, app: &Path, state:
             .env("BAT_WORKSPACE", workspace)
             .env("BAT_LAUNCH", launch.to_string())
             .env("BAT_IMAGE_SHA256", &state.image.sha256)
+            .env("BAT_LAYER_SHA256", state.layers.iter().map(|l| l.sha256.as_str()).collect::<Vec<_>>().join(","))
             .env("BAT_SCRIPT_OUT", &out)
             .env("BAT_SCRIPT_CACHE", &cache)
             .stdin(std::process::Stdio::null())
@@ -485,9 +543,24 @@ fn build_image(options: &AppOptions, app: &Path, policy: &Policy, pinned: &[(Str
     }
     let collect_ms = ms(started) - deps_ms;
 
+    // Packages that are not from the lockfile were gathered in one directory
+    // (`deps::split_local`); they go into an image of their own, mounted there.
+    let local_root = format!("{}/node_modules/{}", workspace.trim_start_matches('/'), deps::LOCAL_STORE);
+    let local_prefix = format!("{local_root}/");
+    let (local_items, items): (Vec<Item>, Vec<Item>) = items.into_iter().partition(|item| item.path == local_root || item.path.starts_with(&local_prefix));
+    let local_items: Vec<Item> = local_items
+        .into_iter()
+        .filter(|item| item.path != local_root)
+        .map(|item| Item { path: item.path[local_prefix.len()..].to_string(), ..item })
+        .collect();
+
     let program_modules: HashSet<String> = policy.programs.iter().flat_map(|p| p.modules.iter().cloned()).collect();
     let transform = modules::transform();
     let meta = json!({ "tool": concat!("bat-prepare ", env!("CARGO_PKG_VERSION")), "transform": modules::TRANSFORM_VERSION, "mount": "/" });
+    let first = match &options.order {
+        Some(path) => read_order(path)?,
+        None => Vec::new(),
+    };
     let tmp_image = options.out.join("image.partial.batimg");
     let output = pack::write_image(
         &items,
@@ -500,6 +573,7 @@ fn build_image(options: &AppOptions, app: &Path, policy: &Policy, pinned: &[(Str
             ],
             align_log2: 4,
             program_modules: if transform.is_some() { program_modules } else { HashSet::new() },
+            first,
         },
         &tmp_image,
     )?;
@@ -512,6 +586,30 @@ fn build_image(options: &AppOptions, app: &Path, policy: &Policy, pinned: &[(Str
     }
     let file = format!("image-{}.batimg", &stats.sha256[..16]);
     fs::rename(&tmp_image, options.out.join(&file))?;
+    let mut layers = Vec::new();
+    if !local_items.is_empty() {
+        let mount = format!("/{local_root}");
+        let meta = json!({ "tool": concat!("bat-prepare ", env!("CARGO_PKG_VERSION")), "transform": modules::TRANSFORM_VERSION, "mount": mount });
+        let layer = pack::write_image(
+            &local_items,
+            PackOptions {
+                root: mount.clone(),
+                transform: transform.as_deref(),
+                sections: vec![(bat_image::SECTION_META, serde_json::to_vec(&meta)?)],
+                align_log2: 4,
+                program_modules: HashSet::new(),
+                first: Vec::new(),
+            },
+            &tmp_image,
+        )?
+        .stats;
+        if options.verify {
+            pack::verify_image(&tmp_image, &local_items)?;
+        }
+        let file = format!("image-{}.batimg", &layer.sha256[..16]);
+        fs::rename(&tmp_image, options.out.join(&file))?;
+        layers.push(ImageRecord { file, bytes: layer.image_bytes, sha256: layer.sha256, mount, entries: layer.entries, head_bytes: layer.head_bytes, zstd: None, sums: None });
+    }
     let pack_ms = ms(started) - deps_ms - collect_ms;
 
     let program_started = Instant::now();
@@ -534,7 +632,8 @@ fn build_image(options: &AppOptions, app: &Path, policy: &Policy, pinned: &[(Str
 
     Ok(State {
         fingerprint: fingerprint.to_string(),
-        image: ImageRecord { file, bytes: stats.image_bytes, sha256: stats.sha256.clone(), mount: "/".into(), entries: stats.entries, head_bytes: stats.head_bytes },
+        image: ImageRecord { file, bytes: stats.image_bytes, sha256: stats.sha256.clone(), mount: "/".into(), entries: stats.entries, head_bytes: stats.head_bytes, zstd: None, sums: None },
+        layers,
         programs,
         dependencies: installed.report,
         pack: stats,
@@ -542,4 +641,68 @@ fn build_image(options: &AppOptions, app: &Path, policy: &Policy, pinned: &[(Str
         node_modules: Some(installed.node_modules.clone()),
         build_ms: json!({ "dependencies": deps_ms, "collect": collect_ms, "pack": pack_ms, "programs": ms(program_started), "verify": verify_ms, "total": ms(started) }),
     })
+}
+
+/// A start-up order file: one `<kinds>\t<guest path>` per line, `kinds` being `b`
+/// (original body), `c` (module record) or `bc`; `#` starts a comment.
+fn read_order(path: &Path) -> Result<Vec<(String, bool, bool)>> {
+    let text = fs::read_to_string(path).with_context(|| format!("read start-up order {}", path.display()))?;
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let Some((kinds, guest)) = line.split_once('\t') else { continue };
+        if line.starts_with('#') || !guest.starts_with('/') {
+            continue;
+        }
+        out.push((guest.to_string(), kinds.contains('b'), kinds.contains('c')));
+    }
+    Ok(out)
+}
+
+/// Make sure `<image>.zst` and `<image>.sums` exist beside an image and are recorded.
+/// Returns whether the record changed.
+fn ensure_transfer(out: &Path, record: &mut ImageRecord, level: i32) -> Result<bool> {
+    let image = out.join(&record.file);
+    let before = (record.zstd.clone(), record.sums.clone());
+    let sums_file = format!("{}.sums", record.file);
+    let sums_ok = record.sums.as_ref().is_some_and(|s| s.file == sums_file && s.block_bytes == SUM_BLOCK as u64 && out.join(&s.file).is_file());
+    if !sums_ok {
+        use std::io::Read;
+        let mut file = fs::File::open(&image).with_context(|| format!("open {}", image.display()))?;
+        let mut sums = Vec::with_capacity((record.bytes as usize).div_ceil(SUM_BLOCK) * 32);
+        let mut block = vec![0u8; SUM_BLOCK];
+        loop {
+            let mut filled = 0;
+            while filled < block.len() {
+                let n = file.read(&mut block[filled..])?;
+                if n == 0 {
+                    break;
+                }
+                filled += n;
+            }
+            if filled == 0 {
+                break;
+            }
+            sums.extend_from_slice(&Sha256::digest(&block[..filled]));
+        }
+        fs::write(out.join(&sums_file), &sums)?;
+        record.sums = Some(Sums { file: sums_file, block_bytes: SUM_BLOCK as u64, sha256: pack::sha256_hex(&sums) });
+    }
+    let level = level.clamp(1, 19);
+    let zstd_file = format!("{}.zst", record.file);
+    let zstd_ok = record.zstd.as_ref().is_some_and(|z| z.file == zstd_file && z.level == level && fs::metadata(out.join(&z.file)).is_ok_and(|m| m.len() == z.bytes));
+    if !zstd_ok {
+        let tmp = out.join(format!("{zstd_file}.tmp{}", std::process::id()));
+        let mut source = fs::File::open(&image)?;
+        // Levels up to 19 keep the window at 8 MiB or less, the most a browser accepts
+        // for `Content-Encoding: zstd`. The frame carries its content size and checksum.
+        let mut encoder = zstd::stream::Encoder::new(fs::File::create(&tmp)?, level)?;
+        encoder.include_checksum(true)?;
+        encoder.set_pledged_src_size(Some(record.bytes))?;
+        encoder.multithread(std::thread::available_parallelism().map_or(1, |n| n.get() as u32))?;
+        std::io::copy(&mut source, &mut encoder)?;
+        encoder.finish()?;
+        fs::rename(&tmp, out.join(&zstd_file))?;
+        record.zstd = Some(Transfer { bytes: fs::metadata(out.join(&zstd_file))?.len(), file: zstd_file, level });
+    }
+    Ok(before != (record.zstd.clone(), record.sums.clone()))
 }

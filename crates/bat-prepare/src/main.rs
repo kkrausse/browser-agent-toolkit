@@ -72,6 +72,24 @@ enum Command {
         /// JSON merged over the policy's preview launch description.
         #[arg(long)]
         preview: Option<String>,
+        /// Start-up order file (see `order`): those bodies are laid out first in the
+        /// image, so a first open can start while the rest still downloads.
+        #[arg(long)]
+        order: Option<PathBuf>,
+        /// zstd level (1..=19) of the copy browsers download. 19 is about 14% smaller
+        /// than 9 and takes tens of seconds per image instead of two.
+        #[arg(long, default_value_t = 9, env = "BAT_ZSTD_LEVEL")]
+        zstd_level: i32,
+    },
+    /// Turn a recorded access trace (JSON `[[offset, length], …]` of reads from `image`,
+    /// in first-access order, as the runtime dumps it) into a start-up order file for
+    /// `app --order`: one `<b|c|bc>\t<guest path>` per line.
+    Order {
+        image: PathBuf,
+        trace: PathBuf,
+        /// Guest path the image is mounted at.
+        #[arg(long, default_value = "/")]
+        root: String,
     },
     /// Produce only the pruned guest node_modules tree in `--work` and report sizes.
     Deps {
@@ -118,7 +136,7 @@ fn main() -> Result<()> {
                 tree::walk(dir.as_ref(), prefix, &mut items)?;
             }
             let walk_ms = started.elapsed().as_millis();
-            let stats = pack::write_image(&items, pack::PackOptions { root, transform: None, sections: vec![], align_log2, program_modules: Default::default() }, &out)?.stats;
+            let stats = pack::write_image(&items, pack::PackOptions { root, transform: None, sections: vec![], align_log2, program_modules: Default::default(), first: vec![] }, &out)?.stats;
             let total_ms = started.elapsed().as_millis();
             println!("{}", serde_json::to_string_pretty(&stats)?);
             eprintln!("packed {} entries, {} bytes in {total_ms} ms (walk {walk_ms} ms)", stats.entries, stats.image_bytes);
@@ -188,7 +206,8 @@ fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&serde_json::json!({ "nodeModules": deps.node_modules, "report": deps.report }))?);
             Ok(())
         }
-        Command::App { app, out, work, source, file, policy, opencode, workspace, bun, force, verify, preview } => {
+        Command::Order { image, trace, root } => order(&image, &trace, &root),
+        Command::App { app, out, work, source, file, policy, opencode, workspace, bun, force, verify, preview, order, zstd_level } => {
             let work = work.unwrap_or_else(|| {
                 let mut name = out.file_name().unwrap_or_default().to_os_string();
                 name.push(".work");
@@ -199,7 +218,7 @@ fn main() -> Result<()> {
                 .map(|spec| spec.split_once('=').map(|(guest, host)| (guest.to_string(), PathBuf::from(host))).ok_or_else(|| anyhow::anyhow!("--file expects <guest path>=<host file>: {spec}")))
                 .collect::<Result<Vec<_>>>()?;
             let preview = preview.map(|text| serde_json::from_str(&text)).transpose()?;
-            let summary = app::prepare_app(app::AppOptions { app, out, work, source, files, policy, application_dir: opencode, workspace, bun, force, verify, preview })?;
+            let summary = app::prepare_app(app::AppOptions { app, out, work, source, files, policy, application_dir: opencode, workspace, bun, force, verify, preview, order, zstd_level })?;
             println!("{}", serde_json::to_string_pretty(&summary)?);
             Ok(())
         }
@@ -230,5 +249,57 @@ fn info(image_path: &std::path::Path, path: Option<&str>) -> Result<()> {
     for child in image.read_dir(index) {
         println!("{:?}\t{}\t{}", child.kind, child.size(), String::from_utf8_lossy(child.name));
     }
+    Ok(())
+}
+
+fn order(image_path: &std::path::Path, trace: &std::path::Path, root: &str) -> Result<()> {
+    use std::io::Write;
+    let file = bat_image::writer::ImageFile::open(image_path)?;
+    let image = file.image();
+    let reads: Vec<(u64, u64)> = serde_json::from_slice(&std::fs::read(trace)?)?;
+    // Every extent of the image: (start, end, entry, is module record).
+    let mut extents: Vec<(u64, u64, u32, bool)> = Vec::new();
+    for index in 0..image.len() {
+        let entry = image.entry(index);
+        if let Some(body) = entry.body() {
+            extents.push((body.offset, body.offset + body.len as u64, index, false));
+        }
+        if let Some(record) = entry.module_record() {
+            extents.push((record.offset, record.offset + record.len as u64, index, true));
+        }
+    }
+    extents.sort_unstable();
+    let mut seen: std::collections::HashMap<u32, usize> = std::collections::HashMap::new();
+    let mut lines: Vec<(u32, bool, bool)> = Vec::new();
+    let (mut bytes, mut unknown) = (0u64, 0u64);
+    for (offset, _) in reads {
+        let at = extents.partition_point(|e| e.0 <= offset);
+        let Some(&(_, end, index, record)) = at.checked_sub(1).and_then(|i| extents.get(i)) else { unknown += 1; continue };
+        if offset >= end {
+            unknown += 1; // the head, or padding
+            continue;
+        }
+        let slot = *seen.entry(index).or_insert_with(|| {
+            lines.push((index, false, false));
+            lines.len() - 1
+        });
+        let line = &mut lines[slot];
+        let had = if record { line.2 } else { line.1 };
+        if !had {
+            bytes += end - extents[at - 1].0;
+        }
+        if record { line.2 = true } else { line.1 = true }
+    }
+    let mut out = std::io::BufWriter::new(std::io::stdout().lock());
+    writeln!(out, "# start-up order: {} files, {bytes} bytes, from {}", lines.len(), image_path.file_name().unwrap_or_default().to_string_lossy())?;
+    for (index, body, record) in &lines {
+        let kinds = match (body, record) {
+            (true, true) => "bc",
+            (true, false) => "b",
+            _ => "c",
+        };
+        writeln!(out, "{kinds}\t{}", pack::guest_path(root, &String::from_utf8_lossy(image.entry(*index).path)))?;
+    }
+    eprintln!("{} files, {bytes} bytes; {unknown} reads outside any body", lines.len());
     Ok(())
 }

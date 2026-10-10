@@ -53,6 +53,8 @@ pub struct Builder {
     by_path: HashMap<Vec<u8>, usize>,
     files: Vec<usize>,
     sections: Vec<(u32, u32, Vec<u8>)>,
+    /// `(entry, original body, module record)` laid out first, in this order.
+    first: Vec<(usize, bool, bool)>,
     align_log2: u32,
     mtime: u64,
 }
@@ -99,6 +101,7 @@ impl Builder {
             by_path: HashMap::new(),
             files: Vec::new(),
             sections: Vec::new(),
+            first: Vec::new(),
             align_log2: 4,
             mtime: 0,
         };
@@ -158,6 +161,14 @@ impl Builder {
             *facts_len = new_blob;
         }
         Ok(())
+    }
+
+    /// Lay this file's original body and/or its module record out directly after the
+    /// head, in call order, ahead of everything not named this way. An image that is
+    /// used while it is still arriving has what a start-up reads first.
+    pub fn first(&mut self, id: FileId, body: bool, record: bool) -> &mut Self {
+        self.first.push((self.files[id.0], body, record));
+        self
     }
 
     pub fn dir(&mut self, path: &str, mode: u16) -> Result<(), BuildError> {
@@ -267,13 +278,28 @@ impl Builder {
         let head_len = round(cursor);
         let bodies_off = head_len;
 
-        // Bodies: originals in index order, then compiled bodies in index order.
+        // Bodies: what was asked to come first, in that order; then the remaining
+        // originals in index order, then the remaining module records in index order.
+        // An offset of 0 means "not placed" (no body starts before the head ends).
         let mut body_off = vec![0u64; n];
         let mut compiled_off = vec![0u64; n];
         let mut cursor = bodies_off;
+        for &(old, body, record) in &self.first {
+            let pos = new_index[old] as usize;
+            if let Node::File { len, compiled_len, facts_len, .. } = self.entries[old].node {
+                if body && len != 0 && body_off[pos] == 0 {
+                    body_off[pos] = cursor;
+                    cursor = round(cursor + len as u64);
+                }
+                if record && compiled_len + facts_len != 0 && compiled_off[pos] == 0 {
+                    compiled_off[pos] = cursor;
+                    cursor = round(cursor + compiled_len as u64 + facts_len as u64);
+                }
+            }
+        }
         for pos in 0..n {
             if let Node::File { len, .. } = self.entries[order[pos]].node {
-                if len != 0 {
+                if len != 0 && body_off[pos] == 0 {
                     body_off[pos] = cursor;
                     cursor = round(cursor + len as u64);
                 }
@@ -281,7 +307,7 @@ impl Builder {
         }
         for pos in 0..n {
             if let Node::File { compiled_len, facts_len, .. } = self.entries[order[pos]].node {
-                if compiled_len + facts_len != 0 {
+                if compiled_len + facts_len != 0 && compiled_off[pos] == 0 {
                     compiled_off[pos] = cursor;
                     cursor = round(cursor + compiled_len as u64 + facts_len as u64);
                 }
