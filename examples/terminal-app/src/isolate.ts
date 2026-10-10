@@ -8,6 +8,15 @@ const key = 'terminal-app-isolating'
 export async function isolate(workerUrl: string, scope: string, note: (kind: string, data?: unknown) => void): Promise<void> {
   if (!('serviceWorker' in navigator)) throw Error('This page needs a service worker, and this browser offers none here (a private window, or a page that is not https or localhost).')
   const registration = await navigator.serviceWorker.register(workerUrl, { scope, updateViaCache: 'none' })
+  // An earlier build registered the runtime's worker by itself, at `<scope>preview/`. A browser
+  // that still has it gives the preview frame to that worker, which no page talks to any more:
+  // the frame never loads and its `/api` requests miss the guest. Only this worker serves here.
+  for (const other of await navigator.serviceWorker.getRegistrations()) {
+    if (other.scope !== registration.scope && other.scope.startsWith(registration.scope)) {
+      note('stage', `removing an older service worker at ${other.scope}`)
+      await other.unregister().catch(() => {})
+    }
+  }
   // A new build's worker knows which files that build compressed: let it take over first.
   await registration.update().catch(() => {})
   const next = registration.installing ?? registration.waiting

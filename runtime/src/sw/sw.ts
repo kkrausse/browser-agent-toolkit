@@ -292,7 +292,7 @@ self.addEventListener('fetch', (event) => {
   if (!match) {
     // A preview frame asking for a root-absolute path of "its" server (`/api/…`): the
     // guest listener named for that prefix answers, and sees the path as it was asked.
-    if (!guestPaths.size || !event.request.referrer) return
+    if (!event.request.referrer) return
     let from: RegExpExecArray | null = null
     try {
       const referrer = new URL(event.request.referrer)
@@ -300,8 +300,18 @@ self.addEventListener('fetch', (event) => {
     } catch {
       // no usable referrer
     }
-    const target = from && guestPaths.get(Number(from[1]))?.find(([p]) => under(url.pathname, p))
+    if (!from) return
+    const previewPort = Number(from[1])
+    const find = () => guestPaths.get(previewPort)?.find(([p]) => under(url.pathname, p))
+    const target = find()
     if (target) event.respondWith(toGuest(event, target[1], url))
+    // This worker was restarted (idle) or replaced (a new build) and has lost the routes with
+    // its port: the page sends both again. Without this the request went to the page's
+    // server, which has no such path.
+    else if (!bridge) event.respondWith(getBridge().then(() => {
+      const found = find()
+      return found ? toGuest(event, found[1], url) : fetch(event.request)
+    }))
     return
   }
   const guestPort = Number(match[1])
