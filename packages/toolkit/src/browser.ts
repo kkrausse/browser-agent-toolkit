@@ -1,5 +1,5 @@
 import type { BootRuntime, Launch, RuntimeEndpoint, RuntimeFs, RuntimeHost, RuntimeProcess } from './runtime-host';
-import { decodeSourceFile, parseManifest, toLaunch, workspaceRoot, type EditorManifest } from './manifest';
+import { decodeSourceFile, parseManifest, toLaunch, workspaceRoot, type EditorManifest, type SourceFile } from './manifest';
 import { agentLaunch, defaultAgent, installAgentConfig, openCode, verifyAgentReady } from './opencode';
 import { createChatController } from './chat/controller';
 import type { ChatController } from './chat/types';
@@ -106,7 +106,7 @@ export async function installSource(fs: RuntimeFs, source: EditorManifest['proje
   let installed = 0;
   const made = new Set<string>();
   for (const [path, file] of Object.entries(source).sort(([a], [b]) => a < b ? -1 : 1)) {
-    if (!path.startsWith('/') || path.split('/').slice(1).some(part => !part || part === '.' || part === '..')) throw Error(`Invalid source path: ${path}`);
+    if (!validPath(path)) throw Error(`Invalid source path: ${path}`);
     const target = workspaceRoot + path;
     if (await fs.stat(target).then(() => true, () => false)) continue;
     const parent = target.slice(0, target.lastIndexOf('/'));
@@ -119,12 +119,66 @@ export async function installSource(fs: RuntimeFs, source: EditorManifest['proje
   return { installed, preserved: false };
 }
 
+const derivedMarker = `${workspaceRoot}/.server/derived-installed`;
+const validPath = (path: string) => path.startsWith('/') && !path.split('/').slice(1).some(part => !part || part === '.' || part === '..');
+
+/** Install the prepared derived files (see `EditorManifest.derived`). Unlike source, these
+ * are never the user's: whenever the prepared bundle or the dependency image is not the
+ * one this workspace last installed from, the directories it owns are removed and the
+ * bundle is written again, so a workspace kept in the browser never runs on a stale
+ * optimizer cache. Otherwise nothing is fetched. */
+export async function installDerived(fs: RuntimeFs, manifest: EditorManifest, manifestUrl: string, signal?: AbortSignal): Promise<{ installed: number }> {
+  const derived = manifest.derived;
+  if (!derived) return { installed: 0 };
+  const identity = `${derived.file} ${manifest.image?.file ?? ''}`;
+  const have = await fs.readFile(derivedMarker).then(bytes => new TextDecoder().decode(bytes), () => '');
+  if (have === identity) return { installed: 0 };
+  const response = await fetch(new URL(derived.file, manifestUrl), { signal });
+  if (!response.ok) throw Error(`Prepared derived files unavailable: HTTP ${response.status}`);
+  const files = await response.json() as Record<string, SourceFile>;
+  for (const path of derived.owns) {
+    if (!validPath('/' + path)) throw Error(`Invalid derived directory: ${path}`);
+    await fs.remove(`${workspaceRoot}/${path}`);
+  }
+  const made = new Set<string>();
+  let installed = 0;
+  for (const [path, file] of Object.entries(files)) {
+    if (!validPath(path)) throw Error(`Invalid derived path: ${path}`);
+    const target = workspaceRoot + path, parent = target.slice(0, target.lastIndexOf('/'));
+    if (!made.has(parent)) { await fs.mkdir(parent); made.add(parent); }
+    await fs.writeFile(target, decodeSourceFile(file));
+    installed++;
+  }
+  await fs.mkdir(`${workspaceRoot}/.server`);
+  await fs.writeFile(derivedMarker, identity);
+  return { installed };
+}
+
 async function loadRuntime(manifest: EditorManifest, manifestUrl: string): Promise<BootRuntime> {
   if (!manifest.image) throw Error('This prepared directory has no runtime image (it was prepared for the development fake host). Pass `boot`.');
   const entry = new URL(manifest.runtime?.entry ?? 'runtime/host.js', manifestUrl).href;
   const module = await import(/* @vite-ignore */ entry);
   if (typeof module.bootRuntime !== 'function') throw Error(`Runtime module ${entry} does not export bootRuntime`);
   return module.bootRuntime;
+}
+
+/**
+ * Forget this browser's copy of the workspace: source edits, agent sessions and caches. The
+ * next `openEditor` starts from the prepared source again (the dependency image is kept).
+ * Rejects with `openedElsewhereMessage` while the editor is open in any tab.
+ */
+export async function resetWorkspace(options: { base?: string } = {}): Promise<void> {
+  const manifestUrl = new URL((options.base ?? '/editor/') + 'manifest.json', location.href).href;
+  const response = await fetch(manifestUrl, { cache: 'no-store' });
+  if (!response.ok) throw Error(`Editor manifest unavailable: HTTP ${response.status}`);
+  const manifest = parseManifest(await response.json());
+  const module = await import(/* @vite-ignore */ new URL(manifest.runtime?.entry ?? 'runtime/host.js', manifestUrl).href);
+  if (typeof module.resetWorkspace !== 'function') throw Error('This runtime cannot reset a workspace');
+  try { await module.resetWorkspace({ manifestUrl }); }
+  catch (error) {
+    if ((error as { code?: string } | null)?.code === 'STORAGE_BUSY') throw Error(openedElsewhereMessage, { cause: error });
+    throw error;
+  }
 }
 
 /** Forward a process's output as log lines, until it ends. */
@@ -196,6 +250,8 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
     publish({ message: 'Installing project source…' });
     const source = await installSource(runtime.fs, manifest.project);
     log('editor', source.preserved ? 'Kept the workspace already in this browser' : `Installed ${source.installed} source files`);
+    const derived = await installDerived(runtime.fs, manifest, manifestUrl, options.signal);
+    if (derived.installed) log('editor', `Installed ${derived.installed} prepared cache files`);
     await installAgentConfig(runtime.fs, {
       modelBaseURL: `${runtime.hostOrigin}${base}model/opencode/`,
       models: manifest.modelCatalog, defaultModel: manifest.defaultModel,

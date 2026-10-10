@@ -31,6 +31,11 @@ export interface EditorManifest {
   workspace: string;
   /** Editable project files by path below the workspace (`/src/home.tsx`). */
   project: Record<string, SourceFile>;
+  /** Files derived from the project and the image at prepare time (Vite's dependency
+   * optimizer cache): one JSON file beside the manifest, `{ path: SourceFile }` with paths
+   * below the workspace. Fetched and installed only when it differs from what the workspace
+   * holds; the `owns` directories are removed first. */
+  derived?: { file: string; bytes: number; sha256: string; owns: string[] } | null;
   /** Runtime module to import, relative to the manifest. Default `runtime/host.js`. */
   runtime?: { entry?: string };
   /** Added by the server handler when it was given a catalog; never written by prepare. */

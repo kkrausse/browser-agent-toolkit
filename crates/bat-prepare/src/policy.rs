@@ -20,7 +20,8 @@ pub struct Policy {
     pub programs: Vec<ProgramSpec>,
     #[serde(default)]
     pub launch: Map<String, Value>,
-    /// Programs run after the image is ready whose output files become project files.
+    /// Programs run after the image is ready whose output files are delivered beside the
+    /// project files, in the derived bundle (`derived-<hash>.json`).
     #[serde(default)]
     pub project_scripts: Vec<ProjectScript>,
     /// Directory `dir:` paths are relative to: the policy file's directory; for the
@@ -66,6 +67,11 @@ pub struct ProjectScript {
     pub run: Vec<String>,
     /// Run only if this path exists below the guest `node_modules`.
     pub if_exists: Option<String>,
+    /// Workspace-relative directories this script's output owns. The browser removes them
+    /// before installing a changed derived bundle, so a stale copy in a workspace that
+    /// already exists is replaced, not merged.
+    #[serde(default)]
+    pub owns: Vec<String>,
 }
 
 impl Policy {

@@ -305,7 +305,24 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
     if let Some(preview) = &options.preview {
         merge(&mut launch["preview"], preview);
     }
-    let scripts = run_project_scripts(&policy, &options, &app, &state, &workspace, &launch, &mut project)?;
+    let mut derived = Map::new();
+    let scripts = run_project_scripts(&policy, &options, &app, &state, &workspace, &launch, &project, &mut derived)?;
+    // Script output is derived from the project and the image, can be megabytes (Vite's
+    // optimizer cache) and is only needed when it changes: it travels in its own
+    // content-addressed file, fetched once per workspace, not in the manifest.
+    let derived_record = if derived.is_empty() {
+        Value::Null
+    } else {
+        let bytes = serde_json::to_vec(&Value::Object(derived))?;
+        let sha256 = pack::sha256_hex(&bytes);
+        let file = format!("derived-{}.json", &sha256[..16]);
+        write_if_changed(&options.out.join(&file), &bytes)?;
+        let owns: Vec<&String> = policy.project_scripts.iter().filter(|s| scripts.iter().any(|r| r["name"] == s.name.as_str() && r["ok"] == true)).flat_map(|s| &s.owns).collect();
+        for path in &owns {
+            check_relative(path)?;
+        }
+        json!({ "file": file, "bytes": bytes.len(), "sha256": sha256, "owns": owns })
+    };
     if policy.application.is_none() {
         if let Some(map) = launch.as_object_mut() {
             map.remove("agent");
@@ -328,6 +345,7 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
         "workspace": workspace,
         "source": options.source,
         "project": project,
+        "derived": derived_record,
         "application": state.application,
         "dependencies": state.dependencies,
         "scripts": scripts,
@@ -336,11 +354,11 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
     let manifest_changed = write_if_changed(&options.out.join("manifest.json"), &manifest_bytes)?;
 
     // Drop outputs of earlier builds.
-    let keep: HashSet<&str> = std::iter::once(state.image.file.as_str()).chain(state.programs.iter().map(|p| p.file.as_str())).collect();
+    let keep: HashSet<&str> = std::iter::once(state.image.file.as_str()).chain(state.programs.iter().map(|p| p.file.as_str())).chain(manifest["derived"]["file"].as_str()).collect();
     for entry in fs::read_dir(&options.out)? {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().into_owned();
-        let ours = (name.starts_with("image-") && name.ends_with(".batimg")) || (name.starts_with("program-") && name.ends_with(".js"));
+        let ours = (name.starts_with("image-") && name.ends_with(".batimg")) || (name.starts_with("program-") && name.ends_with(".js")) || (name.starts_with("derived-") && name.ends_with(".json"));
         if ours && !keep.contains(name.as_str()) {
             fs::remove_file(entry.path())?;
         }
@@ -362,8 +380,9 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
 }
 
 /// Run the policy's project scripts (see `policy::ProjectScript`) and add their output
-/// files to `project`. Returns one report per script for the manifest.
-fn run_project_scripts(policy: &Policy, options: &AppOptions, app: &Path, state: &State, workspace: &str, launch: &Value, project: &mut Map<String, Value>) -> Result<Vec<Value>> {
+/// files to `derived`. Returns one report per script for the manifest.
+#[allow(clippy::too_many_arguments)]
+fn run_project_scripts(policy: &Policy, options: &AppOptions, app: &Path, state: &State, workspace: &str, launch: &Value, project: &Map<String, Value>, derived: &mut Map<String, Value>) -> Result<Vec<Value>> {
     let mut reports = Vec::new();
     for script in &policy.project_scripts {
         let started = Instant::now();
@@ -411,7 +430,7 @@ fn run_project_scripts(policy: &Policy, options: &AppOptions, app: &Path, state:
         for item in items {
             let Source::Host { path, len } = &item.source else { continue };
             check_relative(&item.path)?;
-            project.insert(format!("/{}", item.path), project_file(fs::read(path)?));
+            derived.insert(format!("/{}", item.path), project_file(fs::read(path)?));
             count += 1;
             bytes += len;
         }

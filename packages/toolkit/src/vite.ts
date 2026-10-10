@@ -35,6 +35,9 @@ export function browserEditor(options: BrowserEditorOptions): any {
         cacheDir: '.browser-editor-cache/vite',
         // The guest filesystem holds the workspace and its dependencies, nothing else.
         server: { fs: { strict: false } },
+        // No source maps for optimized dependencies: they were two thirds of the cache
+        // prepare ships (3.7 of 5.8 MB for the TODO app) and of every re-optimization.
+        optimizeDeps: { esbuildOptions: { sourcemap: false } },
       };
     },
     configureServer(server: { middlewares: { use(handler: (request: IncomingLike, response: unknown, next: () => void) => void): void }; httpServer?: { prependListener(name: string, listener: (request: IncomingLike) => void): void; removeListener(name: string, listener: (request: IncomingLike) => void): void; once(name: string, listener: () => void): void } | null }) {

@@ -21,7 +21,7 @@
     }
   ],
   "prune": {
-    "packages": ["@types/*", "bun-types"],
+    "packages": [],
     "nativePackages": true,
     "extensions": [".node"],
     "paths": [],
@@ -58,7 +58,8 @@
     {
       "name": "vite-optimize-deps",
       "run": ["node", "dir:../../../packages/guest-shims/prepare/vite-optimize-deps.mjs"],
-      "ifExists": "vite/package.json"
+      "ifExists": "vite/package.json",
+      "owns": [".browser-editor-cache/vite"]
     }
   ],
   "programs": [{ "name": "opencode-server", "modules": ["/app/server.js"] }],
