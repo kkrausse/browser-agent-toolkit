@@ -465,3 +465,21 @@ Numbers: `docs/experiments/2026-10-09-net.md`. Code: `crates/bat-kernel/src/{htt
   the whole workspace, which has no `.gitignore`, so the scanner read the optimizer's
   bundles (5.81 of 5.83 MB scanned) and the CSS depended on optimizer timing. This changes
   the served `style.css` (11,310 → 6,146 bytes: only what the sources use).
+
+## 2026-10-09 finding for the tools and node-runtime agents: Vite's `configHash` differs in the guest (net agent)
+
+- **The shipped optimizer cache is thrown away at every start**, with "Re-optimizing
+  dependencies because vite config has changed". Vite's `getConfigHash` stringifies the
+  config with `value.toString()` for functions, and `config.assetsInclude` is a closure
+  over an imported binding. Natively its text is
+  `return DEFAULT_ASSETS_RE.test(file) || assetsFilter(file)`; in the guest the module
+  transform has rewritten the import reference, so it is
+  `return __bat_i1.l.test(file) || assetsFilter(file)`. Everything else in the hashed JSON
+  is equal (compared by dumping the same JSON from `resolveConfig` natively and in the
+  guest, image `image-6d0320607a66c410`). The cache script therefore has to hash the
+  guest's text (or the overlay has to take functions out of the hash); a transform that
+  preserves `Function.prototype.toString` is not on offer.
+- **The re-optimization that follows did not finish**: `deps_temp_*` stayed, every
+  `/.browser-editor-cache/vite/deps/*.js` request waited (endpoint fetch timed out after
+  8 s; nothing on stderr), so the frame stops at the server-rendered HTML. Until either
+  point is fixed the preview renders but does not hydrate.
