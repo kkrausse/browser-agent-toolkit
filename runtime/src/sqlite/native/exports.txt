@@ -1,7 +1,6 @@
 # SQLite C API functions the TypeScript side calls (bat_* shims are exported from bat_sqlite.c).
-malloc
-free
 sqlite3_malloc
+sqlite3_realloc
 sqlite3_free
 sqlite3_libversion
 sqlite3_open_v2

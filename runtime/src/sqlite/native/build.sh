@@ -40,7 +40,6 @@ exports=$(grep -v '^#' "$here/exports.txt" | grep . | sed 's/^/-Wl,--export=/' |
   -DSQLITE_OMIT_GET_TABLE \
   -DSQLITE_OMIT_COMPLETE \
   -DSQLITE_OMIT_TCL_VARIABLE \
-  -DSQLITE_OMIT_TRACE \
   -DSQLITE_DQS=0 \
   -DSQLITE_LIKE_DOESNT_MATCH_BLOBS \
   -DSQLITE_MAX_EXPR_DEPTH=1000 \
@@ -50,7 +49,7 @@ exports=$(grep -v '^#' "$here/exports.txt" | grep . | sed 's/^/-Wl,--export=/' |
   -DSQLITE_DEFAULT_AUTOVACUUM=0 \
   -DSQLITE_DEFAULT_RECURSIVE_TRIGGERS=1 \
   -DSQLITE_DIRECT_OVERFLOW_READ \
-  -DHAVE_MALLOC_USABLE_SIZE=1 \
+  -DHAVE_MALLOC_H=1 -DHAVE_MALLOC_USABLE_SIZE=1 \
   $EXTRA \
   -I"$SQLITE_SRC" \
   -Wl,--no-entry -Wl,--stack-first -Wl,-z,stack-size=1048576 \

@@ -238,7 +238,7 @@ function instantiate(backend: FsBackend, module: WebAssembly.Module) {
   refresh()
 
   /** 16 bytes for out-pointers, and a NUL byte that serves as the empty C string. */
-  const out: number = x.malloc(24)
+  const out: number = x.sqlite3_malloc(24)
   const emptyString = out + 16
   u8[emptyString] = 0
 
@@ -247,7 +247,7 @@ function instantiate(backend: FsBackend, module: WebAssembly.Module) {
   const allocString = (s: string): number => {
     const n = s.length
     let cap = n <= 4096 ? n * 3 : n + 64
-    let p: number = x.malloc(cap + 1)
+    let p: number = x.sqlite3_malloc(cap + 1)
     if (!p) throw new RangeError('SQLite: out of memory')
     refresh()
     let { read, written } = encoder.encodeInto(s, u8.subarray(p, p + cap))
@@ -255,7 +255,7 @@ function instantiate(backend: FsBackend, module: WebAssembly.Module) {
       // Non-ASCII beyond the estimate: grow once to the worst case for the rest.
       const rest = s.slice(read)
       cap = written! + rest.length * 3
-      p = x.realloc(p, cap + 1)
+      p = x.sqlite3_realloc(p, cap + 1)
       if (!p) throw new RangeError('SQLite: out of memory')
       refresh()
       written! += encoder.encodeInto(rest, u8.subarray(p + written!, p + cap)).written!
@@ -265,7 +265,7 @@ function instantiate(backend: FsBackend, module: WebAssembly.Module) {
     return p
   }
   const allocBytes = (b: Uint8Array): number => {
-    const p: number = x.malloc(b.length || 1)
+    const p: number = x.sqlite3_malloc(b.length || 1)
     if (!p) throw new RangeError('SQLite: out of memory')
     refresh()
     u8.set(b, p)
@@ -277,9 +277,9 @@ function instantiate(backend: FsBackend, module: WebAssembly.Module) {
   /** Scratch for bat_row: 16 bytes per column. */
   const rowBuffer = (columns: number): number => {
     if (columns > rowCap) {
-      if (rowBuf) x.free(rowBuf)
+      if (rowBuf) x.sqlite3_free(rowBuf)
       rowCap = Math.max(columns, 32)
-      rowBuf = x.malloc(rowCap * 16)
+      rowBuf = x.sqlite3_malloc(rowCap * 16)
       if (!rowBuf) throw new RangeError('SQLite: out of memory')
     }
     return rowBuf

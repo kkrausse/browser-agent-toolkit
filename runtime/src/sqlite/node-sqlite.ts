@@ -92,6 +92,8 @@ interface StatementState {
   unknownNamed: boolean
   /** bare name -> full parameter name, built on first use. */
   bare?: Map<string, string>
+  /** Bumped by every call that resets the statement; an iterator from before is invalid. */
+  epoch: number
 }
 
 export function createSqliteModule(backend: FsBackend, options: SqliteModuleOptions) {
@@ -171,18 +173,19 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
     if (n === 0) return
     let first = 0
     const named = args[0]
-    if (named !== null && typeof named === 'object' && !ArrayBuffer.isView(named)) {
+    if (named !== null && (typeof named === 'object' || typeof named === 'function') && !ArrayBuffer.isView(named)) {
       first = 1
+      const bare = st.bareNamed ? bareNames(st) : undefined
       for (const key of Object.keys(named as object)) {
         const z = E.allocString(key)
         let index: number = x.sqlite3_bind_parameter_index(stmt, z)
-        x.free(z)
-        if (index === 0 && st.bareNamed) {
-          const full = bareNames(st).get(key)
+        x.sqlite3_free(z)
+        if (index === 0 && bare) {
+          const full = bare.get(key)
           if (full !== undefined) {
             const zf = E.allocString(full)
             index = x.sqlite3_bind_parameter_index(stmt, zf)
-            x.free(zf)
+            x.sqlite3_free(zf)
           }
         }
         if (index === 0) {
@@ -194,8 +197,12 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
     }
     let index = 1
     for (let i = first; i < n; i++) {
-      // Anonymous values fill the positions that have no name.
-      while (x.sqlite3_bind_parameter_name(stmt, index)) index++
+      // Anonymous values fill the positions that have no name (`?NNN` counts as unnamed).
+      for (;;) {
+        const name: number = x.sqlite3_bind_parameter_name(stmt, index)
+        if (!name || E.u8[name] === 63) break
+        index++
+      }
       bindValue(st, index++, args[i])
     }
   }
@@ -291,9 +298,15 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
     } else if (typeof value === 'bigint') {
       if (value > MAX_I64 || value < MIN_I64) throw err(RangeError, 'ERR_OUT_OF_RANGE', 'BigInt value is too large for SQLite')
       x.sqlite3_result_int64(ctx, value)
-    } else if (typeof (value as PromiseLike<unknown>).then === 'function') {
-      throw err(Error, 'ERR_SQLITE_ERROR', 'Asynchronous user-defined functions are not supported')
-    } else throw err(Error, 'ERR_SQLITE_ERROR', 'Returned JavaScript value cannot be converted to a SQLite value')
+    } else {
+      const z = E.allocString(
+        typeof (value as PromiseLike<unknown>).then === 'function'
+          ? 'Asynchronous user-defined functions are not supported'
+          : 'Returned JavaScript value cannot be converted to a SQLite value',
+      )
+      x.sqlite3_result_error(ctx, z, -1)
+      x.sqlite3_free(z)
+    }
   }
 
   // ---- StatementSync ----
@@ -326,6 +339,7 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       const st = live(this)
       const t = begin()
       counters.all++
+      st.epoch++
       const stmt = st.stmt
       x.sqlite3_reset(stmt)
       try {
@@ -346,6 +360,7 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       const st = live(this)
       const t = begin()
       counters.get++
+      st.epoch++
       const stmt = st.stmt
       x.sqlite3_reset(stmt)
       try {
@@ -365,6 +380,7 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       const st = live(this)
       const t = begin()
       counters.run++
+      st.epoch++
       const stmt = st.stmt
       x.sqlite3_reset(stmt)
       try {
@@ -386,34 +402,35 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
     iterate(): IterableIterator<unknown> {
       const st = live(this)
       counters.iterate++
+      const epoch = ++st.epoch
       const stmt = st.stmt
       x.sqlite3_reset(stmt)
       bindParams(st, arguments)
       const n: number = x.sqlite3_column_count(stmt)
       let names: string[] | undefined
       let done = false
-      const finish = () => {
-        if (!done) {
-          done = true
-          if (st.conn.stmts.has(stmt)) x.sqlite3_reset(stmt)
-        }
-      }
       const it = {
         __proto__: iteratorPrototype,
         next(): IteratorResult<unknown> {
           if (!st.conn.stmts.has(stmt)) throw invalidState('statement has been finalized')
+          if (st.epoch !== epoch) throw invalidState('iterator was invalidated')
           if (done) return { __proto__: null, done: true, value: null } as any
           const rc: number = x.sqlite3_step(stmt)
           if (rc === SQLITE_ROW) {
             return { __proto__: null, done: false, value: readRow(st, n, (names ??= st.returnArrays ? [] : columnNames(stmt, n))) } as any
           }
+          // As in Node, running off the end resets the statement without ending
+          // the iterator: another next() starts over.
           const failed = rc !== SQLITE_DONE ? stepError(st) : undefined
-          finish()
+          x.sqlite3_reset(stmt)
           if (failed) throw failed
           return { __proto__: null, done: true, value: null } as any
         },
         return(): IteratorResult<unknown> {
-          finish()
+          if (!st.conn.stmts.has(stmt)) throw invalidState('statement has been finalized')
+          if (st.epoch !== epoch) throw invalidState('iterator was invalidated')
+          done = true
+          x.sqlite3_reset(stmt)
           return { __proto__: null, done: true, value: null } as any
         },
       }
@@ -515,7 +532,7 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
     const z = E.allocString(s.location)
     const flags = (s.readOnly ? OPEN_READONLY : OPEN_READWRITE | OPEN_CREATE) | OPEN_URI
     const rc: number = x.sqlite3_open_v2(z, E.out, flags, 0)
-    x.free(z)
+    x.sqlite3_free(z)
     const db = E.u32[E.out >>> 2]
     const conn: Conn = { db, stmts: new Set(), functionIds: [], authorizerId: 0, ignoreNextError: false }
     try {
@@ -549,10 +566,12 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
   const prepareStatement = (s: DbState, conn: Conn, sql: string): StatementSync => {
     const z = E.allocString(sql)
     const rc: number = x.sqlite3_prepare_v2(conn.db, z, E.lastLen + 1, E.out, 0)
-    x.free(z)
+    x.sqlite3_free(z)
     if (rc !== SQLITE_OK) throw sqliteError(conn)
+    // SQL with no statement in it (empty, a comment) gives a null handle; the
+    // object exists but, as in Node, behaves as finalized.
     const stmt = E.u32[E.out >>> 2]
-    conn.stmts.add(stmt)
+    if (stmt) conn.stmts.add(stmt)
     constructing = {
       conn,
       stmt,
@@ -560,9 +579,10 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       returnArrays: s.returnArrays,
       bareNamed: s.bareNamed,
       unknownNamed: s.unknownNamed,
+      epoch: 0,
     }
     const statement = new StatementSync()
-    registry.register(statement, { conn, stmt })
+    if (stmt) registry.register(statement, { conn, stmt })
     return statement
   }
 
@@ -649,14 +669,14 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       counters.exec++
       const z = E.allocString(sql)
       const rc: number = x.bat_exec(conn.db, z)
-      x.free(z)
+      x.sqlite3_free(z)
       end(t)
       if (rc !== SQLITE_OK) throw sqliteError(conn)
     }
     function(name: string, options: unknown, fn?: unknown): void {
       const conn = opened(this)
       if (typeof name !== 'string') throw invalidType('The "name" argument must be a string.')
-      if (typeof options === 'function') {
+      if (arguments.length < 3) {
         fn = options
         options = undefined
       }
@@ -682,13 +702,11 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       const z = E.allocString(name)
       const flags = SQLITE_UTF8 | (deterministic ? SQLITE_DETERMINISTIC : 0) | (directOnly ? SQLITE_DIRECTONLY : 0)
       const rc: number = x.bat_create_function(conn.db, z, varargs ? -1 : f.length, flags, id)
-      x.free(z)
+      x.sqlite3_free(z)
       check(conn, rc)
     }
     aggregate(name: string, options: Record<string, unknown>): void {
       const conn = opened(this)
-      if (typeof name !== 'string') throw invalidType('The "name" argument must be a string.')
-      if (options === null || typeof options !== 'object') throw invalidType('The "options" argument must be an object.')
       const start = options.start
       if (start === undefined) throw invalidType('The "options.start" argument must be a function or a primitive value.')
       const step = options.step as (acc: unknown, ...args: unknown[]) => unknown
@@ -700,6 +718,7 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       const varargs = optionBool(options, 'varargs', false)
       const directOnly = optionBool(options, 'directOnly', false)
       const deterministic = optionBool(options, 'deterministic', false)
+      if (typeof name !== 'string') throw invalidType('The "name" argument must be a string.')
       let argc = -1
       if (!varargs) {
         argc = Math.max(0, step.length - 1)
@@ -723,7 +742,7 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       const z = E.allocString(name)
       const flags = SQLITE_UTF8 | (deterministic ? SQLITE_DETERMINISTIC : 0) | (directOnly ? SQLITE_DIRECTONLY : 0)
       const rc: number = x.bat_create_aggregate(conn.db, z, argc, flags, id, inverse ? 1 : 0)
-      x.free(z)
+      x.sqlite3_free(z)
       check(conn, rc)
     }
     createTagStore(maxSize = 1000): unknown {
@@ -735,7 +754,7 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       if (typeof dbName !== 'string') throw invalidType('The "dbName" argument must be a string.')
       const z = E.allocString(dbName)
       const p: number = x.sqlite3_db_filename(conn.db, z)
-      x.free(z)
+      x.sqlite3_free(z)
       if (!p) return null
       return E.cstr(p) || null
     }
@@ -765,7 +784,7 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       if (typeof dbName !== 'string') throw invalidType('The "dbName" argument must be a string.')
       const z = E.allocString(dbName)
       const p: number = x.sqlite3_serialize(conn.db, z, E.out, 0)
-      x.free(z)
+      x.sqlite3_free(z)
       const size = Number(E.dv.getBigInt64(E.out, true))
       if (!p) {
         if (size === 0) return new Uint8Array(0)
@@ -795,7 +814,7 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       const z = E.allocString(dbName)
       const n = BigInt(buffer.length)
       const rc: number = x.sqlite3_deserialize(conn.db, z, p, n, n, DESERIALIZE_FREEONCLOSE | DESERIALIZE_RESIZEABLE)
-      x.free(z)
+      x.sqlite3_free(z)
       check(conn, rc)
     }
     setAuthorizer(callback: ((...args: unknown[]) => unknown) | null): void {
@@ -900,7 +919,7 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
     return new Promise<number>((resolve, reject) => {
       const z = E.allocString(location)
       const rc: number = x.sqlite3_open_v2(z, E.out, OPEN_READWRITE | OPEN_CREATE | OPEN_URI, 0)
-      x.free(z)
+      x.sqlite3_free(z)
       const dest: Conn = { db: E.u32[E.out >>> 2], stmts: new Set(), functionIds: [], authorizerId: 0, ignoreNextError: false }
       const fail = (e: unknown) => {
         if (dest.db) x.sqlite3_close_v2(dest.db)
@@ -910,8 +929,8 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       const zt = E.allocString(target)
       const zs = E.allocString(source)
       const handle: number = x.sqlite3_backup_init(dest.db, zt, conn.db, zs)
-      x.free(zt)
-      x.free(zs)
+      x.sqlite3_free(zt)
+      x.sqlite3_free(zs)
       if (!handle) return fail(sqliteError(dest))
       // One batch of pages per turn, as native does, so the progress callback sees the loop.
       const turn = () => {
