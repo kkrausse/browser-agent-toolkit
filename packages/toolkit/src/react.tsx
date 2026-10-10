@@ -77,7 +77,10 @@ export function EditorPreview({ editor, hostPaths = noHostPaths, isReady, classN
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [visible, setVisible] = useState(false);
-  const up = useSyncExternalStore(editor.subscribe, () => editor.snapshot().preview === 'ready');
+  // The frame navigates as soon as the server listens: its own request is then the one that
+  // pays for the first render, instead of waiting for the editor's readiness request to do so
+  // and asking again.
+  const up = useSyncExternalStore(editor.subscribe, () => { const state = editor.snapshot().preview; return state === 'listening' || state === 'ready'; });
   const paths = hostPaths.join('\n');
   useEffect(() => { editor.setHostPaths(paths ? paths.split('\n') : []); }, [editor, paths]);
   useEffect(() => {
