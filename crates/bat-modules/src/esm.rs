@@ -291,6 +291,7 @@ pub(crate) fn transform_esm<'a>(
         import_meta: false,
         dynamic: false,
         decorator: None,
+        statement_start: None,
     };
     visitor.visit_program(program);
     let EsmVisitor { dynamic_imports, requires, tla, import_meta, dynamic, decorator, .. } = visitor;
@@ -461,15 +462,23 @@ struct EsmVisitor<'v> {
     import_meta: bool,
     dynamic: bool,
     decorator: Option<(u32, u32)>,
+    /// Start of the expression statement being visited. A callee rewritten at
+    /// that offset would begin the statement with `(`, which continues the
+    /// previous line when that line has no semicolon (`a = b\nimported()`).
+    statement_start: Option<u32>,
 }
 
 impl EsmVisitor<'_> {
     fn reference(&mut self, id: &IdentifierReference, position: Position) {
         let Some(binding) = import_binding(self.scoping, self.by_symbol, id) else { return };
         let access = &self.bindings[binding].access;
+        let statement_start = self.statement_start;
         self.edits.replace_with(id.span.start, id.span.end, |out| match position {
             Position::Value => out.push_str(access),
             Position::Callee => {
+                if statement_start == Some(id.span.start) {
+                    out.push_str("void 0,");
+                }
                 out.push_str("(0,");
                 out.push_str(access);
                 out.push(')');
@@ -505,6 +514,12 @@ pub(crate) fn literal_specifier<'a>(expr: &Expression<'a>) -> Option<&'a str> {
 }
 
 impl<'a> Visit<'a> for EsmVisitor<'_> {
+    fn visit_expression_statement(&mut self, it: &ExpressionStatement<'a>) {
+        let outer = self.statement_start.replace(it.span.start);
+        walk::walk_expression_statement(self, it);
+        self.statement_start = outer;
+    }
+
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         self.reference(it, Position::Value);
     }
