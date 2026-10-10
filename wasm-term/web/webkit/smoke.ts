@@ -3,6 +3,9 @@
 //   web/webkit/smoke.sh [base URL]      default http://127.0.0.1:4790
 //   GUESTS=opencode,codex,proc,codex-local   which guests to run (default all four); PROFILE=desktop|iphone
 //   NET=tunnel|fetch                          codex-local's transport (default: the page's default, the tunnel)
+//   STATIC=1                                  the base URL is the static build (ports/codex/scripts/static.sh) behind a plain
+//                                             file server: only codex-local, net=direct against the mock, and the page
+//                                             isolates itself with its service worker (one reload) before anything else
 // Needs webkit/install.sh once, the dev server, and mock-llm/up.sh.
 //
 // This is WebKit's engine on Linux, not Safari: it says whether the page's
@@ -294,8 +297,19 @@ async function runShell(profile: string, options: BrowserContextOptions, touch: 
     }
     if (guests.includes("codex-local")) {
       // NET=tunnel|fetch picks codex-local's transport (default: the page's own default).
-      const net = process.env.NET ? `&net=${process.env.NET}` : "";
-      if (process.env.NET !== "fetch") {
+      const isStatic = process.env.STATIC === "1";
+      const net = isStatic ? "&backend=mock" : process.env.NET ? `&net=${process.env.NET}` : "";
+      if (isStatic) {
+        // The first visit registers the service worker and reloads; wait on whatever document that leaves.
+        await page.goto(`${base}/`);
+        let isolated = false;
+        for (let i = 0; i < 60 && !isolated; i++) {
+          isolated = await page.evaluate(() => crossOriginIsolated && !!document.querySelector("#launcher form")).catch(() => false);
+          if (!isolated) await page.waitForTimeout(500);
+        }
+        check("codex-local static: a plain file server, the page isolated by its own service worker, the launcher shown", isolated, { errors: errors.slice(0, 3) });
+      }
+      if (!isStatic && process.env.NET !== "fetch") {
         // The tunnel by itself first: the module's own TLS (rustls in wasm, on JavaScriptCore) over the
         // page's binary WebSocket to the relay, against the mock's TLS front. One GET, then the program exits.
         await page.goto(`${base}/?guest=codex-local&persist=0&shell=off&net=tunnel&env=CODEX_WASM_TLS_PROBE=${encodeURIComponent("https://mock-llm.test/health")}&env=CODEX_WASM_TLS_PROBE_REPEAT=2`);
@@ -305,8 +319,10 @@ async function runShell(profile: string, options: BrowserContextOptions, touch: 
         check(`codex-local tunnel: TLS handshake and HTTP/2 inside the module, certificate verified (first request ${times?.[1]} ms, on the open connection ${times?.[2]} ms)`,
           /1https:\/\/mock-llm\.test\/health->200HTTP\/2\.0/.test(out) && /tls-probe:ok/.test(out), out.slice(-400));
       }
+      const loadStarted = Date.now();
       await page.goto(`${base}/?guest=codex-local&persist=0${net}`);
       const home = await waitFor(page, "Ask Codex", 240_000).then(() => true, () => false);
+      if (isStatic) check(`codex-local static: start screen ${Date.now() - loadStarted} ms after navigation (module ${JSON.stringify(await page.evaluate(() => window.wasmTerm?.load).catch(() => null))})`, home);
       check("codex-local: the module starts and shows its start screen", home, { tail: (await screen(page)).split("\n").filter(Boolean).slice(-6), errors: errors.slice(0, 3) });
       const key = (name: string) => page.locator(`.terminal-keys [data-key="${name}"]`).tap();
       if (touch) await key("Keyboard");
@@ -330,7 +346,7 @@ async function runShell(profile: string, options: BrowserContextOptions, touch: 
       check(`codex-local numbers: ${all.length} commands, waiting for a shell ${Math.max(...all.map(proc => proc.queueMs)).toFixed(2)} ms at most, rg ${rg.map(proc => (proc.queueMs + proc.runMs).toFixed(2)).join(" / ")} ms`, true);
       await page.screenshot({ path: join(shots, `webkit-${profile}-codex-local-shell.png`) });
       // The relay refuses hosts it does not know (codex asks GitHub for an announcement): a 403 in the console, by design.
-      const real = errors.filter(error => !/status of 403/.test(error));
+      const real = errors.filter(error => !/status of 403/.test(error) && !(isStatic && /favicon|status of 404/.test(error)));
       check("codex-local: no page errors", real.length === 0, real.slice(0, 5));
     }
   } catch (error) {

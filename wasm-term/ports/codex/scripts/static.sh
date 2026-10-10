@@ -6,7 +6,7 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 out="${1:-$here/../dist/static}"
-(cd "$here/../../web" && bun static.ts "$out")
+(cd "$here/../../../web" && bun static.ts "$out")
 out="$(cd "$out" && pwd)"
 tar -C "$(dirname "$out")" -czf "$(dirname "$out")/wasm-term-codex-static.tgz" --transform "s,^$(basename "$out"),wasm-term-codex-static," "$(basename "$out")"
 ls -l "$(dirname "$out")/wasm-term-codex-static.tgz"
