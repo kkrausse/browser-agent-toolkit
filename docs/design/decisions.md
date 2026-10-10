@@ -85,7 +85,7 @@
   pin. Dropped with Effect: span diagnostics, the reader fence (dispose now aborts and joins
   its own requests), `exportChats` (superseded by native `editor.sessions.export`).
 - **The `runJavascript` guest plugin still bundles Effect** (build-time, into one string).
-  OpenCode's promise plugin API gives a tool no cancellation signal; the Effect one does, and
+  The promise plugin API shows no cancellation signal for a tool in its types (not tried at run time); the Effect one has it, and
   cancelling a runaway script matters. It now spawns `process.execPath` instead of
   `/bin/node.js`.
 - **OpenCode is a Node program**: `node /app/server.js`, with `OPENCODE_DATABASE_PATH` inside

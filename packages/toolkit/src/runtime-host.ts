@@ -20,6 +20,10 @@ export interface Launch {
   cwd?: string;
   /** The complete environment; nothing is inherited. */
   env?: Record<string, string>;
+  /** Names of prepared program scripts (`manifest.programs[].name`) holding this
+   * program's modules precompiled; the runtime may load them before the entry runs.
+   * An optimisation: the launch must also work when the runtime ignores it. */
+  programs?: string[];
 }
 
 export interface BootOptions {

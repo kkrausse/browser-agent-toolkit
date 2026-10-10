@@ -43,6 +43,10 @@ export function createFakeHost(options: FakeHostOptions) {
   /** Map a guest path, or a colon-separated list of them; other strings pass through. */
   const mapValue = (value: string) => value.split(':').map(part => mapPath(part) ?? part).join(':');
   const processes = new Map<string, { child: ChildProcess; exit: Promise<{ code: number | null; signal: string | null }> }>();
+  // Browsers allow six connections per host, so all process output shares one stream:
+  // lines of JSON, `{ id, stream, data }` (base64) and `{ id, exit }`.
+  const subscribers = new Set<ReadableStreamDefaultController<string>>();
+  const send = (message: unknown) => { for (const subscriber of subscribers) { try { subscriber.enqueue(JSON.stringify(message) + '\n'); } catch { subscribers.delete(subscriber); } } };
   const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store', ...coi } });
   const nativePort = (guest: string) => {
     const port = options.ports[Number(guest)];
@@ -99,7 +103,7 @@ export function createFakeHost(options: FakeHostOptions) {
     return json({ message: 'Unknown fs operation' }, 404);
   }
 
-  function start(launch: Launch) {
+  function start(id: string, launch: Launch) {
     const ports = Object.entries(options.ports);
     const argv = launch.argv.map(mapValue).map(arg => {
       const port = ports.find(([guest]) => guest === arg);
@@ -111,12 +115,13 @@ export function createFakeHost(options: FakeHostOptions) {
     env.PATH = [env.PATH, process.env.PATH].filter(Boolean).join(':');
     for (const [guest, native] of ports) env[`BAT_FAKE_PORT_${guest}`] = String(native);
     const child = spawn(argv[0]!, argv.slice(1), { cwd: launch.cwd ? mapValue(launch.cwd) : '/', env, stdio: ['pipe', 'pipe', 'pipe'] });
-    const id = crypto.randomUUID();
     const exit = new Promise<{ code: number | null; signal: string | null }>(done => {
       child.once('error', error => { console.error(`[fake-host] ${argv[0]}: ${error.message}`); done({ code: 127, signal: null }); });
       child.once('exit', (code, signal) => done({ code, signal }));
     });
     processes.set(id, { child, exit });
+    for (const stream of ['stdout', 'stderr'] as const) child[stream]!.on('data', (chunk: Buffer) => send({ id, stream, data: chunk.toString('base64') }));
+    void exit.then(result => send({ id, exit: result }));
     return json({ id });
   }
 
@@ -125,17 +130,6 @@ export function createFakeHost(options: FakeHostOptions) {
     if (!entry) return json({ message: 'No such process' }, 404);
     const { child } = entry;
     switch (action) {
-      case 'stdout': case 'stderr': {
-        const stream = child[action]!;
-        return new Response(new ReadableStream({
-          start(controller) {
-            stream.on('data', (chunk: Buffer) => controller.enqueue(new Uint8Array(chunk)));
-            stream.once('close', () => { try { controller.close(); } catch { /* cancelled */ } });
-          },
-          cancel() { stream.removeAllListeners('data'); stream.resume(); },
-        }), { headers: { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store', ...coi } });
-      }
-      case 'exit': return json(await entry.exit);
       case 'stdin': child.stdin?.write(new Uint8Array(await request.arrayBuffer())); return json({});
       case 'close-stdin': child.stdin?.end(); return json({});
       case 'kill': child.kill((await request.json().catch(() => ({}))).signal === 'SIGKILL' ? 'SIGKILL' : 'SIGTERM'); return json({});
@@ -143,10 +137,36 @@ export function createFakeHost(options: FakeHostOptions) {
     return json({ message: 'Unknown process action' }, 404);
   }
 
+  // A guest program's API speaks guest paths (`/workspace`); the native one knows only
+  // real ones. Translate both ways in what the page exchanges with a guest port.
+  const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const toReal = (text: string) => mounts.reduce((value, [guest, real]) => value.replace(new RegExp(`(?<![\\w.~-])${escape(guest)}(?=[/"'&\\\\]|$)`, 'g'), real), text);
+  const toGuest = (text: string) => mounts.reduce((value, [guest, real]) => value.replaceAll(real, guest), text);
+  async function api(request: Request, port: number, path: string, search: URLSearchParams): Promise<Response> {
+    const query = new URLSearchParams([...search].map(([key, value]) => [key, toReal(value)]));
+    const body = ['GET', 'HEAD'].includes(request.method) ? undefined : toReal(await request.text());
+    const translated = new Request(request.url, { method: request.method, headers: request.headers, body, signal: request.signal });
+    const response = await forward(translated, port, path + (query.size ? `?${query}` : ''));
+    const type = response.headers.get('content-type') ?? '';
+    if (!response.body || !/json|event-stream|text/.test(type)) return response;
+    const decoder = new TextDecoder();
+    let rest = '';
+    // Line by line, so a path is never split across chunks.
+    const lines = new TransformStream<Uint8Array, string>({
+      transform(chunk, controller) {
+        const text = rest + decoder.decode(chunk, { stream: true }), cut = text.lastIndexOf('\n') + 1;
+        rest = text.slice(cut);
+        if (cut) controller.enqueue(toGuest(text.slice(0, cut)));
+      },
+      flush(controller) { if (rest) controller.enqueue(toGuest(rest)); },
+    });
+    return new Response(response.body.pipeThrough(lines), { status: response.status, headers: response.headers });
+  }
+
   /** Forward to a native port, streaming both ways, with the isolation headers a frame needs. */
   async function forward(request: Request, port: number, path: string): Promise<Response> {
     const headers = new Headers(request.headers);
-    headers.delete('host'); headers.delete('accept-encoding');
+    headers.delete('host'); headers.delete('accept-encoding'); headers.delete('content-length');
     let response: Response;
     try {
       response = await fetch(`http://127.0.0.1:${port}${path}`, {
@@ -197,9 +217,16 @@ export function createFakeHost(options: FakeHostOptions) {
         }
         const [area, a, b, ...rest] = path.slice(base.length).split('/');
         if (area === 'boot') return boot();
+        if (area === 'events') {
+          let own: ReadableStreamDefaultController<string> | undefined;
+          return new Response(new ReadableStream<string>({
+            start(controller) { subscribers.add(own = controller); controller.enqueue('{}\n'); },
+            cancel() { if (own) subscribers.delete(own); },
+          }), { headers: { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store', ...coi } });
+        }
         if (area === 'close') { await killAll(); return json({}); }
         if (area === 'fs') return await fs(a!, url, request);
-        if (area === 'spawn') return start(await request.json());
+        if (area === 'spawn') { const body = await request.json(); return start(String(body.id), body.launch); }
         if (area === 'proc') return await proc(a!, b!, request);
         if (area === 'port' && b === 'ready') {
           const port = nativePort(a!), deadline = Date.now() + 20_000;
@@ -209,7 +236,7 @@ export function createFakeHost(options: FakeHostOptions) {
           }
           return json({ listening: false });
         }
-        if (area === 'port' && b === 'http') return forward(request, nativePort(a!), '/' + rest.join('/') + url.search);
+        if (area === 'port' && b === 'http') return await api(request, nativePort(a!), '/' + rest.join('/'), url.searchParams);
         return json({ message: 'Unknown fake host route' }, 404);
       } catch (error) {
         const code = (error as { code?: string }).code;

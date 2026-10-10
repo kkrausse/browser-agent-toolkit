@@ -1,5 +1,6 @@
 import type { RuntimeEndpoint, RuntimeFs } from './runtime-host';
-import type { ServiceLaunch } from './manifest';
+import { toLaunch, type LaunchDescription } from './manifest';
+import type { Launch } from './runtime-host';
 import type { CatalogModel } from './model-catalog';
 import { modelHeaderPluginSource } from './model-headers';
 import { javascriptPluginSource } from './guest/javascript-plugin-source' with { type: 'macro' };
@@ -28,22 +29,31 @@ const fallbackModel: CatalogModel = {
   limit: { context: 1048576, output: 131072 }, websocket: false,
 };
 
-/** The Node-target bundle, started as a Node program. It listens on 127.0.0.1:4096 with
- * Basic auth and shuts down on stdin EOF. */
-export function agentLaunch(password: string): ServiceLaunch {
-  if (!password || /[^\x20-\x7e]/.test(password)) throw Error('Expected a nonempty ASCII server password');
-  return { argv: ['node', '/app/server.js'], cwd: '/app', port: openCode.port, env: {
-    PATH: '/bin', EDITOR_WORKSPACE: workspace,
+/** Used when the manifest carries no agent launch (a manifest written without the image). */
+export const defaultAgent: LaunchDescription = {
+  entry: '/app/server.js', cwd: '/app', port: openCode.port, programs: ['opencode-server'],
+  env: {
+    PATH: '/app/node_modules/.bin:/bin',
     HOME: `${server}/home`, OPENCODE_TEST_HOME: `${server}/home`,
     XDG_CONFIG_HOME: `${server}/config`, XDG_STATE_HOME: `${server}/state`,
     XDG_DATA_HOME: `${server}/data`, XDG_CACHE_HOME: `${server}/cache`, TMPDIR: `${server}/tmp`,
-    OPENCODE_PASSWORD: password,
-    // In the workspace, so sessions persist with it (the old runtime kept it outside).
-    OPENCODE_DATABASE_PATH: `${server}/data/opencode.sqlite`,
     OPENCODE_TREE_SITTER_WASM_PATH: '/app/tree-sitter.wasm',
     OPENCODE_TREE_SITTER_BASH_WASM_PATH: '/app/tree-sitter-bash.wasm',
     OPENCODE_TREE_SITTER_POWERSHELL_WASM_PATH: '/app/tree-sitter-powershell.wasm',
-  } };
+  },
+};
+
+/** The Node-target bundle, started as a Node program (`node /app/server.js`). It listens on
+ * 127.0.0.1:4096 with Basic auth and shuts down on stdin EOF. The prepared description
+ * supplies paths; the per-start secret and the workspace-owned locations are added here. */
+export function agentLaunch(password: string, description: LaunchDescription = defaultAgent): Launch {
+  if (!password || /[^\x20-\x7e]/.test(password)) throw Error('Expected a nonempty ASCII server password');
+  return toLaunch(description, {
+    EDITOR_WORKSPACE: workspace,
+    OPENCODE_PASSWORD: password,
+    // In the workspace, so sessions persist with it (the old runtime kept it outside).
+    OPENCODE_DATABASE_PATH: `${server}/data/opencode.sqlite`,
+  });
 }
 
 /** Global configuration: one provider that is the host's model proxy; an explicit default

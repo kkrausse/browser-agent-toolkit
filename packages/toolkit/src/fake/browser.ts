@@ -25,6 +25,35 @@ export const bootFakeRuntime: BootRuntime = async ({ signal }) => {
   const at = (op: string, path: string) => `fs/${op}?path=${encodeURIComponent(path)}`;
   const { hostOrigin } = await (await call('boot', { method: 'POST', signal })).json();
   let closed: Promise<void> | undefined;
+  // One stream carries every process's output and exit (see the server half).
+  type Sink = { stdout: ReadableStreamDefaultController<Uint8Array>; stderr: ReadableStreamDefaultController<Uint8Array>; exit(result: { code: number | null; signal: string | null }): void };
+  const sinks = new Map<string, Sink>();
+  const finish = (id: string, result: { code: number | null; signal: string | null }) => {
+    const sink = sinks.get(id);
+    if (!sink) return;
+    sinks.delete(id);
+    for (const controller of [sink.stdout, sink.stderr]) { try { controller.close(); } catch { /* cancelled */ } }
+    sink.exit(result);
+  };
+  const events = new AbortController();
+  const eventStream = (await call('events', { signal: events.signal })).body!.pipeThrough(new TextDecoderStream()).getReader();
+  void (async () => {
+    let rest = '';
+    try {
+      for (;;) {
+        const { done, value } = await eventStream.read();
+        if (done) break;
+        const lines = (rest + value).split('\n');
+        rest = lines.pop()!;
+        for (const line of lines) {
+          const message = JSON.parse(line);
+          if (message.exit) finish(message.id, message.exit);
+          else if (message.data) { try { sinks.get(message.id)?.[message.stream as 'stdout' | 'stderr'].enqueue(Uint8Array.from(atob(message.data), char => char.charCodeAt(0))); } catch { /* cancelled */ } }
+        }
+      }
+    } catch { /* closed */ }
+    for (const id of [...sinks.keys()]) finish(id, { code: null, signal: 'SIGKILL' });
+  })();
 
   const host: RuntimeHost = {
     hostOrigin,
@@ -43,19 +72,15 @@ export const bootFakeRuntime: BootRuntime = async ({ signal }) => {
       },
     },
     async spawn(launch) {
-      const { id } = await post('spawn', launch);
-      const stream = (name: string) => new ReadableStream<Uint8Array>({
-        async start(controller) {
-          try {
-            const reader = (await call(`proc/${id}/${name}`)).body!.getReader();
-            for (;;) { const { done, value } = await reader.read(); if (done) break; controller.enqueue(value); }
-          } catch { /* closed */ }
-          controller.close();
-        },
-      });
+      // Registered before the request returns: the server may already be sending output.
+      const id = crypto.randomUUID();
+      let stdoutSink!: ReadableStreamDefaultController<Uint8Array>, stderrSink!: ReadableStreamDefaultController<Uint8Array>;
+      const stdout = new ReadableStream<Uint8Array>({ start(controller) { stdoutSink = controller; } });
+      const stderr = new ReadableStream<Uint8Array>({ start(controller) { stderrSink = controller; } });
+      const exited = new Promise<{ code: number | null; signal: string | null }>(exit => sinks.set(id, { stdout: stdoutSink, stderr: stderrSink, exit }));
+      await post('spawn', { id, launch });
       const process: RuntimeProcess = {
-        stdout: stream('stdout'), stderr: stream('stderr'),
-        exited: call(`proc/${id}/exit`).then(response => response.json(), () => ({ code: null, signal: 'SIGKILL' })),
+        stdout, stderr, exited,
         write: data => void call(`proc/${id}/stdin`, { method: 'POST', body: data as BodyInit }).catch(() => {}),
         closeStdin: () => void post(`proc/${id}/close-stdin`).catch(() => {}),
         kill: (signal = 'SIGTERM') => void post(`proc/${id}/kill`, { signal }).catch(() => {}),
@@ -78,7 +103,7 @@ export const bootFakeRuntime: BootRuntime = async ({ signal }) => {
     // The preview shares the page's origin, so `/api` already reaches the real server.
     setHostPaths() {},
     flush: async () => {},
-    close: () => closed ??= post('close').then(() => {}),
+    close: () => closed ??= post('close').then(() => events.abort()),
   };
   if (signal?.aborted) { await host.close(); throw signal.reason; }
   return host;

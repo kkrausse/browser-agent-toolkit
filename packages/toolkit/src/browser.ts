@@ -1,12 +1,12 @@
-import type { BootRuntime, RuntimeEndpoint, RuntimeFs, RuntimeHost, RuntimeProcess } from './runtime-host';
-import { decodeSourceFile, parseManifest, workspaceRoot, type EditorManifest, type ServiceLaunch } from './manifest';
-import { agentLaunch, installAgentConfig, openCode, verifyAgentReady } from './opencode';
+import type { BootRuntime, Launch, RuntimeEndpoint, RuntimeFs, RuntimeHost, RuntimeProcess } from './runtime-host';
+import { decodeSourceFile, parseManifest, toLaunch, workspaceRoot, type EditorManifest } from './manifest';
+import { agentLaunch, defaultAgent, installAgentConfig, openCode, verifyAgentReady } from './opencode';
 import { createChatController } from './chat/controller';
 import type { ChatController } from './chat/types';
 import { exportSessions, importSessions, type SessionBundle } from './sessions';
 
 export type { BootRuntime, RuntimeHost, RuntimeFs, RuntimeEndpoint, RuntimeProcess, Launch } from './runtime-host';
-export type { EditorManifest, ServiceLaunch } from './manifest';
+export type { EditorManifest, LaunchDescription } from './manifest';
 export type { SessionBundle } from './sessions';
 export { createChatController, canSend } from './chat/controller';
 export type * from './chat/types';
@@ -101,7 +101,7 @@ export async function startupOrder(preview: { listening: Promise<void>; ready: P
 /** Write the prepared project files below `/workspace`. Existing files are kept: edits made
  * in this browser win over newly prepared source. A workspace that was installed once owns
  * its whole tree, so files the agent removed are not resurrected. */
-export async function installSource(fs: RuntimeFs, source: EditorManifest['source']): Promise<{ installed: number; preserved: boolean }> {
+export async function installSource(fs: RuntimeFs, source: EditorManifest['project']): Promise<{ installed: number; preserved: boolean }> {
   if (await fs.stat(sourceMarker).then(() => true, () => false)) return { installed: 0, preserved: true };
   let installed = 0;
   const made = new Set<string>();
@@ -194,7 +194,7 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
     }
     mark('boot');
     publish({ message: 'Installing project source…' });
-    const source = await installSource(runtime.fs, manifest.source);
+    const source = await installSource(runtime.fs, manifest.project);
     log('editor', source.preserved ? 'Kept the workspace already in this browser' : `Installed ${source.installed} source files`);
     await installAgentConfig(runtime.fs, {
       modelBaseURL: `${runtime.hostOrigin}${base}model/opencode/`,
@@ -210,7 +210,8 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
 
   /** One program with a port: spawn, wait for the listener, then its own readiness check. */
   function service(name: 'preview' | 'agent', spec: {
-    launch(): ServiceLaunch;
+    port: number;
+    launch(): Launch;
     check(endpoint: RuntimeEndpoint, signal: AbortSignal): Promise<void>;
     shutdown(process: RuntimeProcess): void;
     listenMs: number;
@@ -221,7 +222,7 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
     let listening: Promise<void> = Promise.reject(Error(`${name} was not started`));
     let ready: Promise<void> = listening;
     void listening.catch(() => {});
-    const endpoint = host.endpoint(spec.launch().port);
+    const endpoint = host.endpoint(spec.port);
     const start = () => {
       run = new AbortController();
       const attempt = (current = { stopped: false });
@@ -246,7 +247,7 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
       listening = spawned.then(async () => {
         const timeout = AbortSignal.timeout(spec.listenMs);
         await endpoint.ready(AbortSignal.any([signal, timeout])).catch(error => {
-          throw timeout.aborted ? Error(`${name} did not listen on port ${launch.port} within ${spec.listenMs / 1000}s`) : signal.reason ?? error;
+          throw timeout.aborted ? Error(`${name} did not listen on port ${spec.port} within ${spec.listenMs / 1000}s`) : signal.reason ?? error;
         });
         mark(`${name}.listening`);
         publish({ [name]: 'listening' });
@@ -279,7 +280,8 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
   }
 
   const preview = service('preview', {
-    launch: () => manifest.preview,
+    port: manifest.launch.preview.port,
+    launch: () => toLaunch(manifest.launch.preview, { BROWSER_AGENT_PORT: String(manifest.launch.preview.port) }),
     listenMs: 60_000,
     shutdown: process => process.kill('SIGTERM'),
     // The guest server is configured with the prefix as its base (see ./vite).
@@ -291,12 +293,14 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
   });
 
   let authorization = '';
+  const agentDescription = manifest.launch.agent ?? defaultAgent;
   const agent = service('agent', {
+    port: agentDescription.port,
     launch() {
       // A fresh credential per start; it never leaves this page and the guest.
       const password = crypto.randomUUID() + crypto.randomUUID();
       authorization = 'Basic ' + btoa('opencode:' + password);
-      return agentLaunch(password);
+      return agentLaunch(password, agentDescription);
     },
     listenMs: 60_000,
     // OpenCode shuts down cleanly on end of input.
@@ -368,7 +372,7 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
     agent: { endpoint: { url: agent.endpoint.url, fetch: agentFetch }, get ready() { return agentUp; }, stop: agent.stop },
     chat,
     ready,
-    setHostPaths: prefixes => host.setHostPaths(manifest.preview.port, prefixes),
+    setHostPaths: prefixes => host.setHostPaths(manifest.launch.preview.port, prefixes),
     restartPreview: () => restart('preview'),
     restartAgent: () => restart('agent'),
     flush: () => host.flush(),
