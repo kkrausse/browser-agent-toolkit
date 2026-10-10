@@ -2,11 +2,11 @@
 //! brotli, behind one handle type.
 //!
 //! `bat_z_write` consumes some input and produces some output per call and
-//! reports both through `bat_z_result()` (two u32: consumed, produced). Its
+//! reports both through `bat_z_result()` (u32 words: consumed, produced, then
+//! on failure an `E_*` kind and, for brotli decoding, the decoder's error code). Its
 //! return value is 1 once the stream is complete (compressor finished and
 //! drained; decompressor at the end of a stream), 0 when more calls are
-//! needed, negative for an error (-3 data error; then `bat_z_result()[2]`
-//! says which, see `E_*`).
+//! needed, -3 for an error.
 //!
 //! gzip framing is done here: miniz_oxide only knows raw deflate and zlib.
 use crate::{bytes, bytes_mut};
@@ -15,7 +15,7 @@ use brotli::enc::StandardAlloc;
 use brotli::{BrotliDecompressStream, BrotliResult, BrotliState};
 use flate2::{Compress, Compression, Decompress, FlushCompress, FlushDecompress, Status};
 
-static mut RESULT: [u32; 3] = [0; 3];
+static mut RESULT: [u32; 4] = [0; 4];
 
 const DATA_ERROR: i32 = -3;
 const E_HEADER: u32 = 1;
@@ -41,6 +41,7 @@ struct Io<'a> {
     consumed: usize,
     produced: usize,
     error: u32,
+    detail: i32,
 }
 
 impl Io<'_> {
@@ -163,7 +164,6 @@ pub struct Inflater {
     mode: u32,
     gzip: bool,
     stage: Stage,
-    first_member: bool,
     /// Header or trailer bytes collected across writes.
     held: Vec<u8>,
     crc: crc32fast::Hasher,
@@ -210,7 +210,6 @@ impl Inflater {
             mode,
             gzip: false,
             stage: Stage::Body,
-            first_member: true,
             held: Vec::new(),
             crc: crc32fast::Hasher::new(),
             size: 0,
@@ -227,7 +226,6 @@ impl Inflater {
             _ => Stage::Body,
         };
         self.d.reset(self.mode == INFLATE);
-        self.first_member = true;
         self.held.clear();
         self.crc = crc32fast::Hasher::new();
         self.size = 0;
@@ -258,15 +256,7 @@ impl Inflater {
                             self.stage = Stage::Body;
                         }
                         Ok(None) => io.consumed += take,
-                        Err(()) if self.first_member => return io.fail(E_HEADER),
-                        Err(()) => {
-                            // Not another member: trailing bytes are ignored, as zlib's users expect.
-                            io.consumed = io.input.len();
-                            self.held.clear();
-                            self.stage = Stage::End;
-                            self.gzip = false;
-                            return 1;
-                        }
+                        Err(()) => return io.fail(E_HEADER),
                     }
                 }
                 Stage::Body => {
@@ -306,10 +296,10 @@ impl Inflater {
                     self.stage = Stage::End;
                 }
                 Stage::End => {
-                    if self.gzip && !io.rest().is_empty() {
-                        // Concatenated gzip members decompress as one stream.
+                    if self.gzip && io.rest().first().is_some_and(|&b| b != 0) {
+                        // Concatenated gzip members decompress as one stream. As in Node, anything
+                        // after a member that is not zero padding has to be another member.
                         self.d.reset(false);
-                        self.first_member = false;
                         self.stage = Stage::GzipHeader;
                         continue;
                     }
@@ -388,7 +378,10 @@ impl BrotliDec {
                 io.consumed = io.input.len();
                 1
             }
-            BrotliResult::ResultFailure => io.fail(E_BROTLI),
+            BrotliResult::ResultFailure => {
+                io.detail = self.s.error_code as i32;
+                io.fail(E_BROTLI)
+            }
             _ => 0,
         }
     }
@@ -424,7 +417,7 @@ pub extern "C" fn bat_z_new(mode: u32, a: u32, b: u32, c: u32, d: u32) -> *mut S
 /// BROTLI_OPERATION_* value for brotli encode; decoders ignore it.
 #[no_mangle]
 pub unsafe extern "C" fn bat_z_write(h: *mut Stream, input: *const u8, in_len: usize, out: *mut u8, out_cap: usize, flush: u32) -> i32 {
-    let mut io = Io { input: bytes(input, in_len), out: bytes_mut(out, out_cap), consumed: 0, produced: 0, error: 0 };
+    let mut io = Io { input: bytes(input, in_len), out: bytes_mut(out, out_cap), consumed: 0, produced: 0, error: 0, detail: 0 };
     let status = match &mut *h {
         Stream::Deflate(s) => s.write(&mut io, flush),
         Stream::Inflate(s) => s.write(&mut io),
@@ -432,7 +425,7 @@ pub unsafe extern "C" fn bat_z_write(h: *mut Stream, input: *const u8, in_len: u
         Stream::BrotliDec(s) => s.write(&mut io),
     };
     let result = &mut *core::ptr::addr_of_mut!(RESULT);
-    *result = [io.consumed as u32, io.produced as u32, io.error];
+    *result = [io.consumed as u32, io.produced as u32, io.error, io.detail as u32];
     status
 }
 
