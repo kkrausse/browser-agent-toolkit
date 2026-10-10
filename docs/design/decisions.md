@@ -710,3 +710,55 @@ Numbers: `docs/experiments/2026-10-10-first-open-and-shell.md`.
   16 MB limit stays for busy periods. A snapshot holds the kernel's overlay lock while the
   overlay is serialized.
 - **Agent configuration files are written only when their content differs.**
+
+## 2026-10-10 first open, image identity (gaps agent)
+
+Numbers: `docs/experiments/2026-10-10-first-open-and-shell.md`.
+
+- **Transport is `Content-Encoding: zstd` of a copy prepare writes (`<image>.zst`), decoded
+  by the browser.** Chrome 154's `DecompressionStream` takes only gzip/deflate (checked:
+  `zstd`, `brotli`, `br` all throw), so the alternatives were a Wasm decoder in the worker
+  or the network stack's own. The network stack's needs no code and runs off the worker.
+  zstd over brotli by build cost at equal size (TODO image 238.9 MB: zstd 9 → 33.8 MB in
+  2 s, zstd 19 → 29.0 MB in 47 s; brotli 5 → 32.7 MB in 8 s, brotli 9 → 30.1 MB in 114 s on
+  one thread). Default level 9; 19 is an option. A Wasm decoder was not built or measured.
+- **Integrity is a SHA-256 per MiB of the image, checked before the block is written.**
+  The sums are a sidecar (`<image>.sums`, 7 KB for the TODO image) whose own hash is in the
+  manifest, so the manifest stays small for the reopen. WebCrypto hashes a block natively
+  (the Wasm SHA-256 pass cost about 8 s for 240 MB); it has no incremental digest, which
+  is why blocks rather than one hash. Verifying before the write is what makes it sound to
+  use the image while it arrives. The whole-file `sha256` in the manifest is no longer
+  computed in the browser when sums exist; it remains the image's name.
+- **An image is mounted when its head is in the file**, with the kernel told it is
+  arriving (kernel-abi.md §17). Chosen over waiting because at 50 Mbit/s even the
+  compressed image is 5 s. The downloader's file is `<name>.partial` in `readwrite-unsafe`
+  mode; workers join that mode when `read-only` is refused. The final name still means
+  complete and verified: a partial that was mounted cannot be renamed while held, so it is
+  marked `.ok` and renamed by the next open.
+- **Prepare lays out what a start-up reads first** (`--order`, from a recorded read trace:
+  758 files, 11 MB of 239 MB for the TODO app) and the browser **stops reading the image
+  after that part until the toolkit says its programs are up** (`RuntimeHost.started()`,
+  optional in the contract; 20 s timer as a fallback). Without the stop, the program
+  scripts shared the link with the image's remainder. The order file is an input of the
+  image (a new order is a new hash); stale lines only cost speed.
+- **Everything else a first open fetches is compressed too** (program scripts, derived
+  bundle, runtime scripts and Wasm): 281 MB → 41 MB on the wire in total.
+- **Packages that are not from the lockfile live in `node_modules/.linked` and travel in
+  a second image** (`manifest.layers`), mounted there. The guest does need the toolkit
+  (its Vite plugin runs in the guest's config, and `tsc` reads its types), so excluding it
+  was not an option; its copy of the runtime (4.4 of 5.1 MB) is pruned by policy. Chosen
+  over delivering those files through the overlay (the derived-bundle route) because an
+  image is read-only, content-addressed and precompiled like the rest of `node_modules`.
+  The policy's shim packages stay in the first image: they change with the tool, not
+  with the app.
+- **Bun's isolated linker is not deterministic about `.bin` links** (one of four installs
+  lacked one): prepare adds the links packages declare and Bun did not write. This was a
+  second cause of image churn, independent of the toolkit.
+- **Kernel walk**: the image fast path applies whenever the overlay has nothing under the
+  next name, so the layer's mount point does not slow lookups elsewhere in `node_modules`.
+- **Image collection** runs after the downloads, only in the tab that holds the
+  workspace, keeps every mounted image, and retries once after 5 s for files a
+  just-closed editor still held. A Web Lock per image name keeps a second tab from
+  truncating a download in progress.
+- **Not done**: resuming an interrupted download (it restarts), and the UI does not show
+  that the image is still arriving in the background.
