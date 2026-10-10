@@ -560,3 +560,42 @@ Numbers: `docs/experiments/2026-10-09-net.md`. Code: `crates/bat-kernel/src/{htt
 - **zlib and the synchronous digests are a separate Wasm** (`crates/bat-node-native`,
   1.1 MB, instantiated on first use), not part of the kernel module, so a process that
   never compresses or hashes does not pay for it and the kernel stays small.
+
+## 2026-10-10 end to end: the TODO scenario on the real runtime (e2e agent)
+
+Evidence: `docs/experiments/2026-10-09-e2e.md`.
+
+- **ripgrep stays the npm package run as a guest `node` process.** After the loop fix a
+  search of `src` takes 31–145 ms and a file listing 51–71 ms per spawn in Chrome, under
+  the 200 ms bar set for building a `wasm32-wasip1` `rg` against the kernel. Revisit if
+  OpenCode starts searching trees larger than a project's own source.
+- **Pending asynchronous Wasm compilation keeps a process alive**, like work on Node's
+  thread pool. `fs.read` on a pipe or socket waits for readiness instead of blocking in
+  the call: Go's Wasm runtime (esbuild-wasm) relies on the call returning.
+- **Script output is a derived bundle, not project files** (supersedes "the cache is
+  delivered as project files" above): `derived-<sha16>.json` beside the manifest, listed
+  as `manifest.derived = { file, bytes, sha256, owns }`. The browser records
+  `<bundle> <image>` in `/workspace/.server/derived-installed` and reinstalls, after
+  removing the `owns` directories, whenever that differs. Chosen over a second image
+  because Vite commits a re-optimization by renaming the cache directory, which an image
+  directory cannot do (`EXDEV`). Source files keep the opposite rule: the browser's copy
+  wins.
+- **Optimized dependencies have no source maps in the guest** (toolkit Vite plugin,
+  `optimizeDeps.esbuildOptions.sourcemap: false`, in the prepare run and in the tab so the
+  config hash agrees): 5.8 → 2.1 MB. Cost: dependency frames in the preview's devtools show
+  bundled code.
+- **`@types/*` and `bun-types` are no longer pruned** (+7 MB): an agent verifying its edit
+  with `tsc --noEmit` is the normal case, and the app's own tsconfig names them.
+- **`/workspace/.server` carries a `.gitignore` of `*`.** The agent's state is inside the
+  workspace so that it persists with it; anything that walks the project by ignore rules
+  (Tailwind's scanner, ripgrep) must not treat it as project content. Without it every
+  agent write reloaded the preview.
+- **`resetWorkspace` deletes the overlay and keeps the image**, under the workspace lock
+  (busy while any tab has the editor open). It is a runtime export beside `bootRuntime`
+  and a toolkit function; the example reaches it through its private editor chunk.
+- **A write to an HTTP response whose client is gone is dropped silently**, as Node does;
+  the handler learns of the departure from `close`.
+- **One command**: `bun run setup` builds everything into `CARGO_TARGET_DIR` (default
+  `target/`) and puts the pinned OpenCode 2.0.3 server in `.runtime/opencode-2.0.3`
+  (copied from a sibling old checkout, else the checksummed release asset);
+  `bun run editor` adds prepare, build and serve of the example.

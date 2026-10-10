@@ -17,7 +17,10 @@ await prepare({
 ```
 
 Runs the Rust CLI `bat-prepare app` (found through `$BAT_PREPARE`, a cargo `target` directory
-above, or PATH), which packs the dependency image and writes `manifest.json`.
+above, or PATH), which packs the dependency image and writes `manifest.json`. Files derived from the
+project at prepare time (Vite's dependency-optimizer cache) go to `derived-<hash>.json`
+beside it; the browser installs that bundle only when it or the image changed, replacing
+the directories it owns.
 
 ## `./server` (serve time)
 
@@ -51,6 +54,9 @@ await editor.chat.send({ text: 'Add a dark theme' })
 console.log(editor.snapshot().timings)              // ms per startup step
 await editor.close()
 ```
+
+`resetWorkspace({ base? })` deletes this browser's copy of the workspace (edits, sessions,
+caches; not the dependency image); it rejects while the editor is open in any tab.
 
 `Editor` also has `fs`, `preview` and `agent` (`{ endpoint, ready, stop }`), `restartPreview()`,
 `restartAgent()`, `flush()`, `sessions.export()` / `sessions.import()`, `subscribe()`.

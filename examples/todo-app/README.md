@@ -9,15 +9,38 @@ and timings, Exit), `server.ts` (handler and authorization), `prepare.ts`, `vite
 
 ## Run
 
-From the repository root: `bun install && bun run build` (builds the toolkit). Then here:
+From the repository root, one command (builds the Wasm pieces, the `bat-prepare` CLI, the
+runtime and the toolkit, fetches the pinned OpenCode server, then prepares, builds and
+serves this example):
 
 ```sh
-cp .env.example .env.local     # optional: VIVARI_MODEL_API_KEY=<key> for chat
-bun run editor                 # prepare (needs bat-prepare), build, serve on :3000
+cp examples/todo-app/.env.example examples/todo-app/.env.local   # optional: VIVARI_MODEL_API_KEY=<key> for chat
+PORT=3000 bun run editor
 ```
 
-`PORT` changes the port. Without a key the editor and preview work and chat answers with an
-explanation.
+`bun run setup` is the build part alone; it is incremental (about 8 s when nothing
+changed, a few minutes the first time). It needs bun, node 24 and cargo with the targets
+`wasm32-wasip1-threads` and `wasm32-unknown-unknown`. After a setup, `bun run editor` in
+this directory repeats only prepare, build and serve (it finds `target/release/bat-prepare`
+and `.runtime/opencode-2.0.3`; set `BAT_PREPARE` / `BAT_OPENCODE_DIR` when they are
+elsewhere, e.g. with a custom `CARGO_TARGET_DIR`).
+
+Without a key the editor and preview work and chat answers with an explanation.
+"Reset workspace" on the home page deletes this browser's source edits and chat sessions;
+the next open starts from the prepared source again.
+
+## Demo driver
+
+`demo/run.ts` drives the README scenario in Chrome through the `browser-control` CLI and
+checks every step (todos on the home page, editor ready, the prompt, the hot-updated dark
+preview with its counter, "Ship it" and a tick inside the preview). Each run is one real
+model conversation.
+
+```sh
+bun demo/run.ts --base http://127.0.0.1:3000 [--runs 3] [--session bat-demo]
+bun demo/run.ts --base http://127.0.0.1:3000 --slow --record /tmp/take.mp4
+bun demo/gif.ts /tmp/take.mp4 ../../docs/media/todo-editor-demo-rust.gif
+```
 
 ### Without the browser runtime (development)
 
