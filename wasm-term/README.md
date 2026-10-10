@@ -118,13 +118,70 @@ settings. The parameters and their defaults (the mock backend):
 
 | Parameter | Default | |
 | --- | --- | --- |
-| `server` | `http://127.0.0.1:4792` | an `opencode serve` the browser can reach; origins other than `localhost`/`127.0.0.1` need `opencode serve --cors <page origin>` |
+| `server` | `/proxy/opencode` | a path means this page's own origin: the dev server's reverse proxy (below). Or the URL of an `opencode serve` the browser can reach directly, e.g. `&server=http://127.0.0.1:4792`; origins other than `localhost`/`127.0.0.1` then need `opencode serve --cors <page origin>`, and an https page cannot call an http server |
 | `password` | `wasm-term-mock` | the server's `OPENCODE_SERVER_PASSWORD` (user `opencode`) |
 | `dir` | `/tmp/wasm-term-workspace` | project directory, a path on the server; empty = where the server runs |
+
+The dev server is also a reverse proxy to the backends, so the page reaches
+them same-origin: no CORS setup, no mixed content, one port to expose.
+
+| Path on :4790 | Goes to | |
+| --- | --- | --- |
+| `/proxy/opencode/...` | `OPENCODE_UPSTREAM`, default `http://127.0.0.1:4792` | streamed as it arrives (the `/api/event` stream), no idle timeout; method, query (`?auth_token=` too), body and `Authorization` unchanged; `Origin` dropped going up, the Basic challenge header dropped coming down |
+| `/proxy/codex` | `CODEX_UPSTREAM`, default `ws://127.0.0.1:4796` | WebSocket relay, text and binary frames, subprotocols passed on |
 
 `mock-llm/down.sh` stops the backend. Prompts that select scripted replies
 (`please use a tool`, `show me markdown`, `long scroll`, ...) are listed in
 `mock-llm/README.md`.
+
+### From other devices: tailnet HTTPS
+
+The page needs cross-origin isolation, which needs a secure context, so from
+another machine it has to be https. `web/serve-up.sh` sets that up on a
+machine with Tailscale and leaves it running:
+
+```sh
+web/serve-up.sh                  # backend + dev server + one tailscale serve entry; prints the URL
+web/serve-down.sh                # takes all three down again
+web/serve-down.sh --keep-backend # ... but leaves the Docker backend
+```
+
+What `serve-up.sh` starts, and `serve-down.sh` removes:
+
+| Piece | What | Look at it |
+| --- | --- | --- |
+| Docker backend | `mock-llm/up.sh` (skipped when :4792 already answers), ports on loopback only | `docker compose -f mock-llm/compose.yaml ps` |
+| dev server | systemd user unit `wasm-term-web.service`: `bun server.ts` on `127.0.0.1:4790`, enabled, restarts on failure, survives logout (lingering) | `systemctl --user status wasm-term-web`, `journalctl --user -u wasm-term-web` |
+| tailnet HTTPS | one `tailscale serve` entry, HTTPS port 4790 (`WASM_TERM_HTTPS_PORT`) -> `http://127.0.0.1:4790`; tailnet only, never funnel | `tailscale serve status` |
+
+Then, from any device on the tailnet: `https://<machine>.<tailnet>.ts.net:4790/`
+(launcher) or `.../?guest=opencode`. Only that one port faces the tailnet; the
+backends stay on loopback behind the proxy paths. `serve-down.sh` removes the
+serve entry only if it still points at the dev server and never touches other
+entries. Changing the serve config needs root unless the user is tailscale's
+operator; the scripts try plain `tailscale serve` and fall back to `sudo` for
+that one command. The unit file is written to `~/.config/systemd/user/` with
+this checkout's path, so run `serve-up.sh` again after moving the checkout.
+
+Anyone on the tailnet who opens the page can drive the backend behind it. With
+the mock backend that is scripted shell commands in a container with no
+internet and no host mounts; point `OPENCODE_UPSTREAM` at a real server only
+with that in mind.
+
+### On a phone
+
+On a touch device (or a window narrower than 600px) the page adds what
+`bun-web-terminal` uses on a phone, importing its touch, viewport and wheel
+code (`web/mobile.ts`):
+
+- a row of keys under the terminal: keyboard, Esc, Ctrl, Tab, arrows. Ctrl is
+  sticky for one key: Ctrl then `p` on the on-screen keyboard is ctrl+p;
+- the keyboard key opens and closes the on-screen keyboard. A tap on the
+  terminal is a click for the program and does not open it;
+- the page follows `visualViewport`, so with the keyboard open the terminal
+  is refitted above it and the prompt and keys row stay visible;
+- a swipe scrolls (as wheel steps: mouse reports, or scrollback); a long press
+  then drag selects.
 
 ### Checks
 
@@ -136,6 +193,23 @@ function with the Rust guests and the JavaScript shim with `js-demo`;
 markdown, scrolling, palette, sessions, clipboard, reload and exit, comparing
 screens with the native client's captures; `opencode-perf` prints load and
 input-latency numbers. Screenshots land in `docs/screenshots/`.
+
+Both run against another base URL with `WASM_TERM_URL`, e.g. the tailnet one:
+`WASM_TERM_URL=https://<machine>.<tailnet>.ts.net:4790 web/verify/run.sh opencode`.
+
+`web/webkit/smoke.sh [base URL]` runs the page headless in Playwright's WebKit
+build, at a desktop viewport and with an iPhone device profile (`PROFILE=desktop`
+or `iphone` for one): isolation, the Worker, the opencode home screen, a
+prompt and its reply; in the iPhone profile also the keys row, focus, swipe
+scrolling and refitting to a keyboard-sized viewport. Once before:
+`web/webkit/install.sh`, which puts the browser under
+`vendor/playwright-browsers` and the system libraries it lacks under
+`vendor/webkit-syslibs` (downloaded Ubuntu packages, unpacked; nothing
+installed system-wide). It is WebKit's engine on Linux, not Safari: it shows
+that the page's JavaScript, wasm, SharedArrayBuffer and Worker use run on
+JavaScriptCore/WebCore, and nothing about iOS itself (the real on-screen
+keyboard and how `visualViewport` moves with it, real touch input, memory
+limits, WebGL on Apple GPUs, clipboard prompts).
 
 The guest ABI, the page-side API and the JavaScript shim are `docs/abi.md`.
 How crossterm/ratatui/tokio run on it, and what the codex port should reuse,

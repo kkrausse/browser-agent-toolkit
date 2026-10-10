@@ -36,7 +36,7 @@ cd ../../web && bun run dev
 
 Open <http://127.0.0.1:4790/?guest=opencode> (or <http://127.0.0.1:4790/> for the launcher form).
 `&server=`, `&password=`, `&dir=` choose the server, its password and the project directory; the
-defaults are the mock backend's (`http://127.0.0.1:4792`, `wasm-term-mock`,
+defaults are the mock backend's (`/proxy/opencode` = the dev server's proxy to `http://127.0.0.1:4792`, `wasm-term-mock`,
 `/tmp/wasm-term-workspace`). `&persist=0` runs without saved state, `&reset=1` forgets it first.
 `&env=WASM_TERM_DEBUG=1` sends the TUI's log to the browser console, `&env=WASM_TERM_FFI_STATS=1`
 logs FFI call and copy volume once a second.
@@ -347,11 +347,17 @@ on top. Not measured: frame time inside the wasm renderer, memory growth over a 
 
 ### Known gaps, in priority order
 
-1. **Only Chrome was run.** Safari/iOS matters and has known differences, none of them tested:
-   - The page must be cross-origin isolated, which browsers only grant in a secure context:
-     `http://127.0.0.1` works, `http://<tailscale-name>:4790` from a phone does not. It needs
-     HTTPS in front of the dev server, and then the opencode server must be HTTPS too (mixed
-     content) and started with `--cors <page origin>`.
+1. **Only Chrome and Linux WebKit were run, no real Safari.** Playwright's WebKit (WPE port,
+   headless) passes `web/webkit/smoke.sh` at a desktop viewport and an iPhone profile: isolated,
+   Worker and wasm start, WebGL renderer, home screen, prompt and streamed reply, and the touch
+   controls. That is the engine, not Safari on macOS/iOS; these are still untested there:
+   - The page must be cross-origin isolated, which browsers only grant in a secure context.
+     Solved for the tailnet: `web/serve-up.sh` puts tailnet HTTPS in front of the dev server and
+     the page reaches opencode through the dev server's `/proxy/opencode` (no CORS, no mixed
+     content). Verified from Chrome and Linux WebKit on the serving machine, not from a phone.
+   - The on-screen keyboard: `web/mobile.ts` follows `visualViewport` and offers a keys row, as
+     `bun-web-terminal` does on an iPhone; here it was only exercised with synthetic touches and
+     a shrunk viewport.
    - Clipboard: Safari allows `navigator.clipboard` calls only inside a user gesture. A request
      that arrives from the Worker is not one, so `ctrl+v` paste and copy-on-select will be
      refused there (the TUI shows its own error). Cmd+V and the paste event still work, since
@@ -385,8 +391,12 @@ on top. Not measured: frame time inside the wasm renderer, memory growth over a 
 
 ## Remaining work, in order
 
-1. An HTTPS path for the dev page and a server reachable from it, then Safari/iOS: isolation,
-   input (touch, on-screen modifier keys), the clipboard gesture rule, the WebGL renderer.
+1. Real Safari and iOS. The HTTPS path exists (`web/serve-up.sh`: tailnet HTTPS in front of the
+   dev server, which proxies the opencode API same-origin), the page has a touch keys row,
+   viewport fit and swipe scrolling (`web/mobile.ts`), and it all passes in Playwright's Linux
+   WebKit at a desktop and an iPhone profile (`web/webkit/smoke.sh`). Not yet run on an actual
+   iPhone or Mac Safari: the on-screen keyboard, memory limits, WebGL there, the clipboard
+   gesture rule.
 2. Gesture-synchronous clipboard read in the page; image paste.
 3. Serve or proxy the extra tree-sitter grammars so highlighting does not depend on GitHub CORS.
 4. Exercise attachments, the diff viewer and terminal panes; run a long session and watch memory.

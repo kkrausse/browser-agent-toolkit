@@ -48,6 +48,11 @@ host-side launchers. What changed for anyone writing a client:
 - 4794 (egress trap) and 4795 (opencode tap) are no longer started by default;
   both are optional host-side helpers now (below).
 
+The dev page reaches opencode and codex through its own server's reverse proxy
+by default (`/proxy/opencode`, `/proxy/codex` on :4790; see the main README).
+With that, a browser on another machine needs neither `MOCK_CORS_ORIGINS` nor
+`MOCK_BIND`: both are only for a page that talks to these ports directly.
+
 Settings, as environment variables for `up.sh`:
 
 | Variable | Default | Effect |

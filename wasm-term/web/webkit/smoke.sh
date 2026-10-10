@@ -8,6 +8,8 @@ web="$(cd "$(dirname "$0")/.." && pwd)"
 vendor="$(cd "$web/../vendor" && pwd)"
 # Playwright reads this while it is imported, so it cannot be set from smoke.ts.
 export PLAYWRIGHT_BROWSERS_PATH="$vendor/playwright-browsers"
+# TLS for https base URLs: glib-networking, unpacked by install.sh.
+export GIO_EXTRA_MODULES="$vendor/webkit-syslibs/root/usr/lib/x86_64-linux-gnu/gio/modules"
 # Its host check also wants the GTK port's libraries; headless runs use the WPE port only.
 export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1
 mkdir -p "$web/../docs/screenshots"

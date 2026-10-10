@@ -2,11 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>wasm-term</title>
   <style>
     html, body { height: 100%; margin: 0; background: #16161d; overflow: hidden; }
-    #terminal { position: fixed; inset: 0; }
+    /* The body is the visible viewport (mobile.ts keeps it above an on-screen keyboard):
+       the terminal fills it, the keys row for touch devices sits below. */
+    body { position: fixed; top: 0; left: 0; width: 100%; height: 100dvh; display: flex; flex-direction: column; }
+    #terminal { position: relative; width: 100%; flex: 1; min-height: 0; overflow: hidden; }
+    #terminal canvas { display: block; -webkit-touch-callout: none; }
+    .terminal-keys { display: none; flex: 0 0 auto; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; padding: 4px 4px 0; border-top: 1px solid #363646; }
+    .terminal-keys button { min-width: 0; min-height: 40px; padding: 2px; border: 1px solid #363646; border-radius: 3px; color: #dcd7ba; background: #16161d; font: 14px ui-monospace, monospace; touch-action: manipulation; }
+    .terminal-keys button[aria-pressed="true"] { color: #16161d; background: #98bb6c; }
+    .terminal-keys button svg { width: 20px; height: 20px; vertical-align: middle; }
+    @media (any-pointer: coarse), (max-width: 600px) {
+      .terminal-keys { display: grid; padding-bottom: max(6px, env(safe-area-inset-bottom)); }
+      #terminal { touch-action: pinch-zoom; }
+    }
     #fatal { position: fixed; inset: 0; margin: 0; padding: 16px; color: #e06c75; font: 14px/1.4 monospace; white-space: pre-wrap; display: none; }
   </style>
 </head>

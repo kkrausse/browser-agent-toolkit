@@ -21,7 +21,18 @@ missing() {
     | { LD_LIBRARY_PATH="$wpe/lib:$wpe/sys/lib:$libs/lib" xargs ldd 2>/dev/null || true; } | awk '/not found/ {print $1}' | sort -u
 }
 
+unpack() {
+  for deb in "$libs"/debs/*.deb; do dpkg-deb -x "$deb" "$libs/root"; done
+  # One flat directory of links: what LD_LIBRARY_PATH points at. Plugins (media codecs,
+  # spelling back ends) are left out: the smoke test needs neither, and each drags in more.
+  find "$libs/root" -name '*.so*' \( -type f -o -type l \) -path '*/lib/*' ! -path '*/gstreamer-1.0/*' ! -path '*/enchant-2/*' -exec ln -sf {} "$libs/lib/" \;
+}
+
 mkdir -p "$libs/debs" "$libs/root" "$libs/lib"
+# Not a link dependency: GLib loads TLS support as a module (smoke.sh points GIO_EXTRA_MODULES at it).
+# Without it WebKit cannot open https pages at all.
+(cd "$libs/debs" && apt-get download glib-networking >/dev/null)
+unpack
 for round in 1 2 3 4 5; do
   need="$(missing)"
   [ -z "$need" ] && break
@@ -30,10 +41,7 @@ for round in 1 2 3 4 5; do
     if [ -z "$package" ]; then echo "no package known for $lib (add it to web/webkit/packages.txt)" >&2; exit 1; fi
     (cd "$libs/debs" && apt-get download "$package" >/dev/null)
   done
-  for deb in "$libs"/debs/*.deb; do dpkg-deb -x "$deb" "$libs/root"; done
-  # One flat directory of links: what LD_LIBRARY_PATH points at. Plugins (media codecs,
-  # spelling back ends) are left out: the smoke test needs neither, and each drags in more.
-  find "$libs/root" -name '*.so*' \( -type f -o -type l \) -path '*/lib/*' ! -path '*/gstreamer-1.0/*' ! -path '*/enchant-2/*' -exec ln -sf {} "$libs/lib/" \;
+  unpack
 done
 left="$(missing)"
 if [ -n "$left" ]; then echo "still missing: $left" >&2; exit 1; fi

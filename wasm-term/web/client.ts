@@ -19,6 +19,7 @@ import { type ClipboardBridge, type ExitStatus, type Program, startProgram } fro
 import { openPersistStore } from "../host/persist-store";
 import type { GuestInfo } from "./guests";
 import { showLauncher } from "./launcher";
+import { installMobileControls } from "./mobile";
 
 declare global {
   interface Window {
@@ -143,7 +144,10 @@ const program = startProgram({
 // Keystrokes, pastes (already bracketed by the terminal when the program asked
 // for it), mouse reports, focus reports and query replies all arrive here as
 // bytes for the pty master.
-terminal.onData(data => {
+const mobile = installMobileControls(container, terminal);
+terminal.onData(typed => {
+  const data = mobile.input(typed);
+  if (!data) return;
   sent.push(data);
   if (sent.length > 200) sent.shift();
   program.write(data);
@@ -163,7 +167,9 @@ new ResizeObserver(() => {
 terminal.onTitleChange(title => {
   document.title = title || "wasm-term";
 });
-terminal.focus();
+// Not on a touch device: focus there opens the on-screen keyboard over a page nobody has touched yet.
+if (matchMedia("(any-pointer: coarse)").matches) terminal.textarea?.blur();
+else terminal.focus();
 
 window.wasmTerm = {
   terminal,

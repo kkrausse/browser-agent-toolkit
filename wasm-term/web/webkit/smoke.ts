@@ -59,20 +59,25 @@ async function run(profile: string, options: BrowserContextOptions, touch: boole
     }), await page.evaluate(() => [innerWidth, innerHeight, window.wasmTerm.terminal.cols, window.wasmTerm.terminal.rows]));
 
     if (touch) {
-      // A tap, as touch events. The page should give the hidden textarea focus:
-      // that is what makes iOS show its keyboard (not observable here).
+      const focused = () => page.evaluate(() => document.activeElement === window.wasmTerm.terminal.textarea);
+      const coarse = await page.evaluate(() => matchMedia("(any-pointer: coarse)").matches);
+      check("touch: the text input is not focused on load (no keyboard over an untouched page)", !(await focused()), { coarse });
+      // A tap, as touch events: a click for the program, not a request for the keyboard.
       const size = page.viewportSize()!;
       await page.touchscreen.tap(size.width / 2, size.height / 3);
       await page.waitForTimeout(300);
-      check("touch: the extra-keys row is shown", await page.evaluate(() => {
+      check("touch: a tap on the terminal does not focus the text input", !(await focused()));
+      check("touch: the extra-keys row is shown, inside the viewport", await page.evaluate(() => {
         const keys = document.querySelector<HTMLElement>(".terminal-keys");
         return !!keys && getComputedStyle(keys).display !== "none" && keys.getBoundingClientRect().bottom <= innerHeight + 1;
       }));
+      // Focus on the textarea is what makes iOS show its keyboard (the keyboard itself is not observable here).
       await page.locator('.terminal-keys [data-key="Keyboard"]').tap();
       await page.waitForTimeout(200);
-      check("touch: the keyboard key focuses the terminal's text input", await page.evaluate(() => document.activeElement === window.wasmTerm.terminal.textarea));
+      check("touch: the keyboard key focuses the terminal's text input", await focused());
+    } else {
+      await page.evaluate(() => window.wasmTerm.terminal.focus());
     }
-    await page.evaluate(() => window.wasmTerm.terminal.focus());
     await page.keyboard.type("hello there", { delay: 10 });
     const typed = await waitFor(page, "hello there", 5_000).then(() => true, () => false);
     check("typed text reaches the program and is echoed in the prompt", typed, await page.evaluate(() => window.wasmTerm.sent.slice(-5)));
@@ -81,6 +86,30 @@ async function run(profile: string, options: BrowserContextOptions, touch: boole
     check("prompt is answered: the mock reply streams in (fetch + event stream from the Worker)", replied, (await screen(page)).split("\n").filter(Boolean).slice(0, 8));
 
     if (touch) {
+      // A swipe down over the transcript scrolls it back (touch events -> wheel steps -> mouse reports).
+      await page.keyboard.type("long scroll", { delay: 10 });
+      await page.keyboard.press("Enter");
+      await waitFor(page, "END-OF-LONG-RESPONSE", 40_000).catch(() => {});
+      await page.waitForTimeout(500);
+      const bottom = await screen(page);
+      await page.evaluate(async () => {
+        const target = document.querySelector("#terminal")!;
+        // Plain events carrying touch lists: WebKit's Linux ports cannot construct Touch.
+        const fire = (type: string, y: number) => {
+          const touch = { identifier: 1, target, clientX: 180, clientY: y };
+          const event = new Event(type, { bubbles: true, cancelable: true });
+          Object.assign(event, { touches: type === "touchend" ? [] : [touch], changedTouches: [touch] });
+          target.dispatchEvent(event);
+        };
+        fire("touchstart", 150);
+        for (let y = 170; y <= 450; y += 20) { fire("touchmove", y); await new Promise(resolve => setTimeout(resolve, 30)); }
+        await new Promise(resolve => setTimeout(resolve, 200)); // a finger that pauses does not coast
+        fire("touchend", 450);
+      });
+      await page.waitForTimeout(600);
+      const scrolled = await screen(page);
+      check("touch: a swipe scrolls the transcript back", bottom.includes("END-OF-LONG-RESPONSE") && !scrolled.includes("END-OF-LONG-RESPONSE"), scrolled.split("\n").filter(Boolean).slice(-5));
+      await page.screenshot({ path: join(shots, "webkit-iphone-scrolled.png") });
       const before = await screen(page);
       await page.locator('.terminal-keys [data-key="Control"]').tap();
       await page.keyboard.type("p");
@@ -91,6 +120,25 @@ async function run(profile: string, options: BrowserContextOptions, touch: boole
       check("touch: Esc on the keys row closes it", !(await screen(page)).includes("Commands") && before.length > 0, await page.evaluate(() => window.wasmTerm.sent.slice(-3)));
     }
     await page.screenshot({ path: join(shots, `webkit-${profile}.png`) });
+    if (touch) {
+      // Stand-in for the on-screen keyboard: the visible viewport loses its lower 45%.
+      // (On iOS only visualViewport shrinks, the layout viewport does not; that difference is not reproduced here.)
+      const size = page.viewportSize()!;
+      const rowsBefore = await page.evaluate(() => window.wasmTerm.terminal.rows);
+      await page.setViewportSize({ width: size.width, height: Math.round(size.height * 0.55) });
+      await page.waitForFunction(rows => window.wasmTerm.terminal.rows < rows, rowsBefore, { timeout: 5_000 }).catch(() => {});
+      await page.waitForTimeout(500);
+      const fit = await page.evaluate(() => {
+        const keys = document.querySelector(".terminal-keys")!.getBoundingClientRect();
+        const canvas = document.querySelector("#terminal canvas")!.getBoundingClientRect();
+        const view = window.visualViewport!;
+        return { rows: window.wasmTerm.terminal.rows, keysBottom: keys.bottom, canvasBottom: canvas.bottom, keysTop: keys.top, viewHeight: view.height, body: document.body.getBoundingClientRect().height };
+      });
+      const text = await screen(page);
+      check("touch: with the viewport shrunk as by a keyboard, the grid refits and the prompt and keys row stay visible",
+        fit.rows < rowsBefore && fit.keysBottom <= fit.viewHeight + 1 && fit.canvasBottom <= fit.keysTop + 1 && Math.abs(fit.body - fit.viewHeight) <= 1 && text.includes("Mock Model"), { rowsBefore, ...fit });
+      await page.screenshot({ path: join(shots, "webkit-iphone-keyboard-height.png") });
+    }
     check("no page errors", errors.length === 0, errors.slice(0, 5));
   } catch (error) {
     check("the script ran to the end", false, String((error as Error).stack ?? error).slice(0, 500));
