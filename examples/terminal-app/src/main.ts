@@ -7,6 +7,8 @@
 //                                       fetches here; `endpoint(port).fetch` reaches the server)
 //   OpenCode server → model             a plain cross-origin fetch from the tab to `?model=`;
 //                                       no server of this page is involved
+//   OpenCode server → api.openai.com    (a ChatGPT sign-in) the runtime's own TLS and HTTP through
+//                                       a TCP relay, `?tunnel=`, which carries ciphertext only
 //   app in the frame → its `/api`       a third guest program (todo-api.ts), through the service worker
 //
 // The page is a directory of static files: every URL is relative to the page, and the
@@ -14,6 +16,8 @@
 //
 //   ?model=<base URL>    an OpenAI Responses API. Default: the build's MODEL_URL, else this host, port 4311 (mock-model.ts)
 //   ?modelId=<id>        the model id sent in requests. Default `scripted`
+//   ?tunnel=<wss URL>    a TCP relay (wasm-term/web/tcp-relay-main.ts) for the hosts that answer without CORS headers.
+//                        Default: the build's TUNNEL_URL, else none; `0` for none
 //   ?reset=1             first forget this browser's workspace (source edits, sessions) and the client's saved state
 import { installDerived, installSource, type BootRuntime, type EditorManifest, type RuntimeHost, type RuntimeProcess } from '@kkrausse/browser-agent-toolkit/browser'
 import { installDiag } from './diag'
@@ -56,11 +60,16 @@ const workerUrl = new URL('sw.js', here).href
 const api = { script: '/tmp/todo-api.mjs', port: 3001, store: `${workspace}/.server/todos.json` }
 // Set when the page is built (`MODEL_URL=… bun run build`), for a page published away from its mock.
 const builtModel = process.env.MODEL_URL || undefined
+const builtTunnel = process.env.TUNNEL_URL || undefined
 
 // OpenAI's signing keys, which the server reads to check the identity token of a ChatGPT sign-in.
-// That document is served without CORS headers, so the build ships a copy (build.ts) and the
-// server's request for it is answered with the copy.
+// That document is served without CORS headers. With a tunnel the server reads the real one
+// through it; without, the build ships a copy (build.ts) and the request is answered with that.
 const openAiKeys = 'https://auth.openai.com/.well-known/jwks.json'
+// What goes through the tunnel when there is one: the model API of a ChatGPT sign-in, whose
+// answers carry no CORS headers, and the keys above. The token exchange at auth.openai.com
+// allows any origin and stays with the browser's fetch.
+const tunnelled = ['api.openai.com', 'https://auth.openai.com/.well-known/']
 
 const params = new URLSearchParams(location.search)
 // `?reset=1` is taken out of the address at once and remembered for this start only: the page
@@ -77,13 +86,16 @@ const model: ModelEndpoint = {
   apiKey: 'not-a-key',
 }
 
+const givenTunnel = params.get('tunnel') ?? builtTunnel
+const tunnel = givenTunnel && givenTunnel !== '0' && /^wss?:$/.test(URL.parse(givenTunnel)?.protocol ?? '') ? { url: givenTunnel, to: tunnelled } : undefined
+
 const status = document.querySelector<HTMLPreElement>('#status')!
 const frame = document.querySelector<HTMLIFrameElement>('#app')!
 const logPane = document.querySelector<HTMLPreElement>('#log pre')!
 const diag = installDiag(params, builtModel && new URL('/diag', builtModel).href)
 const say = (text: string, error = false) => { status.textContent = text; status.classList.toggle('error', error); diag.event(error ? 'failed' : 'stage', text) }
 window.batTerminal = { log: [], model }
-document.querySelector('#title')!.textContent = `OpenCode · model ${model.id} at ${new URL(model.baseURL).host}`
+document.querySelector('#title')!.textContent = `OpenCode · model ${model.id} at ${new URL(model.baseURL).host}${tunnel ? ` · tunnel ${new URL(tunnel.url).host}` : ''}`
 const panel = installPanel({ onOpen: () => window.batTerminal.terminal?.terminal.focus() })
 // Ctrl+Tab and Ctrl+Shift+Tab switch browser tabs. The terminal would take them (and cancel
 // the browser's handling) like any other key, so they are kept from it here.
@@ -158,6 +170,7 @@ async function main() {
   await installDerived(runtime.fs, manifest, manifestUrl)
   await installServerConfig(runtime.fs, model)
   log(`[page] model endpoint: ${model.baseURL} (model ${model.id}), fetched by this tab directly`)
+  if (tunnel) log(`[page] tunnel: ${tunnel.to.join(', ')} through the relay at ${new URL(tunnel.url).host}, with TLS in this tab`)
 
   // Both programs start at once; each is its own Worker.
   say('Starting the app and the OpenCode server…')
@@ -172,7 +185,7 @@ async function main() {
   const [appProcess, serverProcess, apiProcess] = await Promise.all([
     // The dev server's base is the frame's path, which depends on where this page is served.
     runtime.spawn(toLaunch(preview, { BROWSER_AGENT_PORT: String(preview.port), BROWSER_AGENT_BASE: new URL(app.url).pathname })),
-    runtime.spawn(serverLaunch(agent, password, model, { [openAiKeys]: new URL('openai-jwks.json', here).href })),
+    runtime.spawn(serverLaunch(agent, password, model, tunnel ? { tunnel } : { fetchMap: { [openAiKeys]: new URL('openai-jwks.json', here).href } })),
     runtime.spawn({ argv: ['node', api.script], cwd: workspace, env: { PATH: '/bin', PORT: String(api.port), TODO_STORE: api.store }, programs: [] }),
   ])
   follow('app', appProcess, false)

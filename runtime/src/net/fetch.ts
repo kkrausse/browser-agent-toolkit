@@ -21,9 +21,9 @@
 // from a host that sends no CORS headers, which the page serves a copy of. The guest sees the
 // answer under the URL it asked for.
 //
-// `BAT_FETCH_TUNNEL` (host names, separated by spaces or commas) with `BAT_FETCH_TUNNEL_URL`
-// (`wss://relay.example/tcp`) in the process's environment: an https request to one of those
-// hosts is not given to the browser. The runtime opens a WebSocket to the relay, which opens
+// `BAT_FETCH_TUNNEL` (host names, or `https://host/path` prefixes for only the URLs under a
+// path; separated by spaces or commas) with `BAT_FETCH_TUNNEL_URL` (`wss://relay.example/tcp`)
+// in the process's environment: an https request to one of those is not given to the browser. The runtime opens a WebSocket to the relay, which opens
 // a TCP connection to the host and carries bytes; TLS (certificate chain and name verified
 // against public roots; nothing can turn that off) and HTTP/1.1 are spoken here, in the tab.
 // For an API that answers without `Access-Control-Allow-Origin`, whose response the browser's
@@ -115,7 +115,10 @@ function createGuestFetch(rt: Runtime): GuestFetch {
   const tunnelFor = (url: URL): string | undefined => {
     const relay = env('BAT_FETCH_TUNNEL_URL')
     if (!relay || url.protocol !== 'https:') return undefined
-    return env('BAT_FETCH_TUNNEL').toLowerCase().split(/[\s,]+/).includes(url.hostname.toLowerCase()) ? relay : undefined
+    const at = url.origin + url.pathname
+    // An entry is a host name, or `https://host/path` for the URLs under that path only.
+    const named = env('BAT_FETCH_TUNNEL').split(/[\s,]+/).some((entry) => (entry.includes('/') ? at.startsWith(entry) : entry.toLowerCase() === url.hostname))
+    return named ? relay : undefined
   }
   let engine: Promise<TlsEngine> | undefined
   /** bat_tls.wasm, fetched and instantiated at the first tunnelled request of this process. */

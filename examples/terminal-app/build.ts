@@ -4,7 +4,7 @@
 //   index.html, main.js     the page
 //   sw.js                   its service worker (isolation headers, inflating, the preview)
 //   todo-api.js             the TODO app's backend, a guest program
-//   openai-jwks.json        a copy of OpenAI's public signing keys (see below)
+//   openai-jwks.json        a copy of OpenAI's public signing keys, for a page without a tunnel (see below)
 //   wasm-term/              the terminal half (from `bun run wasm-term`)
 //   editor/                 the prepared runtime, image and manifest (from `bun run prepare:editor`)
 //
@@ -16,6 +16,8 @@
 //   OUT_DIR     another output directory (default dist/)
 //   MODEL_URL   the default `?model=` (and its `/diag` collector) of the built page,
 //               for a page that is not published beside its mock
+//   TUNNEL_URL  the default `?tunnel=` of the built page: the WebSocket address of a TCP relay
+//               (`wss://relay.example/tcp`) that allows the page's origin
 import { copyFileSync, createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { dirname, extname, join, resolve } from 'node:path'
 import { pipeline } from 'node:stream/promises'
@@ -58,7 +60,8 @@ for (const [path, source] of files) {
 }
 
 // OpenAI's signing keys (public), for the identity token of "Sign in with ChatGPT": the tab
-// cannot read them from auth.openai.com, which sends no CORS headers for this document. A
+// cannot read them from auth.openai.com, which sends no CORS headers for this document. Only
+// a page without a tunnel uses the copy (with one, the server reads the real document). A
 // copy made now goes stale when OpenAI rotates its keys; the sign-in then fails at the
 // identity check ("invalid ID token") until the page is built again.
 const keysUrl = 'https://auth.openai.com/.well-known/jwks.json'
@@ -77,10 +80,10 @@ async function bundle(entry: string, name: string, options: Partial<Parameters<t
   await Bun.write(join(out, name), await result.outputs[0]!.text())
   kept.add(name)
 }
-await bundle('src/main.ts', 'main.js', { define: { 'process.env.MODEL_URL': JSON.stringify(process.env.MODEL_URL ?? '') } })
+await bundle('src/main.ts', 'main.js', { define: { 'process.env.MODEL_URL': JSON.stringify(process.env.MODEL_URL ?? ''), 'process.env.TUNNEL_URL': JSON.stringify(process.env.TUNNEL_URL ?? '') } })
 await bundle('sw.ts', 'sw.js', { format: 'iife', define: { GZIPPED: JSON.stringify(gzipped) } })
 await bundle('todo-api.ts', 'todo-api.js', { target: 'node' })
 
 for (const path of walk(out)) if (!kept.has(path)) rmSync(join(out, path))
 const bytes = [...kept].reduce((sum, path) => sum + statSync(join(out, path)).size, 0)
-console.log(`Built ${out}: ${kept.size} files, ${(bytes / 1e6).toFixed(1)} MB (${compressed} compressed now, ${reused} unchanged, ${copied} copied; ${gzipped.length} shipped as .gz)${process.env.MODEL_URL ? `; default model ${process.env.MODEL_URL}` : ''}`)
+console.log(`Built ${out}: ${kept.size} files, ${(bytes / 1e6).toFixed(1)} MB (${compressed} compressed now, ${reused} unchanged, ${copied} copied; ${gzipped.length} shipped as .gz)${process.env.MODEL_URL ? `; default model ${process.env.MODEL_URL}` : ''}${process.env.TUNNEL_URL ? `; default tunnel ${process.env.TUNNEL_URL}` : ''}`)
