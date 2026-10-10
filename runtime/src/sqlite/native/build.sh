@@ -3,7 +3,7 @@
 #
 #   WASI_SDK=/path/to/wasi-sdk-34.0-x86_64-linux \
 #   SQLITE_SRC=/path/to/sqlite-amalgamation-3530100 \
-#   [WASM_OPT=/path/to/binaryen/bin/wasm-opt] [OPT=-O2] [OUT=…] sh build.sh
+#   [WASM_OPT=/path/to/binaryen/bin/wasm-opt] [OPT=-Os] [OUT=…] sh build.sh
 #
 # Inputs used for the committed binary (sha256):
 #   sqlite-amalgamation-3530100.zip  36ad6e7f38540a3b21a2ac36340833f0a9e426bc1c752751c3ba669466827eae
@@ -17,7 +17,7 @@ set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 : "${WASI_SDK:?set WASI_SDK}"
 : "${SQLITE_SRC:?set SQLITE_SRC}"
-OPT=${OPT:--O2}
+OPT=${OPT:--Os}
 OUT=${OUT:-$here/../sqlite3.wasm}
 EXTRA=${EXTRA:-}
 

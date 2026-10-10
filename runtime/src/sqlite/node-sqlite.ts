@@ -94,6 +94,10 @@ interface StatementState {
   bare?: Map<string, string>
   /** Bumped by every call that resets the statement; an iterator from before is invalid. */
   epoch: number
+  /** An iterator may have left the statement mid-way: reset before the next execution. */
+  stepped: boolean
+  /** Some parameter is bound: clear before binding again. */
+  bound: boolean
 }
 
 export function createSqliteModule(backend: FsBackend, options: SqliteModuleOptions) {
@@ -168,9 +172,17 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
 
   const bindParams = (st: StatementState, args: IArguments | unknown[]): void => {
     const stmt = st.stmt
-    check(st.conn, x.sqlite3_clear_bindings(stmt))
+    if (st.stepped) {
+      st.stepped = false
+      x.sqlite3_reset(stmt)
+    }
     const n = args.length
+    if (st.bound) {
+      st.bound = false
+      check(st.conn, x.sqlite3_clear_bindings(stmt))
+    }
     if (n === 0) return
+    st.bound = true
     let first = 0
     const named = args[0]
     if (named !== null && (typeof named === 'object' || typeof named === 'function') && !ArrayBuffer.isView(named)) {
@@ -341,7 +353,6 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       counters.all++
       st.epoch++
       const stmt = st.stmt
-      x.sqlite3_reset(stmt)
       try {
         bindParams(st, arguments)
         const rows: unknown[] = []
@@ -362,7 +373,6 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       counters.get++
       st.epoch++
       const stmt = st.stmt
-      x.sqlite3_reset(stmt)
       try {
         bindParams(st, arguments)
         const rc: number = x.sqlite3_step(stmt)
@@ -382,7 +392,6 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       counters.run++
       st.epoch++
       const stmt = st.stmt
-      x.sqlite3_reset(stmt)
       try {
         bindParams(st, arguments)
         let rc: number
@@ -404,8 +413,8 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       counters.iterate++
       const epoch = ++st.epoch
       const stmt = st.stmt
-      x.sqlite3_reset(stmt)
       bindParams(st, arguments)
+      st.stepped = true
       const n: number = x.sqlite3_column_count(stmt)
       let names: string[] | undefined
       let done = false
@@ -580,6 +589,8 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       bareNamed: s.bareNamed,
       unknownNamed: s.unknownNamed,
       epoch: 0,
+      stepped: false,
+      bound: false,
     }
     const statement = new StatementSync()
     if (stmt) registry.register(statement, { conn, stmt })
@@ -990,6 +1001,52 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       get engine() { return holder.stats },
       /** Also accumulate time spent in the API (adds two clock reads per call). */
       setTiming(on: boolean) { timing = on },
+      /**
+       * Run a small canned workload so that the engine is instantiated and the
+       * Wasm functions a real program hits first (parser, code generator, VDBE,
+       * b-tree, and with `scratchFile` the pager, WAL and VFS) are already
+       * compiled. V8 compiles Wasm functions lazily on their first call, which
+       * otherwise lands on the guest's first queries; compiled code belongs to
+       * the WebAssembly.Module and is shared by every worker it was posted to.
+       * `scratchFile` is created, used and deleted (with its -wal).
+       */
+      prewarm(scratchFile?: string): void {
+        const Db = DatabaseSync as any
+        const db = new Db(scratchFile ?? ':memory:')
+        try {
+          db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA cache_size = -2000; PRAGMA foreign_keys = ON')
+          db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name NOT LIKE ?').all('table', 'sqlite_%')
+          db.exec('BEGIN')
+          db.prepare('CREATE TABLE IF NOT EXISTS a(id TEXT PRIMARY KEY, n INTEGER NOT NULL, data TEXT, time_created INTEGER)').run()
+          db.prepare('CREATE TABLE b(id INTEGER PRIMARY KEY, a_id TEXT NOT NULL REFERENCES a(id) ON DELETE CASCADE, v REAL, blob BLOB)').run()
+          db.prepare('CREATE INDEX b_a ON b(a_id)').run()
+          db.prepare('CREATE UNIQUE INDEX a_n ON a(n)').run()
+          const ia = db.prepare('INSERT INTO a(id, n, data, time_created) VALUES (?, ?, ?, ?)')
+          const ib = db.prepare('INSERT INTO b(a_id, v, blob) VALUES ($a, $v, $blob) RETURNING id')
+          for (let i = 0; i < 40; i++) {
+            ia.run(`id-${i}`, i, JSON.stringify({ i, text: 'x'.repeat(200) }), Date.now())
+            ib.get({ a: `id-${i}`, v: i / 3, blob: new Uint8Array(64) })
+          }
+          db.exec('COMMIT')
+          db.prepare('SELECT a.id, a.data, count(b.id) AS c FROM a LEFT JOIN b ON b.a_id = a.id WHERE a.n >= ? GROUP BY a.id ORDER BY a.time_created DESC, a.id LIMIT 10').all(5)
+          db.prepare('SELECT * FROM a WHERE id = ?').get('id-3')
+          db.prepare('SELECT * FROM a WHERE id IN (?, ?, ?) AND data IS NOT NULL').all('id-1', 'id-2', 'id-3')
+          db.prepare("SELECT json_extract(data, '$.i') AS i FROM a WHERE n < ? ORDER BY n").all(3)
+          db.prepare('UPDATE a SET data = ?, n = n + 1000 WHERE id = ?').run('{}', 'id-7')
+          db.prepare('INSERT INTO a(id, n, data) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data').run('id-8', 8, 'y'.repeat(20000))
+          db.prepare('DELETE FROM a WHERE id = ?').run('id-9')
+          db.prepare('PRAGMA table_info(a)').all()
+          db.prepare('PRAGMA wal_checkpoint(PASSIVE)').all()
+        } finally {
+          db.close()
+          if (scratchFile) {
+            try {
+              backend.delete(scratchFile)
+              backend.delete(`${scratchFile}-wal`)
+            } catch {}
+          }
+        }
+      },
     },
   }
 }
