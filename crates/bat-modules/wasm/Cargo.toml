@@ -20,8 +20,13 @@ bat-modules = { path = ".." }
 [patch.crates-io]
 js-sys = { path = "stubs/js-sys" }
 
+# Measured on a 234-line TSX file, warm, in Node 24 (transform only):
+#   "z": 1.24 MB (0.46 MB gzip), 1.6-1.8 ms     <- chosen: workspace files are few
+#   "s": 1.86 MB (0.58 MB gzip), 1.4 ms
+#   3:   2.29 MB (0.67 MB gzip), 1.1-1.3 ms
+# Override with CARGO_PROFILE_RELEASE_OPT_LEVEL when running build-wasm.sh.
 [profile.release]
-opt-level = "s"
+opt-level = "z"
 lto = "fat"
 codegen-units = 1
 panic = "abort"
