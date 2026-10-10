@@ -910,13 +910,32 @@ export function createFs(rt: Runtime): any {
       buffer = o.buffer ?? Buffer.alloc(16384)
       args = [buffer, o]
     }
-    let n
-    try {
-      n = readSync(fd, args[0], args[1], args[2], args[3])
-    } catch (e) {
-      return loop.nextTick(cb, e)
+    const finish = () => {
+      let n
+      try {
+        n = readSync(fd, args[0], args[1], args[2], args[3])
+      } catch (e) {
+        return loop.nextTick(cb, e)
+      }
+      loop.nextTick(cb, null, n, buffer)
     }
-    loop.nextTick(cb, null, n, buffer)
+    // A pipe or socket with nothing to read yet: wait for readiness instead of blocking
+    // the thread inside the call. Go's Wasm runtime (esbuild-wasm's service) reads stdin
+    // with fs.read and expects the call to return so its other goroutines can run; a
+    // blocking read deadlocked it after the first request.
+    let ready = 1
+    try {
+      ready = k.pollFd(fd)
+    } catch {
+      // not an fd the kernel can poll: let the read report the error
+    }
+    if (ready & (1 | 8 | 16)) return finish()
+    loop.ref()
+    loop.onFd(fd, 1 | 16, () => {
+      loop.offFd(fd)
+      loop.unref()
+      finish()
+    })
   }
   fs.write = (fd: number, data: any, ...args: any[]) => {
     const cb = typeof args[args.length - 1] === 'function' ? args.pop() : () => {}
