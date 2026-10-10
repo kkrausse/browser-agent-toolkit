@@ -49,7 +49,18 @@ export function browserEditor(options: BrowserEditorOptions): any {
       server.httpServer?.prependListener('upgrade', restore);
       server.httpServer?.once('close', () => server.httpServer?.removeListener('upgrade', restore));
     },
-    configResolved(config: { root: string }) { editingModule = resolve(config.root, options.module); },
+    configResolved(config: { root: string; assetsInclude?: (file: string) => boolean }) {
+      editingModule = resolve(config.root, options.module);
+      if (!isGuest() || typeof config.assetsInclude !== 'function') return;
+      // Vite hashes its config, functions by their source text, to decide whether the
+      // dependency-optimizer cache shipped by prepare is still valid. Its own
+      // `assetsInclude` closes over an imported binding, and the browser runtime's module
+      // loader rewrites such references, so the text (and the hash) differed between the
+      // native run that produced the cache and the guest, which then threw the cache away
+      // at every start. This wrapper has the same text on both sides.
+      const original = config.assetsInclude;
+      config.assetsInclude = function assetsInclude(file: string) { return original(file); };
+    },
     load(id: string) {
       if (isGuest() && id.split('?')[0] === editingModule) return 'export default function Editing(){return null}';
     },
