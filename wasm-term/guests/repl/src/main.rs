@@ -209,9 +209,7 @@ fn main() -> io::Result<()> {
         std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default()
     );
 
-    let mut signals = Signals::new()?;
-    signal::action(SIGINT, Action::Catch)?;
-    signal::action(SIGWINCH, Action::Catch)?;
+    let mut signals = Signals::new(&[SIGINT, SIGWINCH])?;
 
     loop {
         for signo in signals.pending()? {

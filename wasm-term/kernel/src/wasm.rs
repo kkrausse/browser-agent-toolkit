@@ -112,6 +112,12 @@ pub extern "C" fn pty_poll_in(id: u32) -> u32 {
     k().ptys[id as usize].poll_in() as u32
 }
 
+/// `FIONREAD`: bytes a slave `read` could return right now.
+#[no_mangle]
+pub extern "C" fn pty_readable_len(id: u32) -> u32 {
+    k().ptys[id as usize].readable_len() as u32
+}
+
 /// Writes the 44-byte termios struct into the scratch buffer.
 #[no_mangle]
 pub extern "C" fn pty_tcgetattr(id: u32) {

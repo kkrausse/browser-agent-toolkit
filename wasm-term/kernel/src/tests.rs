@@ -264,6 +264,17 @@ fn canonical_line_is_capped_and_newline_still_terminates_it() {
     assert!(line.ends_with('\n'));
 }
 
+#[test]
+fn fionread_counts_what_the_next_read_returns() {
+    let mut p = pty();
+    typed(&mut p, "ab");
+    assert_eq!(p.readable_len(), 0, "an unfinished line is not readable");
+    typed(&mut p, "\rcd\r");
+    assert_eq!(p.readable_len(), 3, "one line at a time");
+    raw(&mut p);
+    assert_eq!(p.readable_len(), 6);
+}
+
 // ---- signals ----------------------------------------------------------------
 
 #[test]

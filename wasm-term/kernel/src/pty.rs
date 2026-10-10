@@ -637,6 +637,26 @@ impl Pty {
         ReadResult::Block(None)
     }
 
+    /// `ioctl(FIONREAD)`: bytes a `read` could return right now.
+    pub fn readable_len(&self) -> usize {
+        if !self.l(ICANON) {
+            return self.rbuf.len();
+        }
+        // The first complete line, without its EOF mark if it ends in one.
+        let mut n = 0;
+        for idx in 0..self.canon_head {
+            match self.rflag[idx] {
+                F_EOF => break,
+                F_NONE => n += 1,
+                _ => {
+                    n += 1;
+                    break;
+                }
+            }
+        }
+        n
+    }
+
     /// `poll(POLLIN)` on the slave. Mirrors `input_available_p(tty, 1)`.
     pub fn poll_in(&self) -> bool {
         if self.hangup {

@@ -3,7 +3,7 @@
 // keep the two in step.
 
 import { TERMIOS_SIZE } from "./kernel";
-import { type HttpHandle, type Machine, NSIG, ProcessExit, SIG_CATCH, SIGKILL, type WsHandle } from "./machine";
+import { type HttpHandle, type Machine, NSIG, ProcessExit, SIG_CATCH, SIGKILL, type SignalQueue, type WsHandle } from "./machine";
 import { WS_BINARY, WS_TEXT } from "./protocol";
 import { type DirNode, ERRNO, type FileNode, type Vfs, type VfsNode } from "./vfs";
 
@@ -16,6 +16,7 @@ const OFLAG_EXCL = 4;
 const OFLAG_TRUNC = 8;
 const RIGHT_FD_SEEK = 1n << 2n;
 const RIGHT_FD_TELL = 1n << 5n;
+const RIGHT_FD_WRITE = 1n << 6n;
 const RIGHTS_ALL = (1n << 30n) - 1n;
 const EVENTTYPE_CLOCK = 0;
 const EVENTTYPE_FD_READ = 1;
@@ -24,11 +25,11 @@ const EVENTTYPE_FD_WRITE = 2;
 const NET_NONBLOCK = 1;
 
 type Fd =
-  | { kind: "tty"; flags: number }
+  | { kind: "tty"; flags: number; readOnly?: boolean }
   | { kind: "null"; flags: number }
   | { kind: "file"; flags: number; node: FileNode; pos: number }
   | { kind: "dir"; flags: number; node: DirNode; preopen?: string }
-  | { kind: "sig"; flags: number }
+  | { kind: "sig"; flags: number; queue: SignalQueue }
   | { kind: "ws"; flags: number; handle: WsHandle }
   | { kind: "http"; flags: number; handle: HttpHandle; headTaken: boolean };
 
@@ -96,14 +97,14 @@ export function createWasi({ args, env, machine, vfs }: WasiOptions): Wasi {
     }
   }
 
-  function sigRead(cap: number, nonblock: boolean): Uint8Array | number {
+  function sigRead(queue: SignalQueue, cap: number, nonblock: boolean): Uint8Array | number {
     if (cap < 4) return ERRNO.INVAL;
     return blockOn(nonblock, () => {
-      if (machine.caught.length === 0) return undefined;
-      const count = Math.min(machine.caught.length, Math.floor(cap / 4));
+      if (queue.pending.length === 0) return undefined;
+      const count = Math.min(queue.pending.length, Math.floor(cap / 4));
       const out = new Uint8Array(count * 4);
       const outView = new DataView(out.buffer);
-      machine.caught.splice(0, count).forEach((signo, index) => outView.setUint32(index * 4, signo, true));
+      queue.pending.splice(0, count).forEach((signo, index) => outView.setUint32(index * 4, signo, true));
       return out;
     });
   }
@@ -142,7 +143,7 @@ export function createWasi({ args, env, machine, vfs }: WasiOptions): Wasi {
         return out;
       }
       case "dir": return ERRNO.ISDIR;
-      case "sig": return sigRead(cap, nonblocking(fd));
+      case "sig": return sigRead(fd.queue, cap, nonblocking(fd));
       case "http": return httpRead(fdNumber, fd, cap);
       case "ws": return ERRNO.INVAL; // message boundaries matter: use wasm_term.ws_recv
     }
@@ -153,6 +154,7 @@ export function createWasi({ args, env, machine, vfs }: WasiOptions): Wasi {
     if (!fd) return ERRNO.BADF;
     switch (fd.kind) {
       case "tty":
+        if (fd.readOnly) return ERRNO.BADF;
         machine.pump();
         pty.slaveWrite(data);
         machine.flushOutput();
@@ -361,6 +363,7 @@ export function createWasi({ args, env, machine, vfs }: WasiOptions): Wasi {
     fd_close(fdNumber: number) {
       const fd = fds.get(fdNumber);
       if (!fd) return ERRNO.BADF;
+      if (fd.kind === "sig") machine.closeSignalQueue(fd.queue);
       if (fd.kind === "ws" || fd.kind === "http") {
         machine.net.delete(fdNumber);
         machine.post({ t: "net_close", handle: fdNumber });
@@ -454,7 +457,7 @@ export function createWasi({ args, env, machine, vfs }: WasiOptions): Wasi {
 
     path_open(
       dirFd: number, dirFlags: number, pathPtr: number, pathLen: number, oflags: number,
-      _rightsBase: bigint, _rightsInheriting: bigint, fdFlags: number, fdPtr: number,
+      rightsBase: bigint, _rightsInheriting: bigint, fdFlags: number, fdPtr: number,
     ) {
       const found = lookup(dirFd, pathPtr, pathLen, (dirFlags & 1) !== 0);
       if (typeof found === "number") return found;
@@ -471,7 +474,7 @@ export function createWasi({ args, env, machine, vfs }: WasiOptions): Wasi {
       else if (node.kind === "file") {
         if (oflags & OFLAG_TRUNC) vfs.truncate(node, 0);
         entry = { kind: "file", flags: fdFlags, node, pos: 0 };
-      } else if (node.kind === "dev") entry = { kind: node.dev, flags: fdFlags };
+      } else if (node.kind === "dev") entry = { kind: node.dev, flags: fdFlags, readOnly: (rightsBase & RIGHT_FD_WRITE) === 0n };
       else return ERRNO.LOOP;
       view().setUint32(fdPtr, allocFd(entry), true);
       return ERRNO.SUCCESS;
@@ -576,22 +579,26 @@ export function createWasi({ args, env, machine, vfs }: WasiOptions): Wasi {
         }
       }
 
-      const readable = (fdNumber: number): boolean | number => {
+      /** Bytes (or records) a read would return now; 0 = not readable. An errno is returned as a negative number. */
+      const readable = (fdNumber: number): number => {
         const fd = fds.get(fdNumber);
-        if (!fd) return ERRNO.BADF;
+        if (!fd) return -ERRNO.BADF;
         switch (fd.kind) {
-          case "tty": return pty.pollIn();
-          case "sig": return machine.caught.length > 0;
-          case "ws": return fd.handle.events.length > 0;
-          case "http": return (!fd.headTaken && fd.handle.head !== null) || fd.handle.chunks.length > 0 || fd.handle.ended;
-          default: return true;
+          case "tty": return pty.pollIn() ? Math.max(1, pty.readableLen()) : 0;
+          case "sig": return fd.queue.pending.length * 4;
+          case "ws": return fd.handle.events[0] ? Math.max(1, fd.handle.events[0].data.length) : fd.handle.finished ? 1 : 0;
+          case "http":
+            if (fd.handle.chunks[0]) return fd.handle.chunks[0].length;
+            return (!fd.headTaken && fd.handle.head !== null) || fd.handle.ended ? 1 : 0;
+          case "file": return Math.max(1, fd.node.size - fd.pos);
+          default: return 1;
         }
       };
 
       for (;;) {
         machine.pump();
         const now = performance.now();
-        const events: { sub: Sub; errno: number }[] = [];
+        const events: { sub: Sub; errno: number; nbytes?: number }[] = [];
         let nextDeadline = Infinity;
         for (const sub of subs) {
           if (sub.type === EVENTTYPE_CLOCK) {
@@ -599,21 +606,28 @@ export function createWasi({ args, env, machine, vfs }: WasiOptions): Wasi {
             else nextDeadline = Math.min(nextDeadline, sub.deadlineMs);
           } else if (sub.type === EVENTTYPE_FD_READ) {
             const ready = readable(sub.fd);
-            if (typeof ready === "number") events.push({ sub, errno: ready });
-            else if (ready) events.push({ sub, errno: 0 });
+            if (ready < 0) events.push({ sub, errno: -ready });
+            else if (ready > 0) events.push({ sub, errno: 0, nbytes: ready });
           } else {
-            events.push({ sub, errno: fds.has(sub.fd) ? 0 : ERRNO.BADF });
+            // Descriptors that cannot be written with fd_write never poll
+            // writable: signal, WebSocket and HTTP descriptors, and a terminal
+            // opened read-only. Reporting them writable would make a
+            // level-triggered reactor (mio on wasi, under tokio) spin.
+            const fd = fds.get(sub.fd);
+            if (!fd) events.push({ sub, errno: ERRNO.BADF });
+            else if (!(fd.kind === "sig" || fd.kind === "ws" || fd.kind === "http" || (fd.kind === "tty" && fd.readOnly))) events.push({ sub, errno: 0 });
           }
         }
         if (events.length > 0) {
           const v = view();
-          events.forEach(({ sub, errno }, index) => {
+          events.forEach(({ sub, errno, nbytes }, index) => {
             const at = outPtr + index * 32;
             bytes(at, 32).fill(0);
             v.setBigUint64(at, sub.userdata, true);
             v.setUint16(at + 8, errno, true);
             v.setUint8(at + 10, sub.type);
-            if (sub.type !== EVENTTYPE_CLOCK) v.setBigUint64(at + 16, 1n, true);
+            // wasi-libc answers ioctl(FIONREAD) from this field.
+            if (sub.type !== EVENTTYPE_CLOCK) v.setBigUint64(at + 16, BigInt(nbytes ?? 65536), true);
           });
           v.setUint32(neventsPtr, events.length, true);
           return ERRNO.SUCCESS;
@@ -677,8 +691,8 @@ export function createWasi({ args, env, machine, vfs }: WasiOptions): Wasi {
       if (oldActionPtr) view().setUint32(oldActionPtr, previous, true);
       return ERRNO.SUCCESS;
     },
-    sig_fd(fdPtr: number) {
-      view().setUint32(fdPtr, allocFd({ kind: "sig", flags: 0 }), true);
+    sig_fd(mask: number, fdPtr: number) {
+      view().setUint32(fdPtr, allocFd({ kind: "sig", flags: 0, queue: machine.openSignalQueue(mask >>> 0) }), true);
       return ERRNO.SUCCESS;
     },
     last_error(bufPtr: number, bufLen: number, lenPtr: number) {

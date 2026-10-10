@@ -47,6 +47,13 @@ export interface HttpHandle {
   error: string | null;
 }
 
+/** The state behind one signalfd-style descriptor. */
+export interface SignalQueue {
+  mask: number;
+  /** Pending signal numbers in arrival order; a signal is pending at most once. */
+  pending: number[];
+}
+
 export type NetHandle = WsHandle | HttpHandle;
 
 export interface Machine {
@@ -64,8 +71,9 @@ export interface Machine {
 
   /** Returns the previous disposition. */
   setDisposition(signo: number, disposition: number): number;
-  /** Queue of caught signals, in arrival order, without duplicates. */
-  caught: number[];
+  /** Opens a queue that receives the caught signals named in `mask` (bits `1 << signo`). */
+  openSignalQueue(mask: number): SignalQueue;
+  closeSignalQueue(queue: SignalQueue): void;
   /** Bumped whenever a signal is caught; lets a blocking call notice. */
   caughtSeq(): number;
   raise(signo: number): void;
@@ -76,7 +84,7 @@ export interface Machine {
 
 export function createMachine(pty: Pty, ring: RingReader, postMessage: (message: WorkerMessage, transfer: Transferable[]) => void): Machine {
   const dispositions = new Map<number, number>();
-  const caught: number[] = [];
+  const signalQueues = new Set<SignalQueue>();
   let caughtSeq = 0;
   let outSent = 0;
   const net = new Map<number, NetHandle>();
@@ -103,7 +111,9 @@ export function createMachine(pty: Pty, ring: RingReader, postMessage: (message:
     const disposition = signo === SIGKILL ? SIG_DFL : dispositions.get(signo) ?? SIG_DFL;
     if (disposition === SIG_IGN) return;
     if (disposition === SIG_CATCH) {
-      if (!caught.includes(signo)) caught.push(signo);
+      for (const queue of signalQueues) {
+        if (queue.mask & (1 << signo) && !queue.pending.includes(signo)) queue.pending.push(signo);
+      }
       caughtSeq++;
       return;
     }
@@ -175,7 +185,14 @@ export function createMachine(pty: Pty, ring: RingReader, postMessage: (message:
       dispositions.set(signo, disposition);
       return previous;
     },
-    caught,
+    openSignalQueue(mask) {
+      const queue: SignalQueue = { mask, pending: [] };
+      signalQueues.add(queue);
+      return queue;
+    },
+    closeSignalQueue(queue) {
+      signalQueues.delete(queue);
+    },
     caughtSeq: () => caughtSeq,
     raise: deliver,
     net,

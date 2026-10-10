@@ -1,0 +1,192 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index a3755ce..6e1ea84 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -44,7 +44,7 @@ derive-more = ["dep:derive_more"]
+ document-features = ["dep:document-features"]
+ 
+ ## Enables the [EventStream](event::EventStream) struct for async event reading.
+-event-stream = ["dep:futures-core", "events"]
++event-stream = ["dep:futures-core", "events", "dep:tokio"]
+ 
+ ## Enables [`serde`] for various types.
+ serde = ["dep:serde", "bitflags/serde"]
+@@ -80,6 +80,14 @@ rustix = { version = "1", default-features = false, features = ["std", "stdio",
+ signal-hook = { version = "0.3.17", optional = true }
+ signal-hook-mio = { version = "0.2.4", features = ["support-v1_0"], optional = true }
+ 
++# wasm-term (wasm32-wasip1): termios, signals and poll come from the wasm-term
++# guest ABI; rustix covers plain descriptor work. See src/wasi_compat.rs.
++[target.'cfg(target_os = "wasi")'.dependencies]
++rustix = { version = "1", default-features = false, features = ["std", "stdio", "termios"] }
++wasm-term-sys = { path = "../../wasm-term-sys" }
++# Only for `event-stream`: the stream waits on tokio's reactor (see src/event/stream_wasi.rs).
++tokio = { version = "1.44", default-features = false, features = ["net", "rt"], optional = true }
++
+ [dev-dependencies]
+ futures = "0.3"
+ futures-timer = "3.0"
+diff --git a/src/event.rs b/src/event.rs
+index 64703c3..8c26869 100644
+--- a/src/event.rs
++++ b/src/event.rs
+@@ -122,7 +122,11 @@ pub(crate) mod filter;
+ pub(crate) mod internal;
+ pub(crate) mod read;
+ pub(crate) mod source;
+-#[cfg(feature = "event-stream")]
++#[cfg(all(feature = "event-stream", not(target_os = "wasi")))]
++pub(crate) mod stream;
++// wasm32-wasip1 has no threads: the stream is driven by tokio's reactor instead.
++#[cfg(all(feature = "event-stream", target_os = "wasi"))]
++#[path = "event/stream_wasi.rs"]
+ pub(crate) mod stream;
+ pub(crate) mod sys;
+ pub(crate) mod timeout;
+diff --git a/src/event/source/unix.rs b/src/event/source/unix.rs
+index 810bad3..7dbd285 100644
+--- a/src/event/source/unix.rs
++++ b/src/event/source/unix.rs
+@@ -1,11 +1,11 @@
+-#[cfg(feature = "use-dev-tty")]
++#[cfg(any(feature = "use-dev-tty", target_os = "wasi"))]
+ pub(crate) mod tty;
+ 
+-#[cfg(not(feature = "use-dev-tty"))]
++#[cfg(not(any(feature = "use-dev-tty", target_os = "wasi")))]
+ pub(crate) mod mio;
+ 
+-#[cfg(feature = "use-dev-tty")]
++#[cfg(any(feature = "use-dev-tty", target_os = "wasi"))]
+ pub(crate) use self::tty::UnixInternalEventSource;
+ 
+-#[cfg(not(feature = "use-dev-tty"))]
++#[cfg(not(any(feature = "use-dev-tty", target_os = "wasi")))]
+ pub(crate) use self::mio::UnixInternalEventSource;
+diff --git a/src/event/source/unix/tty.rs b/src/event/source/unix/tty.rs
+index f67feee..a3a237c 100644
+--- a/src/event/source/unix/tty.rs
++++ b/src/event/source/unix/tty.rs
+@@ -1,9 +1,12 @@
+ #[cfg(feature = "libc")]
+ use std::os::unix::prelude::AsRawFd;
++#[cfg(target_os = "wasi")]
++use crate::wasi_compat::{UnixStream, filedescriptor, signal_hook};
++#[cfg(unix)]
++use std::os::unix::net::UnixStream;
+ use std::{
+     collections::VecDeque,
+     io,
+-    os::unix::net::UnixStream,
+     time::{Duration, Instant},
+ };
+ 
+@@ -79,8 +82,10 @@ impl UnixInternalEventSource {
+                 // Unregistering is unnecessary because EventSource is a singleton
+                 #[cfg(feature = "libc")]
+                 pipe::register(libc::SIGWINCH, sender)?;
+-                #[cfg(not(feature = "libc"))]
++                #[cfg(all(not(feature = "libc"), unix))]
+                 pipe::register(rustix::process::Signal::WINCH.as_raw(), sender)?;
++                #[cfg(target_os = "wasi")]
++                pipe::register(wasm_term_sys::signal::SIGWINCH as i32, sender)?;
+                 receiver
+             },
+             #[cfg(feature = "event-stream")]
+diff --git a/src/event/sys/unix/waker.rs b/src/event/sys/unix/waker.rs
+index 1c55f3b..e034de5 100644
+--- a/src/event/sys/unix/waker.rs
++++ b/src/event/sys/unix/waker.rs
+@@ -1,11 +1,11 @@
+-#[cfg(feature = "use-dev-tty")]
++#[cfg(any(feature = "use-dev-tty", target_os = "wasi"))]
+ pub(crate) mod tty;
+ 
+-#[cfg(not(feature = "use-dev-tty"))]
++#[cfg(not(any(feature = "use-dev-tty", target_os = "wasi")))]
+ pub(crate) mod mio;
+ 
+-#[cfg(feature = "use-dev-tty")]
++#[cfg(any(feature = "use-dev-tty", target_os = "wasi"))]
+ pub(crate) use self::tty::Waker;
+ 
+-#[cfg(not(feature = "use-dev-tty"))]
++#[cfg(not(any(feature = "use-dev-tty", target_os = "wasi")))]
+ pub(crate) use self::mio::Waker;
+diff --git a/src/event/sys/unix/waker/tty.rs b/src/event/sys/unix/waker/tty.rs
+index 8fda30b..9e23f7a 100644
+--- a/src/event/sys/unix/waker/tty.rs
++++ b/src/event/sys/unix/waker/tty.rs
+@@ -1,6 +1,9 @@
++#[cfg(target_os = "wasi")]
++use crate::wasi_compat::UnixStream;
++#[cfg(unix)]
++use std::os::unix::net::UnixStream;
+ use std::{
+     io::{self, Write},
+-    os::unix::net::UnixStream,
+     sync::{Arc, Mutex},
+ };
+ 
+diff --git a/src/lib.rs b/src/lib.rs
+index 580809e..e997c94 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -257,6 +257,11 @@ pub mod terminal;
+ #[cfg(feature = "osc52")]
+ pub mod clipboard;
+ 
++// The cross-thread waker has no caller without threads; see wasi_compat.rs.
++#[cfg(target_os = "wasi")]
++#[allow(dead_code)]
++mod wasi_compat;
++
+ #[cfg(windows)]
+ /// A module that exposes one function to check if the current terminal supports ANSI sequences.
+ pub mod ansi_support;
+diff --git a/src/terminal/sys/unix.rs b/src/terminal/sys/unix.rs
+index e4fdc56..4351607 100644
+--- a/src/terminal/sys/unix.rs
++++ b/src/terminal/sys/unix.rs
+@@ -12,11 +12,12 @@ use libc::{
+     winsize,
+ };
+ use parking_lot::Mutex;
++#[cfg(target_os = "wasi")]
++use crate::wasi_compat::termios::{self as termios_backend, Termios, Winsize};
+ #[cfg(not(feature = "libc"))]
+-use rustix::{
+-    fd::AsFd,
+-    termios::{Termios, Winsize},
+-};
++use rustix::fd::AsFd;
++#[cfg(all(not(feature = "libc"), unix))]
++use rustix::termios::{self as termios_backend, Termios, Winsize};
+ 
+ use std::{fs::File, io, process};
+ #[cfg(feature = "libc")]
+@@ -91,7 +92,7 @@ pub(crate) fn window_size() -> io::Result<WindowSize> {
+         // Fallback to libc::STDOUT_FILENO if /dev/tty is missing
+         rustix::stdio::stdout()
+     };
+-    let size = rustix::termios::tcgetwinsize(fd)?;
++    let size = termios_backend::tcgetwinsize(fd)?;
+     Ok(size.into())
+ }
+ 
+@@ -170,13 +171,13 @@ pub(crate) fn disable_raw_mode() -> io::Result<()> {
+ 
+ #[cfg(not(feature = "libc"))]
+ fn get_terminal_attr(fd: impl AsFd) -> io::Result<Termios> {
+-    let result = rustix::termios::tcgetattr(fd)?;
++    let result = termios_backend::tcgetattr(fd)?;
+     Ok(result)
+ }
+ 
+ #[cfg(not(feature = "libc"))]
+ fn set_terminal_attr(fd: impl AsFd, termios: &Termios) -> io::Result<()> {
+-    rustix::termios::tcsetattr(fd, rustix::termios::OptionalActions::Now, termios)?;
++    termios_backend::tcsetattr(fd, termios_backend::OptionalActions::Now, termios)?;
+     Ok(())
+ }
+ 

@@ -24,7 +24,7 @@ pub mod raw {
         pub fn tcsetattr(fd: u32, action: u32, termios: *const super::termios::Termios) -> u32;
         pub fn winsize_get(fd: u32, winsize: *mut super::termios::Winsize) -> u32;
         pub fn sig_action(signo: u32, action: u32, old_action: *mut u32) -> u32;
-        pub fn sig_fd(fd: *mut u32) -> u32;
+        pub fn sig_fd(mask: u32, fd: *mut u32) -> u32;
         pub fn last_error(buf: *mut u8, buf_len: u32, len: *mut u32) -> u32;
         pub fn ws_open(url: *const u8, url_len: u32, protocols: *const u8, protocols_len: u32, fd: *mut u32) -> u32;
         pub fn ws_send(fd: u32, kind: u32, data: *const u8, len: u32) -> u32;
@@ -228,18 +228,26 @@ pub mod signal {
         })
     }
 
-    /// A signalfd-style descriptor: readable (and pollable) when a caught
-    /// signal is pending. Each record is one little-endian `u32` signal number.
+    /// A signalfd-style descriptor: readable (and pollable) when one of the
+    /// signals it was opened for has been caught. Each record is one
+    /// little-endian `u32` signal number. Several descriptors may watch the
+    /// same signal; each gets its own copy.
     #[derive(Debug)]
     pub struct Signals {
         file: File,
     }
 
     impl Signals {
-        /// Opens the descriptor in non-blocking mode.
-        pub fn new() -> io::Result<Signals> {
+        /// Sets each of `signals` to [`Action::Catch`] and opens a
+        /// non-blocking descriptor that receives them.
+        pub fn new(signals: &[u32]) -> io::Result<Signals> {
+            let mut mask = 0u32;
+            for &signo in signals {
+                action(signo, Action::Catch)?;
+                mask |= 1 << signo;
+            }
             let mut fd = 0u32;
-            check(unsafe { raw::sig_fd(&mut fd) })?;
+            check(unsafe { raw::sig_fd(mask, &mut fd) })?;
             super::set_nonblocking(fd as RawFd, true)?;
             Ok(Signals { file: unsafe { File::from_raw_fd(fd as RawFd) } })
         }

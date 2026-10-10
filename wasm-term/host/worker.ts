@@ -11,6 +11,30 @@ import { createWasi } from "./wasi";
 const post = (message: WorkerMessage, transfer: Transferable[] = []) =>
   (self as unknown as { postMessage(message: unknown, transfer: Transferable[]): void }).postMessage(message, transfer);
 
+/** WASM_TERM_TRACE=1: logs, about once a second, how often each import was called.
+ * The quickest way to see what a guest is blocked on, or that an event loop is spinning. */
+function traceImports(imports: WebAssembly.Imports): void {
+  let counts: Record<string, number> = {};
+  let since = performance.now();
+  for (const [moduleName, module] of Object.entries(imports)) {
+    for (const [name, fn] of Object.entries(module)) {
+      if (typeof fn !== "function") continue;
+      (module as Record<string, unknown>)[name] = (...args: unknown[]) => {
+        const key = moduleName === "wasm_term" ? `wasm_term.${name}` : name;
+        counts[key] = (counts[key] ?? 0) + 1;
+        const now = performance.now();
+        if (now - since >= 1000) {
+          const summary = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}=${n}`).join(" ");
+          post({ t: "log", text: `[wasm-term trace ${(now - since).toFixed(0)}ms] ${summary}` });
+          counts = {};
+          since = now;
+        }
+        return (fn as (...args: unknown[]) => unknown)(...args);
+      };
+    }
+  }
+}
+
 async function run(init: InitMessage): Promise<void> {
   const [kernelModule, guestModule] = await Promise.all([
     WebAssembly.compileStreaming(fetch(init.kernelUrl)),
@@ -30,6 +54,7 @@ async function run(init: InitMessage): Promise<void> {
   if (init.env.HOME) vfs.mkdirp(init.env.HOME);
 
   const wasi = createWasi({ args: init.args, env: init.env, machine, vfs });
+  if (init.env.WASM_TERM_TRACE) traceImports(wasi.imports);
   const instance = await WebAssembly.instantiate(guestModule, wasi.imports);
   const exports = instance.exports as { memory: WebAssembly.Memory; _start(): void };
   wasi.setMemory(exports.memory);

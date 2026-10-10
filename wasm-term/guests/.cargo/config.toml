@@ -1,2 +1,6 @@
 [build]
 target = "wasm32-wasip1"
+
+# tokio only enables its I/O driver on wasi (mio over poll_oneoff) under this cfg.
+[target.wasm32-wasip1]
+rustflags = ["--cfg", "tokio_unstable"]

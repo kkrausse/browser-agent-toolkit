@@ -13,6 +13,7 @@ interface KernelExports {
   pty_slave_read(id: number, cap: number, nowMs: number): number;
   pty_read_deadline(): number;
   pty_poll_in(id: number): number;
+  pty_readable_len(id: number): number;
   pty_tcgetattr(id: number): void;
   pty_tcsetattr(id: number, action: number): void;
   pty_winsize_get(id: number): void;
@@ -37,6 +38,8 @@ export interface Pty {
    * retry at when the read would block (Infinity: wait for input). */
   slaveRead(cap: number): Uint8Array | { retryAt: number };
   pollIn(): boolean;
+  /** FIONREAD: bytes a read could return right now. */
+  readableLen(): number;
   getTermios(): Uint8Array;
   setTermios(action: number, termios: Uint8Array): void;
   getWinsize(): Uint8Array;
@@ -101,6 +104,7 @@ export async function loadKernel(module: WebAssembly.Module): Promise<{ createPt
           return { retryAt: deadline < 0 ? Infinity : deadline };
         },
         pollIn: () => k.pty_poll_in(id) === 1,
+        readableLen: () => k.pty_readable_len(id),
         getTermios() {
           k.pty_tcgetattr(id);
           return buf().slice(0, TERMIOS_SIZE);

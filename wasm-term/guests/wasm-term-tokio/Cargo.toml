@@ -1,0 +1,10 @@
+[package]
+name = "wasm-term-tokio"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+description = "tokio adapters for wasm-term descriptors: async readiness, WebSocket, streaming HTTP"
+
+[dependencies]
+tokio = { version = "1.44", default-features = false, features = ["net", "rt"] }
+wasm-term-sys = { path = "../wasm-term-sys" }
