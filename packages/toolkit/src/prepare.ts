@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -23,6 +23,11 @@ export interface PrepareOptions {
   /** The `bat-prepare` executable. Default: `$BAT_PREPARE`, then `release/bat-prepare` under `target` or `target-prepare`
    * in an enclosing cargo workspace, then `bat-prepare` on PATH. */
   bin?: string;
+  /** Directory of built runtime assets (`host.js`, worker scripts, Wasm, `sw.js`), copied to
+   * `<outDir>/runtime/` where the manifest's default `runtime/host.js` points. Default:
+   * `$BAT_RUNTIME_DIR`, then `runtime/` beside this module (the published package), then
+   * `runtime/dist` in an enclosing repository (`bun runtime/build.ts`). */
+  runtimeDir?: string;
   /** Write only the manifest (launches and project files), no image: for development
    * against the fake host (`./fake`), which runs the programs natively. */
   manifestOnly?: boolean;
@@ -61,6 +66,25 @@ function findBin(explicit?: string): string {
       if (existsSync(candidate)) return candidate;
     }
     if (resolve(directory, '..') === directory) return 'bat-prepare';
+  }
+}
+
+function findRuntime(explicit?: string): string {
+  const given = explicit ?? process.env.BAT_RUNTIME_DIR;
+  if (given) return resolve(given);
+  if (existsSync(join(import.meta.dirname, 'runtime/host.js'))) return join(import.meta.dirname, 'runtime');
+  for (let directory = import.meta.dirname; ; directory = resolve(directory, '..')) {
+    if (existsSync(join(directory, 'runtime/dist/host.js'))) return join(directory, 'runtime/dist');
+    if (resolve(directory, '..') === directory) throw Error('Runtime assets not found: run `bun runtime/build.ts`, or set BAT_RUNTIME_DIR / `runtimeDir`.');
+  }
+}
+
+/** Put the runtime the browser boots next to the manifest (`<outDir>/runtime/`). */
+async function installRuntime(outDir: string, runtimeDir: string): Promise<void> {
+  const target = join(outDir, 'runtime');
+  await mkdir(target, { recursive: true });
+  for (const entry of await readdir(runtimeDir, { withFileTypes: true })) {
+    if (entry.isFile() && !entry.name.startsWith('.')) await copyFile(join(runtimeDir, entry.name), join(target, entry.name));
   }
 }
 
@@ -105,5 +129,6 @@ export async function prepare(options: PrepareOptions): Promise<EditorManifest> 
     ...(options.preview ? ['--preview', JSON.stringify(options.preview)] : []),
     ...(options.openCodeDir ? ['--opencode', resolve(options.openCodeDir)] : []),
   ]);
+  await installRuntime(outDir, findRuntime(options.runtimeDir));
   return JSON.parse(await readFile(manifestPath, 'utf8'));
 }

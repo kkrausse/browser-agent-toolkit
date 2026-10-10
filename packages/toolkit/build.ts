@@ -17,3 +17,9 @@ for (const [target, entrypoints] of [
   if (!result.success) throw new AggregateError(result.logs);
 }
 await buildUIStyles();
+// The browser runtime travels with the package when it has been built (`bun runtime/build.ts`):
+// `prepare()` copies it beside the manifest.
+if (await Bun.file('../../runtime/dist/host.js').exists()) {
+  await $`mkdir -p dist/runtime`;
+  await $`find ../../runtime/dist -maxdepth 1 -type f ! -name ".*" -exec cp {} dist/runtime/ ";"`;
+}
