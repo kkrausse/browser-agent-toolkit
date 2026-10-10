@@ -587,3 +587,25 @@ Content-Length, `16` Expect: 100-continue, `32` body runs until close, `64` HTTP
 | `bat_port_listener(port)` | id | identity of the listener on `port` (never reused), 0 if none; wait on the exported word `BAT_PORTS_WORD` for changes |
 
 `bat_close` now also drops readiness events still queued for that fd.
+
+## 16. Additions by the node runtime
+
+- **`bat_module_facts(path, len, buf, cap) -> len`** (`crates/bat-kernel/src/module_facts.rs`):
+  the facts blob (import/export lists, `docs/design/module-format.md` §6) of the image
+  entry at `path`; 0 if it has none or the file is not in an image. On `ERANGE` the needed
+  size is in `buf[0..4]`. `bat_read_file` with the compiled flag returns only the body and,
+  in the stat, the facts word; the loader asks for the blob when an ES module imports a
+  CommonJS module by name.
+- **`bootKernel({ processWorkerType: 'classic' })`** is passed to kerneld's
+  `new Worker(...)`. The node runtime's worker is a classic script
+  (`runtime/dist/bat-process.js`, built by `runtime/build.ts`); its configuration is in the
+  URL fragment (`processWorkerUrl` in `runtime/src/process/config.ts`). It speaks the same
+  `attach` / `images` / `run` → `ready` / `error` protocol as `process-worker.ts` and
+  ignores `runnerUrl`.
+- **A process worker must not both call `bat_proc_exit` and post `exited`.** kerneld
+  retires the worker for each, and `retire` schedules `bat_thread_free` each time; the
+  second free corrupts the heap (observed as the page spinning on a lock about five
+  seconds later). The node worker relies on the supervisor event alone. `retire` should
+  ignore a worker it has already retired.
+- **`proc::finish` publishes the status before closing the files** (it used to store it
+  afterwards, so `waitpid` right after pipe EOF could return 0).

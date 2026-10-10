@@ -341,3 +341,26 @@ In `crates/bat-modules/harness` (Node 24, `node --experimental-import-meta-resol
 - `opencode.mjs`: the 27.7 MB OpenCode server bundle, to `GET /api/health → 200`.
 - `check-tree.mjs DIR`: transform every file of a tree and compile each result in V8.
 - `compare-cjs-lexer.mjs DIR` (`node --expose-internals`): CommonJS facts ⊇ Node's lexer.
+
+## 10. Async context hooks (`Options::async_context`)
+
+Added by the node runtime. Off by default; `bat-prepare` and the runtime's Wasm calls
+(option flag bit 11) turn it on. Every `await x`, in both module kinds and at any depth, is
+written
+
+```js
+__bat_u(await __bat_w(x))
+```
+
+as three insertions, so the operand's text, lines and inner rewrites are untouched and a
+module that contains `await` no longer has `CODE_IS_SOURCE`. `__bat_w` and `__bat_u` are
+globals the runtime defines (`runtime/src/node/async_hooks.ts`): identity functions until
+an `AsyncLocalStorage` exists; afterwards `__bat_w` returns a promise that always fulfils
+with the outcome of `x` paired with the current context frame, and `__bat_u` restores that
+frame and returns the value or rethrows. A loader without async context defines both as
+`(v) => v`. `for await` and `await using` are not instrumented.
+
+Also changed in §3's rewrite table: a call (or tagged template) whose callee is an import
+and which is the first token of an expression statement is written
+`void 0,(0,__bat_iN.a)(x)`. A leading `(` would continue the previous line when that line
+has no semicolon.

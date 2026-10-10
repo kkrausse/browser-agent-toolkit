@@ -488,3 +488,75 @@ Numbers: `docs/experiments/2026-10-09-net.md`. Code: `crates/bat-kernel/src/{htt
   the same in the prepare run and in the guest (the TODO app ships `3988b30b` and the
   guest's Vite accepts it: no "Re-optimizing", the frame hydrates). The second point
   stands.
+
+## 2026-10-09 node runtime (process worker, loader, builtins)
+
+- **The process worker is a classic script; configuration rides in its URL fragment.**
+  Module workers have no `importScripts`, which the Node lib bundle and program scripts met
+  during synchronous loading need. kerneld only knows the worker URL, so
+  `processWorkerUrl(script, config)` (`runtime/src/process/config.ts`) appends the config
+  as JSON; `bootKernel` gained `processWorkerType: 'classic'`.
+- **Everything launch-independent happens in the warm spare**: loop, `process`, globals,
+  `importScripts` of the Node lib, nine common builtins, streaming compiles of the Wasm
+  helpers. Measured: spawn → first guest statement 2.3 ms median warm, 54 ms cold.
+- **Two bundles.** `bat-process.js` (kernel binding, loop, loader, TypeScript builtins) and
+  `bat-nodelib.js` (Node's own `lib/`, one factory per module, nothing evaluated until
+  required). Builtins from other parts of the tree register through
+  `runtime/src/<dir>/builtins.ts`, picked up by `runtime/build.ts`.
+- **The loop owns its timers.** One host timer tracks the earliest `Timeout` in a heap; a
+  turn is due timers → kernel events → immediates, so a timer that came due always runs
+  before the next watch event (the chokidar hazard), and sub-4 ms timers poll through a
+  MessageChannel instead of hitting the browser's nested-timer clamp. Node's own
+  `lib/timers.js` was not vendored: it sits on native timer lists.
+- **`process.exit` blocks the worker** (`Atomics.wait` on a private buffer) after
+  `bat_proc_exit`, so nothing of the guest runs afterwards; kerneld terminates it. The
+  worker does not post `exited` (kerneld's `retire` is not idempotent; see the experiment
+  notes).
+- **fs callbacks are delivered with `nextTick`, fs promises resolve at once.** Every
+  operation is a synchronous kernel call; a macrotask hop per callback bought nothing.
+  A program that recurses through fs callbacks forever would starve timers.
+- **Worker-scope names are shadowed, not deleted**: `self`, `postMessage`,
+  `importScripts`, `location`, `XMLHttpRequest`, `Worker` … live on
+  `WorkerGlobalScope.prototype`, so the runtime defines `undefined` own properties over
+  them. `navigator` is replaced by a Node-shaped object that keeps `storage`/`locks`
+  non-enumerable, because the kernel's OPFS code reaches them through the global.
+- **`MessageChannel` in `worker_threads` is implemented in the process's loop**, not on
+  the browser's: `on('message')`, keeping the process alive while listening and
+  `receiveMessageOnPort` need it. The global `MessageChannel` is still the browser's.
+  `Worker` is not provided.
+- **Children: no shell.** A command line is split into words (quotes, `VAR=x` prefixes,
+  `$VAR`); `sh -c`, `env`, `node`, a JS file, a node shebang or a `.bin` link are run;
+  anything with `|`, `&&`, redirections, or an unknown program is ENOENT. `fork` IPC is
+  newline-delimited JSON over a loopback socket whose port is passed in
+  `NODE_CHANNEL_FD` (the kernel's spawn has three stdio slots and no fd passing).
+- **AsyncLocalStorage needs the module transform.** Chrome 154 has no `AsyncContext`.
+  First attempt: frames captured by everything the loop schedules plus a wrapped
+  `Promise.prototype.then`. Measured with `runtime/harness/guests/als.mjs`: correct across
+  timers and I/O, wrong after `await null` inside `als.run(store, asyncFn)` and after
+  `await als.run(...)`, because the continuation of a native `await` cannot be hooked.
+  Now `bat-modules` (`Options::async_context`, on in `bat-prepare` and in the runtime's
+  Wasm calls) compiles `await x` to `__bat_u(await __bat_w(x))`; the two globals are
+  pass-throughs until the first `AsyncLocalStorage` exists, then carry the frame with the
+  awaited outcome. 49 of 49 checks pass, including a continuation resumed from another
+  context. Cost while a storage is in use: one extra promise per `await`. Not covered:
+  `for await`, `await using`, code compiled outside the transform.
+- **A rewritten callee at statement start is written `void 0,(0,ns.f)()`** in
+  `bat-modules` (a bare `(0,…)` continued a previous line without a semicolon). Images
+  compiled before commit d883a3a are affected.
+- **The entry's program script is loaded with `import()`, as a module.** Measured (table
+  in `docs/experiments/2026-10-09-node-runtime.md`): `importScripts` in a dedicated worker
+  never gets a V8 code cache; `import()` from the HTTP cache does from the third load
+  (27.7 MB OpenCode program: 650–800 ms + 150 ms per process → 230 ms + 5 ms). Consequence
+  for prepare: **a program script must be valid module code**, so it is evaluated in
+  strict mode. That is free for ES modules (already strict) and wrong for sloppy CommonJS;
+  a program that carries CommonJS needs either a check that the module is strict-safe or
+  a second, classic script for those modules. A service worker serving the script from
+  Cache Storage did not produce a code cache with either loader.
+- **Module bodies from the image are evaluated with indirect `eval` and are not code
+  cached** (118 ms of the 147 ms for `require('typescript')`; 118 ms for Vite's 546
+  wrappers). The remedy is the one above: ship start-up module sets as program scripts.
+- **`util.inspect` is still Vivari's bridge**, not Node's `internal/util/inspect.js`
+  (which needs V8 introspection bindings). Object output is close, not identical.
+- **zlib and the synchronous digests are a separate Wasm** (`crates/bat-node-native`,
+  1.1 MB, instantiated on first use), not part of the kernel module, so a process that
+  never compresses or hashes does not pay for it and the kernel stays small.

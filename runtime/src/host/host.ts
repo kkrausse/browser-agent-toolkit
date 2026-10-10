@@ -127,6 +127,37 @@ function rpc(worker: Worker) {
   }
 }
 
+/** One workspace per mount point of the editor on this origin. */
+const namespaceOf = (manifestUrl: string) => new URL(manifestUrl).pathname.replace(/\/[^/]*$/, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'default'
+
+/**
+ * Delete everything this browser stores for the workspace (source edits, agent sessions,
+ * caches). The dependency image stays, so the next open is a reopen, not a download.
+ * Rejects with `code: 'STORAGE_BUSY'` while the workspace is open in any tab.
+ */
+export async function resetWorkspace(options: { manifestUrl: string; namespace?: string }): Promise<void> {
+  const namespace = options.namespace ?? namespaceOf(options.manifestUrl)
+  const attempt = () =>
+    navigator.locks.request(`bat-kernel:${namespace}`, { ifAvailable: true }, async (lock) => {
+      if (!lock) return false
+      let dir = await navigator.storage.getDirectory()
+      try {
+        for (const part of ['bat', namespace]) dir = await dir.getDirectoryHandle(part)
+        await dir.removeEntry('overlay', { recursive: true })
+      } catch (e) {
+        if ((e as DOMException)?.name !== 'NotFoundError') throw e
+      }
+      return true
+    })
+  // An editor that was just closed releases its lock a moment later (its supervisor is terminating).
+  let done = await attempt()
+  for (let i = 0; !done && i < 20; i++) {
+    await new Promise((r) => setTimeout(r, 100))
+    done = await attempt()
+  }
+  if (!done) throw busy()
+}
+
 export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
   const t0 = performance.now()
   const manifest = options.manifest as Manifest
@@ -141,8 +172,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
       // observer failure
     }
   }
-  // One workspace per mount point of the editor on this origin.
-  const namespace = options.namespace ?? (new URL(options.manifestUrl).pathname.replace(/\/[^/]*$/, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'default')
+  const namespace = options.namespace ?? namespaceOf(options.manifestUrl)
   const image = manifest.image
   const timings: Record<string, number | boolean> = {}
 
