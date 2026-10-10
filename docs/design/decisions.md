@@ -227,3 +227,53 @@ Spec: `docs/design/module-format.md`; reference loader `crates/bat-modules/harne
 - **The resolver is not written by the kernel agent.** The node-runtime agent put one in
   `crates/bat-kernel/src/resolve.rs` while the kernel agent's own was being started; to
   keep one resolver the kernel agent dropped its attempt and left that file alone.
+
+## 2026-10-09 tools: esbuild shim, optimizer cache, prepare additions (bat-tools)
+
+Numbers and evidence: `docs/experiments/2026-10-09-tools.md`.
+
+- **A shim is laid over the generic package it falls back to (`overlay`), not installed in
+  its place (`dir:`).** Bun installs a `file:` override without its dependencies (the lock
+  entry is `["esbuild@file:.bat-shims/esbuild", {}]`), so a `dir:` shim cannot keep
+  `esbuild-wasm` in the tree. The policy keeps `esbuild → npm:esbuild-wasm@{version}` and
+  adds `overlay: dir:…/packages/guest-shims/esbuild`: prepare copies the shim's files into
+  the installed package and merges `package.overlay.json` (`main`). The fallback is the
+  neighbouring `lib/main.js`, always at the locked version. `dir:` remains right for shims
+  with no fallback (the oxide scanner).
+- **The esbuild shim depends on oxc directly, in its own Wasm (`bat_esbuild.wasm`), not on
+  `bat-modules`' Wasm.** `bat-modules` emits loader function bodies with facts; esbuild's
+  `transform` must return a plain ES module with `define` applied and esbuild's result
+  shape. Both link the same oxc 0.153 crates, so one combined module would save about
+  1 MB of download; that needs one crate exporting both ABIs and is left as a follow-up.
+- **`transform` never downlevels and never minifies beyond whitespace.** `target` and
+  `supported` are accepted and ignored (the guest runs in current Chrome; Vite's dev
+  transforms pass `esnext`). `minifyWhitespace` is done by oxc's printer. `minify`,
+  `minifyIdentifiers`, `minifySyntax`, `format: cjs|iife`, non-JS loaders, decorators,
+  `import x = require()`, and any option the shim does not know go to the real esbuild
+  (`esbuild-wasm`, loaded on first such call). Nothing in dev mode takes that path for the
+  TODO app (0 of 22 calls at startup, 0 of 25 with a hot update).
+- **`build()` is implemented for exactly one shape: one entry whose imports are all
+  external after the plugins' `onResolve`.** That is `bundleConfigFile`, which React
+  Router's child compiler runs at every start through `vite.loadConfigFromFile` (the
+  `--configLoader native` flag only covers Vite's own load). A config that imports a
+  local file, and every `context()` (the dependency optimizer), fall back.
+- **The optimizer cache is produced by running the project's own Vite at the guest's path
+  in a mount namespace (bubblewrap), not by rewriting hashes.** Vite's `configHash` covers
+  `root` and `resolve`, and each `fileHash` covers the absolute output path, so only a
+  run that sees `/workspace` writes exactly what the guest would. Without bubblewrap the
+  script runs at the host path and recomputes `configHash`/`lockfileHash`/`hash` with a
+  copy of Vite's functions that is first checked against the hashes Vite itself wrote;
+  both modes gave the same three hashes for the TODO app. `fileHash` then keeps the host
+  path (Vite compares it only between two of its own runs).
+- **The cache is delivered as project files, not in the image.** Vite commits a
+  re-optimization by renaming the `deps` directory, and the kernel answers `EXDEV` for
+  renaming an image directory; and the cache depends on `vite.config.ts`, so putting it
+  in the image would turn a config edit into a new 236 MB image. Cost: `manifest.json`
+  grows from 24 KB to 6.0 MB (3.7 MB of that is the optimizer's source maps). A second
+  small image, or a manifest-side blob, would be better; that is a format change for the
+  prepare and kernel owners.
+- **Prepare gained three things**, each small: substitution `overlay`; `projectScripts`
+  (host programs whose output files become project files; a failing script is reported in
+  the manifest and skipped); and a base directory for `dir:` paths in the embedded policy
+  (`$BAT_POLICY_BASE`, else the crate's `data/` at build time; it used to be the current
+  directory).
