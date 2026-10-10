@@ -770,3 +770,18 @@ Numbers: `docs/experiments/2026-10-10-first-open-and-shell.md`.
   truncating a download in progress.
 - **Not done**: resuming an interrupted download (it restarts), and the UI does not show
   that the image is still arriving in the background.
+
+## 2026-10-10 closing pass (summary: `docs/experiments/2026-10-10-rust-rewrite-summary.md`)
+
+- **The preview frame has no `SharedWorker`.** Vite's client waits for a restarted dev
+  server by opening `new WebSocket(url, 'vite-ping')` inside a blob `SharedWorker`; the
+  frame's `WebSocket` replacement does not exist in that global, so the ping went to the
+  real server and the frame was never reloaded after a `vite.config.ts` edit (measured:
+  server answering again after 0.35 s, frame stale indefinitely; with the class hidden the
+  app is back 1.46 s after the edit). Cost: an app that uses a `SharedWorker` does not work
+  in the preview. The alternative, a `SharedWorker` wrapper that injects the replacement
+  into the worker's script, was not built.
+- **A new service worker serves the frame from the open after the one that finds it.**
+  Seen when the change above was deployed; left as it is.
+- **The harness defaults to the setup's outputs** (`examples/todo-app/.editor/prepared`,
+  `target/`), then the earlier build directories.
