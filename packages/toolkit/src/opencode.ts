@@ -48,12 +48,15 @@ export const defaultAgent: LaunchDescription = {
  * supplies paths; the per-start secret and the workspace-owned locations are added here. */
 export function agentLaunch(password: string, description: LaunchDescription = defaultAgent): Launch {
   if (!password || /[^\x20-\x7e]/.test(password)) throw Error('Expected a nonempty ASCII server password');
-  return toLaunch(description, {
+  const launch = toLaunch(description, {
     EDITOR_WORKSPACE: workspace,
     OPENCODE_PASSWORD: password,
     // In the workspace, so sessions persist with it (the old runtime kept it outside).
     OPENCODE_DATABASE_PATH: `${server}/data/opencode.sqlite`,
   });
+  // Loaded before the server (see `modelSourcePreloadSource`); a separate argument, so a host
+  // that maps guest paths (the development fake host) maps this one too.
+  return { ...launch, argv: [launch.argv[0]!, '--require', modelSourcePreload, ...launch.argv.slice(1)] };
 }
 
 /** Global configuration: one provider that is the host's model proxy; an explicit default
@@ -90,6 +93,46 @@ export function modelCatalogPluginSource(modelIDs: string[]): string {
 } };`;
 }
 
+const modelSourcePreload = `${server}/editor-model-source.cjs`;
+/**
+ * OpenCode builds its catalog from the models.dev document: 226 providers and about 4,000
+ * models, 5.4 MB, fetched at every start older than five minutes, stored as one database
+ * row and copied model by model into the catalog while plugins activate. The editor has one
+ * provider (the host's proxy, id `opencode`), and the server's own `/api/model` lists only
+ * that provider's models either way. This preload (`node --require`) answers the server's
+ * catalog request with the upstream document reduced to that provider, so the stored row is
+ * about 2% of the size and a start no longer normalizes and copies models nobody can use.
+ * A workspace's first start still builds from the catalog bundled in the server; the
+ * reduced document replaces it at the first refresh. Measured in
+ * docs/experiments/2026-10-09-startup.md.
+ */
+export function modelSourcePreloadSource(providers: string[] = ['opencode']): string {
+  return `'use strict';
+const source = 'https://models.opencode.ai/api.json';
+const keep = ${JSON.stringify(providers)};
+const upstream = globalThis.fetch;
+let said = false;
+globalThis.fetch = async function (input, init) {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input && input.url;
+  if (url !== source) return upstream.call(this, input, init);
+  const response = await upstream.call(this, input, init);
+  if (!response.ok) return response;
+  const catalog = await response.json();
+  const reduced = {};
+  for (const id of keep) if (Object.hasOwn(catalog, id)) reduced[id] = catalog[id];
+  const text = JSON.stringify(reduced);
+  if (!said) { said = true; console.error('[editor] model catalog source reduced to ' + Object.keys(reduced).length + ' of ' + Object.keys(catalog).length + ' providers, ' + text.length + ' bytes'); }
+  return new Response(text, { status: 200, headers: { 'content-type': 'application/json' } });
+};
+`;
+}
+
+/** Write only when the content differs: every write is journaled for the next open to replay. */
+async function writeText(fs: RuntimeFs, path: string, text: string) {
+  const have = await fs.readFile(path).then(bytes => new TextDecoder().decode(bytes), () => undefined);
+  if (have !== text) await fs.writeFile(path, text);
+}
+
 /** Write OpenCode's directories, plugins and global configuration. Nothing else in the workspace is touched. */
 export async function installAgentConfig(fs: RuntimeFs, options: { modelBaseURL: string; models?: Record<string, CatalogModel>; defaultModel?: string }) {
   for (const directory of openCode.directories) await fs.mkdir(directory);
@@ -97,15 +140,16 @@ export async function installAgentConfig(fs: RuntimeFs, options: { modelBaseURL:
   // ignore rules must not see it: Tailwind's Vite plugin scans every unignored file and
   // answers a change to a scanned non-module file with a full page reload, so each
   // database or log write of the agent reloaded the preview (three times per chat turn).
-  await fs.writeFile(`${server}/.gitignore`, '*\n');
+  await writeText(fs, `${server}/.gitignore`, '*\n');
   const plugins = `${configDirectory}/plugins`;
-  await fs.writeFile(`${plugins}/editor-model-headers.js`, modelHeaderPluginSource(options.modelBaseURL));
-  await fs.writeFile(`${plugins}/editor-javascript.js`, javascriptPlugin);
+  await writeText(fs, `${plugins}/editor-model-headers.js`, modelHeaderPluginSource(options.modelBaseURL));
+  await writeText(fs, `${plugins}/editor-javascript.js`, javascriptPlugin);
   // An explicit default means the host owns the whole catalog. The workspace persists
   // between visits, so a previous visit's catalog plugin must not survive.
-  if (options.defaultModel !== undefined) await fs.writeFile(`${plugins}/editor-model-catalog.js`, modelCatalogPluginSource(Object.keys(options.models ?? {})));
+  if (options.defaultModel !== undefined) await writeText(fs, `${plugins}/editor-model-catalog.js`, modelCatalogPluginSource(Object.keys(options.models ?? {})));
   else await fs.remove(`${plugins}/editor-model-catalog.js`);
-  await fs.writeFile(openCode.configPath, JSON.stringify(agentConfig(options.modelBaseURL, options.models, options.defaultModel)));
+  await writeText(fs, modelSourcePreload, modelSourcePreloadSource());
+  await writeText(fs, openCode.configPath, JSON.stringify(agentConfig(options.modelBaseURL, options.models, options.defaultModel)));
 }
 
 const timed = (name: string) => { try { performance.mark(`bat:${name}`); } catch { /* no user timing */ } };
@@ -156,6 +200,8 @@ export async function verifyAgentReady(endpoint: Pick<RuntimeEndpoint, 'fetch'>,
   if (!configured || typeof configured.package !== 'string' || configured.websocket !== false) throw Error('OpenCode global model configuration not loaded');
   timed('agent.config');
   const { data } = await json(`/api/model?${locationQuery}`, 'model catalog');
+  // Startup tracing (see the runtime's trace.ts): the catalog as served, for comparing runs.
+  if ((globalThis as { __batTrace?: unknown }).__batTrace) (globalThis as { __batAgentModels?: unknown }).__batAgentModels = data;
   const model = Array.isArray(data) && data.find(item => item.providerID === 'opencode' && item.id === modelID);
   if (!model?.enabled || !model.capabilities?.tools) throw Error(`OpenCode model ${modelID} is not enabled with tools (present: ${!!model})`);
 }

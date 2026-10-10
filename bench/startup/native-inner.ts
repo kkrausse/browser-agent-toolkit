@@ -4,6 +4,12 @@ import { spawn } from 'node:child_process'
 import { verifyAgentReady } from '../../packages/toolkit/src/opencode'
 
 const [kind, launchJson, password] = process.argv.slice(2)
+const nodeArgs = (process.env.NATIVE_NODE_ARGS ?? '').split(' ').filter(Boolean)
+const finish = async (child: import('node:child_process').ChildProcess, signal: NodeJS.Signals | undefined) => {
+  if (!nodeArgs.length) return void child.kill('SIGKILL')
+  if (signal) child.kill(signal)
+  await new Promise((r) => child.once('exit', r))
+}
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const state = { log: '', exited: false }
 async function until(test: () => boolean, what: string) {
@@ -15,7 +21,8 @@ async function until(test: () => boolean, what: string) {
   }
 }
 function start(command: string[], cwd: string, env: Record<string, string>) {
-  const child = spawn(process.execPath, command, { cwd, env: { PATH: process.env.PATH!, ...(process.env.NODE_COMPILE_CACHE ? { NODE_COMPILE_CACHE: process.env.NODE_COMPILE_CACHE } : {}), ...env }, stdio: ['pipe', 'pipe', 'pipe'] })
+  // NATIVE_NODE_ARGS (e.g. `--cpu-prof --cpu-prof-dir=/workspace/.prof`): the program then gets time to exit by itself.
+  const child = spawn(process.execPath, [...nodeArgs, ...command], { cwd, env: { PATH: process.env.PATH!, ...(process.env.NODE_COMPILE_CACHE ? { NODE_COMPILE_CACHE: process.env.NODE_COMPILE_CACHE } : {}), ...env }, stdio: ['pipe', 'pipe', 'pipe'] })
   child.stdout.on('data', (d) => (state.log += d))
   child.stderr.on('data', (d) => (state.log += d))
   child.on('exit', () => (state.exited = true))
@@ -66,7 +73,7 @@ async function vite() {
   const page = performance.now() - t0
   await sleep(300)
   const reported = /ready in (\d+)/.exec(state.log.replace(/\x1b\[[0-9;]*m/g, ''))?.[1]
-  child.kill('SIGKILL')
+  await finish(child, 'SIGTERM')
   return { listening, document, page, requests: seen.size, viteReadyIn: reported ? Number(reported) : undefined, optimizerRan: /optimized dependencies changed|new dependencies optimized|Re-optimizing/i.test(state.log) }
 }
 
@@ -86,7 +93,7 @@ async function openCode() {
   const ready = performance.now() - t0
   await sleep(0)
   child.stdin.end()
-  child.kill('SIGKILL')
+  await finish(child, undefined)
   return { listening, health: marks.health, activated: marks.activated, ready }
 }
 

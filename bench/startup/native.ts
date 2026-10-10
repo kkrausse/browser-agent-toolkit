@@ -66,7 +66,7 @@ function sandboxed(ws: string, app: string, args: string[]): Promise<any> {
   const child = spawn(
     'bwrap',
     ['--die-with-parent', '--unshare-net', ...binds, '--dev', '/dev', '--proc', '/proc', '--bind', ws, '/workspace', '--bind', join(work, 'guest/node_modules'), '/workspace/node_modules', '--bind', app, '/app', '--ro-bind', join(work, 'support/node_modules'), '/app/node_modules', '--chdir', '/', node, inner, ...args],
-    { env: { PATH: process.env.PATH!, HOME: process.env.HOME!, ...(compileCache ? { NODE_COMPILE_CACHE: join(scratch, `compile-cache-${args[0]}`) } : {}) }, stdio: ['ignore', 'pipe', 'pipe'] },
+    { env: { PATH: process.env.PATH!, HOME: process.env.HOME!, ...(process.env.NATIVE_NODE_ARGS ? { NATIVE_NODE_ARGS: process.env.NATIVE_NODE_ARGS } : {}), ...(compileCache ? { NODE_COMPILE_CACHE: join(scratch, `compile-cache-${args[0]}`) } : {}) }, stdio: ['ignore', 'pipe', 'pipe'] },
   )
   let out = ''
   let err = ''
