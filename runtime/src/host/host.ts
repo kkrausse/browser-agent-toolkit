@@ -176,7 +176,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
       processWorkerType: 'classic',
       namespace,
       persist: options.persist ?? true,
-      noPersist: ['/.bat'],
+      noPersist: ['/.bat', '/tmp'],
       warmSpare: true,
     } as Parameters<typeof bootKernel>[0])
   } catch (e) {

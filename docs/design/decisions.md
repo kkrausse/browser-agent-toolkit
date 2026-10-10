@@ -485,5 +485,6 @@ Numbers: `docs/experiments/2026-10-09-net.md`. Code: `crates/bat-kernel/src/{htt
   point is fixed the preview renders but does not hydrate.
 - **Fixed in the toolkit's Vite plugin** (same day): in guest mode `configResolved` wraps
   `config.assetsInclude` in a function whose text has no imported binding, so the hash is
-  the same in the prepare run and in the guest (`3988b30b` on both sides for the TODO
-  app). The example then starts without re-optimizing. The second point stands.
+  the same in the prepare run and in the guest (the TODO app ships `3988b30b` and the
+  guest's Vite accepts it: no "Re-optimizing", the frame hydrates). The second point
+  stands.
