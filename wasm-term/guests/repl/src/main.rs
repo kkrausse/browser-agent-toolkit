@@ -130,6 +130,7 @@ fn run(command: &str, rest: &str) -> io::Result<Option<i32>> {
             println!("sleep SECS       block in a timer");
             println!("write PATH TEXT  write a file        cat PATH   read it back");
             println!("ls [PATH]        list a directory    env        show environment");
+            println!("flood [LINES]    print fast          panic      abort with a Rust panic");
             println!("exit [CODE]      leave               ^D         end of file");
         }
         "echo" => println!("{rest}"),
@@ -190,6 +191,16 @@ fn run(command: &str, rest: &str) -> io::Result<Option<i32>> {
                 println!("{key}={value}");
             }
         }
+        "flood" => {
+            // Fast output: exercises output flow control; ^C (with `trap off`) stops it.
+            let lines: u64 = rest.parse().unwrap_or(100_000);
+            let stdout = io::stdout();
+            let mut out = stdout.lock();
+            for n in 1..=lines {
+                writeln!(out, "line {n} of {lines} {}", "#".repeat((n % 60) as usize))?;
+            }
+        }
+        "panic" => panic!("requested by the panic command"),
         "exit" => return Ok(Some(rest.parse().unwrap_or(0))),
         other => println!("{other}: unknown command (try help)"),
     }

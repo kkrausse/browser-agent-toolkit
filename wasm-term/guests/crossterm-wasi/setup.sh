@@ -26,6 +26,11 @@ fi
 git clone --quiet "$REPO" crossterm
 git -C crossterm checkout --quiet "$REV"
 ./mechanical.sh crossterm
+# Committed inside the clone so that `git -C crossterm diff` is exactly
+# wasi.patch. To change the patch: edit files in crossterm/, then
+#   git -C crossterm diff > wasi.patch
+# (overlay files are untracked there; copy edits back to overlay/ by hand).
+git -C crossterm -c user.name=wasm-term -c user.email=wasm-term@localhost commit --quiet -am "wasm-term: mechanical cfg(unix) widening"
 git -C crossterm apply ../wasi.patch
 cp -R overlay/. crossterm/
 echo "crossterm-wasi/crossterm ready at $REV + wasi backend"

@@ -97,7 +97,26 @@ const program = startProgram({
 // Keystrokes, pastes (already bracketed by the terminal when the program asked
 // for it), mouse reports, focus reports and query replies all arrive here as
 // bytes for the pty master.
-terminal.onData(data => {
+let mouseButtons = 0;
+for (const type of ["mousedown", "mouseup", "mousemove"] as const) {
+  window.addEventListener(type, event => (mouseButtons = event.buttons), { capture: true });
+}
+
+/** Workaround for ghostty-web: with any-motion tracking (DEC 1003) it reports
+ * pointer motion with no button held as button code 32 ("left button drag")
+ * instead of 35 ("no button"), so programs see a drag on every hover. The
+ * page knows the real button state, so the report is corrected here.
+ * Remove once ghostty-web's input handler encodes this itself. */
+function fixMotionReport(data: string): string {
+  if (mouseButtons !== 0) return data;
+  return data.replace(/^\x1b\[<(\d+);(\d+;\d+M)$/, (report, code: string, rest: string) => {
+    const value = Number(code);
+    return (value & 32) !== 0 && (value & 3) === 0 && value < 64 ? `\x1b[<${value + 3};${rest}` : report;
+  });
+}
+
+terminal.onData(raw => {
+  const data = fixMotionReport(raw);
   sent.push(data);
   if (sent.length > 200) sent.shift();
   program.write(data);

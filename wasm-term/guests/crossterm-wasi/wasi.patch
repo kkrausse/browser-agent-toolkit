@@ -129,16 +129,22 @@ index 8fda30b..9e23f7a 100644
  };
  
 diff --git a/src/lib.rs b/src/lib.rs
-index 580809e..e997c94 100644
+index 580809e..1e4fb17 100644
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -257,6 +257,11 @@ pub mod terminal;
+@@ -1,5 +1,7 @@
+ #![deny(unused_imports, unused_must_use)]
+ #![allow(unexpected_cfgs)]
++// wasm32-wasip1 has no threads, so the cross-thread `Waker` has no caller there.
++#![cfg_attr(target_os = "wasi", allow(dead_code))]
+ 
+ //! # Cross-platform Terminal Manipulation Library
+ //!
+@@ -257,6 +259,9 @@ pub mod terminal;
  #[cfg(feature = "osc52")]
  pub mod clipboard;
  
-+// The cross-thread waker has no caller without threads; see wasi_compat.rs.
 +#[cfg(target_os = "wasi")]
-+#[allow(dead_code)]
 +mod wasi_compat;
 +
  #[cfg(windows)]
