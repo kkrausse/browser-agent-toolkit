@@ -22,6 +22,8 @@ pub struct Thread {
     pub tls_block: usize, // +32
     pub tls_size: usize,  // +36
     pub tls_align: usize, // +40
+    /// `Arc<Process>` raw pointer this thread is bound to, or 0.
+    pub proc: core::sync::atomic::AtomicUsize, // +44
 }
 
 thread_local! {
