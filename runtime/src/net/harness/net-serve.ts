@@ -1,5 +1,5 @@
 // Static server for the net harness pages (COOP/COEP, .ts bundled on request).
-//   bun runtime/src/net/harness/server.ts [port]
+//   bun runtime/src/net/harness/net-serve.ts [port]
 // /real/* stands for "the page's real server" in hostPaths and host.internal checks.
 import { join, normalize } from 'node:path'
 
@@ -25,7 +25,7 @@ Bun.serve({
     const path = decodeURIComponent(url.pathname)
     if (path === '/kernel.wasm') return new Response(Bun.file(wasm), { headers: { ...headers, 'Content-Type': 'application/wasm' } })
     if (path.startsWith('/real/')) {
-      return Response.json({ real: true, path, method: req.method, cookie: req.headers.get('cookie'), big: req.headers.get('x-big')?.length ?? 0 }, { headers })
+      return Response.json({ real: true, path, method: req.method, hasCookie: req.headers.has('cookie'), big: req.headers.get('x-big')?.length ?? 0 }, { headers })
     }
     // The layout the toolkit's server handler gives a real app: manifest and image under
     // /editor/, runtime assets under /editor/runtime/.
