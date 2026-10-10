@@ -3,7 +3,9 @@
 //! calls. `main` is the whole program; the Wasm exports below are how the
 //! runtime calls it (runtime/src/process/sh.ts).
 pub mod ast;
+pub mod awk;
 pub mod builtins;
+pub mod diff;
 pub mod expand;
 pub mod files;
 pub mod find;
@@ -11,10 +13,12 @@ pub mod glob;
 pub mod interp;
 pub mod parser;
 pub mod pkg;
+pub mod rg;
 pub mod sed;
 pub mod sys;
 pub mod test;
 pub mod text;
+pub mod util;
 
 use interp::{basename, Flow, Interp, Io, X, SHELL_NAMES};
 
@@ -46,6 +50,13 @@ fn shell_main(sh: &mut Interp, argv: &[String]) -> X {
         }
         for c in a[1..].chars() {
             match c {
+                // `bash -euo pipefail -c …`: an `o` inside a cluster takes the next argument as its option name.
+                'o' => {
+                    if argv.get(i + 1).map(String::as_str) == Some("pipefail") {
+                        sh.s.opts.pipefail = on;
+                    }
+                    i += 1;
+                }
                 'c' => command = true,
                 's' => from_stdin = true,
                 'e' => sh.s.opts.errexit = on,

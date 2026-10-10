@@ -17,6 +17,10 @@ enum Expr {
     Size(i8, u64, u64),
     /// minutes or days: (sign, value, unit in ms)
     Mtime(i8, f64, f64),
+    /// The whole path matches (`-regex`, `-iregex`).
+    Regex(regex_lite::Regex),
+    /// `-printf`: literal text and directives, in order.
+    Printf(Vec<(String, char)>),
     Print,
     Print0,
     Delete,
@@ -30,6 +34,8 @@ struct Parser<'a> {
     a: &'a [String],
     i: usize,
     action: bool,
+    /// `-regextype posix-extended` was given.
+    ere: bool,
     sh: &'a Interp,
 }
 
@@ -103,6 +109,69 @@ impl Parser<'_> {
             "-mtime" | "-mmin" => {
                 let (sign, v) = signed(&self.arg(&t)?);
                 Expr::Mtime(sign, v.parse().map_err(|_| format!("invalid argument to `{t}'"))?, if t == "-mtime" { 86_400_000.0 } else { 60_000.0 })
+            }
+            "-regex" | "-iregex" => {
+                let p = self.arg(&t)?;
+                // Emacs syntax (find's default): `\(`, `\)`, `\|` are the operators, the bare characters literals.
+                let mut src = String::from(if t == "-iregex" { "(?i)^(?:" } else { "^(?:" });
+                let mut chars = p.chars();
+                while let Some(c) = chars.next() {
+                    match c {
+                        '\\' => match chars.next() {
+                            Some(n @ ('(' | ')' | '|')) if !self.ere => src.push(n),
+                            Some(n) => {
+                                src.push('\\');
+                                src.push(n);
+                            }
+                            None => src.push_str("\\\\"),
+                        },
+                        '(' | ')' | '|' | '{' | '}' if !self.ere => {
+                            src.push('\\');
+                            src.push(c);
+                        }
+                        c => src.push(c),
+                    }
+                }
+                src.push_str(")$");
+                Expr::Regex(regex_lite::Regex::new(&src).map_err(|e| format!("invalid regular expression `{p}': {e}"))?)
+            }
+            "-regextype" => {
+                let kind = self.arg(&t)?;
+                self.ere = kind.contains("extended") || kind.contains("egrep") || kind.contains("awk");
+                Expr::True
+            }
+            "-printf" => {
+                self.action = true;
+                let f: Vec<char> = self.arg(&t)?.chars().collect();
+                let mut parts: Vec<(String, char)> = Vec::new();
+                let mut lit = String::new();
+                let mut i = 0;
+                while i < f.len() {
+                    match f[i] {
+                        '\\' if i + 1 < f.len() => {
+                            i += 1;
+                            lit.push(match f[i] {
+                                'n' => '\n',
+                                't' => '\t',
+                                '0' => '\0',
+                                'r' => '\r',
+                                c => c,
+                            });
+                        }
+                        '%' if i + 1 < f.len() => {
+                            i += 1;
+                            match f[i] {
+                                '%' => lit.push('%'),
+                                d @ ('p' | 'f' | 'h' | 's' | 'y' | 'm') => parts.push((std::mem::take(&mut lit), d)),
+                                d => return Err(format!("-printf: the directive %{d} is not available in this environment (%p %f %h %s %y %m are)")),
+                            }
+                        }
+                        c => lit.push(c),
+                    }
+                    i += 1;
+                }
+                parts.push((lit, ' '));
+                Expr::Printf(parts)
             }
             "-print" => {
                 self.action = true;
@@ -201,6 +270,23 @@ impl Walk<'_> {
                     _ => age == *v,
                 }
             }
+            Expr::Regex(re) => re.is_match(shown),
+            Expr::Printf(parts) => {
+                for (lit, d) in parts {
+                    self.out.extend_from_slice(lit.as_bytes());
+                    let text = match d {
+                        'p' => shown.to_string(),
+                        'f' => basename(shown).to_string(),
+                        'h' => crate::interp::dirname(shown).to_string(),
+                        's' => st.size.to_string(),
+                        'y' => if st.is_dir() { "d" } else if st.is_symlink() { "l" } else { "f" }.to_string(),
+                        'm' => format!("{:o}", st.mode),
+                        _ => String::new(),
+                    };
+                    self.out.extend_from_slice(text.as_bytes());
+                }
+                true
+            }
             Expr::Print => {
                 self.out.extend_from_slice(shown.as_bytes());
                 self.out.push(b'\n');
@@ -253,6 +339,7 @@ impl Walk<'_> {
             }
         };
         self.prune = false;
+        self.sh.check_deadline()?;
         if !depth_first && depth >= min {
             self.eval(e, shown, path, &st)?;
         }
@@ -342,7 +429,7 @@ pub fn run(sh: &mut Interp, a: &[String]) -> X {
     let (expr, action) = if rest.is_empty() {
         (Expr::True, false)
     } else {
-        let mut p = Parser { a: &rest, i: 0, action: false, sh };
+        let mut p = Parser { a: &rest, i: 0, action: false, ere: false, sh };
         match p.or() {
             Ok(e) if p.i >= rest.len() => (e, p.action),
             Ok(_) => {

@@ -1,5 +1,5 @@
 //! Command dispatch and the builtins that are part of the shell itself.
-use crate::interp::{basename, Done, Flow, Interp, Var, X};
+use crate::interp::{basename, Arr, Done, Flow, Interp, Var, X};
 use crate::parser::valid_name;
 use crate::sys;
 
@@ -77,13 +77,14 @@ pub const BUILTINS: &[&str] = &[
     "exec", "exit", "export", "false", "find", "getopts", "grep", "egrep", "fgrep", "head", "hostname", "id", "local", "ln", "ls", "mkdir", "mktemp", "mv", "printenv",
     "printf", "pwd", "read", "readlink", "readonly", "realpath", "return", "rm", "rmdir", "sed", "seq", "set", "shift", "sleep", "sort", "source", "tail",
     "tee", "test", "touch", "tr", "trap", "true", "type", "umask", "uname", "uniq", "unset", "wait", "wc", "which", "whoami", "xargs", "npm", "npx", "bunx",
-    "yarn", "pnpm", "bun", "unalias", "declare", "typeset", "let", "nproc", "stat", "rev", "tac", "yes", "clear", "sync",
+    "yarn", "pnpm", "bun", "unalias", "declare", "typeset", "let", "nproc", "stat", "rev", "tac", "yes", "clear", "sync", "rg", "nl", "base64", "sha256sum", "sha1sum", "md5sum", "shasum", "tree", "cmp", "paste", "comm", "expr", "fold", "column", "od", "xxd",
+    "hexdump", "diff", "timeout", "awk", "gawk", "mapfile", "readarray",
 ];
 
 /// Shell builtins proper: these are not found as programs by `which`.
 const SHELL_ONLY: &[&str] = &[
     ":", ".", "alias", "break", "cd", "command", "continue", "eval", "exec", "exit", "export", "getopts", "local", "read", "readonly", "return", "set", "shift",
-    "source", "trap", "type", "umask", "unset", "wait", "unalias", "declare", "typeset", "let",
+    "source", "trap", "type", "umask", "unset", "wait", "unalias", "declare", "typeset", "let", "mapfile", "readarray",
 ];
 
 pub fn is_builtin(name: &str) -> bool {
@@ -133,8 +134,23 @@ pub fn run(sh: &mut Interp, argv: &[String]) -> Option<X> {
             for name in a[1..].iter().filter(|n| !n.starts_with('-')) {
                 if a.get(1).map(String::as_str) == Some("-f") {
                     sh.s.funcs.remove(name);
+                } else if let Some((arr, key)) = name.strip_suffix(']').and_then(|n| n.split_once('[')) {
+                    // `unset 'a[key]'`
+                    let key = key.trim_matches(['"', '\'']);
+                    match sh.s.arrays.get_mut(arr) {
+                        Some(Arr::Assoc(v)) => v.retain(|e| e.0 != key),
+                        Some(Arr::Indexed(_)) => {
+                            if let Ok(n) = sh.arith(key) {
+                                if let Some(Arr::Indexed(m)) = sh.s.arrays.get_mut(arr) {
+                                    m.remove(&n);
+                                }
+                            }
+                        }
+                        None => {}
+                    }
                 } else {
                     sh.s.vars.remove(name);
+                    sh.s.arrays.remove(name);
                 }
             }
             Ok(0)
@@ -177,6 +193,19 @@ pub fn run(sh: &mut Interp, argv: &[String]) -> Option<X> {
         "command" => command(sh, a),
         "type" | "which" => which(sh, a),
         "read" => read(sh, a),
+        "mapfile" | "readarray" => {
+            // mapfile [-t] [-n count] [-s skip] [array]: lines of standard input into an array.
+            let args = Args::parse(a, "ndsOuCc");
+            let name = args.rest.first().cloned().unwrap_or_else(|| "MAPFILE".into());
+            let data = sh.read_stdin_all();
+            let text = String::from_utf8_lossy(&data);
+            let skip = args.val('s').and_then(|v| v.parse::<usize>().ok()).unwrap_or(0);
+            let count = args.val('n').and_then(|v| v.parse::<usize>().ok()).filter(|n| *n > 0).unwrap_or(usize::MAX);
+            let lines: Vec<String> = text.split_inclusive('\n').skip(skip).take(count).map(|l| if args.has('t') { l.trim_end_matches('\n').to_string() } else { l.to_string() }).collect();
+            sh.s.vars.remove(&name);
+            sh.s.arrays.insert(name, Arr::from_list(lines));
+            Ok(0)
+        }
         "wait" => Ok(sh.reap_jobs(false)),
         "let" => {
             let mut last = 0;
@@ -217,9 +246,19 @@ pub fn run(sh: &mut Interp, argv: &[String]) -> Option<X> {
                 };
                 total += num.parse::<f64>().unwrap_or(0.0) * mul;
             }
-            sys::sleep_ms(total * 1000.0);
-            Ok(0)
+            let ms = total * 1000.0;
+            match sh.deadline.map(|d| d - sys::now_ms()) {
+                Some(left) if left < ms => {
+                    sys::sleep_ms(left.max(0.0));
+                    sh.check_deadline().map(|_| 0)
+                }
+                _ => {
+                    sys::sleep_ms(ms);
+                    Ok(0)
+                }
+            }
         }
+        "timeout" => timeout(sh, a),
         "xargs" => xargs(sh, a),
         "npm" | "yarn" | "pnpm" | "bun" | "npx" | "bunx" => crate::pkg::run(sh, a),
         "cat" | "ls" | "mkdir" | "rm" | "rmdir" | "cp" | "mv" | "touch" | "ln" | "chmod" | "basename" | "dirname" | "realpath" | "readlink" | "mktemp" | "du" | "stat" => {
@@ -228,6 +267,12 @@ pub fn run(sh: &mut Interp, argv: &[String]) -> Option<X> {
         "head" | "tail" | "wc" | "grep" | "egrep" | "fgrep" | "sed" | "sort" | "uniq" | "tr" | "cut" | "tee" | "seq" | "date" | "uname" | "whoami" | "hostname" | "id"
         | "nproc" | "rev" | "tac" | "yes" => crate::text::run(sh, a),
         "find" => crate::find::run(sh, a),
+        "rg" => crate::rg::run(sh, a),
+        "awk" | "gawk" => crate::awk::run(sh, a),
+        "diff" => crate::diff::run(sh, a),
+        "nl" | "base64" | "sha256sum" | "sha1sum" | "md5sum" | "shasum" | "tree" | "cmp" | "paste" | "comm" | "expr" | "fold" | "column" | "od" | "xxd" | "hexdump" => {
+            crate::util::run(sh, a)
+        }
         _ => return None,
     };
     Some(r)
@@ -365,6 +410,8 @@ fn declare(sh: &mut Interp, a: &[String]) -> X {
     let local = which == "local" || ((which == "declare" || which == "typeset") && sh.s.func_depth > 0);
     let mut names = Vec::new();
     let mut unexport = false;
+    // 'a' indexed, 'A' associative
+    let mut array = None;
     for arg in &a[1..] {
         if arg.starts_with('-') && names.is_empty() {
             for c in arg[1..].chars() {
@@ -372,6 +419,7 @@ fn declare(sh: &mut Interp, a: &[String]) -> X {
                     'x' => export = true,
                     'r' => readonly = true,
                     'n' if which == "export" => unexport = true,
+                    'a' | 'A' => array = Some(c),
                     _ => {}
                 }
             }
@@ -397,6 +445,23 @@ fn declare(sh: &mut Interp, a: &[String]) -> X {
             sh.err(&format!("sh: {which}: `{n}': not a valid identifier"));
             st = 1;
             continue;
+        }
+        if local {
+            if let Some(scope) = sh.s.local_arrays.last_mut() {
+                if !scope.iter().any(|(k, _)| k == name) {
+                    let old = sh.s.arrays.remove(name);
+                    scope.push((name.to_string(), old));
+                }
+            }
+        }
+        if let Some(kind) = array {
+            let keep = matches!((sh.s.arrays.get(name), kind), (Some(Arr::Indexed(_)), 'a') | (Some(Arr::Assoc(_)), 'A'));
+            if !keep {
+                sh.s.arrays.insert(name.to_string(), if kind == 'A' { Arr::Assoc(Vec::new()) } else { Arr::Indexed(Default::default()) });
+            }
+            if value.is_none() {
+                continue;
+            }
         }
         if local {
             if let Some(scope) = sh.s.locals.last_mut() {
@@ -577,7 +642,7 @@ fn command(sh: &mut Interp, a: &[String]) -> X {
 }
 
 fn read(sh: &mut Interp, a: &[String]) -> X {
-    let args = Args::parse(a, "pdntu");
+    let args = Args::parse(a, "pdntua");
     let raw = args.has('r');
     let mut line = match sh.read_line() {
         Some(l) => String::from_utf8_lossy(&l).into_owned(),
@@ -598,8 +663,24 @@ fn read(sh: &mut Interp, a: &[String]) -> X {
         }
         line = line.replace("\\", "");
     }
-    let names: Vec<String> = if args.rest.is_empty() { vec!["REPLY".into()] } else { args.rest.clone() };
     let ifs = sh.ifs();
+    if let Some(name) = args.val('a').map(str::to_string) {
+        // read -a array: every field becomes an element.
+        let items: Vec<String> = if ifs.chars().all(char::is_whitespace) {
+            line.split(|c| ifs.contains(c)).filter(|s| !s.is_empty()).map(str::to_string).collect()
+        } else {
+            let t = line.trim_matches(|c: char| c.is_whitespace() && ifs.contains(c));
+            if t.is_empty() {
+                Vec::new()
+            } else {
+                t.split(|c| ifs.contains(c)).map(|s| s.trim().to_string()).collect()
+            }
+        };
+        sh.s.vars.remove(&name);
+        sh.s.arrays.insert(name, Arr::from_list(items));
+        return Ok(0);
+    }
+    let names: Vec<String> = if args.rest.is_empty() { vec!["REPLY".into()] } else { args.rest.clone() };
     let is_ws = |c: char| ifs.contains(c) && c.is_whitespace();
     let mut rest = line.trim_matches(|c| is_ws(c));
     if names.len() == 1 && args.rest.is_empty() {
@@ -848,4 +929,74 @@ fn xargs(sh: &mut Interp, a: &[String]) -> X {
 /// The `name` to show for a command in messages and `$0` of applets.
 pub fn applet_name(arg0: &str) -> &str {
     basename(arg0)
+}
+
+fn duration_ms(v: &str) -> Option<f64> {
+    let (num, mul) = match v.as_bytes().last()? {
+        b's' => (&v[..v.len() - 1], 1.0),
+        b'm' => (&v[..v.len() - 1], 60.0),
+        b'h' => (&v[..v.len() - 1], 3600.0),
+        b'd' => (&v[..v.len() - 1], 86400.0),
+        _ => (v, 1.0),
+    };
+    num.parse::<f64>().ok().filter(|n| *n >= 0.0).map(|n| n * mul * 1000.0)
+}
+
+/// `timeout DURATION COMMAND…`: the command runs in this shell with a deadline
+/// that `Interp::check_deadline` enforces before every command and that `sleep`
+/// honours. Nothing preempts a single builtin in the middle of its work, a
+/// read that waits for input, or a child process (`sys::wait` has no timeout).
+fn timeout(sh: &mut Interp, a: &[String]) -> X {
+    let mut i = 1;
+    let mut preserve = false;
+    while i < a.len() && a[i].starts_with('-') && a[i].len() > 1 {
+        let s = a[i].as_str();
+        i += 1;
+        match s {
+            "--" => break,
+            // No signals here: the command is stopped the same way whatever is asked for.
+            "-s" | "--signal" | "-k" | "--kill-after" => i += 1,
+            "--preserve-status" => preserve = true,
+            "--foreground" | "-v" | "--verbose" => {}
+            _ if s.starts_with("--signal=") || s.starts_with("-s") || s.starts_with("--kill-after=") || s.starts_with("-k") => {}
+            _ => {
+                sh.err(&format!("timeout: invalid option '{s}'"));
+                return Ok(125);
+            }
+        }
+    }
+    let Some(ms) = a.get(i).and_then(|v| duration_ms(v)) else {
+        sh.err(&match a.get(i) {
+            Some(v) => format!("timeout: invalid time interval '{v}'"),
+            None => "timeout: missing operand".into(),
+        });
+        return Ok(125);
+    };
+    if i + 1 >= a.len() {
+        sh.err(&format!("timeout: missing operand after '{}'", a[i]));
+        return Ok(125);
+    }
+    let outer = (sh.deadline, sh.timed_out);
+    let mine = if ms > 0.0 { Some(sys::now_ms() + ms) } else { None };
+    sh.deadline = match (outer.0, mine) {
+        (Some(o), Some(m)) => Some(o.min(m)),
+        (o, m) => o.or(m),
+    };
+    sh.timed_out = false;
+    let r = sh.run_status(&a[i + 1..]);
+    let fired = sh.timed_out;
+    sh.deadline = outer.0;
+    sh.timed_out = outer.1;
+    if !fired {
+        return r;
+    }
+    if mine.is_none_or(|m| sys::now_ms() < m) {
+        // An enclosing timeout ran out, not this one: keep unwinding.
+        sh.timed_out = true;
+        return Err(Flow::Exit(124));
+    }
+    match r {
+        Ok(_) | Err(Flow::Exit(_)) => Ok(if preserve { 143 } else { 124 }),
+        other => other,
+    }
 }

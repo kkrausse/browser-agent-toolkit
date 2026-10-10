@@ -490,10 +490,16 @@ impl<'a> Parser<'a> {
         let mut assigns = Vec::new();
         let mut words: Vec<Word> = Vec::new();
         let mut redirs = Vec::new();
+        // `declare name=(…)`: the declaration runs first, then these assignments.
+        let mut after: Vec<Assign> = Vec::new();
         loop {
             self.blank();
             if let Some(r) = self.try_redir()? {
                 redirs.push(r);
+                continue;
+            }
+            if self.starts("<(") || self.starts(">(") {
+                words.push(vec![self.procsub()?]);
                 continue;
             }
             let c = self.peek();
@@ -501,6 +507,22 @@ impl<'a> Parser<'a> {
                 break;
             }
             let w = self.word()?;
+            if self.peek() == b'(' {
+                // `name=(…)`: an array, as an assignment or as an operand of declare/local.
+                if let Some(mut a) = as_assign(&w).filter(|a| a.value.is_empty() && a.index.is_none()) {
+                    let declaring = matches!(words.first().map(Vec::as_slice), Some([Part::Lit(c)]) if matches!(c.as_str(), "declare" | "local" | "typeset" | "readonly" | "export"));
+                    if words.is_empty() || declaring {
+                        a.array = Some(self.array_literal()?);
+                        if declaring {
+                            words.push(vec![Part::Lit(a.name.clone())]);
+                            after.push(a);
+                        } else {
+                            assigns.push(a);
+                        }
+                        continue;
+                    }
+                }
+            }
             if words.is_empty() {
                 if let Some(a) = as_assign(&w) {
                     assigns.push(a);
@@ -528,6 +550,9 @@ impl<'a> Parser<'a> {
         }
         if words.is_empty() && assigns.is_empty() && redirs.is_empty() {
             return Err(self.unexpected());
+        }
+        if !after.is_empty() {
+            return Ok(Cmd::List(vec![(Cmd::Simple { assigns, words, redirs }, false), (Cmd::Simple { assigns: after, words: Vec::new(), redirs: Vec::new() }, false)]));
         }
         Ok(Cmd::Simple { assigns, words, redirs })
     }
@@ -592,6 +617,10 @@ impl<'a> Parser<'a> {
             return Ok(None);
         };
         self.blank();
+        if self.starts("<(") || self.starts(">(") {
+            let target = vec![self.procsub()?];
+            return Ok(Some(Redir { fd, op, target, body: Default::default() }));
+        }
         let c = self.peek();
         if c == 0 || self.is_meta(c) {
             return Err(self.unexpected());
@@ -849,11 +878,11 @@ impl<'a> Parser<'a> {
         if is_name_start(n) {
             self.i += 1;
             let name = self.name();
-            return Ok(Part::Param(Box::new(Param { name, op: ParamOp::Plain })));
+            return Ok(Part::Param(Box::new(Param { name, op: ParamOp::Plain, index: None, bang: false })));
         }
         if n.is_ascii_digit() || matches!(n, b'@' | b'*' | b'#' | b'?' | b'$' | b'!' | b'-') {
             self.i += 2;
-            return Ok(Part::Param(Box::new(Param { name: (n as char).to_string(), op: ParamOp::Plain })));
+            return Ok(Part::Param(Box::new(Param { name: (n as char).to_string(), op: ParamOp::Plain, index: None, bang: false })));
         }
         self.i += 1;
         Ok(Part::Quoted("$".into()))
@@ -870,18 +899,22 @@ impl<'a> Parser<'a> {
             let save = self.i;
             self.i += 1;
             let name = self.name();
-            self.skip_subscript();
+            let index = self.subscript()?;
             if !name.is_empty() && self.peek() == b'}' {
                 self.i += 1;
-                return Ok(Part::Param(Box::new(Param { name, op: ParamOp::Len })));
+                return Ok(Part::Param(Box::new(Param { name, op: ParamOp::Len, index, bang: false })));
             }
             self.i = save;
+        }
+        let bang = self.peek() == b'!' && is_name_start(self.at(1));
+        if bang {
+            self.i += 1;
         }
         let name = self.name();
         if name.is_empty() {
             return Err(bad());
         }
-        self.skip_subscript();
+        let index = self.subscript()?;
         let wctx = if in_dq { Ctx::BraceDq } else { Ctx::BraceUnq };
         let c = self.peek();
         let op = match c {
@@ -953,15 +986,63 @@ impl<'a> Parser<'a> {
             return Err(bad());
         }
         self.i += 1;
-        Ok(Part::Param(Box::new(Param { name, op })))
+        Ok(Part::Param(Box::new(Param { name, op, index, bang })))
     }
-    /// `${name[@]}`: there are no arrays; the subscript is accepted and ignored.
-    fn skip_subscript(&mut self) {
-        if self.peek() == b'[' {
-            if let Some(n) = self.s[self.i..].iter().position(|c| *c == b']') {
-                self.i += n + 1;
-            }
+    /// The subscript of `${name[…]}`, expanded later (as an arithmetic expression or a key).
+    fn subscript(&mut self) -> PR<Option<Word>> {
+        if self.peek() != b'[' {
+            return Ok(None);
         }
+        let start = self.i + 1;
+        let mut depth = 0;
+        let mut j = start;
+        while j < self.s.len() {
+            match self.s[j] {
+                b'[' => depth += 1,
+                b']' if depth == 0 => break,
+                b']' => depth -= 1,
+                _ => {}
+            }
+            j += 1;
+        }
+        if j >= self.s.len() {
+            return Err("bad substitution".into());
+        }
+        let raw = String::from_utf8_lossy(&self.s[start..j]).into_owned();
+        self.i = j + 1;
+        Ok(Some(parse_text(&raw)?))
+    }
+
+    /// `(a b "c d")` after `name=`: the opening parenthesis is next.
+    fn array_literal(&mut self) -> PR<Vec<Word>> {
+        self.i += 1;
+        let mut out = Vec::new();
+        loop {
+            self.newlines()?;
+            if self.i >= self.s.len() {
+                return Err("syntax error: unexpected end of file in an array".into());
+            }
+            if self.peek() == b')' {
+                self.i += 1;
+                return Ok(out);
+            }
+            out.push(self.word()?);
+        }
+    }
+
+    /// `<(list)` or `>(list)`; the `<` or `>` is next.
+    fn procsub(&mut self) -> PR<Part> {
+        let out = self.peek() == b'>';
+        self.i += 2;
+        let saved = std::mem::replace(&mut self.regex_word, false);
+        let c = if self.at_only_close() { Cmd::List(Vec::new()) } else { self.list()? };
+        self.newlines()?;
+        self.regex_word = saved;
+        if self.peek() != b')' {
+            return Err("syntax error: unterminated process substitution".into());
+        }
+        self.i += 1;
+        Ok(Part::ProcSub(Rc::new(c), out))
     }
 }
 
@@ -989,6 +1070,42 @@ fn flatten_literal(w: &Word, out: &mut String) {
 
 fn as_assign(w: &Word) -> Option<Assign> {
     let Part::Lit(first) = w.first()? else { return None };
+    // `name[subscript]=value`: the subscript may hold expansions, so it can span several parts.
+    if let Some(br) = first.find('[') {
+        if valid_name(&first[..br]) && first.find('=').is_none_or(|e| e > br) {
+            let mut index: Word = Vec::new();
+            for (pi, part) in w.iter().enumerate() {
+                let text = match part {
+                    Part::Lit(s) if pi == 0 => &s[br + 1..],
+                    Part::Lit(s) => s.as_str(),
+                    other => {
+                        index.push(other.clone());
+                        continue;
+                    }
+                };
+                let (pos, append) = match (text.find("]="), text.find("]+=")) {
+                    (Some(a), Some(b)) if b < a => (b, true),
+                    (Some(a), _) => (a, false),
+                    (None, Some(b)) => (b, true),
+                    (None, None) => {
+                        index.push(Part::Lit(text.to_string()));
+                        continue;
+                    }
+                };
+                if pos > 0 {
+                    index.push(Part::Lit(text[..pos].to_string()));
+                }
+                let rest = &text[pos + if append { 3 } else { 2 }..];
+                let mut value: Word = Vec::new();
+                if !rest.is_empty() {
+                    value.push(Part::Lit(rest.to_string()));
+                }
+                value.extend(w[pi + 1..].iter().cloned());
+                return Some(Assign { name: first[..br].to_string(), append, value, index: Some(index), array: None });
+            }
+            return None;
+        }
+    }
     let eq = first.find('=')?;
     let (mut name, rest) = (&first[..eq], &first[eq + 1..]);
     let append = name.ends_with('+');
@@ -1003,5 +1120,5 @@ fn as_assign(w: &Word) -> Option<Assign> {
         value.push(Part::Lit(rest.to_string()));
     }
     value.extend(w[1..].iter().cloned());
-    Some(Assign { name: name.to_string(), append, value })
+    Some(Assign { name: name.to_string(), append, value, index: None, array: None })
 }

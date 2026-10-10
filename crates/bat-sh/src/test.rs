@@ -84,7 +84,14 @@ impl Ev<'_> {
                         eq == (op != "!=")
                     }
                     "=~" => match regex_lite::Regex::new(&b) {
-                        Ok(re) => re.is_match(&a),
+                        Ok(re) => match re.captures(&a) {
+                            Some(c) => {
+                                let groups: Vec<String> = (0..c.len()).map(|i| c.get(i).map(|m| m.as_str().to_string()).unwrap_or_default()).collect();
+                                self.sh.s.arrays.insert("BASH_REMATCH".into(), crate::interp::Arr::from_list(groups));
+                                true
+                            }
+                            None => false,
+                        },
                         Err(_) => {
                             self.err = Some(format!("{b}: invalid regular expression"));
                             false
