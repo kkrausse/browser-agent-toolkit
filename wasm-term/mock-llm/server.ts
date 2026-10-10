@@ -229,7 +229,7 @@ const SCENARIOS: Scenario[] = [
   {
     name: "error",
     match: /\bmock-error\b/i,
-    step: () => ({ text: "" }), // handled before streaming: HTTP 500
+    step: () => ({ text: "" }), // handled before streaming: HTTP 400
   },
   {
     name: "multi-tool",
@@ -627,8 +627,9 @@ async function handleModel(req: Request, path: string, parse: (b: Json, raw: str
       ` results=${turn.toolResults.length} user="${clip(turn.userText)}" ua="${clip(req.headers.get("user-agent") ?? "", 40)}"`,
   );
   if (scenario.name === "error") {
-    log(`#${n}   -> scenario=error HTTP 500`);
-    return json({ error: { message: "mock-llm scripted failure (prompt contained mock-error)", type: "server_error" } }, 500);
+    // 400, not 5xx: both clients retry server errors (opencode indefinitely), a 400 is rendered once.
+    log(`#${n}   -> scenario=error HTTP 400`);
+    return json({ error: { message: "mock-llm scripted failure (prompt contained mock-error)", type: "invalid_request_error", code: "mock_error" } }, 400);
   }
   const step = scenario.step(turn);
   log(
