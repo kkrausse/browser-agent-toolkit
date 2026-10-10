@@ -440,6 +440,9 @@ impl<'a> Image<'a> {
             }
             if part == b".." {
                 at = u32_at(r, 12);
+                if at >= self.entry_count {
+                    return None;
+                }
                 continue;
             }
             let child = self.lookup_child(at, part)?;

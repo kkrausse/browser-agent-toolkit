@@ -30,7 +30,7 @@
 - **Entry mtime is one fixed image-wide value** (2026-01-01T00:00:00Z), so equal inputs
   give byte-identical images (checked: same sha256 across four rebuilds).
 - **Prune by rule, not by list:** a package is "platform native" when its package.json
-  restricts `os`/`cpu` (and `cpu` lacks `wasm32`). That removed all 9 native packages in
+  restricts `os`/`cpu` (and `cpu` lacks `wasm32`). That removed all 8 native packages in
   the TODO tree without naming them. `.map` (22 MB) and `.md`/`.mdx` (4.6 MB) are **kept**:
   whether the guest's Vite/esbuild read dependency source maps was not checked, and the
   brief was to be conservative. The policy's `prune.extensions` can drop them once a
@@ -57,3 +57,47 @@
 - **The image's meta section carries nothing build-specific.** It briefly held the input
   fingerprint, which includes the tool binary's mtime, so every rebuild of `bat-prepare`
   changed the image hash and would have forced a 236 MB re-download for identical content.
+
+## Toolkit package and TODO example (2026-10-09)
+
+- **`RuntimeHost` is the only seam** between `packages/toolkit` and the runtime:
+  `packages/toolkit/src/runtime-host.ts`. The runtime ships a module exporting
+  `bootRuntime(options): Promise<RuntimeHost>`; `openEditor` imports it from
+  `manifest.runtime.entry` (default `runtime/host.js` beside the manifest) unless the caller
+  passes `boot`. Two members go beyond the list in the brief: `hostOrigin` (the runtime, not
+  the toolkit, knows how a guest reaches the page's server, so "`host.internal` carries the
+  page's scheme and port" is its fact) and `setHostPaths(port, prefixes)` (preview routing
+  lives in the service worker).
+- **`openEditor` returns `Promise<Editor>`**, resolved once the workspace is booted and both
+  programs are starting; `editor.ready` is the rest. A synchronous return could not hand out
+  `fs` or a preview URL, and waiting for the chat would hold the preview back. The chat
+  controller exists from that moment: its requests wait behind the agent's verification.
+- **The manifest is `bat-prepare`'s (`bat-prepared-v1`)**, not a second toolkit format.
+  `prepare()` only maps options to `bat-prepare app` and reads the manifest back. The server
+  handler adds `modelCatalog`/`defaultModel` when delivering it.
+- **Chat client: Effect and `@opencode/client` dropped, reducer and generated types kept.**
+  The published client's promise flavour is itself plain `fetch` plus a 40-line SSE reader,
+  so `chat/api.ts` (about 120 lines, 15 calls) follows it call for call. The controller's
+  scopes/fibers became three nested `AbortController`s plus the existing generation and
+  selection counters. The vendored reducer (500 lines) is OpenCode's own event-to-message
+  projection and was kept unchanged; the 6,500-line types file is type-only, exact generated
+  2.0.3 output, and costs nothing at run time, so trimming it by hand would only lose the
+  pin. Dropped with Effect: span diagnostics, the reader fence (dispose now aborts and joins
+  its own requests), `exportChats` (superseded by native `editor.sessions.export`).
+- **The `runJavascript` guest plugin still bundles Effect** (build-time, into one string).
+  OpenCode's promise plugin API gives a tool no cancellation signal; the Effect one does, and
+  cancelling a runaway script matters. It now spawns `process.execPath` instead of
+  `/bin/node.js`.
+- **OpenCode is a Node program**: `node /app/server.js`, with `OPENCODE_DATABASE_PATH` inside
+  `/workspace/.server/data`, so sessions persist with the workspace (the old runtime kept the
+  database at `/runtime-probe`, outside it).
+- **Startup order is one function** (`startupOrder` in `browser.ts`): the agent starts when
+  the preview's server listens; both are joined; the preview's failure wins.
+- **UI styling kept as it was.** The old chat UI already was shadcn-on-Base-UI with a
+  prefixed, precompiled Tailwind sheet and Lucide icons; it is copied unchanged. Its
+  dependencies are now ordinary `dependencies` of the package instead of being bundled.
+- **A development fake host** (`./fake`, `./fake/server`) backs `RuntimeHost` with native
+  processes so everything but the runtime is exercised for real. Measured there on diesel2
+  (native Vite 7.3.6 and OpenCode 2.0.3, machine otherwise busy): preview listening 1.0 s
+  after spawn, app visible 3.6 s after Open, agent verified 3.7 s after its spawn, chat
+  attached 6.1 s after Open. These are native floors under load, not runtime numbers.
