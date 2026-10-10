@@ -3,11 +3,13 @@
 // 2.0.3 artefact (the old toolkit's `vivari/experiments/opencode-release-server`), with the
 // environment switches the OpenCode CLI itself reads for the same options.
 import { NodeServices } from '@effect/platform-node'
-import { Effect } from 'effect'
+import { Effect, References } from 'effect'
 import { HttpClient } from 'effect/unstable/http'
 import { ServerProcess } from '@opencode/server/process'
 
 declare const OPENCODE_SERVER_VERSION: string
+// OPENCODE_LOG_LEVEL as the OpenCode CLI reads it (default INFO, where every bus event is a multi-line record on stdout).
+const logLevel = ({ DEBUG: 'Debug', INFO: 'Info', WARN: 'Warn', ERROR: 'Error' } as const)[(process.env.OPENCODE_LOG_LEVEL ?? '').toUpperCase()] ?? 'Info'
 const off = (name: string) => ['1', 'true'].includes((process.env[name] ?? '').toLowerCase())
 
 await Effect.runPromise(Effect.scoped(Effect.gen(function* () {
@@ -34,6 +36,7 @@ await Effect.runPromise(Effect.scoped(Effect.gen(function* () {
   // A browser's fetch carries these requests: CORS policies of public endpoints (the model
   // catalog) reject Effect's `b3` / `traceparent` headers.
   Effect.provideService(HttpClient.TracerPropagationEnabled, false),
+  Effect.provideService(References.MinimumLogLevel, logLevel),
   Effect.provide(NodeServices.layer),
 ))
 console.log('OPENCODE_SERVER_PROCESS_SHUTDOWN_COMPLETE')

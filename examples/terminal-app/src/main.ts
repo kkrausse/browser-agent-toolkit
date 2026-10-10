@@ -20,6 +20,7 @@ import { installDiag } from './diag'
 import { isolate } from './isolate'
 import { installServerConfig, serverHealthy, serverLaunch, toLaunch, workspace, type ModelEndpoint } from './opencode'
 import { installPanel } from './panel'
+import { watchSignIn } from './signin'
 
 /** What `/wasm-term/embed.js` exports (wasm-term's `web/embed.ts`, bundled by `wasm-term.ts`). */
 interface WasmTerm {
@@ -55,6 +56,11 @@ const workerUrl = new URL('sw.js', here).href
 const api = { script: '/tmp/todo-api.mjs', port: 3001, store: `${workspace}/.server/todos.json` }
 // Set when the page is built (`MODEL_URL=… bun run build`), for a page published away from its mock.
 const builtModel = process.env.MODEL_URL || undefined
+
+// OpenAI's signing keys, which the server reads to check the identity token of a ChatGPT sign-in.
+// That document is served without CORS headers, so the build ships a copy (build.ts) and the
+// server's request for it is answered with the copy.
+const openAiKeys = 'https://auth.openai.com/.well-known/jwks.json'
 
 const params = new URLSearchParams(location.search)
 // `?reset=1` is taken out of the address at once and remembered for this start only: the page
@@ -161,7 +167,7 @@ async function main() {
   const [appProcess, serverProcess, apiProcess] = await Promise.all([
     // The dev server's base is the frame's path, which depends on where this page is served.
     runtime.spawn(toLaunch(preview, { BROWSER_AGENT_PORT: String(preview.port), BROWSER_AGENT_BASE: new URL(app.url).pathname })),
-    runtime.spawn(serverLaunch(agent, password, model)),
+    runtime.spawn(serverLaunch(agent, password, model, { [openAiKeys]: new URL('openai-jwks.json', here).href })),
     runtime.spawn({ argv: ['node', api.script], cwd: workspace, env: { PATH: '/bin', PORT: String(api.port), TODO_STORE: api.store }, programs: [] }),
   ])
   follow('app', appProcess, false)
@@ -173,12 +179,13 @@ async function main() {
   await serverUp
 
   // Client and server are the same version; only the server's credential is added here.
-  const toServer = (path: string, init: { method: string; headers: [string, string][]; body: Uint8Array | null; signal: AbortSignal }) => server.fetch(path, {
+  // The page also watches for a sign-in that waits on a loopback redirect (signin.ts).
+  const toServer = watchSignIn((path, init) => server.fetch(path, {
     method: init.method,
     headers: [...init.headers.filter(([name]) => name.toLowerCase() !== 'authorization'), ['authorization', authorization]],
     body: init.body as BodyInit | null,
     signal: init.signal,
-  })
+  }), () => window.batTerminal.runtime, log)
   const { mountTerminal } = await wasmTerm
   window.batTerminal.terminal = await mountTerminal({
     container: document.querySelector<HTMLDivElement>('#terminal')!,

@@ -13,6 +13,12 @@
 // that a server on the developer's own machine (a local model endpoint) could not be told
 // apart from a guest listener.
 //
+// `BAT_FETCH_MAP` in the process's environment is a JSON object of exact URLs (origin and
+// path, no query) to the URL fetched in their place: `{ "https://issuer.example/keys.json":
+// "https://page.example/app/keys.json" }`. For a public document a program insists on reading
+// from a host that sends no CORS headers, which the page serves a copy of. The guest sees the
+// answer under the URL it asked for.
+//
 // With `BAT_FETCH_DIAG=1` in the process's environment, a request handed to the browser's
 // fetch that rejects or is answered with a status of 400 or more leaves one line on the
 // process's stderr: `[bat fetch] <METHOD> <origin + path> -> <status | error>`. Never the
@@ -55,11 +61,29 @@ function createGuestFetch(rt: Runtime): GuestFetch {
     const method = (init?.method ?? (typeof input === 'object' && !(input instanceof URL) ? input.method : 'GET')).toUpperCase()
     try { process.stderr?.write(`[bat fetch] ${method} ${where} -> ${result}\n`) } catch { /* no stderr */ }
   }
-  /** The browser's fetch, reporting what failed (see the top of the file). */
+  let mapText: string | undefined, map: Record<string, string> = {}
+  /** The URL fetched in place of `input`, when `BAT_FETCH_MAP` names it. */
+  const mapped = (input: RequestInfo | URL): string | undefined => {
+    const text = (rt as any).process?.env?.BAT_FETCH_MAP
+    if (!text) return undefined
+    if (text !== mapText) {
+      mapText = text
+      try { map = JSON.parse(text) } catch { map = {} }
+    }
+    try {
+      const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
+      const to = map[url.origin + url.pathname]
+      return typeof to === 'string' ? to : undefined
+    } catch { return undefined }
+  }
+  /** The browser's fetch, with the URL map applied and reporting what failed (see the top of the file). */
   const native = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     let response: Response
     try {
-      response = await browserFetch(input, init)
+      const to = mapped(input)
+      // The copy is the page's own file: the request's headers and mode were meant for the other host.
+      if (to !== undefined) response = await browserFetch(to, { signal: init?.signal ?? (typeof input === 'object' && !(input instanceof URL) ? input.signal : undefined) })
+      else response = await browserFetch(input, init)
     } catch (error) {
       // An abort is the caller's own doing.
       const name = (error as any)?.name

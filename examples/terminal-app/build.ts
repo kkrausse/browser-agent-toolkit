@@ -4,6 +4,7 @@
 //   index.html, main.js     the page
 //   sw.js                   its service worker (isolation headers, inflating, the preview)
 //   todo-api.js             the TODO app's backend, a guest program
+//   openai-jwks.json        a copy of OpenAI's public signing keys (see below)
 //   wasm-term/              the terminal half (from `bun run wasm-term`)
 //   editor/                 the prepared runtime, image and manifest (from `bun run prepare:editor`)
 //
@@ -55,6 +56,20 @@ for (const [path, source] of files) {
   if (gzip) { await pipeline(createReadStream(source), createGzip({ level: 9 }), createWriteStream(target)); compressed++ }
   else { copyFileSync(source, target); copied++ }
 }
+
+// OpenAI's signing keys (public), for the identity token of "Sign in with ChatGPT": the tab
+// cannot read them from auth.openai.com, which sends no CORS headers for this document. A
+// copy made now goes stale when OpenAI rotates its keys; the sign-in then fails at the
+// identity check ("invalid ID token") until the page is built again.
+const keysUrl = 'https://auth.openai.com/.well-known/jwks.json'
+const keys = await fetch(keysUrl, { signal: AbortSignal.timeout(20_000) }).then(async response => response.ok ? await response.json() as { keys?: unknown[] } : undefined, () => undefined)
+if (Array.isArray(keys?.keys) && keys.keys.length) {
+  await Bun.write(join(out, 'openai-jwks.json'), JSON.stringify(keys))
+  kept.add('openai-jwks.json')
+} else if (existsSync(join(out, 'openai-jwks.json'))) {
+  kept.add('openai-jwks.json')
+  console.warn(`Could not fetch ${keysUrl}: keeping the copy of an earlier build`)
+} else console.warn(`Could not fetch ${keysUrl}: "Sign in with ChatGPT" will fail at its identity check in this build`)
 
 async function bundle(entry: string, name: string, options: Partial<Parameters<typeof Bun.build>[0]>) {
   const result = await Bun.build({ entrypoints: [resolve(here, entry)], target: 'browser', format: 'esm', sourcemap: 'none', ...options })

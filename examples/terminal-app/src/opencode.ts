@@ -62,7 +62,7 @@ export function toLaunch(description: LaunchDescription, env: Record<string, str
 }
 
 /** `node /app/server.js`: listens on 127.0.0.1:<port> in the guest with Basic auth, ends on stdin EOF. */
-export function serverLaunch(description: LaunchDescription, password: string, model: ModelEndpoint): Launch {
+export function serverLaunch(description: LaunchDescription, password: string, model: ModelEndpoint, fetchMap: Record<string, string> = {}): Launch {
   const url = new URL(model.baseURL)
   const loopback = /^(localhost|127(\.\d+){3}|\[::1\])$/.test(url.hostname) && url.protocol === 'http:'
   return toLaunch(description, {
@@ -71,6 +71,10 @@ export function serverLaunch(description: LaunchDescription, password: string, m
     // One stderr line per request of the server that the browser's fetch rejected or that was
     // answered 400 or more (method, URL without its query, status or error); the page logs stderr.
     BAT_FETCH_DIAG: '1',
+    // Exact URLs the runtime fetches from somewhere else (a copy this page serves).
+    ...(Object.keys(fetchMap).length ? { BAT_FETCH_MAP: JSON.stringify(fetchMap) } : {}),
+    // At INFO the server prints every bus event; the page logs (and posts) what it prints.
+    OPENCODE_LOG_LEVEL: 'WARN',
     // In the guest, loopback means the guest's own listeners. A model endpoint on this
     // machine's loopback (the mock) is named here so the runtime hands it to the browser.
     ...(loopback ? { BAT_HOST_LOOPBACK_PORTS: url.port || '80' } : {}),

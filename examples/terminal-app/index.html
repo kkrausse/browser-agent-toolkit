@@ -28,6 +28,14 @@
     #terminal canvas { display: block; }
     #status { position: absolute; inset: 0; margin: 0; padding: 12px; white-space: pre-wrap; pointer-events: none; font: 12px/1.5 ui-monospace, monospace; }
     #status.error { color: #e06c75; }
+    /* Shown only while a sign-in waits for its loopback redirect (src/signin.ts). */
+    #signin { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 10px; border-bottom: 1px solid #363646; font: 12px ui-monospace, monospace; }
+    #signin[hidden] { display: none; }
+    #signin a { color: #7e9cd8; }
+    #signin input { flex: 1 1 180px; min-width: 0; font: inherit; color: #dcd7ba; background: #1f1f28; border: 1px solid #363646; border-radius: 4px; padding: 3px 6px; }
+    #signin.over > :not(output) { display: none; }
+    #signin output { flex: 1 0 100%; overflow-wrap: anywhere; }
+    #signin output:empty { display: none; }
     #log { flex: 0 0 auto; border-top: 1px solid #363646; font: 12px ui-monospace, monospace; }
     #log summary { padding: 4px 10px; cursor: pointer; user-select: none; }
     #log pre { margin: 0; padding: 0 10px 8px; height: 26vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
@@ -39,6 +47,12 @@
   <aside id="panel" aria-label="OpenCode terminal">
     <div id="grip" role="separator" aria-orientation="vertical" aria-label="Resize the terminal panel" tabindex="0"></div>
     <header><span id="title">OpenCode</span><button id="close" title="Hide the terminal (it keeps running)">Close</button></header>
+    <form id="signin" hidden>
+      <a target="_blank" rel="noreferrer">Open the sign-in page</a>
+      <input name="callback" aria-label="The address the sign-in tab ended on" autocomplete="off" spellcheck="false">
+      <button>Finish sign-in</button>
+      <output></output>
+    </form>
     <div id="body"><div id="terminal"></div><pre id="status">Starting…</pre></div>
     <details id="log"><summary>OpenCode server output</summary><pre></pre></details>
   </aside>
