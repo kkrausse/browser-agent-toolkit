@@ -93,6 +93,17 @@ const scenarios = {
     });
   },
 
+  async "edge cases agree with native Node"() {
+    // The same module graph evaluated by Node itself is the oracle.
+    const native = await import(fixture("edge/main.mjs"));
+    const ours = await load(fixture("edge/main.mjs"));
+    assert.deepEqual(ours.result, native.result);
+    // Same export names. (Order differs for `export *` names: the reference
+    // loader appends them after the module's own, sorted, names.)
+    assert.deepEqual(Object.keys(ours).sort(), Object.keys(native));
+    assert.deepEqual(Object.keys(ours.everything), Object.keys(native.everything));
+  },
+
   async "ambiguous .js detected as ESM"() {
     globalThis.__ambiguousThis = "unset";
     await load(fixture("ambiguous-esm.js"));

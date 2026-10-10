@@ -116,8 +116,41 @@ fn required_specifier<'a>(expr: &Expression<'a>) -> Option<&'a str> {
     None
 }
 
+/// `require("literal")` exactly.
+fn direct_require<'a>(expr: &Expression<'a>) -> Option<&'a str> {
+    match expr.without_parentheses() {
+        Expression::CallExpression(call)
+            if call.callee.is_specific_id("require") && call.arguments.len() == 1 =>
+        {
+            call.arguments[0].as_expression().and_then(literal_specifier)
+        }
+        _ => None,
+    }
+}
+
+/// The expression a call/member chain starts from: `a` in `a(b).c[d]()`.
+fn chain_root<'b, 'a>(mut expr: &'b Expression<'a>) -> &'b Expression<'a> {
+    loop {
+        expr = match expr.without_parentheses() {
+            Expression::CallExpression(call) if !call.callee.is_specific_id("require") => {
+                &call.callee
+            }
+            Expression::StaticMemberExpression(m) => &m.object,
+            Expression::ComputedMemberExpression(m) => &m.object,
+            other => return other,
+        };
+    }
+}
+
 impl<'a> CjsVisitor<'_, 'a> {
     fn object_literal_exports(&mut self, object: &ObjectExpression<'a>) {
+        // Lexer quirk kept for parity with Node: when the first property's
+        // value is `require("x")`, Node's lexer records "x" as a re-export.
+        if let Some(ObjectPropertyKind::ObjectProperty(first)) = object.properties.first() {
+            if let Some(spec) = direct_require(&first.value) {
+                self.reexports.insert(spec);
+            }
+        }
         for property in &object.properties {
             match property {
                 ObjectPropertyKind::ObjectProperty(p) => {
@@ -227,11 +260,12 @@ impl<'a> Visit<'a> for CjsVisitor<'_, 'a> {
                     match right {
                         Expression::ObjectExpression(object) => self.object_literal_exports(object),
                         other => {
-                            if let Some(spec) = required_specifier(other) {
-                                if matches!(other, Expression::CallExpression(c) if c.callee.is_specific_id("require"))
-                                {
-                                    self.reexports.insert(spec);
-                                }
+                            // `module.exports = require("x")`. Node's lexer
+                            // stops reading at the closing parenthesis, so
+                            // `require("x")(arg)` and `require("x").y` count
+                            // too; follow it, extra names are harmless.
+                            if let Some(spec) = direct_require(chain_root(other)) {
+                                self.reexports.insert(spec);
                             }
                         }
                     }
@@ -239,6 +273,32 @@ impl<'a> Visit<'a> for CjsVisitor<'_, 'a> {
             }
         }
         walk::walk_assignment_expression(self, it);
+    }
+
+    fn visit_binary_expression(&mut self, it: &BinaryExpression<'a>) {
+        // Lexer quirk kept for parity with Node: its `exports.name =` check
+        // does not look past the `=`, so `exports.name === x` counts as an
+        // export. Real code hits this (`typeof exports.default === "function"`).
+        if matches!(it.operator, BinaryOperator::Equality | BinaryOperator::StrictEquality) {
+            // The operand that textually ends right before the operator.
+            let mut operand = &it.left;
+            loop {
+                operand = match operand {
+                    Expression::UnaryExpression(unary) => &unary.argument,
+                    Expression::BinaryExpression(binary) => &binary.right,
+                    Expression::LogicalExpression(logical) => &logical.right,
+                    _ => break,
+                };
+            }
+            if let Some(member) = operand.as_member_expression() {
+                if is_exports_object(member.object()) {
+                    if let Some(name) = member.static_property_name() {
+                        self.exports.insert(name);
+                    }
+                }
+            }
+        }
+        walk::walk_binary_expression(self, it);
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
