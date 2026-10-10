@@ -69,6 +69,9 @@ Testing never calls a real model: `mock-llm/` serves scripted responses.
 | 4791 | mock model server |
 | 4792 | isolated `opencode serve` |
 | 4793 | isolated `codex app-server` |
+| 4794 | egress trap (refuse-and-log HTTP proxy) |
+| 4795 | logging tap in front of opencode |
+| 4796 | logging tap in front of codex; also strips `Origin`, which `codex app-server` rejects, so browsers connect here |
 
 ## Rules for working here
 
