@@ -1,7 +1,7 @@
 // Browser-side application entry: the real opencode TUI (`run` from
-// packages/tui) with a remote-only host. Loaded by host/worker-main.ts after
-// it has installed globalThis.process, the node shims' backing state and the
-// wasm OpenTUI core, because all of those are read at module evaluation.
+// packages/tui) with a remote-only host. Loaded by host/guest.ts after the
+// machine's node shim (process, fs) and the wasm OpenTUI core are in place,
+// because all of those are read at module evaluation.
 import { run } from "@opencode/tui"
 import { OpenCode } from "@opencode/client"
 import { Service } from "@opencode/client/effect/service"
@@ -15,6 +15,8 @@ declare const OPENCODE_VERSION: string
 export interface StartOptions {
   serverUrl: string
   password?: string
+  /** The project directory: a path on the server's machine. Default: the directory the server runs in. */
+  directory?: string
   prompt?: string
   log(level: string, message: string, tags?: unknown): void
 }
@@ -22,12 +24,15 @@ export interface StartOptions {
 export async function start(options: StartOptions): Promise<void> {
   const input = remoteTuiInput({ ...options, version: OPENCODE_VERSION })
   // The native client sends its own working directory, which is also a path
-  // on the server's machine. A browser has no such directory, so adopt the
-  // one the server was started in.
-  const api = OpenCode.make({ baseUrl: options.serverUrl, headers: Service.headers(input.server.endpoint) })
-  const location = await api.location.get()
-  mkdirSync(location.directory, { recursive: true })
-  process.chdir(location.directory)
+  // on the server's machine. A browser has no such directory: it is given
+  // one, or adopts the one the server was started in.
+  let directory = options.directory
+  if (!directory) {
+    const api = OpenCode.make({ baseUrl: options.serverUrl, headers: Service.headers(input.server.endpoint) })
+    directory = (await api.location.get()).directory
+  }
+  mkdirSync(directory, { recursive: true })
+  process.chdir(directory)
 
   const global = Global.make()
   for (const directory of [global.data, global.config, global.state, global.cache, global.log, global.tmp]) {

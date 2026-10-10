@@ -28,6 +28,7 @@ export const FRAME_INPUT = 1; // payload: bytes typed at the terminal
 export const FRAME_RESIZE = 2; // payload: u16 cols, rows, xpixel, ypixel
 export const FRAME_SIGNAL = 3; // payload: u32 signo (sent by the page, e.g. kill)
 export const FRAME_NET = 4; // payload: u32 handle, u32 kind, data
+export const FRAME_CLIPBOARD = 5; // payload: u32 request id, u32 ok (1/0), then the text or the error (utf-8)
 export const FRAME_MORE = 0x80;
 
 // FRAME_NET kinds. 1-5 are also the `kind` values of the guest's ws_recv.
@@ -54,6 +55,15 @@ export interface InitMessage {
   ypixel: number;
   /** Files to place in the vfs before the program starts (absolute path → contents). */
   files?: Record<string, Uint8Array | string>;
+  /** Directories whose files are reported to the page (`persist` messages) whenever they change. */
+  persist?: PersistRoots;
+}
+
+export interface PersistRoots {
+  /** Absolute directories; every regular file below them is persistent. */
+  roots: string[];
+  /** Paths containing any of these substrings are left out (lock directories, logs). */
+  exclude?: string[];
 }
 
 export type WorkerMessage =
@@ -66,4 +76,9 @@ export type WorkerMessage =
   | { t: "http_open"; handle: number; method: string; url: string; headers: [string, string][]; body: Uint8Array | null }
   | { t: "http_ack"; handle: number; bytes: number }
   | { t: "net_close"; handle: number }
-  | { t: "log"; text: string };
+  | { t: "log"; text: string }
+  /** A persistent file changed (`data`) or went away (`null`). */
+  | { t: "persist"; path: string; data: Uint8Array | null }
+  | { t: "clipboard_write"; text: string }
+  /** Answered with a FRAME_CLIPBOARD frame carrying the same id. */
+  | { t: "clipboard_read"; id: number };

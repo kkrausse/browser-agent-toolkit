@@ -4,7 +4,7 @@
 
 import type { Pty } from "./kernel";
 import {
-  FRAME_INPUT, FRAME_NET, FRAME_RESIZE, FRAME_SIGNAL, H_OUT_ACK, HTTP_BODY, HTTP_END, HTTP_ERROR, HTTP_HEAD,
+  FRAME_CLIPBOARD, FRAME_INPUT, FRAME_NET, FRAME_RESIZE, FRAME_SIGNAL, H_OUT_ACK, HTTP_BODY, HTTP_END, HTTP_ERROR, HTTP_HEAD,
   OUT_WINDOW, WS_CLOSE, WS_ERROR, type WorkerMessage,
 } from "./protocol";
 import type { RingReader } from "./ring";
@@ -58,6 +58,8 @@ export type NetHandle = WsHandle | HttpHandle;
 
 export interface Machine {
   pty: Pty;
+  /** The inbound ring; a non-blocking consumer waits on its wake counter (`H_WAKE`). */
+  ring: RingReader;
   /** Processes everything the page has sent: input through the line
    * discipline, resizes, network events, signals. Flushes echo to the page.
    * Throws ProcessExit when a signal with default disposition is fatal. */
@@ -80,6 +82,8 @@ export interface Machine {
 
   net: Map<number, NetHandle>;
   lastError: string;
+  /** Called from `pump()` with the page's answer to a `clipboard_read` request. */
+  onClipboard: ((id: number, ok: boolean, text: string) => void) | null;
 }
 
 export function createMachine(pty: Pty, ring: RingReader, postMessage: (message: WorkerMessage, transfer: Transferable[]) => void): Machine {
@@ -161,6 +165,9 @@ export function createMachine(pty: Pty, ring: RingReader, postMessage: (message:
         signals.push(new DataView(frame.payload.buffer, frame.payload.byteOffset).getUint32(0, true));
       } else if (frame.type === FRAME_NET) {
         netEvent(frame.payload);
+      } else if (frame.type === FRAME_CLIPBOARD) {
+        const view = new DataView(frame.payload.buffer, frame.payload.byteOffset);
+        machine.onClipboard?.(view.getUint32(0, true), view.getUint32(4, true) === 1, new TextDecoder().decode(frame.payload.subarray(8)));
       }
     }
     if (consumed && ring.writerWaiting()) post({ t: "drain" });
@@ -172,8 +179,9 @@ export function createMachine(pty: Pty, ring: RingReader, postMessage: (message:
     for (const signo of signals) deliver(signo);
   }
 
-  return {
+  const machine: Machine = {
     pty,
+    ring,
     pump,
     waitUntil(deadlineMs) {
       ring.wait(deadlineMs === Infinity ? Infinity : deadlineMs - performance.now());
@@ -197,5 +205,7 @@ export function createMachine(pty: Pty, ring: RingReader, postMessage: (message:
     raise: deliver,
     net,
     lastError: "",
+    onClipboard: null,
   };
+  return machine;
 }

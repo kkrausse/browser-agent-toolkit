@@ -1,4 +1,4 @@
-// Node-style timer handles for a Worker: setTimeout/setInterval return an
+// Node-style timer handles for a Worker (part of the node shim, installed by runtime.ts): setTimeout/setInterval return an
 // object with ref()/unref()/refresh() (code written for Node calls them),
 // which still converts to the numeric id for clearTimeout and friends.
 export function installNodeTimers(scope: Record<string, any> = globalThis): void {

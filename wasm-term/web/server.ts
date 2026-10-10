@@ -2,11 +2,17 @@
 //
 // Every response carries COOP/COEP so the page is cross-origin isolated, which
 // SharedArrayBuffer (and therefore the blocking syscall bridge) requires.
-// Besides the page it serves the kernel wasm, the guests, and a few endpoints
-// under /test/ that the `net` guest talks to.
+// Besides the page it serves the kernel wasm, the wasm guests, the JavaScript
+// guests' directories (ports), and a few endpoints under /test/ that the `net`
+// guest talks to.
 
-import { existsSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, readdirSync } from "node:fs";
+import { basename, extname, join, normalize } from "node:path";
+import { opencodeGuest } from "../ports/opencode/web/guest";
+import type { GuestInfo, JsGuest } from "./guests";
+
+/** JavaScript guests (ports). Each is served from its own directory under /guests/<name>/. */
+const jsGuests: JsGuest[] = [opencodeGuest];
 
 const root = join(import.meta.dir, "..");
 const port = Number(process.env.PORT ?? 4790);
@@ -33,18 +39,30 @@ function file(path: string, type: string): Response {
 /** Bundles the page and the worker. Rebuilt on every page load so edits show up on refresh. */
 async function bundle(): Promise<Map<string, Blob>> {
   const result = await Bun.build({
-    entrypoints: [join(import.meta.dir, "client.ts"), join(root, "host/worker.ts")],
+    entrypoints: [join(import.meta.dir, "client.ts"), join(root, "host/worker.ts"), join(root, "host/js-worker.ts")],
     target: "browser",
     format: "esm",
     sourcemap: "inline",
   });
   if (!result.success) throw new AggregateError(result.logs, "bundle failed");
   const outputs = new Map<string, Blob>();
-  // Outputs are named after their entry point: /client.js and /worker.js.
+  // Outputs are named after their entry point: /client.js, /worker.js (wasm guests), /js-worker.js (JavaScript guests).
   for (const output of result.outputs) outputs.set(`/${basename(output.path)}`, output);
   return outputs;
 }
 let bundles = await bundle();
+
+const TYPES: Record<string, string> = {
+  ".js": "text/javascript", ".map": "application/json", ".wasm": "application/wasm", ".scm": "text/plain; charset=utf-8",
+  ".json": "application/json",
+};
+
+function guestList(): GuestInfo[] {
+  const wasm: GuestInfo[] = existsSync(guestsDir)
+    ? readdirSync(guestsDir).filter(name => name.endsWith(".wasm")).sort().map(name => ({ name: basename(name, ".wasm"), kind: "wasm" }))
+    : [];
+  return [...wasm, ...jsGuests.map(({ dir, build, ...info }) => info)];
+}
 
 /** Server-sent events: `count` events, one every `interval` ms, each flushed on its own. */
 function sse(url: URL): Response {
@@ -89,6 +107,16 @@ const server = Bun.serve({
     if (path === "/kernel.wasm") return file(kernelWasm, "application/wasm");
     const guest = /^\/guests\/([\w-]+)\.wasm$/.exec(path);
     if (guest) return file(join(guestsDir, `${guest[1]}.wasm`), "application/wasm");
+    if (path === "/guests.json") return respond(JSON.stringify(guestList()), "application/json");
+    const jsFile = /^\/guests\/([\w-]+)\/(.+)$/.exec(path);
+    const jsGuest = jsFile && jsGuests.find(candidate => candidate.name === jsFile[1]);
+    if (jsFile && jsGuest) {
+      const relative = normalize(jsFile[2]!);
+      if (relative.startsWith("..")) return respond("Not found\n", "text/plain", {}, 404);
+      const target = join(jsGuest.dir, relative);
+      if (!existsSync(target)) return respond(`Not built: ${target}\nRun: ${jsGuest.build}\n`, "text/plain", {}, 404);
+      return respond(Bun.file(target), TYPES[extname(target)] ?? "application/octet-stream");
+    }
 
     // ---- endpoints for the `net` guest -------------------------------------
     if (path === "/test/ws") {
@@ -118,4 +146,4 @@ const server = Bun.serve({
   },
 });
 
-console.log(`wasm-term: ${server.url}?guest=repl`);
+console.log(`wasm-term: ${server.url}  (launcher; or ?guest=repl, ?guest=opencode, ...)`);

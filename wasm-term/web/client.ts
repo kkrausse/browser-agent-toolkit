@@ -1,8 +1,12 @@
-// The page: a full-window ghostty-web terminal attached to one program.
+// The page: a full-window ghostty-web terminal attached to one program, or,
+// with no `guest` in the URL, a launcher that lists the programs.
 //
-//   /?guest=repl                 which guest to run (guests/dist/<name>.wasm)
+//   /?guest=repl                 which guest to run (see /guests.json)
 //   &arg=a&arg=b                 extra argv entries
 //   &env=KEY=value               extra environment
+//   &<param>=value               a guest's own settings (opencode: server, password, dir)
+//   &persist=0                   do not load or store the guest's persistent directories
+//   &reset=1                     forget what was stored for this guest first
 //
 // The wiring is the whole point of this file:
 //   terminal.onData  → program.write   (pty master input)
@@ -10,7 +14,10 @@
 //   terminal resize  → program.resize  (winsize + SIGWINCH)
 
 import { init, Terminal } from "@random/ghostty-web";
-import { type ExitStatus, type Program, startProgram } from "../host/index";
+import { type ClipboardBridge, type ExitStatus, type Program, startProgram } from "../host/index";
+import { openPersistStore } from "../host/persist-store";
+import type { GuestInfo } from "./guests";
+import { showLauncher } from "./launcher";
 
 declare global {
   interface Window {
@@ -23,12 +30,21 @@ declare global {
       /** Every string the terminal sent to the program, most recent last. */
       sent: string[];
       exit: ExitStatus | null;
+      /** What programs get as the system clipboard; replaceable (tests, browsers without the async clipboard API). */
+      clipboard: ClipboardBridge;
     };
   }
 }
 
 const params = new URLSearchParams(location.search);
-const guest = params.get("guest") ?? "repl";
+const guests = (await (await fetch("/guests.json")).json()) as GuestInfo[];
+const guest = params.get("guest");
+if (guest === null) {
+  showLauncher(guests);
+  // Nothing below applies without a program; a module cannot return, so wait forever.
+  await new Promise(() => {});
+  throw new Error("unreachable");
+}
 const container = document.querySelector<HTMLDivElement>("#terminal")!;
 
 function fatal(message: string): never {
@@ -40,10 +56,14 @@ function fatal(message: string): never {
 
 if (!crossOriginIsolated) fatal("This page is not cross-origin isolated; SharedArrayBuffer is unavailable.\nServe it with COOP: same-origin and COEP: require-corp (bun web/server.ts does).");
 if (!/^[\w-]+$/.test(guest)) fatal(`Bad guest name: ${guest}`);
+const info: GuestInfo = guests.find(candidate => candidate.name === guest) ?? { name: guest, kind: "wasm" };
 
 await init();
 const terminal = new Terminal({
   rendererType: "webgl",
+  // Ctrl+V is the terminal's literal-next key (and a key binding in many TUIs),
+  // not paste: paste stays on Cmd+V / Ctrl+Shift+V and the browser's paste event.
+  ctrlVPaste: false,
   cursorBlink: true,
   copyOnSelect: false,
   scrollback: 5_000,
@@ -73,23 +93,42 @@ for (const pair of params.getAll("env")) {
   if (equals > 0) env[pair.slice(0, equals)] = pair.slice(equals + 1);
 }
 
+// A guest's own settings arrive as environment variables.
+for (const param of info.params ?? []) env[param.env] = params.get(param.query) ?? param.default;
+
+const persist = params.get("persist") === "0"
+  ? undefined
+  : { namespace: guest, ...(info.persist ?? { roots: ["/home/user"] }) };
+if (persist && params.get("reset") === "1") await openPersistStore(persist.namespace).clear();
+
+const clipboard: ClipboardBridge = {
+  readText: () => navigator.clipboard.readText(),
+  writeText: text => navigator.clipboard.writeText(text),
+};
+
 const sent: string[] = [];
 const pixels = cellPixels();
 const program = startProgram({
-  guestUrl: `/guests/${guest}.wasm`,
+  guestUrl: info.kind === "js" ? `/guests/${guest}/guest.js` : `/guests/${guest}.wasm`,
   kernelUrl: "/kernel.wasm",
-  workerUrl: "/worker.js",
+  workerUrl: info.kind === "js" ? "/js-worker.js" : "/worker.js",
   args: [guest, ...params.getAll("arg")],
   env: { ...env, WASM_TERM_ORIGIN: location.origin },
   cols: terminal.cols,
   rows: terminal.rows,
   xpixel: Math.round(pixels.width * terminal.cols),
   ypixel: Math.round(pixels.height * terminal.rows),
+  persist,
+  // Indirect, so that replacing window.wasmTerm.clipboard takes effect.
+  clipboard: {
+    readText: () => window.wasmTerm.clipboard.readText(),
+    writeText: text => window.wasmTerm.clipboard.writeText(text),
+  },
   onOutput: data => terminal.write(data),
   onExit(status) {
     window.wasmTerm.exit = status;
     const how = status.signal ? `killed by signal ${status.signal}` : `exit code ${status.code}`;
-    const detail = status.error ? `\r\n${status.error}` : "";
+    const detail = status.error ? `\r\n${status.error.replaceAll(/\r?\n/g, "\r\n")}` : "";
     terminal.write(`\r\n\x1b[0m\x1b[2m[process ended: ${how}]${detail}\x1b[0m\r\n`);
   },
 });
@@ -97,57 +136,11 @@ const program = startProgram({
 // Keystrokes, pastes (already bracketed by the terminal when the program asked
 // for it), mouse reports, focus reports and query replies all arrive here as
 // bytes for the pty master.
-let mouseButtons = 0;
-for (const type of ["mousedown", "mouseup", "mousemove"] as const) {
-  window.addEventListener(type, event => (mouseButtons = event.buttons), { capture: true });
-}
-
-/** Workaround for ghostty-web: with any-motion tracking (DEC 1003) it reports
- * pointer motion with no button held as button code 32 ("left button drag")
- * instead of 35 ("no button"), so programs see a drag on every hover. The
- * page knows the real button state, so the report is corrected here.
- * Remove once ghostty-web's input handler encodes this itself. */
-function fixMotionReport(data: string): string {
-  if (mouseButtons !== 0) return data;
-  return data.replace(/^\x1b\[<(\d+);(\d+;\d+M)$/, (report, code: string, rest: string) => {
-    const value = Number(code);
-    return (value & 32) !== 0 && (value & 3) === 0 && value < 64 ? `\x1b[<${value + 3};${rest}` : report;
-  });
-}
-
-terminal.onData(raw => {
-  const data = fixMotionReport(raw);
+terminal.onData(data => {
   sent.push(data);
   if (sent.length > 200) sent.shift();
   program.write(data);
 });
-
-// Ctrl+V is the terminal's literal-next key (and scroll-down in Emacs), not
-// paste: paste stays on Cmd+V / Ctrl+Shift+V and the browser's paste event.
-container.addEventListener("keydown", event => {
-  if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && event.code === "KeyV") {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    sent.push("\x16");
-    program.write("\x16");
-  }
-}, { capture: true });
-
-// Focus reporting (DEC mode 1004). ghostty-web tracks whether the program
-// asked for it but leaves producing the reports to the embedder.
-let focused = document.hasFocus() && container.contains(document.activeElement);
-function reportFocus(now: boolean): void {
-  if (now === focused) return;
-  focused = now;
-  if (!terminal.hasFocusEvents()) return;
-  const report = now ? "\x1b[I" : "\x1b[O";
-  sent.push(report);
-  program.write(report);
-}
-container.addEventListener("focusin", () => reportFocus(true));
-container.addEventListener("focusout", () => reportFocus(false));
-window.addEventListener("blur", () => reportFocus(false));
-window.addEventListener("focus", () => reportFocus(container.contains(document.activeElement)));
 
 terminal.onResize(({ cols, rows }) => {
   const { width, height } = cellPixels();
@@ -170,6 +163,7 @@ window.wasmTerm = {
   program,
   sent,
   exit: null,
+  clipboard,
   screen() {
     const buffer = terminal.buffer.active;
     const lines: string[] = [];

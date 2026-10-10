@@ -1,275 +1,292 @@
-// node:fs for the browser client: a small in-memory tree, enough for what the
-// opencode TUI keeps on disk (kv state, prompt history, themes lookups, logs).
-// Nothing persists across page loads yet; see NOTES.md (remaining work).
-import { Buffer } from "node:buffer"
+// node:fs over the machine's vfs (../vfs.ts), so a JavaScript program and a
+// wasm guest see the same kind of filesystem and share its persistence. The
+// surface is what terminal programs actually use (the sync calls, their
+// promise twins, a write stream); it is not all of node:fs.
+//
+// A bundled program does not import this file: it imports `node:fs`, which the
+// bundler plugin (bun-plugin.ts) maps to modules/fs.ts, which re-exports the
+// instance the worker runtime installed.
 
-interface FileNode {
-  kind: "file"
-  data: Uint8Array
-  mtimeMs: number
-}
-interface DirNode {
-  kind: "dir"
-  entries: Map<string, FsNode>
-  mtimeMs: number
-}
-type FsNode = FileNode | DirNode
+import { Buffer } from "node:buffer";
+import type { DirNode, FileNode, Vfs, VfsNode } from "../vfs";
 
-const root: DirNode = { kind: "dir", entries: new Map(), mtimeMs: Date.now() }
+export interface NodeFsOptions {
+  cwd(): string;
+  /** Called (at most once per microtask turn) after something was written, renamed or removed. */
+  changed?(): void;
+}
+
+const ERRNO: Record<string, number> = { ENOENT: -2, EEXIST: -17, ENOTDIR: -20, EISDIR: -21, EINVAL: -22, ENOTEMPTY: -39 };
 
 function fsError(code: string, syscall: string, path: string): Error {
-  const error = new Error(`${code}: ${syscall} '${path}'`) as Error & { code: string; syscall: string; path: string; errno: number }
-  error.code = code
-  error.syscall = syscall
-  error.path = path
-  error.errno = code === "ENOENT" ? -2 : code === "EEXIST" ? -17 : -1
-  return error
-}
-
-function parts(path: unknown): string[] {
-  const text = path instanceof URL ? decodeURIComponent(path.pathname) : String(path)
-  const out: string[] = []
-  const cwd = (globalThis as any).process?.cwd?.() ?? "/"
-  for (const part of (text.startsWith("/") ? text : `${cwd}/${text}`).split("/")) {
-    if (part === "" || part === ".") continue
-    if (part === "..") out.pop()
-    else out.push(part)
-  }
-  return out
-}
-
-function lookup(path: unknown): FsNode | undefined {
-  let node: FsNode = root
-  for (const part of parts(path)) {
-    if (node.kind !== "dir") return undefined
-    const next = node.entries.get(part)
-    if (next === undefined) return undefined
-    node = next
-  }
-  return node
-}
-
-function parentOf(path: unknown, syscall: string): { dir: DirNode; name: string } {
-  const segments = parts(path)
-  const name = segments.pop()
-  if (name === undefined) throw fsError("EEXIST", syscall, String(path))
-  const dir = lookup("/" + segments.join("/"))
-  if (dir === undefined || dir.kind !== "dir") throw fsError("ENOENT", syscall, String(path))
-  return { dir, name }
+  return Object.assign(new Error(`${code}: ${syscall} '${path}'`), { code, syscall, path, errno: ERRNO[code] ?? -1 });
 }
 
 function toBytes(data: unknown): Uint8Array {
-  if (typeof data === "string") return new TextEncoder().encode(data)
-  if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength).slice()
-  if (data instanceof ArrayBuffer) return new Uint8Array(data).slice()
-  return new TextEncoder().encode(String(data))
+  if (typeof data === "string") return new TextEncoder().encode(data);
+  if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  return new TextEncoder().encode(String(data));
 }
 
 function encodingOf(options: unknown): string | undefined {
-  if (typeof options === "string") return options
-  if (options && typeof options === "object") return (options as { encoding?: string }).encoding ?? undefined
-  return undefined
+  if (typeof options === "string") return options;
+  if (options && typeof options === "object") return (options as { encoding?: string }).encoding ?? undefined;
+  return undefined;
 }
 
-function stats(node: FsNode) {
-  const time = new Date(node.mtimeMs)
-  return {
-    isFile: () => node.kind === "file",
-    isDirectory: () => node.kind === "dir",
-    isSymbolicLink: () => false,
-    size: node.kind === "file" ? node.data.byteLength : 0,
-    mode: node.kind === "file" ? 0o100644 : 0o040755,
-    mtimeMs: node.mtimeMs,
-    ctimeMs: node.mtimeMs,
-    atimeMs: node.mtimeMs,
-    birthtimeMs: node.mtimeMs,
-    mtime: time,
-    ctime: time,
-    atime: time,
-    birthtime: time,
-    dev: 1,
-    ino: 1,
-    nlink: 1,
-    uid: 0,
-    gid: 0,
+export type NodeFs = ReturnType<typeof createNodeFs>;
+
+export function createNodeFs(vfs: Vfs, options: NodeFsOptions) {
+  let notifying = false;
+  function changed(): void {
+    if (!options.changed || notifying) return;
+    notifying = true;
+    queueMicrotask(() => {
+      notifying = false;
+      options.changed!();
+    });
   }
-}
 
-export function existsSync(path: unknown): boolean {
-  return lookup(path) !== undefined
-}
-
-export function statSync(path: unknown, options?: { throwIfNoEntry?: boolean }) {
-  const node = lookup(path)
-  if (node === undefined) {
-    if (options?.throwIfNoEntry === false) return undefined as never
-    throw fsError("ENOENT", "stat", String(path))
+  function absolute(path: unknown): string {
+    const text = path instanceof URL ? decodeURIComponent(path.pathname) : String(path);
+    return text.startsWith("/") ? text : `${options.cwd()}/${text}`;
   }
-  return stats(node)
-}
-export const lstatSync = statSync
 
-export function mkdirSync(path: unknown, options?: { recursive?: boolean } | number): string | undefined {
-  const recursive = typeof options === "object" && options?.recursive === true
-  let node: DirNode = root
-  const segments = parts(path)
-  for (let index = 0; index < segments.length; index++) {
-    const name = segments[index]!
-    const existing = node.entries.get(name)
-    const last = index === segments.length - 1
-    if (existing === undefined) {
-      if (!last && !recursive) throw fsError("ENOENT", "mkdir", String(path))
-      const created: DirNode = { kind: "dir", entries: new Map(), mtimeMs: Date.now() }
-      node.entries.set(name, created)
-      node = created
-    } else if (existing.kind === "dir") {
-      if (last && !recursive) throw fsError("EEXIST", "mkdir", String(path))
-      node = existing
-    } else throw fsError("EEXIST", "mkdir", String(path))
+  function lookup(path: unknown, follow = true): VfsNode | undefined {
+    const found = vfs.resolve(vfs.root, absolute(path), follow);
+    return typeof found === "number" ? undefined : found.node ?? undefined;
   }
-  return undefined
-}
 
-export function readFileSync(path: unknown, options?: unknown): any {
-  const node = lookup(path)
-  if (node === undefined) throw fsError("ENOENT", "open", String(path))
-  if (node.kind !== "file") throw fsError("EISDIR", "read", String(path))
-  const encoding = encodingOf(options)
-  return encoding ? Buffer.from(node.data).toString(encoding as BufferEncoding) : Buffer.from(node.data)
-}
-
-export function writeFileSync(path: unknown, data: unknown, options?: unknown): void {
-  const { dir, name } = parentOf(path, "open")
-  const existing = dir.entries.get(name)
-  if (existing?.kind === "dir") throw fsError("EISDIR", "open", String(path))
-  const flag = typeof options === "object" && options ? (options as { flag?: string }).flag : undefined
-  if (existing && flag?.includes("x")) throw fsError("EEXIST", "open", String(path))
-  const bytes = toBytes(data)
-  if (existing && flag?.startsWith("a")) {
-    const joined = new Uint8Array(existing.data.byteLength + bytes.byteLength)
-    joined.set(existing.data)
-    joined.set(bytes, existing.data.byteLength)
-    existing.data = joined
-    existing.mtimeMs = Date.now()
-    return
+  function parentOf(path: unknown, syscall: string): { dir: DirNode; name: string; node: VfsNode | null } {
+    const found = vfs.resolve(vfs.root, absolute(path), false);
+    if (typeof found === "number") throw fsError("ENOENT", syscall, String(path));
+    return found;
   }
-  dir.entries.set(name, { kind: "file", data: bytes, mtimeMs: Date.now() })
-}
 
-export function appendFileSync(path: unknown, data: unknown): void {
-  writeFileSync(path, data, { flag: "a" })
-}
-
-export function readdirSync(path: unknown, options?: { withFileTypes?: boolean }): any[] {
-  const node = lookup(path)
-  if (node === undefined) throw fsError("ENOENT", "scandir", String(path))
-  if (node.kind !== "dir") throw fsError("ENOTDIR", "scandir", String(path))
-  const names = [...node.entries.keys()].sort()
-  if (!options?.withFileTypes) return names
-  return names.map((name) => ({ name, parentPath: String(path), path: String(path), ...stats(node.entries.get(name)!) }))
-}
-
-export function unlinkSync(path: unknown): void {
-  const { dir, name } = parentOf(path, "unlink")
-  if (!dir.entries.delete(name)) throw fsError("ENOENT", "unlink", String(path))
-}
-
-export function rmSync(path: unknown, options?: { force?: boolean; recursive?: boolean }): void {
-  if (lookup(path) === undefined) {
-    if (options?.force) return
-    throw fsError("ENOENT", "rm", String(path))
-  }
-  const { dir, name } = parentOf(path, "rm")
-  dir.entries.delete(name)
-}
-export const rmdirSync = rmSync
-
-export function renameSync(from: unknown, to: unknown): void {
-  const source = parentOf(from, "rename")
-  const node = source.dir.entries.get(source.name)
-  if (node === undefined) throw fsError("ENOENT", "rename", String(from))
-  const target = parentOf(to, "rename")
-  source.dir.entries.delete(source.name)
-  target.dir.entries.set(target.name, node)
-}
-
-export function copyFileSync(from: unknown, to: unknown): void {
-  writeFileSync(to, readFileSync(from))
-}
-
-export function realpathSync(path: unknown): string {
-  if (lookup(path) === undefined) throw fsError("ENOENT", "realpath", String(path))
-  return "/" + parts(path).join("/")
-}
-
-export function accessSync(path: unknown): void {
-  if (lookup(path) === undefined) throw fsError("ENOENT", "access", String(path))
-}
-
-export function chmodSync(): void {}
-export function utimesSync(): void {}
-
-export function watch(): { close(): void; on(): unknown; off(): unknown; unref(): unknown; ref(): unknown } {
-  const watcher = { close() {}, on: () => watcher, off: () => watcher, unref: () => watcher, ref: () => watcher }
-  return watcher
-}
-
-export function createWriteStream(path: unknown) {
-  const stream = {
-    write(chunk: unknown) {
-      appendFileSync(path, chunk)
-      return true
-    },
-    end() {},
-    on: () => stream,
-    once: () => stream,
-    destroy() {},
-  }
-  return stream
-}
-
-const settle =
-  <Args extends unknown[], Result>(fn: (...args: Args) => Result) =>
-  async (...args: Args): Promise<Result> =>
-    fn(...args)
-
-export const promises = {
-  access: settle(accessSync),
-  appendFile: settle(appendFileSync),
-  chmod: settle(chmodSync),
-  copyFile: settle(copyFileSync),
-  lstat: settle(lstatSync),
-  mkdir: settle(mkdirSync),
-  readFile: settle(readFileSync),
-  readdir: settle(readdirSync),
-  realpath: settle(realpathSync),
-  rename: settle(renameSync),
-  rm: settle(rmSync),
-  rmdir: settle(rmdirSync),
-  stat: settle(statSync),
-  unlink: settle(unlinkSync),
-  utimes: settle(utimesSync),
-  writeFile: settle(writeFileSync),
-  async open(path: unknown, flags?: string) {
-    if (flags?.includes("x") && existsSync(path)) throw fsError("EEXIST", "open", String(path))
-    if (!existsSync(path)) {
-      if (!flags || flags.startsWith("r")) throw fsError("ENOENT", "open", String(path))
-      writeFileSync(path, "")
-    }
+  function stats(node: VfsNode) {
+    const ms = (ns: bigint) => Number(ns / 1_000_000n);
+    const mtimeMs = ms(node.mtime);
+    const time = new Date(mtimeMs);
     return {
-      writeFile: async (data: unknown) => writeFileSync(path, data),
-      appendFile: async (data: unknown) => appendFileSync(path, data),
-      readFile: async (options?: unknown) => readFileSync(path, options),
-      stat: async () => statSync(path),
-      close: async () => {},
+      isFile: () => node.kind === "file",
+      isDirectory: () => node.kind === "dir",
+      isSymbolicLink: () => node.kind === "symlink",
+      isCharacterDevice: () => node.kind === "dev",
+      isFIFO: () => false,
+      isSocket: () => false,
+      isBlockDevice: () => false,
+      size: node.kind === "file" ? node.size : 0,
+      mode: node.kind === "file" ? 0o100644 : node.kind === "dir" ? 0o040755 : node.kind === "symlink" ? 0o120777 : 0o020666,
+      mtimeMs, ctimeMs: ms(node.ctime), atimeMs: ms(node.atime), birthtimeMs: ms(node.ctime),
+      mtime: time, ctime: time, atime: time, birthtime: time,
+      dev: 1, ino: node.ino, nlink: 1, uid: 1000, gid: 1000,
+    };
+  }
+
+  function existsSync(path: unknown): boolean {
+    return lookup(path) !== undefined;
+  }
+
+  function statWith(follow: boolean, syscall: string) {
+    return (path: unknown, statOptions?: { throwIfNoEntry?: boolean }) => {
+      const node = lookup(path, follow);
+      if (node === undefined) {
+        if (statOptions?.throwIfNoEntry === false) return undefined as never;
+        throw fsError("ENOENT", syscall, String(path));
+      }
+      return stats(node);
+    };
+  }
+  const statSync = statWith(true, "stat");
+  const lstatSync = statWith(false, "lstat");
+
+  function mkdirSync(path: unknown, mkdirOptions?: { recursive?: boolean } | number): string | undefined {
+    const recursive = typeof mkdirOptions === "object" && mkdirOptions?.recursive === true;
+    if (recursive) {
+      try {
+        vfs.mkdirp(absolute(path));
+      } catch {
+        throw fsError("EEXIST", "mkdir", String(path));
+      }
+      return undefined;
     }
-  },
-}
+    const found = parentOf(path, "mkdir");
+    if (found.node) throw fsError("EEXIST", "mkdir", String(path));
+    vfs.mkdir(found.dir, found.name);
+    return undefined;
+  }
 
-export const constants = { F_OK: 0, R_OK: 4, W_OK: 2, X_OK: 1, O_RDONLY: 0, O_WRONLY: 1, O_RDWR: 2 }
+  function fileAt(path: unknown, syscall: string): FileNode {
+    const node = lookup(path);
+    if (node === undefined) throw fsError("ENOENT", syscall, String(path));
+    if (node.kind === "dir") throw fsError("EISDIR", syscall, String(path));
+    if (node.kind !== "file") throw fsError("EINVAL", syscall, String(path));
+    return node;
+  }
 
-export default {
-  accessSync, appendFileSync, chmodSync, constants, copyFileSync, createWriteStream, existsSync, lstatSync,
-  mkdirSync, promises, readFileSync, readdirSync, realpathSync, renameSync, rmSync, rmdirSync, statSync,
-  unlinkSync, utimesSync, watch, writeFileSync,
+  function readFileSync(path: unknown, readOptions?: unknown): any {
+    const file = fileAt(path, "open");
+    const copy = Buffer.from(file.data.slice(0, file.size));
+    const encoding = encodingOf(readOptions);
+    return encoding ? copy.toString(encoding as BufferEncoding) : copy;
+  }
+
+  function writeFileSync(path: unknown, data: unknown, writeOptions?: unknown): void {
+    const flag = typeof writeOptions === "object" && writeOptions ? (writeOptions as { flag?: string }).flag : undefined;
+    const found = vfs.resolve(vfs.root, absolute(path), true);
+    if (typeof found === "number") throw fsError("ENOENT", "open", String(path));
+    if (found.node?.kind === "dir") throw fsError("EISDIR", "open", String(path));
+    if (found.node && flag?.includes("x")) throw fsError("EEXIST", "open", String(path));
+    if (found.node && found.node.kind !== "file") return; // /dev/null and friends
+    const file = found.node ?? vfs.createFile(found.dir, found.name);
+    const bytes = toBytes(data);
+    if (flag?.startsWith("a")) vfs.write(file, file.size, bytes);
+    else {
+      vfs.truncate(file, 0);
+      vfs.write(file, 0, bytes);
+    }
+    changed();
+  }
+
+  function appendFileSync(path: unknown, data: unknown): void {
+    writeFileSync(path, data, { flag: "a" });
+  }
+
+  function readdirSync(path: unknown, readdirOptions?: { withFileTypes?: boolean }): any[] {
+    const node = lookup(path);
+    if (node === undefined) throw fsError("ENOENT", "scandir", String(path));
+    if (node.kind !== "dir") throw fsError("ENOTDIR", "scandir", String(path));
+    const names = [...node.entries.keys()].sort();
+    if (!readdirOptions?.withFileTypes) return names;
+    return names.map(name => ({ name, parentPath: String(path), path: String(path), ...stats(node.entries.get(name)!) }));
+  }
+
+  function unlinkSync(path: unknown): void {
+    const found = parentOf(path, "unlink");
+    if (!found.node) throw fsError("ENOENT", "unlink", String(path));
+    if (found.node.kind === "dir") throw fsError("EISDIR", "unlink", String(path));
+    found.dir.entries.delete(found.name);
+    changed();
+  }
+
+  function rmSync(path: unknown, rmOptions?: { force?: boolean; recursive?: boolean }): void {
+    const found = vfs.resolve(vfs.root, absolute(path), false);
+    if (typeof found === "number" || !found.node) {
+      if (rmOptions?.force) return;
+      throw fsError("ENOENT", "rm", String(path));
+    }
+    if (found.node.kind === "dir" && found.node.entries.size > 0 && !rmOptions?.recursive) throw fsError("ENOTEMPTY", "rm", String(path));
+    found.dir.entries.delete(found.name);
+    changed();
+  }
+
+  function rmdirSync(path: unknown, rmOptions?: { recursive?: boolean }): void {
+    const node = lookup(path, false);
+    if (node && node.kind !== "dir") throw fsError("ENOTDIR", "rmdir", String(path));
+    rmSync(path, rmOptions);
+  }
+
+  function renameSync(from: unknown, to: unknown): void {
+    const source = parentOf(from, "rename");
+    if (!source.node) throw fsError("ENOENT", "rename", String(from));
+    const target = parentOf(to, "rename");
+    if (target.node?.kind === "dir" && target.node.entries.size > 0) throw fsError("ENOTEMPTY", "rename", String(to));
+    source.dir.entries.delete(source.name);
+    target.dir.entries.set(target.name, source.node);
+    if (source.node.kind === "dir") source.node.parent = target.dir;
+    changed();
+  }
+
+  function copyFileSync(from: unknown, to: unknown): void {
+    writeFileSync(to, readFileSync(from));
+  }
+
+  function realpathSync(path: unknown): string {
+    if (lookup(path) === undefined) throw fsError("ENOENT", "realpath", String(path));
+    const out: string[] = [];
+    for (const part of absolute(path).split("/")) {
+      if (part === "" || part === ".") continue;
+      if (part === "..") out.pop();
+      else out.push(part);
+    }
+    return "/" + out.join("/");
+  }
+
+  function accessSync(path: unknown): void {
+    if (lookup(path) === undefined) throw fsError("ENOENT", "access", String(path));
+  }
+
+  function chmodSync(): void {}
+  function utimesSync(): void {}
+
+  /** Nothing else writes to this filesystem, so a watcher never has anything to report. */
+  function watch() {
+    const watcher = { close() {}, on: () => watcher, off: () => watcher, once: () => watcher, unref: () => watcher, ref: () => watcher };
+    return watcher;
+  }
+
+  function createWriteStream(path: unknown, streamOptions?: { flags?: string }) {
+    if (!streamOptions?.flags?.startsWith("a")) writeFileSync(path, "");
+    const stream = {
+      write(chunk: unknown) {
+        appendFileSync(path, chunk);
+        return true;
+      },
+      end(chunk?: unknown) {
+        if (chunk !== undefined && typeof chunk !== "function") appendFileSync(path, chunk);
+      },
+      on: () => stream,
+      once: () => stream,
+      destroy() {},
+    };
+    return stream;
+  }
+
+  const settle = <Args extends unknown[], Result>(fn: (...args: Args) => Result) =>
+    async (...args: Args): Promise<Result> => fn(...args);
+
+  const promises = {
+    access: settle(accessSync),
+    appendFile: settle(appendFileSync),
+    chmod: settle(chmodSync),
+    copyFile: settle(copyFileSync),
+    lstat: settle(lstatSync),
+    mkdir: settle(mkdirSync),
+    readFile: settle(readFileSync),
+    readdir: settle(readdirSync),
+    realpath: settle(realpathSync),
+    rename: settle(renameSync),
+    rm: settle(rmSync),
+    rmdir: settle(rmdirSync),
+    stat: settle(statSync),
+    unlink: settle(unlinkSync),
+    utimes: settle(utimesSync),
+    writeFile: settle(writeFileSync),
+    async open(path: unknown, flags?: string) {
+      if (flags?.includes("x") && existsSync(path)) throw fsError("EEXIST", "open", String(path));
+      if (!existsSync(path)) {
+        if (!flags || flags.startsWith("r")) throw fsError("ENOENT", "open", String(path));
+        writeFileSync(path, "");
+      } else if (flags?.startsWith("w")) writeFileSync(path, "");
+      return {
+        writeFile: async (data: unknown) => writeFileSync(path, data),
+        appendFile: async (data: unknown) => appendFileSync(path, data),
+        write: async (data: unknown) => (appendFileSync(path, data), { bytesWritten: toBytes(data).length }),
+        readFile: async (readOptions?: unknown) => readFileSync(path, readOptions),
+        stat: async () => statSync(path),
+        sync: async () => {},
+        datasync: async () => {},
+        close: async () => {},
+      };
+    },
+  };
+
+  const constants = { F_OK: 0, R_OK: 4, W_OK: 2, X_OK: 1, O_RDONLY: 0, O_WRONLY: 1, O_RDWR: 2 };
+
+  return {
+    accessSync, appendFileSync, chmodSync, constants, copyFileSync, createWriteStream, existsSync, lstatSync,
+    mkdirSync, promises, readFileSync, readdirSync, realpathSync, renameSync, rmSync, rmdirSync, statSync,
+    unlinkSync, utimesSync, watch, writeFileSync,
+  };
 }

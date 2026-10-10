@@ -38,6 +38,8 @@ export interface WasiOptions {
   env: Record<string, string>;
   machine: Machine;
   vfs: Vfs;
+  /** Called after a call that may have changed files (close, sync, rename, unlink): the persistence hook. */
+  onFsChange?: () => void;
 }
 
 export interface Wasi {
@@ -46,7 +48,7 @@ export interface Wasi {
   setMemory(memory: WebAssembly.Memory): void;
 }
 
-export function createWasi({ args, env, machine, vfs }: WasiOptions): Wasi {
+export function createWasi({ args, env, machine, vfs, onFsChange }: WasiOptions): Wasi {
   let memory: WebAssembly.Memory;
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
@@ -369,6 +371,7 @@ export function createWasi({ args, env, machine, vfs }: WasiOptions): Wasi {
         machine.post({ t: "net_close", handle: fdNumber });
       }
       fds.delete(fdNumber);
+      if (fd.kind === "file") onFsChange?.();
       if (fdNumber < nextFd) nextFd = Math.max(fdNumber, 4);
       return ERRNO.SUCCESS;
     },
@@ -415,8 +418,8 @@ export function createWasi({ args, env, machine, vfs }: WasiOptions): Wasi {
     fd_filestat_set_times: (fdNumber: number) => (fds.has(fdNumber) ? ERRNO.SUCCESS : ERRNO.BADF),
     fd_advise: (fdNumber: number) => (fds.has(fdNumber) ? ERRNO.SUCCESS : ERRNO.BADF),
     fd_allocate: (fdNumber: number) => (fds.has(fdNumber) ? ERRNO.SUCCESS : ERRNO.BADF),
-    fd_datasync: (fdNumber: number) => (fds.has(fdNumber) ? ERRNO.SUCCESS : ERRNO.BADF),
-    fd_sync: (fdNumber: number) => (fds.has(fdNumber) ? ERRNO.SUCCESS : ERRNO.BADF),
+    fd_datasync: (fdNumber: number) => (fds.has(fdNumber) ? (onFsChange?.(), ERRNO.SUCCESS) : ERRNO.BADF),
+    fd_sync: (fdNumber: number) => (fds.has(fdNumber) ? (onFsChange?.(), ERRNO.SUCCESS) : ERRNO.BADF),
     fd_prestat_get(fdNumber: number, prestatPtr: number) {
       const fd = fds.get(fdNumber);
       if (!fd || fd.kind !== "dir" || fd.preopen === undefined) return ERRNO.BADF;
@@ -523,6 +526,7 @@ export function createWasi({ args, env, machine, vfs }: WasiOptions): Wasi {
       if (!found.node) return ERRNO.NOENT;
       if (found.node.kind === "dir") return ERRNO.ISDIR;
       found.dir.entries.delete(found.name);
+      onFsChange?.();
       return ERRNO.SUCCESS;
     },
     path_rename(oldFd: number, oldPtr: number, oldLen: number, newFd: number, newPtr: number, newLen: number) {
@@ -535,6 +539,7 @@ export function createWasi({ args, env, machine, vfs }: WasiOptions): Wasi {
       from.dir.entries.delete(from.name);
       to.dir.entries.set(to.name, from.node);
       if (from.node.kind === "dir") from.node.parent = to.dir;
+      onFsChange?.();
       return ERRNO.SUCCESS;
     },
     path_symlink(targetPtr: number, targetLen: number, dirFd: number, pathPtr: number, pathLen: number) {

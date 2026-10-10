@@ -1,9 +1,19 @@
 // Bundles the real opencode TUI (vendor/opencode, packages/tui, unmodified
 // source) with OpenTUI wired to the wasm core.
-//   bun build/bundle-opencode.ts --target=bun       -> dist/opencode-tui.bun.js   (Bun host, real Node APIs)
-//   bun build/bundle-opencode.ts --target=browser   -> dist/opencode-tui.browser.js (Worker host, shims)
+//
+//   bun build/build-site.ts --target=bun       -> dist/opencode-tui.bun.js (Bun host, real Node APIs)
+//   bun build/build-site.ts --target=browser   -> dist/site/: everything the browser guest loads
+//       guest.js            host/guest.ts, the JS-guest entry the machine imports
+//       tui.js (+ .map)     the TUI itself (host/worker-app.ts)
+//       opentui.wasm        the Zig core (copied from dist/opentui.wasm; `bun run build:native`)
+//       parser.worker.js    OpenTUI's tree-sitter worker
+//       tree-sitter.wasm    web-tree-sitter's runtime
+//       assets/<lang>/...   the grammars and queries OpenTUI ships (markdown, js, ts, zig)
+//   add --minify for a smaller tui.js (anchors and stack traces are less readable).
 import path from "node:path"
+import { cpSync, mkdirSync } from "node:fs"
 import type { BunPlugin } from "bun"
+import { nodeShimsPlugin } from "../../../host/node/bun-plugin"
 import { opentuiWasmPlugin, OPENTUI_ROOT } from "./opentui-wasm-plugin"
 
 const HERE = path.resolve(import.meta.dir, "..")
@@ -90,54 +100,44 @@ function conditionalStubs(): BunPlugin {
   }
 }
 
-// Node built-ins for the browser target. Bun's own browser polyfills cover
-// path, events, buffer, stream, util, crypto, assert, string_decoder; these are the rest.
-function nodeShims(): BunPlugin {
-  const shim = (name: string) => path.join(HERE, "src/node", name)
-  const map: Record<string, string> = {
-    fs: shim("fs.ts"),
-    "fs/promises": shim("fs-promises.ts"),
-    url: shim("url.ts"),
-    os: shim("os.ts"),
-    child_process: shim("unavailable.ts"),
-    module: shim("unavailable.ts"),
-    vm: shim("unavailable.ts"),
-    sqlite: shim("unavailable.ts"),
-    worker_threads: shim("unavailable.ts"),
-    perf_hooks: shim("unavailable.ts"),
-    tty: shim("unavailable.ts"),
-    net: shim("unavailable.ts"),
-    console: shim("console.ts"),
-    process: shim("process-module.ts"),
-    path: shim("path.ts"),
-  }
-  return {
-    name: "node-shims",
-    setup(build) {
-      build.onResolve({ filter: /^(node:)?(fs|fs\/promises|url|os|child_process|module|vm|sqlite|worker_threads|perf_hooks|tty|net|console|process|path)$/ }, (args) => {
-        // A shim may wrap the bundler's own polyfill of the module it replaces.
-        if (args.importer.startsWith(path.join(HERE, "src/node") + path.sep)) return undefined
-        return { path: map[args.path.replace(/^node:/, "")]! }
-      })
-    },
-  }
+const minify = args.includes("--minify")
+const define = {
+  ...(target === "browser" ? { global: "globalThis" } : {}),
+  OPENCODE_VERSION: JSON.stringify(version),
+  OPENCODE_CHANNEL: JSON.stringify("wasm-term"),
 }
 
-const result = await Bun.build({
-  entrypoints: [path.join(HERE, target === "bun" ? "host/bun-main.ts" : "host/worker-app.ts")],
-  outdir: path.join(HERE, "dist"),
-  naming: `opencode-tui.${target}.js`,
-  target,
-  format: "esm",
-  sourcemap: "linked",
-  conditions: ["node"],
-  define: {
-    ...(target === "browser" ? { global: "globalThis" } : {}),
-    OPENCODE_VERSION: JSON.stringify(version),
-    OPENCODE_CHANNEL: JSON.stringify("wasm-term"),
-  },
-  plugins: [...(target === "browser" ? [nodeShims()] : []), conditionalStubs(), singleInstances(), opentuiWasmPlugin(), createSolidTransformPlugin()],
-})
-for (const log of result.logs) console.error(String(log))
-if (!result.success) process.exit(1)
-for (const output of result.outputs) console.log(path.relative(HERE, output.path), output.size)
+async function bundle(entry: string, outdir: string, name: string, plugins: BunPlugin[], options: { minify?: boolean; sourcemap?: "linked" | "none" } = {}) {
+  const result = await Bun.build({
+    entrypoints: [path.join(HERE, entry)],
+    outdir,
+    naming: name,
+    target,
+    format: "esm",
+    sourcemap: options.sourcemap ?? "linked",
+    minify: options.minify ?? false,
+    conditions: ["node"],
+    define,
+    plugins,
+  })
+  for (const log of result.logs) console.error(String(log))
+  if (!result.success) process.exit(1)
+  for (const output of result.outputs) console.log(path.relative(HERE, output.path), output.size)
+}
+
+if (target === "bun") {
+  await bundle("host/bun-main.ts", path.join(HERE, "dist"), "opencode-tui.bun.js", [conditionalStubs(), singleInstances(), opentuiWasmPlugin(), createSolidTransformPlugin()])
+} else {
+  const site = path.join(HERE, "dist/site")
+  mkdirSync(site, { recursive: true })
+  await bundle("host/worker-app.ts", site, "tui.js", [nodeShimsPlugin(), conditionalStubs(), singleInstances(), opentuiWasmPlugin(), createSolidTransformPlugin()], { minify })
+  await bundle("host/guest.ts", site, "guest.js", [nodeShimsPlugin()], { sourcemap: "none" })
+  await bundle("src/tree-sitter-worker.ts", site, "parser.worker.js", [nodeShimsPlugin(), opentuiWasmPlugin()], { sourcemap: "none", minify })
+  const core = path.join(OPENTUI_ROOT, "packages/core")
+  cpSync(path.join(HERE, "dist/opentui.wasm"), path.join(site, "opentui.wasm"))
+  cpSync(Bun.resolveSync("web-tree-sitter/tree-sitter.wasm", core), path.join(site, "tree-sitter.wasm"))
+  cpSync(path.join(core, "src/lib/tree-sitter/assets"), path.join(site, "assets"), {
+    recursive: true,
+    filter: (source) => !/\.(ts|md)$/.test(source),
+  })
+}

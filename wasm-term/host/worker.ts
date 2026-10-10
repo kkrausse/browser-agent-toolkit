@@ -4,6 +4,7 @@
 import { loadKernel } from "./kernel";
 import { createMachine, ProcessExit } from "./machine";
 import type { InitMessage, WorkerMessage } from "./protocol";
+import { createPersister } from "./persist";
 import { createRingReader } from "./ring";
 import { createVfs } from "./vfs";
 import { createWasi } from "./wasi";
@@ -53,7 +54,9 @@ async function run(init: InitMessage): Promise<void> {
   }
   if (init.env.HOME) vfs.mkdirp(init.env.HOME);
 
-  const wasi = createWasi({ args: init.args, env: init.env, machine, vfs });
+  const persister = init.persist ? createPersister(vfs, init.persist, post) : null;
+
+  const wasi = createWasi({ args: init.args, env: init.env, machine, vfs, onFsChange: persister?.sync });
   if (init.env.WASM_TERM_TRACE) traceImports(wasi.imports);
   const instance = await WebAssembly.instantiate(guestModule, wasi.imports);
   const exports = instance.exports as { memory: WebAssembly.Memory; _start(): void };
@@ -75,6 +78,7 @@ async function run(init: InitMessage): Promise<void> {
       console.error(thrown);
     }
   }
+  persister?.sync();
   try {
     machine.flushOutput();
   } catch {
