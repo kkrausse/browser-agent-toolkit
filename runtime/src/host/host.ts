@@ -675,6 +675,8 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
         for (const p of running) p.kill('SIGKILL')
         await Promise.race([Promise.all(running.map((p) => p.exited)), new Promise((r) => setTimeout(r, 2000))])
         await kernel.flush().catch(() => {})
+        // The next open reads a snapshot instead of replaying this session's journal.
+        await Promise.race([booted.kerneld('compact').catch(() => {}), new Promise((r) => setTimeout(r, 2000))])
         toWorker({ t: 'bat-closed' })
         navigator.serviceWorker?.removeEventListener('message', onWorkerMessage)
         reactor.stop()

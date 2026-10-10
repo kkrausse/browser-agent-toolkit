@@ -492,6 +492,11 @@ const ops: Record<string, (a: any) => unknown> = {
   },
   removeImage: (a: { name: string }) => removeImage(cfg.namespace, a.name),
   snapshot: () => snapshot(),
+  /** At close: leave a snapshot and an empty journal for the next open when the journal is worth folding. */
+  compact: () => {
+    drainJournal()
+    return journal && journalSize > SNAPSHOT_IDLE_AT ? snapshot() : undefined
+  },
   flush: () => drainJournal(),
   spareReady: async () => {
     ensureSpare()
