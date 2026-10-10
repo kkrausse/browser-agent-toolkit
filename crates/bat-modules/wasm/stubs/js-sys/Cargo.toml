@@ -1,0 +1,10 @@
+[package]
+name = "js-sys"
+version = "0.3.106"
+edition = "2021"
+description = "Stub: the handful of js_sys::Date items oxc-browserslist names, without wasm-bindgen."
+
+[features]
+default = ["std"]
+std = []
+unsafe-eval = []

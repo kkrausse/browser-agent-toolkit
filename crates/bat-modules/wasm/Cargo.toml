@@ -1,0 +1,29 @@
+# The WebAssembly build of bat-modules. Its own workspace (own lock file, own
+# profile, own [patch]) so that none of this leaks into the native build.
+[package]
+name = "bat-modules-wasm"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+bat-modules = { path = ".." }
+
+# oxc_transformer -> oxc_compat -> oxc-browserslist depends on js-sys on every
+# wasm32 target, for a clock nothing here calls. The real js-sys exports
+# hundreds of wasm-bindgen descriptor functions from a cdylib and adds imports
+# that only wasm-bindgen's post-processor can satisfy. Replace it with a stub.
+[patch.crates-io]
+js-sys = { path = "stubs/js-sys" }
+
+[profile.release]
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+debug = 0
+strip = true

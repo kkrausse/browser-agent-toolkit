@@ -20,8 +20,6 @@ mod esm;
 pub mod facts;
 mod lower;
 mod map;
-#[cfg(target_arch = "wasm32")]
-mod wasm;
 
 use std::borrow::Cow;
 use std::cell::RefCell;
