@@ -15,6 +15,8 @@ pub enum Part {
     CmdSub(Rc<Cmd>),
     /// `$((…))`: the text, itself expanded before evaluation.
     Arith(Word),
+    /// `<(…)` (false) or `>(…)` (true): the name of a file standing for the command's output or input.
+    ProcSub(Rc<Cmd>, bool),
 }
 
 pub type Word = Vec<Part>;
@@ -23,6 +25,10 @@ pub type Word = Vec<Part>;
 pub struct Param {
     pub name: String,
     pub op: ParamOp,
+    /// `${name[…]}`: the subscript (`@`, `*`, an expression or a key).
+    pub index: Option<Word>,
+    /// `${!name}` (the variable it names) and `${!name[@]}` (the keys).
+    pub bang: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -71,6 +77,10 @@ pub struct Assign {
     pub name: String,
     pub append: bool,
     pub value: Word,
+    /// `name[…]=value`
+    pub index: Option<Word>,
+    /// `name=(…)`
+    pub array: Option<Vec<Word>>,
 }
 
 #[derive(Clone, Debug)]

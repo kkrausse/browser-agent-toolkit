@@ -500,3 +500,29 @@ awk	longer programs	awk -F, '¶NR == 1 { for (i = 1; i <= NF; i++) col[$i] = i; 
 awk	regex escapes and classes	awk 'BEGIN { print "foo(bar)" ~ /\(bar\)/, "a|b" ~ /a\|b/, "a+b" ~ /a\+b/, "[x]" ~ /\[x\]/, "$5" ~ /^\$5$/, "aaa" ~ /^a{3}$/, "{}" ~ /{}/, "the cat" ~ /\<cat\>/, "concat" ~ /\ycat\y/, "a b" ~ /a\sb/, "a_1" ~ /^\w+$/, "a]" ~ /[]a]+$/, "x_y" ~ /^[[:alnum:]_]+$/ }'
 awk	field separators	for s in ':' '\t' ', *' '[' '(' '?' '"' '  ' 'ab+' '\\s+' '\\|' '\\'; do printf 'a:b\tc, d[e(f?g"h  i abbb j|k\\l\n' | awk -F"$s" '{ print NF, $2 }'; done
 awk	errors are loud	awk 'BEGIN { x[1][2] = 3 }'; echo $?; awk 'BEGIN { "date" | getline d; print d }'; echo $?; awk 'BEGIN { print undefined_fn(1) }'; echo $?; awk 'BEGIN { printf "%d %s\n" }'; echo $?; awk 'BEGIN { x[1] = 1; x = 2 }'; echo $?; awk 'BEGIN { next }'; echo $?; awk; echo $?
+bash	array literal and index	a=(x y z); echo ${a[0]} ${a[1]} "${a[2]}" $a ${a[-1]}
+bash	array all and count	a=(x "y z" w); echo ${#a[@]} ${#a[*]} ${#a[1]}; printf '<%s>' "${a[@]}"; echo; printf '<%s>' ${a[@]}; echo; printf '<%s>' "${a[*]}"; echo
+bash	array append	a=(1 2); a+=(3 "4 5"); a+=(6); echo "${#a[@]}: ${a[@]}"; b=(); b+=(x); echo ${#b[@]} ${b[0]}
+bash	array for loop	a=(one "two three" four); for x in "${a[@]}"; do echo "[$x]"; done; for i in "${!a[@]}"; do echo "$i=${a[$i]}"; done
+bash	array element assign	a=(); a[0]=zero; a[2]=two; i=5; a[i]=five; a[$((i+1))]=six; echo "${a[@]}" "${!a[@]}" ${#a[@]}; a[0]+=more; echo ${a[0]}
+bash	array slices and ops	a=(a.txt b.txt c.md d); echo "${a[@]:1:2}" "${a[@]:2}"; echo "${a[@]%.txt}" "${a[@]/b/B}" "${a[@]^^}"; echo "${a[@]: -1}"
+bash	array from command and glob	files=(src/*.rs *.md); echo ${#files[@]} "${files[@]}"; words=($(echo one two three)); echo ${#words[@]} ${words[2]}; lines=($(seq 3)); echo "${lines[@]}"
+bash	array empty and unset	e=(); echo "${#e[@]}"; for x in "${e[@]}"; do echo never; done; printf '[%s]\n' "${e[@]}" | wc -l; a=(1 2 3); unset 'a[1]'; echo "${a[@]}" ${#a[@]}; unset a; echo "${#a[@]}"
+bash	array in conditions and arithmetic	a=(5 10 15); if [ ${#a[@]} -gt 2 ]; then echo many; fi; [[ ${a[1]} -eq 10 ]] && echo ten; echo $(( a[0] + a[2] )) $(( ${a[1]} * 2 )); (( a[0]++ )); (( a[1] = 7 )); echo "${a[@]}"; for ((i=0; i<${#a[@]}; i++)); do printf '%s,' "${a[i]}"; done; echo
+bash	array join with IFS	a=(x y z); IFS=,; echo "${a[*]}"; unset IFS; (IFS=:; echo "${a[*]}"); echo "${a[*]}"
+bash	array copy and concat	a=(1 2); b=("${a[@]}" 3); c=("${b[@]}"); c+=("${a[@]}"); echo "${c[@]}" ${#c[@]}
+bash	array in function and local	f() { local arr=(a b c); local -a other; other+=(z); echo "${#arr[@]} ${arr[1]} ${other[0]}"; }; arr=(outer); f; echo "${arr[@]}"; g() { local n=$#; local args=("$@"); echo "$n ${args[1]}"; }; g p "q r" s
+bash	declare -a and declare array	declare -a list=(a b); list+=(c); echo "${list[@]}"; declare -a e; echo ${#e[@]}; readonly -a ro=(1 2) 2>/dev/null; echo ${ro[1]}
+bash	assoc arrays	declare -A m; m[k]=v; m["two words"]=x; key=dyn; m[$key]=1; echo ${m[k]} "${m[two words]}" ${m[dyn]} ${#m[@]}; for k in "${!m[@]}"; do echo "$k=${m[$k]}"; done | sort; [[ -n ${m[k]} ]] && echo has; unset 'm[k]'; echo ${#m[@]}
+bash	assoc array literal	declare -A color=([red]=1 [green]=2 ["dark blue"]=3); echo ${color[green]} "${color[dark blue]}" ${#color[@]}; color[red]+=0; echo ${color[red]}; for k in "${!color[@]}"; do echo "$k"; done | sort | head -1
+bash	read -a and mapfile	IFS=, read -ra parts <<< "a,b c,d"; echo ${#parts[@]} "${parts[1]}"; read -ra w <<< "one two  three"; echo ${#w[@]} ${w[2]}; mapfile -t lines < a.txt; echo ${#lines[@]} "${lines[1]}"; readarray -t l2 < <(grep -v 2 a.txt); echo "${l2[@]}"
+bash	BASH_REMATCH and PIPESTATUS	[[ main.rs =~ ^(.*)\.(rs)$ ]] && echo ${BASH_REMATCH[1]} ${BASH_REMATCH[2]} ${BASH_REMATCH[0]}; false | true | (exit 3); echo "${PIPESTATUS[@]}"; true; echo ${PIPESTATUS[0]}; cat a.txt | grep -c line; echo ${PIPESTATUS[0]} 
+bash	indirect expansion	name=target; target=value; echo ${!name}; a=(x y); ref='a[1]'; echo "${!a[@]}"
+bash	array quoting edge	a=("" "x" ""); echo ${#a[@]}; printf '<%s>' "${a[@]}"; echo; set -- "${a[@]}"; echo $#; b=("a b" c); set -- ${b[@]}; echo $#; echo "pre${b[@]}post"
+bash	array sort idiom	a=(pear apple fig); sorted=($(printf '%s\n' "${a[@]}" | sort)); echo "${sorted[@]}"; IFS=$'\n' s2=($(sort <<< "${a[*]}")); unset IFS; echo "${s2[0]}"
+bash	process substitution input	diff <(echo a) <(echo a) && echo same; cat <(echo one) <(echo two); wc -l < <(seq 5); comm -12 <(sort a.txt) <(sort b.txt)
+bash	process substitution in loop	while read -r l; do echo "[$l]"; done < <(head -2 a.txt); n=0; while read -r x; do n=$((n+1)); done < <(seq 4); echo $n; diff <(sort list.txt) <(sort -u list.txt)
+bash	process substitution output	echo hi | tee >(tr a-z A-Z > up.txt) > /dev/null; sleep 0.1; cat up.txt; paste <(seq 2) <(seq 3 4)
+bash	nounset with arrays	set -u; a=(1); echo "${a[@]}" "${#a[@]}"; e=(); echo "n=${#e[@]}"; echo "${e[@]:-default}"
+util	find -regex	find . -regex '.*/main\.rs'; find src -regex '.*\.\(rs\|py\)' | LC_ALL=C sort; find . -iregex '.*README.*'; find src -regextype posix-extended -regex '.*/(main|helper)\.rs' | LC_ALL=C sort; find . -regex 'main.rs'; echo $?
+util	find -printf	find src -maxdepth 1 -name '*.rs' -printf '%f\n'; find src -name '*.rs' -printf '%p %s %y\n' | LC_ALL=C sort; find docs -type f -printf '%h/%f|'; echo; find src -maxdepth 0 -printf '[%p]\t%%\n'

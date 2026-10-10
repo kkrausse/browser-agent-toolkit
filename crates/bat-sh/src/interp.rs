@@ -56,6 +56,31 @@ pub struct Var {
     pub readonly: bool,
 }
 
+/// A bash array: indexed (sparse) or associative (in the order the keys were set).
+#[derive(Clone)]
+pub enum Arr {
+    Indexed(std::collections::BTreeMap<i64, String>),
+    Assoc(Vec<(String, String)>),
+}
+
+impl Arr {
+    pub fn values(&self) -> Vec<String> {
+        match self {
+            Arr::Indexed(m) => m.values().cloned().collect(),
+            Arr::Assoc(v) => v.iter().map(|e| e.1.clone()).collect(),
+        }
+    }
+    pub fn keys(&self) -> Vec<String> {
+        match self {
+            Arr::Indexed(m) => m.keys().map(|k| k.to_string()).collect(),
+            Arr::Assoc(v) => v.iter().map(|e| e.0.clone()).collect(),
+        }
+    }
+    pub fn from_list(items: Vec<String>) -> Arr {
+        Arr::Indexed(items.into_iter().enumerate().map(|(i, v)| (i as i64, v)).collect())
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct Opts {
     pub errexit: bool,
@@ -81,6 +106,11 @@ pub struct Sh {
     pub func_depth: u32,
     pub locals: Vec<Vec<(String, Option<Var>)>>,
     pub last_bg: u32,
+    pub arrays: HashMap<String, Arr>,
+    /// Arrays shadowed by `local` in the running functions.
+    pub local_arrays: Vec<Vec<(String, Option<Arr>)>>,
+    /// Exit statuses of the stages of the last pipeline (`PIPESTATUS`).
+    pub pipestatus: Vec<i32>,
 }
 
 pub enum Flow {
@@ -128,6 +158,8 @@ pub struct Interp {
     /// `timeout`: when the command it runs has to stop (host clock, ms), and whether that happened.
     pub deadline: Option<f64>,
     pub timed_out: bool,
+    /// Files standing for `<(…)` and `>(…)` of the command being run: (path, command to feed it to afterwards).
+    pub procsubs: Vec<(String, Option<Rc<Cmd>>)>,
 }
 
 pub fn normalize(path: &str) -> String {
@@ -198,6 +230,9 @@ impl Interp {
                 func_depth: 0,
                 locals: Vec::new(),
                 last_bg: 0,
+                arrays: HashMap::new(),
+                local_arrays: Vec::new(),
+                pipestatus: Vec::new(),
             },
             jobs: Vec::new(),
             tmp_seq: 0,
@@ -209,6 +244,7 @@ impl Interp {
             exit_trap: None,
             deadline: None,
             timed_out: false,
+            procsubs: Vec::new(),
         }
     }
 
@@ -366,7 +402,157 @@ impl Interp {
         }
     }
 
-    fn tmp(&mut self) -> String {
+    /// After a command: run the `>(…)` commands on what was written for them and remove the files.
+    pub fn end_procsubs(&mut self, mark: usize) {
+        while self.procsubs.len() > mark {
+            let Some((path, cmd)) = self.procsubs.pop() else { break };
+            if let Some(c) = cmd {
+                let data = sys::read_file(&path).unwrap_or_default();
+                self.subshell(|sh| {
+                    sh.set_fd(0, Io::input(data));
+                    sh.exec(&c)
+                });
+            }
+            let _ = sys::unlink(&path);
+        }
+    }
+
+    // ---- arrays ----
+
+    /// The elements of an array (or of the scalar of that name, as its only element).
+    pub fn array_items(&self, name: &str, keys: bool) -> Vec<String> {
+        if name == "PIPESTATUS" {
+            return if keys { (0..self.s.pipestatus.len()).map(|i| i.to_string()).collect() } else { self.s.pipestatus.iter().map(|s| s.to_string()).collect() };
+        }
+        match self.s.arrays.get(name) {
+            Some(a) if keys => a.keys(),
+            Some(a) => a.values(),
+            None => match self.get(name) {
+                Some(v) if keys => vec![if v.is_empty() { String::new() } else { "0".into() }].into_iter().filter(|k| !k.is_empty()).collect(),
+                Some(v) => vec![v.to_string()],
+                None => Vec::new(),
+            },
+        }
+    }
+
+    /// The key a subscript stands for: text for an associative array, a number otherwise (negative counts from the end).
+    fn array_key(&mut self, name: &str, index: &Word) -> Result<Result<String, i64>, Flow> {
+        if matches!(self.s.arrays.get(name), Some(Arr::Assoc(_))) {
+            let k = self.expand_one(index)?;
+            // Quotes inside a subscript are not removed by the parser.
+            let k = match k.as_bytes() {
+                [b'"', .., b'"'] | [b'\'', .., b'\''] if k.len() >= 2 => k[1..k.len() - 1].to_string(),
+                _ => k,
+            };
+            return Ok(Ok(k));
+        }
+        let mut n = self.arith_word(index)?;
+        if n < 0 {
+            let len = match self.s.arrays.get(name) {
+                Some(Arr::Indexed(m)) => m.keys().next_back().map(|k| k + 1).unwrap_or(0),
+                _ if name == "PIPESTATUS" => self.s.pipestatus.len() as i64,
+                _ => 1,
+            };
+            n += len;
+        }
+        Ok(Err(n))
+    }
+
+    pub fn array_get(&mut self, name: &str, index: &Word) -> Result<Option<String>, Flow> {
+        Ok(match self.array_key(name, index)? {
+            Ok(key) => match self.s.arrays.get(name) {
+                Some(Arr::Assoc(v)) => v.iter().find(|e| e.0 == key).map(|e| e.1.clone()),
+                _ => None,
+            },
+            Err(n) if name == "PIPESTATUS" => self.s.pipestatus.get(n as usize).map(|s| s.to_string()),
+            Err(n) => match self.s.arrays.get(name) {
+                Some(Arr::Indexed(m)) => m.get(&n).cloned(),
+                _ if n == 0 => self.get(name).map(str::to_string),
+                _ => None,
+            },
+        })
+    }
+
+    pub fn array_set(&mut self, name: &str, index: &Word, val: String, append: bool) -> Result<(), Flow> {
+        let key = self.array_key(name, index)?;
+        if !self.s.arrays.contains_key(name) {
+            // A scalar becomes element 0 of the new array.
+            let first = self.s.vars.remove(name).map(|v| v.val);
+            self.s.arrays.insert(name.to_string(), Arr::Indexed(first.into_iter().map(|v| (0, v)).collect()));
+        }
+        match (self.s.arrays.get_mut(name), key) {
+            (Some(Arr::Assoc(v)), Ok(k)) => match v.iter_mut().find(|e| e.0 == k) {
+                Some(e) if append => e.1.push_str(&val),
+                Some(e) => e.1 = val,
+                None => v.push((k, val)),
+            },
+            (Some(Arr::Indexed(m)), Err(n)) if n >= 0 => {
+                let slot = m.entry(n).or_default();
+                if append {
+                    slot.push_str(&val);
+                } else {
+                    *slot = val;
+                }
+            }
+            _ => self.err(&format!("sh: {name}: bad array subscript")),
+        }
+        Ok(())
+    }
+
+    /// `name=(…)`, `name+=(…)`, `name[i]=v`.
+    fn assign_array(&mut self, a: &Assign) -> Result<(), Flow> {
+        if let Some(index) = &a.index {
+            let v = self.expand_one(&a.value)?;
+            return self.array_set(&a.name, index, v, a.append);
+        }
+        let Some(words) = &a.array else { return Ok(()) };
+        let assoc = matches!(self.s.arrays.get(&a.name), Some(Arr::Assoc(_)));
+        let mut next: i64 = 0;
+        let mut arr = match self.s.arrays.remove(&a.name) {
+            Some(old) if a.append => old,
+            _ if assoc => Arr::Assoc(Vec::new()),
+            _ if a.append => Arr::Indexed(self.s.vars.get(&a.name).map(|v| (0, v.val.clone())).into_iter().collect()),
+            _ => Arr::Indexed(Default::default()),
+        };
+        if let Arr::Indexed(m) = &arr {
+            next = m.keys().next_back().map(|k| k + 1).unwrap_or(0);
+        }
+        self.s.vars.remove(&a.name);
+        for w in words {
+            // `[key]=value` sets that key; anything else is expanded like command words.
+            let keyed = matches!(w.first(), Some(Part::Lit(s)) if s.starts_with('[')) && as_keyed(w);
+            if keyed {
+                let text = self.expand_one(w)?;
+                if let Some((k, v)) = text[1..].split_once("]=") {
+                    match &mut arr {
+                        Arr::Assoc(list) => match list.iter_mut().find(|e| e.0 == k) {
+                            Some(e) => e.1 = v.to_string(),
+                            None => list.push((k.to_string(), v.to_string())),
+                        },
+                        Arr::Indexed(m) => {
+                            let n = self.arith(k)?;
+                            m.insert(n, v.to_string());
+                            next = n + 1;
+                        }
+                    }
+                    continue;
+                }
+            }
+            for item in self.expand_words(std::slice::from_ref(w))? {
+                match &mut arr {
+                    Arr::Indexed(m) => {
+                        m.insert(next, item);
+                        next += 1;
+                    }
+                    Arr::Assoc(list) => list.push((item, String::new())),
+                }
+            }
+        }
+        self.s.arrays.insert(a.name.clone(), arr);
+        Ok(())
+    }
+
+    pub fn tmp(&mut self) -> String {
         self.tmp_seq += 1;
         let dir = self.get("TMPDIR").filter(|d| d.starts_with('/')).unwrap_or("/tmp").to_string();
         format!("{}/.sh-{}-{}-{}", dir.trim_end_matches('/'), sys::getpid(), (self.start_ms as u64) % 1_000_000, self.tmp_seq)
@@ -401,6 +587,10 @@ impl Interp {
         self.check_deadline()?;
         let st = self.exec_inner(c)?;
         self.s.status = st;
+        if let Cmd::Simple { .. } = c {
+            self.s.pipestatus.clear();
+            self.s.pipestatus.push(st);
+        }
         if st != 0 && self.s.opts.errexit && self.s.cond_depth == 0 {
             if matches!(c, Cmd::Simple { .. } | Cmd::Pipeline { negate: false, .. } | Cmd::Subshell(..) | Cmd::Cond(_) | Cmd::Arith(_)) {
                 return Err(Flow::Exit(st));
@@ -420,9 +610,11 @@ impl Interp {
         if redirs.is_empty() {
             return f(self);
         }
+        let mark = self.procsubs.len();
         let Some(saved) = self.apply_redirs(redirs)? else { return Ok(1) };
         let r = f(self);
         self.restore_fds(saved);
+        self.end_procsubs(mark);
         r
     }
 
@@ -456,11 +648,10 @@ impl Interp {
             }
             Cmd::Pipeline { negate, cmds } => {
                 let st = if cmds.len() == 1 {
-                    if *negate {
-                        self.cond(&cmds[0])?
-                    } else {
-                        self.exec(&cmds[0])?
-                    }
+                    let st = if *negate { self.cond(&cmds[0])? } else { self.exec(&cmds[0])? };
+                    self.s.pipestatus.clear();
+                    self.s.pipestatus.push(st);
+                    st
                 } else {
                     self.pipeline(cmds)
                 };
@@ -569,6 +760,7 @@ impl Interp {
     pub fn call_func(&mut self, body: Rc<Cmd>, args: &[String]) -> X {
         let saved = std::mem::replace(&mut self.s.params, args.to_vec());
         self.s.locals.push(Vec::new());
+        self.s.local_arrays.push(Vec::new());
         self.s.func_depth += 1;
         let saved_loop = std::mem::replace(&mut self.s.loop_depth, 0);
         let r = self.exec(&body);
@@ -581,6 +773,16 @@ impl Interp {
                 }
                 None => {
                     self.s.vars.remove(&name);
+                }
+            }
+        }
+        for (name, old) in self.s.local_arrays.pop().unwrap_or_default().into_iter().rev() {
+            match old {
+                Some(a) => {
+                    self.s.arrays.insert(name, a);
+                }
+                None => {
+                    self.s.arrays.remove(&name);
                 }
             }
         }
@@ -645,6 +847,7 @@ impl Interp {
         for (n, ch) in children {
             statuses[n] = self.reap(ch);
         }
+        self.s.pipestatus = statuses.clone();
         if self.s.opts.pipefail {
             statuses.iter().rev().copied().find(|s| *s != 0).unwrap_or(0)
         } else {
@@ -653,10 +856,35 @@ impl Interp {
     }
 
     pub fn exec_simple(&mut self, assigns: &[Assign], words: &[Word], redirs: &[Redir], may_spawn: bool) -> Result<Done, Flow> {
+        let mark = self.procsubs.len();
+        let r = self.exec_simple_inner(assigns, words, redirs, may_spawn);
+        if self.procsubs.len() > mark {
+            // The files of `<(…)` are read by the command, so a child has to end first.
+            let r = match r {
+                Ok(Done::Spawned(ch)) => Ok(Done::Status(self.reap(ch))),
+                other => other,
+            };
+            self.end_procsubs(mark);
+            return r;
+        }
+        r
+    }
+
+    fn exec_simple_inner(&mut self, assigns: &[Assign], words: &[Word], redirs: &[Redir], may_spawn: bool) -> Result<Done, Flow> {
         self.cmdsub_status = 0;
         let argv = self.expand_words(words)?;
         if argv.is_empty() {
             for a in assigns {
+                if a.index.is_some() || a.array.is_some() {
+                    self.assign_array(a)?;
+                    continue;
+                }
+                if self.s.arrays.contains_key(&a.name) {
+                    // Assigning to an array by its name alone is element 0.
+                    let v = self.expand_one(&a.value)?;
+                    self.array_set(&a.name, &vec![Part::Lit("0".into())], v, a.append)?;
+                    continue;
+                }
                 let mut v = self.expand_one(&a.value)?;
                 if a.append {
                     v = format!("{}{}", self.var(&a.name), v);
@@ -676,6 +904,10 @@ impl Interp {
         }
         let mut values = Vec::with_capacity(assigns.len());
         for a in assigns {
+            if a.index.is_some() || a.array.is_some() {
+                // An array in front of a command is simply assigned.
+                self.assign_array(a)?;
+            }
             let mut v = self.expand_one(&a.value)?;
             if a.append {
                 v = format!("{}{}", self.var(&a.name), v);
@@ -696,6 +928,9 @@ impl Interp {
         };
         let mut saved_vars = Vec::with_capacity(assigns.len());
         for (a, v) in assigns.iter().zip(values) {
+            if a.index.is_some() || a.array.is_some() {
+                continue;
+            }
             saved_vars.push((a.name.clone(), self.s.vars.insert(a.name.clone(), Var { val: v, exported: true, readonly: false })));
         }
         let r = self.run_argv(&argv, may_spawn);
@@ -1067,4 +1302,9 @@ impl Interp {
         }
         Ok(Some(saved))
     }
+}
+
+/// Is this array element word of the form `[key]=value`?
+fn as_keyed(w: &Word) -> bool {
+    w.iter().any(|p| matches!(p, Part::Lit(s) if s.contains("]=")))
 }

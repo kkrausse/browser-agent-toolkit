@@ -265,8 +265,39 @@ impl Interp {
                     fb.lit(s)
                 }
                 Part::Quoted(s) => fb.quoted(s),
+                Part::ProcSub(c, out) => {
+                    let path = self.tmp();
+                    let data = if *out {
+                        Vec::new()
+                    } else {
+                        // The command runs now; the word is the name of a file with what it printed.
+                        let cap: crate::interp::Capture = Default::default();
+                        let capc = cap.clone();
+                        self.subshell(|sh| {
+                            sh.set_fd(1, Io::Cap(capc));
+                            sh.exec(c)
+                        });
+                        self.reap_jobs(true);
+                        let d = std::mem::take(&mut *cap.borrow_mut());
+                        d
+                    };
+                    if let Err(e) = crate::sys::write_file(&path, &data, crate::sys::O_TRUNC, 0o600) {
+                        self.err(&format!("sh: process substitution: {path}: {}", crate::sys::strerror(e)));
+                    }
+                    self.procsubs.push((path.clone(), if *out { Some(c.clone()) } else { None }));
+                    fb.quoted(&path);
+                }
                 Part::Dq(inner) => {
-                    let only_at = inner.len() == 1 && self.s.params.is_empty() && matches!(&inner[0], Part::Param(p) if p.name == "@" && matches!(p.op, ParamOp::Plain));
+                    let empty_list = |sh: &Interp, p: &Param| -> bool {
+                        if !matches!(p.op, ParamOp::Plain) {
+                            return false;
+                        }
+                        match &p.index {
+                            None => p.name == "@" && sh.s.params.is_empty(),
+                            Some(i) => matches!(i.as_slice(), [Part::Quoted(s)] | [Part::Lit(s)] if s == "@") && sh.array_items(&p.name, false).is_empty(),
+                        }
+                    };
+                    let only_at = inner.len() == 1 && matches!(&inner[0], Part::Param(p) if empty_list(self, p));
                     if !only_at {
                         fb.touch();
                     }
@@ -342,8 +373,97 @@ impl Interp {
         }
     }
 
+    /// `${a[…]}`, `${!a[@]}`, `${!name}` and `$a` for an array `a`, in terms of the scalar code below.
+    fn exp_array_param(&mut self, p: &Param, in_dq: bool, fb: &mut Fb, split: bool) -> Result<(), Flow> {
+        const ELEM: &str = "_bat_sh_element";
+        let plain = |name: &str, op: ParamOp| Param { name: name.to_string(), op, index: None, bang: false };
+        let list_kind = match p.index.as_deref() {
+            Some([Part::Quoted(s)] | [Part::Lit(s)]) if s == "@" || s == "*" => Some(s.clone()),
+            _ => None,
+        };
+        let Some(kind) = list_kind else {
+            if p.bang && p.index.is_none() {
+                // `${!name}`: the variable whose name is the value of `name`.
+                let target = self.var(&p.name);
+                return self.exp_param(&plain(&target, p.op.clone()), in_dq, fb, split);
+            }
+            let zero = vec![Part::Lit("0".into())];
+            let val = self.array_get(&p.name, p.index.as_ref().unwrap_or(&zero))?;
+            // The element stands in a scratch variable while the operation is applied to it.
+            let saved = self.s.vars.remove(ELEM);
+            if let Some(v) = val {
+                self.s.vars.insert(ELEM.into(), crate::interp::Var { val: v, exported: false, readonly: false });
+            }
+            let r = self.exp_param(&plain(ELEM, p.op.clone()), in_dq, fb, split);
+            self.s.vars.remove(ELEM);
+            if let Some(v) = saved {
+                self.s.vars.insert(ELEM.into(), v);
+            }
+            return r;
+        };
+        let mut items = self.array_items(&p.name, p.bang);
+        match &p.op {
+            ParamOp::Plain => {}
+            ParamOp::Len => {
+                self.emit(&items.len().to_string(), in_dq, fb, split);
+                return Ok(());
+            }
+            ParamOp::Slice { off, len } => {
+                let n = items.len() as i64;
+                let mut o = self.arith_word(off)?;
+                if o < 0 {
+                    o = (n + o).max(0);
+                }
+                let o = o.min(n);
+                let end = match len {
+                    Some(l) => (o + self.arith_word(l)?.max(0)).min(n),
+                    None => n,
+                };
+                items = items[o as usize..end as usize].to_vec();
+            }
+            ParamOp::Default { kind, .. } if items.is_empty() || *kind == b'+' => {
+                // `${a[@]:-word}`, `${a[@]+word}`: the list as a whole is set or not.
+                let saved = self.s.vars.remove(ELEM);
+                if !items.is_empty() {
+                    self.s.vars.insert(ELEM.into(), crate::interp::Var { val: items.join(" "), exported: false, readonly: false });
+                }
+                let r = self.exp_param(&plain(ELEM, p.op.clone()), in_dq, fb, split);
+                self.s.vars.remove(ELEM);
+                if let Some(v) = saved {
+                    self.s.vars.insert(ELEM.into(), v);
+                }
+                return r;
+            }
+            ParamOp::Default { .. } => {}
+            op => {
+                // Any other operation applies to each element.
+                let saved = self.s.vars.remove(ELEM);
+                let mut mapped = Vec::with_capacity(items.len());
+                for item in items {
+                    self.s.vars.insert(ELEM.into(), crate::interp::Var { val: item, exported: false, readonly: false });
+                    let mut one = Fb::default();
+                    self.exp_param(&plain(ELEM, op.clone()), true, &mut one, false)?;
+                    mapped.push(one.finish().iter().map(|f| text(f)).collect::<Vec<_>>().join(" "));
+                }
+                self.s.vars.remove(ELEM);
+                if let Some(v) = saved {
+                    self.s.vars.insert(ELEM.into(), v);
+                }
+                items = mapped;
+            }
+        }
+        // The list expands the way "$@" and "$*" do.
+        let saved = std::mem::replace(&mut self.s.params, items);
+        let r = self.exp_param(&plain(&kind, ParamOp::Plain), in_dq, fb, split);
+        self.s.params = saved;
+        r
+    }
+
     fn exp_param(&mut self, p: &Param, in_dq: bool, fb: &mut Fb, split: bool) -> Result<(), Flow> {
         let name = p.name.as_str();
+        if p.index.is_some() || p.bang || name == "PIPESTATUS" || (!self.s.arrays.is_empty() && self.s.arrays.contains_key(name)) {
+            return self.exp_array_param(p, in_dq, fb, split);
+        }
         if (name == "@" || name == "*") && matches!(p.op, ParamOp::Plain) {
             let params = self.s.params.clone();
             if in_dq && name == "@" {
@@ -726,6 +846,32 @@ impl Ar<'_> {
             return Ok(v);
         }
         if let Some(name) = self.ident() {
+            if self.i < self.s.len() && self.s[self.i] == b'[' {
+                // `a[i]`: an array element (read, `=`, `++`, `--`).
+                let start = self.i + 1;
+                let end = start + self.s[start..].iter().position(|c| *c == b']').ok_or("missing `]'")?;
+                let index = vec![Part::Lit(String::from_utf8_lossy(&self.s[start..end]).into_owned())];
+                self.i = end + 1;
+                let cur = self.sh.array_get(&name, &index).ok().flatten().unwrap_or_default();
+                let v = parse_int(cur.trim()).unwrap_or(0);
+                self.ws();
+                let new = if self.peek_is("++") || self.peek_is("--") {
+                    let inc = self.s[self.i] == b'+';
+                    self.i += 2;
+                    Some(v + if inc { 1 } else { -1 })
+                } else if self.i < self.s.len() && self.s[self.i] == b'=' && self.s.get(self.i + 1) != Some(&b'=') {
+                    self.i += 1;
+                    let rhs = self.ternary()?;
+                    let _ = self.sh.array_set(&name, &index, rhs.to_string(), false);
+                    return Ok(rhs);
+                } else {
+                    None
+                };
+                if let Some(n) = new {
+                    let _ = self.sh.array_set(&name, &index, n.to_string(), false);
+                }
+                return Ok(v);
+            }
             let v = self.value_of(&name)?;
             if self.peek_is("++") || self.peek_is("--") {
                 let inc = self.s[self.i] == b'+';

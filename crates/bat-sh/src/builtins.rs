@@ -1,5 +1,5 @@
 //! Command dispatch and the builtins that are part of the shell itself.
-use crate::interp::{basename, Done, Flow, Interp, Var, X};
+use crate::interp::{basename, Arr, Done, Flow, Interp, Var, X};
 use crate::parser::valid_name;
 use crate::sys;
 
@@ -78,13 +78,13 @@ pub const BUILTINS: &[&str] = &[
     "printf", "pwd", "read", "readlink", "readonly", "realpath", "return", "rm", "rmdir", "sed", "seq", "set", "shift", "sleep", "sort", "source", "tail",
     "tee", "test", "touch", "tr", "trap", "true", "type", "umask", "uname", "uniq", "unset", "wait", "wc", "which", "whoami", "xargs", "npm", "npx", "bunx",
     "yarn", "pnpm", "bun", "unalias", "declare", "typeset", "let", "nproc", "stat", "rev", "tac", "yes", "clear", "sync", "rg", "nl", "base64", "sha256sum", "sha1sum", "md5sum", "shasum", "tree", "cmp", "paste", "comm", "expr", "fold", "column", "od", "xxd",
-    "hexdump", "diff", "timeout", "awk", "gawk",
+    "hexdump", "diff", "timeout", "awk", "gawk", "mapfile", "readarray",
 ];
 
 /// Shell builtins proper: these are not found as programs by `which`.
 const SHELL_ONLY: &[&str] = &[
     ":", ".", "alias", "break", "cd", "command", "continue", "eval", "exec", "exit", "export", "getopts", "local", "read", "readonly", "return", "set", "shift",
-    "source", "trap", "type", "umask", "unset", "wait", "unalias", "declare", "typeset", "let",
+    "source", "trap", "type", "umask", "unset", "wait", "unalias", "declare", "typeset", "let", "mapfile", "readarray",
 ];
 
 pub fn is_builtin(name: &str) -> bool {
@@ -134,8 +134,23 @@ pub fn run(sh: &mut Interp, argv: &[String]) -> Option<X> {
             for name in a[1..].iter().filter(|n| !n.starts_with('-')) {
                 if a.get(1).map(String::as_str) == Some("-f") {
                     sh.s.funcs.remove(name);
+                } else if let Some((arr, key)) = name.strip_suffix(']').and_then(|n| n.split_once('[')) {
+                    // `unset 'a[key]'`
+                    let key = key.trim_matches(['"', '\'']);
+                    match sh.s.arrays.get_mut(arr) {
+                        Some(Arr::Assoc(v)) => v.retain(|e| e.0 != key),
+                        Some(Arr::Indexed(_)) => {
+                            if let Ok(n) = sh.arith(key) {
+                                if let Some(Arr::Indexed(m)) = sh.s.arrays.get_mut(arr) {
+                                    m.remove(&n);
+                                }
+                            }
+                        }
+                        None => {}
+                    }
                 } else {
                     sh.s.vars.remove(name);
+                    sh.s.arrays.remove(name);
                 }
             }
             Ok(0)
@@ -178,6 +193,19 @@ pub fn run(sh: &mut Interp, argv: &[String]) -> Option<X> {
         "command" => command(sh, a),
         "type" | "which" => which(sh, a),
         "read" => read(sh, a),
+        "mapfile" | "readarray" => {
+            // mapfile [-t] [-n count] [-s skip] [array]: lines of standard input into an array.
+            let args = Args::parse(a, "ndsOuCc");
+            let name = args.rest.first().cloned().unwrap_or_else(|| "MAPFILE".into());
+            let data = sh.read_stdin_all();
+            let text = String::from_utf8_lossy(&data);
+            let skip = args.val('s').and_then(|v| v.parse::<usize>().ok()).unwrap_or(0);
+            let count = args.val('n').and_then(|v| v.parse::<usize>().ok()).filter(|n| *n > 0).unwrap_or(usize::MAX);
+            let lines: Vec<String> = text.split_inclusive('\n').skip(skip).take(count).map(|l| if args.has('t') { l.trim_end_matches('\n').to_string() } else { l.to_string() }).collect();
+            sh.s.vars.remove(&name);
+            sh.s.arrays.insert(name, Arr::from_list(lines));
+            Ok(0)
+        }
         "wait" => Ok(sh.reap_jobs(false)),
         "let" => {
             let mut last = 0;
@@ -382,6 +410,8 @@ fn declare(sh: &mut Interp, a: &[String]) -> X {
     let local = which == "local" || ((which == "declare" || which == "typeset") && sh.s.func_depth > 0);
     let mut names = Vec::new();
     let mut unexport = false;
+    // 'a' indexed, 'A' associative
+    let mut array = None;
     for arg in &a[1..] {
         if arg.starts_with('-') && names.is_empty() {
             for c in arg[1..].chars() {
@@ -389,6 +419,7 @@ fn declare(sh: &mut Interp, a: &[String]) -> X {
                     'x' => export = true,
                     'r' => readonly = true,
                     'n' if which == "export" => unexport = true,
+                    'a' | 'A' => array = Some(c),
                     _ => {}
                 }
             }
@@ -414,6 +445,23 @@ fn declare(sh: &mut Interp, a: &[String]) -> X {
             sh.err(&format!("sh: {which}: `{n}': not a valid identifier"));
             st = 1;
             continue;
+        }
+        if local {
+            if let Some(scope) = sh.s.local_arrays.last_mut() {
+                if !scope.iter().any(|(k, _)| k == name) {
+                    let old = sh.s.arrays.remove(name);
+                    scope.push((name.to_string(), old));
+                }
+            }
+        }
+        if let Some(kind) = array {
+            let keep = matches!((sh.s.arrays.get(name), kind), (Some(Arr::Indexed(_)), 'a') | (Some(Arr::Assoc(_)), 'A'));
+            if !keep {
+                sh.s.arrays.insert(name.to_string(), if kind == 'A' { Arr::Assoc(Vec::new()) } else { Arr::Indexed(Default::default()) });
+            }
+            if value.is_none() {
+                continue;
+            }
         }
         if local {
             if let Some(scope) = sh.s.locals.last_mut() {
@@ -594,7 +642,7 @@ fn command(sh: &mut Interp, a: &[String]) -> X {
 }
 
 fn read(sh: &mut Interp, a: &[String]) -> X {
-    let args = Args::parse(a, "pdntu");
+    let args = Args::parse(a, "pdntua");
     let raw = args.has('r');
     let mut line = match sh.read_line() {
         Some(l) => String::from_utf8_lossy(&l).into_owned(),
@@ -615,8 +663,24 @@ fn read(sh: &mut Interp, a: &[String]) -> X {
         }
         line = line.replace("\\", "");
     }
-    let names: Vec<String> = if args.rest.is_empty() { vec!["REPLY".into()] } else { args.rest.clone() };
     let ifs = sh.ifs();
+    if let Some(name) = args.val('a').map(str::to_string) {
+        // read -a array: every field becomes an element.
+        let items: Vec<String> = if ifs.chars().all(char::is_whitespace) {
+            line.split(|c| ifs.contains(c)).filter(|s| !s.is_empty()).map(str::to_string).collect()
+        } else {
+            let t = line.trim_matches(|c: char| c.is_whitespace() && ifs.contains(c));
+            if t.is_empty() {
+                Vec::new()
+            } else {
+                t.split(|c| ifs.contains(c)).map(|s| s.trim().to_string()).collect()
+            }
+        };
+        sh.s.vars.remove(&name);
+        sh.s.arrays.insert(name, Arr::from_list(items));
+        return Ok(0);
+    }
+    let names: Vec<String> = if args.rest.is_empty() { vec!["REPLY".into()] } else { args.rest.clone() };
     let is_ws = |c: char| ifs.contains(c) && c.is_whitespace();
     let mut rest = line.trim_matches(|c| is_ws(c));
     if names.len() == 1 && args.rest.is_empty() {
