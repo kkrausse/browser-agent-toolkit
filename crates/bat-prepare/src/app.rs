@@ -32,6 +32,7 @@ pub struct AppOptions {
     pub workspace: String,
     pub bun: String,
     pub force: bool,
+    pub verify: bool,
     /// JSON merged over the policy's `launch.preview`.
     pub preview: Option<Value>,
 }
@@ -399,6 +400,12 @@ fn build_image(options: &AppOptions, app: &Path, policy: &Policy, pinned: &[(Str
         &tmp_image,
     )?;
     let stats = output.stats;
+    let mut verify_ms = Value::Null;
+    if options.verify {
+        let verify_started = Instant::now();
+        let compared = pack::verify_image(&tmp_image, &items)?;
+        verify_ms = json!({ "ms": ms(verify_started), "entries": items.len(), "bodies": compared });
+    }
     let file = format!("image-{}.batimg", &stats.sha256[..16]);
     fs::rename(&tmp_image, options.out.join(&file))?;
     let pack_ms = ms(started) - deps_ms - collect_ms;
@@ -428,6 +435,6 @@ fn build_image(options: &AppOptions, app: &Path, policy: &Policy, pinned: &[(Str
         dependencies: installed.report,
         pack: stats,
         application,
-        build_ms: json!({ "dependencies": deps_ms, "collect": collect_ms, "pack": pack_ms, "programs": ms(program_started), "total": ms(started) }),
+        build_ms: json!({ "dependencies": deps_ms, "collect": collect_ms, "pack": pack_ms, "programs": ms(program_started), "verify": verify_ms, "total": ms(started) }),
     })
 }

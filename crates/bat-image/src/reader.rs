@@ -409,6 +409,52 @@ impl<'a> Image<'a> {
         None
     }
 
+    /// Resolve `path` relative to directory `dir`, following symlinks inside the image
+    /// (`.` and `..` are honoured; `..` at the root stays at the root). The final
+    /// component is followed only if `follow_final`. Returns `None` if a component is
+    /// missing, a symlink target is absolute (the image does not know its mount point;
+    /// the caller resolves those), or more than 40 links are crossed.
+    /// Allocation-free: nested links recurse.
+    pub fn resolve(&self, dir: u32, path: &[u8], follow_final: bool) -> Option<u32> {
+        self.resolve_depth(dir, path, follow_final, 0)
+    }
+
+    fn resolve_depth(&self, dir: u32, path: &[u8], follow_final: bool, depth: u32) -> Option<u32> {
+        if depth > 40 || dir >= self.entry_count || path.first() == Some(&b'/') {
+            return None;
+        }
+        let mut at = dir;
+        let mut rest = path;
+        while !rest.is_empty() {
+            let (part, tail) = match rest.iter().position(|&c| c == b'/') {
+                Some(i) => (&rest[..i], &rest[i + 1..]),
+                None => (rest, &rest[rest.len()..]),
+            };
+            rest = tail;
+            if part.is_empty() || part == b"." {
+                continue;
+            }
+            let r = self.raw(at);
+            if r[8] != KIND_DIR {
+                return None;
+            }
+            if part == b".." {
+                at = u32_at(r, 12);
+                continue;
+            }
+            let child = self.lookup_child(at, part)?;
+            let c = self.raw(child);
+            let last = rest.iter().all(|&b| b == b'/');
+            if c[8] == KIND_SYMLINK && (follow_final || !last) {
+                let target = self.string(u64_at(c, 16) as u32, u32_at(c, 24) as usize);
+                at = self.resolve_depth(at, target, true, depth + 1)?;
+            } else {
+                at = child;
+            }
+        }
+        Some(at)
+    }
+
     /// Iterate a directory's children in name order.
     pub fn read_dir(&self, dir: u32) -> impl Iterator<Item = Entry<'a>> + 'a {
         let image = *self;

@@ -66,6 +66,9 @@ enum Command {
         /// Rebuild the image even if the inputs are unchanged.
         #[arg(long)]
         force: bool,
+        /// After building, read every entry back through the reader and compare.
+        #[arg(long)]
+        verify: bool,
         /// JSON merged over the policy's preview launch description.
         #[arg(long)]
         preview: Option<String>,
@@ -158,7 +161,8 @@ fn main() -> Result<()> {
         Command::Cat { image, path, compiled, facts } => {
             use std::io::Write;
             let file = bat_image::writer::ImageFile::open(&image)?;
-            let Some(index) = file.image().lookup(path.trim_matches('/').as_bytes()) else { bail!("not found: {path}") };
+            // Symlinks are followed, as the guest would.
+            let Some(index) = file.image().resolve(bat_image::Image::ROOT, path.trim_matches('/').as_bytes(), true) else { bail!("not found: {path}") };
             let bytes = if compiled {
                 file.read_compiled(index)?.ok_or_else(|| anyhow::anyhow!("no compiled body: {path}"))?
             } else if facts {
@@ -184,7 +188,7 @@ fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&serde_json::json!({ "nodeModules": deps.node_modules, "report": deps.report }))?);
             Ok(())
         }
-        Command::App { app, out, work, source, file, policy, opencode, workspace, bun, force, preview } => {
+        Command::App { app, out, work, source, file, policy, opencode, workspace, bun, force, verify, preview } => {
             let work = work.unwrap_or_else(|| {
                 let mut name = out.file_name().unwrap_or_default().to_os_string();
                 name.push(".work");
@@ -195,7 +199,7 @@ fn main() -> Result<()> {
                 .map(|spec| spec.split_once('=').map(|(guest, host)| (guest.to_string(), PathBuf::from(host))).ok_or_else(|| anyhow::anyhow!("--file expects <guest path>=<host file>: {spec}")))
                 .collect::<Result<Vec<_>>>()?;
             let preview = preview.map(|text| serde_json::from_str(&text)).transpose()?;
-            let summary = app::prepare_app(app::AppOptions { app, out, work, source, files, policy, application_dir: opencode, workspace, bun, force, preview })?;
+            let summary = app::prepare_app(app::AppOptions { app, out, work, source, files, policy, application_dir: opencode, workspace, bun, force, verify, preview })?;
             println!("{}", serde_json::to_string_pretty(&summary)?);
             Ok(())
         }
@@ -216,8 +220,9 @@ fn info(image_path: &std::path::Path, path: Option<&str>) -> Result<()> {
         }
         return Ok(());
     };
-    let Some(index) = image.lookup(path.trim_matches('/').as_bytes()) else { bail!("not found: {path}") };
+    let Some(index) = image.resolve(bat_image::Image::ROOT, path.trim_matches('/').as_bytes(), false) else { bail!("not found: {path}") };
     let entry = image.entry(index);
+    println!("/{}", String::from_utf8_lossy(entry.path));
     println!("{:?} mode={:o} size={} facts={:#x} compiled={:?}", entry.kind, entry.mode, entry.size(), entry.facts, entry.compiled().map(|e| e.len));
     if let Some(target) = entry.target() {
         println!("-> {}", String::from_utf8_lossy(target));

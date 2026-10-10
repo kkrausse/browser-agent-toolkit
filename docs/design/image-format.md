@@ -16,7 +16,7 @@ offset 0 ┌──────────────────────�
          │ in-head section payloads     │   (each 8-aligned)
 head_len ├──────────────────────────────┤   = bodies_off, a multiple of the body alignment
          │ original bodies, index order │   each starts on a body-alignment boundary
-         │ compiled bodies, index order │
+         │ module records, index order  │   compiled body immediately followed by facts blob
 file_len └──────────────────────────────┘
 ```
 
@@ -71,7 +71,7 @@ for tools. Whole-file identity is the content-addressed file name
 | 28 | 4 | `compiled_len` | compiled body length, 0 = none | 0 | 0 |
 | 32 | 8 | `compiled_off` | compiled body file offset | 0 | 0 |
 | 40 | 4 | `facts` | module facts word | 0 | 0 |
-| 44 | 4 | reserved | `0` | | |
+| 44 | 4 | `facts_len` | facts blob length, 0 = none | 0 | 0 |
 
 Paths are relative to the image root, `/`-separated, without leading or trailing slash, no
 empty, `.` or `..` components. The root's path is empty. Where the image is mounted in the
@@ -104,19 +104,41 @@ Consequences the reader relies on:
   one child range; this is what symlink-following resolution uses. `parent` gives `..`.
 - A parent always precedes its children.
 
-## Facts word
+## Module record: compiled body, facts word, facts blob
 
-`0` means the module transform did not look at the entry. Bits 0..7 are defined here; bits
-8..31 belong to `bat-modules` (see that crate) and are copied through unchanged.
+A file that `bat-prepare` offered to the module transform (`.js .mjs .cjs .jsx .ts .mts
+.cts .tsx`, not `.d.ts`; JSON is not offered) carries:
 
-| Bit | Name | Meaning |
-| --- | --- | --- |
-| 0 | `KNOWN` | prepare ran the module transform (or classified the file) |
-| 1 | `ESM` | source is an ES module; clear = CommonJS |
-| 2 | `TLA` | has top-level await: the compiled body is an async function |
-| 3 | `JSON` | JSON module: no compiled body, the loader parses the original |
-| 4 | `FAILED` | transform failed: no compiled body, the loader transforms at run time |
-| 5 | `IN_PROGRAM` | the compiled body is also in a program script (below) |
+- `facts`: bits 0..23 are the `bat-modules` facts word, stored verbatim (module kind in
+  bits 0..2: 1 CommonJS, 2 ESM; bit 3 async/top-level await; bit 14 `CODE_IS_SOURCE`; bit
+  15 `HAS_BLOB`; full list in `crates/bat-modules/src/facts.rs` and
+  `docs/design/module-format.md`). `facts == 0` means the entry was not offered to the
+  transform.
+- bits set by `bat-prepare`: **bit 30 `FAILED`** (the transform reported an error; no
+  compiled body, no blob; the loader transforms the original at run time and surfaces the
+  real diagnostic) and **bit 31 `IN_PROGRAM`** (the compiled body is not in the image
+  because it ships in a program script; facts and blob are still here).
+- the **module record** at `compiled_off`: `compiled_len` bytes of compiled body (the
+  loader-format function *body*, UTF-8) immediately followed by `facts_len` bytes of facts
+  blob (import/export lists in the `bat-modules` encoding). One read of
+  `compiled_len + facts_len` bytes at `compiled_off` returns both
+  (`Entry::module_record`). Either part may be empty; when both are, `compiled_off` is 0.
+
+When `CODE_IS_SOURCE` is set the compiled body equals the original byte for byte and is
+not stored a second time (`compiled_len == 0`): the loader uses the original body. So the
+rule for the loader is:
+
+```
+facts == 0 or FAILED            → transform the original at run time
+IN_PROGRAM and script loaded    → function registered by the program script
+compiled_len != 0               → compiled body from the image
+CODE_IS_SOURCE                  → original body is the function body
+otherwise                       → transform the original at run time
+```
+
+The function header is not stored; it follows from the facts word (see
+`bat-modules`): `function(exports,require,module,__filename,__dirname,__bat){` for
+CommonJS, `function*(__bat){` for ESM, `async function*(__bat){` for ESM with bit 3.
 
 ## Sections
 
@@ -127,7 +149,114 @@ legal and is read through the positioned read.
 
 | Id | Name | Payload |
 | --- | --- | --- |
-| 1 | resolution table | reserved; not yet written |
-| 2 | program scripts | see below |
-| 3 | meta | UTF-8 JSON, informational |
+| 1 | resolution table | reserved; not written yet |
+| 2 | program scripts | UTF-8 JSON: `[{"name": "opencode-server", "modules": ["/app/server.js"]}]`, guest paths in registration order. File names of the scripts are content-addressed and therefore live in `manifest.json`, not in the image. |
+| 3 | meta | UTF-8 JSON, informational: `{"tool", "transform", "mount", "fingerprint"}` |
 
+## Reader API (`bat_image`, `default-features = false` in the kernel)
+
+```rust
+Image::head_len(prefix: &[u8]) -> Result<u64, ImageError>   // from the first 128 bytes
+Image::new(head: &'a [u8]) -> Result<Image<'a>, ImageError> // mount; O(1); Image is Copy
+image.verify_checksum()                                      // optional, O(head)
+image.len() / file_len() / mtime() / body_align()
+image.entry(i) -> Entry { index, path, name, kind, mode, parent, facts, .. }
+entry.size() / body() / compiled() / facts_blob() / module_record() -> Option<Extent{offset,len}>
+entry.children() -> Range<u32>      entry.target() -> Option<&[u8]>
+image.lookup(path) -> Option<u32>                 // literal path, one binary search
+image.lookup_child(dir, name) -> Option<u32>      // one component
+image.children(dir) -> Range<u32>   image.read_dir(dir) -> impl Iterator<Item = Entry>
+image.resolve(dir, path, follow_final) -> Option<u32>  // follows in-image symlinks, `.`/`..`
+image.read_extent(extent, buf, |offset, dst| ...) / read_body(i, ..) / read_compiled(i, ..)
+image.section(id) -> Option<Section>   image.section_bytes(id) -> Option<&[u8]>
+```
+
+The head slice may live in shared memory; the reader never writes to it and holds no
+other state. `read_*` call the supplied function exactly once with the destination slice.
+
+## Program scripts
+
+A program script is a classic script (loadable with `importScripts`, compiled off-thread
+and code-cached by the browser) at a content-addressed name
+`program-<name>-<first 16 hex of sha256>.js`. For each module, in order:
+
+```js
+__bat_define("/app/server.js",async function*(__bat){<compiled body>
+});
+```
+
+- `__bat_define(path, fn)` is a global the loader installs before loading the script. It
+  records `fn` as the module function for the guest absolute path `path`. Nothing runs
+  at registration.
+- `fn` is exactly the function the loader would have built from the image's compiled
+  body: header chosen from the facts word as above, the body starting on the same line
+  as the header (so line numbers equal the compiled body's), a newline, `}`.
+- Facts and blob for the module are read from the image entry as for any other module;
+  the entry has `IN_PROGRAM` set and no compiled body. If the script is not loaded the
+  loader falls back to transforming the original, so programs are purely an optimisation.
+- Which launch uses which program: `manifest.json`, `launch.<name>.programs`.
+
+## Prepared output directory (`bat-prepare app`)
+
+```
+<out>/manifest.json
+<out>/image-<hash16>.batimg
+<out>/program-<name>-<hash16>.js
+<out>.work/            scratch + cache (state.json, staged tree); not served
+```
+
+The single image is mounted at `/` and contains `/workspace/node_modules/…` (guest
+dependency tree), `/app/server.js` + tree-sitter wasm (pinned, verified) and
+`/app/node_modules/…` (ripgrep). Editable source is not in the image: it is in the
+manifest and is installed into the overlay.
+
+`manifest.json`:
+
+```jsonc
+{
+  "format": "bat-prepared-v1",
+  "image": { "file": "image-86a0af33366510f8.batimg", "bytes": 243425648, "sha256": "…",
+             "mount": "/", "entries": 12110, "headBytes": 1726208 },
+  "programs": [ { "name": "opencode-server", "file": "program-opencode-server-….js",
+                  "bytes": 27721261, "sha256": "…", "modules": ["/app/server.js"] } ],
+  "launch": {
+    "preview": { "entry": "/workspace/node_modules/vite/bin/vite.js", "args": ["--configLoader", "native", "--host", "0.0.0.0", "--port", "5173", "--strictPort"],
+                 "cwd": "/workspace", "env": { … }, "port": 5173, "programs": [] },
+    "agent":   { "entry": "/app/server.js", "args": [], "cwd": "/app", "env": { … },
+                 "port": 4096, "programs": ["opencode-server"] }
+  },
+  "workspace": "/workspace",
+  "source": ["src", "vite.config.ts", …],          // the editable allowlist, app-relative
+  "project": {                                      // workspace-relative path → content
+    "/src/root.tsx": "…utf-8 text…",
+    "/public/logo.png": { "encoding": "base64", "data": "…" },
+    "/package.json": "…", "/bun.lock": "…"
+  },
+  "application": { "id": "opencode-server-process-2.0.3", "directory": "/app", "files": { "server.js": { "bytes", "sha256" }, … } },
+  "dependencies": { "installer", "before", "after", "substitutions", "removedPackages", … }
+}
+```
+
+`launch.agent.env` carries no secret; the host adds `OPENCODE_PASSWORD` and writes the
+OpenCode config at run time. `launch.*.programs` lists only scripts that were emitted.
+
+## Guest policy (`crates/bat-prepare/data/guest-policy.json`)
+
+Data that decides the guest tree; `--policy <file>` replaces it, `bat-prepare policy`
+prints the embedded one.
+
+- `substitutions[]`: `{ "package", "with", "expect" }`. If `package` is locked (one
+  version), a root `overrides` entry is added with `with` after replacing `{version}`.
+  `with` is `npm:<name>@{version}`, a tarball URL, or **`dir:<path>`** (a local package
+  directory relative to the policy file, copied into the stage and installed as a `file:`
+  dependency: this is how a Rust-backed shim package replaces an entry). `expect` is a
+  file that must exist in the installed replacement.
+- `prune`: `packages` (names, trailing `*`), `nativePackages` (drop packages whose
+  package.json restricts `os`/`cpu`, unless `cpu` includes `wasm32`), `extensions`
+  (file suffixes), `paths` (globs relative to `node_modules`), `duplicatesOfApplication`
+  (drop files byte-identical to an application file). Dangling symlinks and emptied
+  directories are removed afterwards.
+- `application`: guest directory, pinned files (`bytes`, `sha256`), and the `support`
+  install (manifest + lock for `ripgrep@0.3.1`, placed at `/app/node_modules`).
+- `programs[]`: `{ "name", "modules": [guest paths] }`.
+- `launch`: copied into the manifest (`--preview '<json>'` is merged over `launch.preview`).
