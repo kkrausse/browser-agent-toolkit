@@ -1,21 +1,21 @@
 {
   "name": "lightningcss",
   "version": "1.32.0",
-  "description": "Guest shim for lightningcss 1.32.0: costs nothing at require and instantiates lightningcss-wasm (15.9 MB) on the first transform/bundle call. The Vite + Tailwind dev server imports lightningcss at startup and never calls it. Needs only WebAssembly and fs.",
+  "description": "Guest shim for lightningcss 1.32.0: costs nothing at require and instantiates lightningcss-wasm (15.9 MB) on the first transform/bundle call. The Vite + Tailwind dev server imports lightningcss at startup and never calls it. Needs only WebAssembly and fs. Normally laid over an installed lightningcss-wasm (see package.overlay.json and the guest policy); this manifest is for using the directory as a package of its own.",
   "license": "MPL-2.0",
-  "main": "index.js",
+  "main": "bat-main.cjs",
   "exports": {
     ".": {
-      "import": "./index.mjs",
-      "require": "./index.js"
+      "import": "./bat-main.mjs",
+      "require": "./bat-main.cjs"
     },
     "./package.json": "./package.json"
   },
   "files": [
-    "index.js",
-    "index.mjs",
-    "load.js",
-    "vendor"
+    "bat-main.cjs",
+    "bat-main.mjs",
+    "bat-load.cjs",
+    "bat-vendor"
   ],
   "dependencies": {
     "lightningcss-wasm": "1.32.0"

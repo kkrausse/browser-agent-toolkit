@@ -1,0 +1,14 @@
+{
+  "main": "bat-main.cjs",
+  "module": "bat-main.mjs",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./bat-main.mjs",
+      "require": "./bat-main.cjs"
+    },
+    "./lightningcss_node.wasm": "./lightningcss_node.wasm",
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false
+}

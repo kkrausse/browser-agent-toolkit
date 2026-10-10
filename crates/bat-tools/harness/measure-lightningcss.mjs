@@ -53,7 +53,7 @@ a = t(); css.browserslistToTargets(['chrome 100']); css.composeVisitors([{}, {}]
 a = t(); css.transform(optimize(css.Features)); out.firstTransformMs = t() - a;
 a = t(); css.transform(optimize(css.Features)); out.secondTransformMs = t() - a; out.rssAfterMb = process.memoryUsage().rss / 1048576; console.log(JSON.stringify(out));`,
   'shim import': tree => `${prelude(from(tree))}
-const a = t(); import(pathToFileURL(req.resolve('lightningcss')).href.replace(/index\\.js$/, 'index.mjs')).then(m => { out.totalMs = t() - a; out.names = Object.keys(m).sort().join(' '); console.log(JSON.stringify(out)); });`,
+const a = t(); import(pathToFileURL(req.resolve('lightningcss')).href.replace(/bat-main\\.cjs$/, 'bat-main.mjs')).then(m => { out.totalMs = t() - a; out.names = Object.keys(m).sort().join(' '); console.log(JSON.stringify(out)); });`,
 };
 const trees = { 'wasm steps': oldTree, 'wasm import': oldTree, 'wasm require': oldTree, native: nativeTree, shim: shimTree, 'shim import': shimTree };
 const samples = {};

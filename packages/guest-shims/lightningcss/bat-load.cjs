@@ -5,10 +5,11 @@
 // the CommonJS one through require('url') and takes webcrypto from node:crypto.
 //
 // From the lightningcss-wasm package this reads two files and no JavaScript of its own:
-//   lightningcss_node.wasm            (exported by the package as a subpath)
-//   node_modules/napi-wasm/index.js   (its bundled dependency: N-API for Wasm, CommonJS)
+//   lightningcss_node.wasm            next to this file when laid over lightningcss-wasm,
+//                                     else the dependency's exported subpath
+//   node_modules/napi-wasm/index.js   its bundled dependency: N-API for Wasm, CommonJS
 //
-// The bundleAsync part is lightningcss-wasm's async.mjs (MPL-2.0, see vendor/LICENSE)
+// The bundleAsync part is lightningcss-wasm's async.mjs (MPL-2.0, see bat-vendor/LICENSE)
 // rewritten as CommonJS: Binaryen Asyncify unwinds the Rust stack when the bundler awaits a
 // JavaScript promise (a custom resolver), and bundle() is called again to rewind into it.
 'use strict';
@@ -55,9 +56,9 @@ function createBundleAsync(env, hooks) {
 }
 
 function load() {
-  const wasmPath = require.resolve('lightningcss-wasm/lightningcss_node.wasm');
-  const packageDir = path.dirname(wasmPath);
-  const bundledNapi = path.join(packageDir, 'node_modules/napi-wasm/index.js');
+  const beside = path.join(__dirname, 'lightningcss_node.wasm');
+  const wasmPath = fs.existsSync(beside) ? beside : require.resolve('lightningcss-wasm/lightningcss_node.wasm');
+  const bundledNapi = path.join(path.dirname(wasmPath), 'node_modules/napi-wasm/index.js');
   const { Environment, napi } = require(fs.existsSync(bundledNapi) ? bundledNapi : 'napi-wasm');
   const random = globalThis.crypto ?? require('crypto').webcrypto;
 
