@@ -1,0 +1,216 @@
+# group<TAB>label<TAB>command; ¶ stands for a newline inside the command
+invoke	bash -lc	bash -lc 'echo hi > f.txt && cat f.txt | wc -c && ls'
+invoke	/bin/bash -lc	/bin/bash -lc 'echo $0; echo ok'
+invoke	sh -c	sh -c 'echo one; exit 3'; echo $?
+invoke	zsh -lc	zsh -lc 'echo z'
+invoke	bash -c args	bash -c 'echo "$1-$2"' _ a b
+invoke	bash script	printf 'echo script $1\n' > s.sh; bash s.sh x
+invoke	bash -euo pipefail	bash -euo pipefail -c 'false | true; echo unreachable'; echo $?
+lang	pipeline	cat list.txt | sort | uniq -c | sort -rn | head -2
+lang	and-or	test -f nope && echo yes || echo no
+lang	redirect out/append	echo a > o.txt; echo b >> o.txt; cat o.txt
+lang	redirect 2>&1	ls nope 2>&1 | wc -l
+lang	redirect &>	ls nope &> all.txt; wc -l < all.txt
+lang	redirect 2>/dev/null	cat nope 2>/dev/null; echo $?
+lang	pipe |&	ls nope |& wc -l
+lang	glob star	echo src/*.rs *.md
+lang	glob recursive **	shopt -s globstar; echo **/*.rs
+lang	glob ? and []	echo [ab].txt ?.txt
+lang	brace expansion	echo {a,b}.txt src/{main,lib}.rs
+lang	subshell	(cd src && pwd | sed 's|.*/||'); pwd | grep -c .
+lang	group	{ echo a; echo b; } | wc -l
+lang	cmd subst	echo "n=$(wc -l < list.txt)" `echo back`
+lang	arithmetic	x=5; echo $((x*2+1)) $((x>3?1:0))
+lang	param expansion	v=src/main.rs; echo ${v##*/} ${v%.rs} ${v/main/lib} ${#v} ${nope:-dflt}
+lang	heredoc	cat <<'EOF' > h.txt¶line $x¶EOF¶cat h.txt
+lang	heredoc to file var	x=1; cat > h.txt <<EOF¶v=$x¶EOF¶cat h.txt
+lang	here-string	grep -c a <<< "banana"
+lang	for loop	for f in src/*.rs; do echo "f=$f"; done
+lang	while read	while IFS= read -r l; do echo "[$l]"; done < a.txt
+lang	case	case README.md in *.md) echo md;; *) echo no;; esac
+lang	if/elif	if [ -d src ]; then echo d; elif [ -f src ]; then echo f; else echo n; fi
+lang	function	f() { local x=$1; echo "<$x>"; return 2; }; f a; echo $?
+lang	[[ ]] regex	[[ main.rs =~ ^(.*)\.rs$ ]] && echo ${BASH_REMATCH[1]}
+lang	[[ ]] glob	[[ -f README.md && README.md == *.md ]] && echo ok
+lang	arrays	a=(x y z); echo ${a[1]} ${#a[@]}; for i in "${a[@]}"; do echo $i; done
+lang	assoc arrays	declare -A m; m[k]=v; echo ${m[k]}
+lang	process subst	diff <(echo a) <(echo a) && echo same
+lang	$'..' quoting	printf '%s' $'a\tb\n'
+lang	set -e	set -e; false; echo no
+lang	set -o pipefail	set -o pipefail; false | true; echo $?
+lang	set -x	set -x; echo traced 2>&1
+lang	background + wait	(sleep 0.05; echo bg) & wait; echo done
+lang	exit status $?	false; echo $?; true; echo $?
+lang	export + env	export FOO=bar; env | grep ^FOO=; FOO=x sh -c 'echo $FOO'
+lang	cd + $PWD + ~	cd src && basename "$PWD" && cd - >/dev/null && echo ~ | grep -c /
+lang	eval	c='echo ev'; eval "$c $((1+1))"
+lang	trap EXIT	trap 'echo bye' EXIT; echo hi
+lang	read -p / stdin	echo "a b" | { read x y; echo "$y"; }
+lang	printf -v	printf -v out '%03d' 7; echo $out
+lang	[ -nt ] / test ops	[ a.txt -ot b.txt ] || [ a.txt -nt b.txt ] || echo same-time; [ 3 -ge 2 ] && echo ge
+lang	multi-line script	set -euo pipefail¶for i in 1 2; do¶  echo "i=$i"¶done¶echo end
+lang	semicolon list & comments	echo a; # comment¶echo b
+lang	stdin redirect	wc -l < list.txt
+lang	command -v	command -v ls >/dev/null && echo has; command -v nosuch || echo none
+lang	exec	exec echo replaced
+lang	time	time -p true 2>&1 | grep -c real
+lang	select/until/break	i=0; until [ $i -ge 2 ]; do i=$((i+1)); done; echo $i
+lang	${var:offset:len} ${var^^}	v=hello; echo ${v:1:3} ${v^^} ${v,,}
+lang	$RANDOM $SECONDS $LINENO	[ -n "$RANDOM" ] && echo r; echo ${SECONDS:-x} | grep -c .
+lang	pushd/popd	pushd src >/dev/null && pwd | grep -c src && popd >/dev/null
+lang	source	echo 'v=sourced' > l.sh; source ./l.sh; echo $v
+lang	nested quotes	echo "a 'b' \"c\" \$d" 'e "f"'
+read	cat	cat a.txt
+read	cat -n	cat -n a.txt
+read	cat multiple	cat a.txt b.txt | wc -l
+read	nl -ba	nl -ba a.txt
+read	head -n / -N	head -n 2 list.txt; head -1 list.txt
+read	head -c	head -c 5 list.txt
+read	tail -n / +N	tail -n 2 list.txt; tail -n +5 list.txt
+read	tail -c	tail -c 3 list.txt
+read	sed -n range	sed -n '2,3p' src/main.rs
+read	sed -n multiple -e	sed -n -e '1p' -e '3p' a.txt
+read	wc -l / -c / -w	wc -l list.txt; wc -c < a.txt; wc -w people.txt
+read	ls	ls
+read	ls -la count	ls -la | wc -l
+read	ls -1 dir	ls -1 src
+read	ls -R	ls -R src
+read	ls -lh size col	ls -lh list.txt | wc -l
+read	ls -t / -S	ls -S a.txt b.txt list.txt
+read	ls -d glob	ls -d src/*/
+read	ls -p / -F	ls -p; ls -F src
+read	tree	tree src
+read	stat -c	stat -c '%s %n' a.txt
+read	file	file README.md
+read	du -sh	du -sh src | cut -f2
+read	less/more	less a.txt
+read	pwd	pwd | grep -c /
+read	realpath	realpath src/../a.txt | grep -c a.txt
+read	basename/dirname	basename src/main.rs .rs; dirname src/util/helper.rs
+read	od / xxd / hexdump	printf 'AB' | od -c | head -1
+read	xxd	printf 'AB' | xxd
+read	strings	strings a.txt | head -1
+read	md5sum / sha256sum	printf abc | sha256sum
+read	md5sum	printf abc | md5sum
+read	base64	printf abc | base64
+read	cmp	cmp a.txt a.txt && echo same
+search	grep -n	grep -n apple list.txt
+search	grep -rn	grep -rn "fn " src | sort
+search	grep -rn --include	grep -rn --include='*.rs' TODO . | sort
+search	grep -rl	grep -rl fn . | sort
+search	grep -E alternation	grep -E 'apple|cherry' list.txt
+search	grep -i -c -v	grep -ic APPLE list.txt; grep -vc apple list.txt
+search	grep -A/-B/-C	grep -A1 -B1 cherry list.txt
+search	grep -o	grep -o 'an' list.txt
+search	grep -w -x	grep -w apple list.txt; grep -x 10 list.txt
+search	grep -F	grep -F 'a + b' src/main.rs
+search	grep -P	grep -P '\d+' list.txt
+search	grep -q status	grep -q zzz list.txt; echo $?
+search	grep -H / -h multi	grep -h line1 a.txt b.txt; grep -H line1 a.txt
+search	grep --exclude-dir	grep -rn --exclude-dir=util fn . | sort
+search	grep -e -e	grep -e apple -e cherry list.txt
+search	grep -m	grep -m1 apple list.txt
+search	grep -L	grep -L apple list.txt a.txt
+search	rg pattern	rg -n "fn " src
+search	rg --files	rg --files | sort
+search	rg -l / -g	rg -l fn -g '*.rs'
+search	find -name	find . -name '*.rs' | sort
+search	find -type f/-type d	find src -type d | sort; find . -maxdepth 1 -type f | sort
+search	find -path / -not	find . -path './src/*' -not -name '*.rs' | sort
+search	find -o / parens	find . \( -name '*.md' -o -name '*.toml' \) | sort
+search	find -exec {} \;	find src -name '*.rs' -exec wc -l {} \; | sort
+search	find -exec {} +	find src -name '*.rs' -exec grep -l fn {} + | sort
+search	find -print0 | xargs -0	find src -name '*.rs' -print0 | xargs -0 grep -l fn | sort
+search	find -newer/-mtime/-size	find . -size +0 -name 'a.txt'; find . -mtime -1 -name a.txt
+search	find -delete	find . -name 'a.txt' -delete; ls a.txt 2>/dev/null; echo $?
+search	find -iname / -regex	find . -iname 'readme*'; find . -regex '.*/main\.rs'
+search	find -prune	find . -name util -prune -o -name '*.rs' -print | sort
+search	find -empty / -printf	find . -type d -empty; find src -maxdepth 1 -name '*.rs' -printf '%f\n'
+search	which	which ls cat grep | wc -l
+search	locate/fd	fd main
+edit	sed -i s///	sed -i 's/apple/APPLE/g' list.txt; grep -c APPLE list.txt
+edit	sed -i -e multiple	sed -i -e 's/line1/L1/' -e '2d' a.txt; cat a.txt
+edit	sed -E groups	sed -E 's/([a-z]+) ([0-9]+)/\2 \1/' people.txt
+edit	sed insert/append	sed '2i\inserted' a.txt; sed '$a\appended' a.txt
+edit	sed address /re/	sed -n '/fn add/,/^}/p' src/main.rs
+edit	sed y / c / =	sed 'y/abc/ABC/' list.txt | head -2; sed -n '$=' list.txt
+edit	sed -i.bak	sed -i.bak 's/1/one/' a.txt; ls a.txt.bak
+edit	cat > file <<EOF	cat > new.py <<'EOF'¶print("x")¶EOF¶wc -l new.py
+edit	printf > file	printf '%s\n' a b c > p.txt; wc -l < p.txt
+edit	tee / tee -a	echo x | tee t.txt >/dev/null; echo y | tee -a t.txt | wc -l; cat t.txt
+edit	echo >> append	echo more >> a.txt; tail -1 a.txt
+edit	mkdir -p	mkdir -p x/y/z && ls -d x/y/z
+edit	rm -rf	rm -rf src && ls src 2>/dev/null; echo $?
+edit	rm -f missing	rm -f nope; echo $?
+edit	mv	mv a.txt c.txt && ls c.txt && mv c.txt src/ && ls src | sort
+edit	cp / cp -r / -a	cp a.txt a2.txt; cp -r src src2; cp -a docs docs2; ls src2 docs2 a2.txt
+edit	touch	touch t1 t2 && ls t1 t2
+edit	ln -s / readlink	ln -s a.txt l.txt && readlink l.txt && cat l.txt | wc -l
+edit	chmod +x / 755	chmod +x a.txt && [ -x a.txt ] && echo x; chmod 644 a.txt; [ -x a.txt ] || echo nox
+edit	mktemp	f=$(mktemp); [ -f "$f" ] && echo made; rm "$f"; d=$(mktemp -d); [ -d "$d" ] && echo dir
+edit	truncate / : >	: > a.txt; wc -c < a.txt
+edit	truncate cmd	truncate -s 0 a.txt; wc -c < a.txt
+edit	install / rmdir	rmdir empty && ls -d empty 2>/dev/null; echo $?
+edit	patch	printf -- '--- a.txt\n+++ a.txt\n@@ -1,3 +1,3 @@\n line1\n-line2\n+LINE2\n line3\n' | patch -p0 && cat a.txt
+edit	apply_patch	apply_patch <<'EOF'¶*** Begin Patch¶*** Add File: z.txt¶+hi¶*** End Patch¶EOF
+edit	ed / ex	printf '1d\nw\nq\n' | ed -s a.txt; cat a.txt
+edit	dd	dd if=a.txt of=d.txt 2>/dev/null; cmp a.txt d.txt && echo ok
+text	sort flags	sort -u list.txt | wc -l; sort -n list.txt | tail -2; sort -r list.txt | head -1
+text	sort -k -t	sort -k2 -n people.txt | head -1; sort -t' ' -k3,3 -k1,1r people.txt | head -1
+text	uniq -c / -d	sort list.txt | uniq -c | sort -rn | head -1; sort list.txt | uniq -d
+text	cut	cut -d' ' -f1,3 people.txt; cut -c1-3 list.txt | head -1
+text	tr	echo hello | tr a-z A-Z; echo 'a  b' | tr -s ' '; echo abc | tr -d b
+text	awk print col	awk '{print $2}' people.txt
+text	awk -F / sum	awk -F' ' '{s+=$2} END {print s}' people.txt
+text	awk NR range	awk 'NR>=2 && NR<=3' list.txt
+text	xargs	ls *.txt | xargs wc -l | tail -1
+text	xargs -I	printf 'a\nb\n' | xargs -I{} echo "<{}>"
+text	xargs -n / -P	echo 1 2 3 4 | xargs -n 2 echo
+text	diff -u	diff -u a.txt b.txt | tail -n +3; echo $?
+text	diff -q / -r	diff -q a.txt b.txt; diff -rq src docs | wc -l
+text	comm / join / paste	paste a.txt b.txt | head -1
+text	comm	comm -12 <(sort a.txt) <(sort b.txt)
+text	column -t	column -t people.txt
+text	fold / fmt	echo 'aaaa bbbb cccc' | fold -w 5
+text	tac / rev	tac a.txt | head -1; echo abc | rev
+text	seq	seq 3; seq 1 2 5 | tr '\n' ' '
+text	printf formats	printf '%5s|%-5s|%03d|%.2f|%x\n' a b 7 3.14159 255
+text	echo -e / -n	echo -e 'a\tb'; echo -n x; echo
+text	expr / bc	expr 2 + 3; echo '2*3' | bc
+text	jq	echo '{"a":1}' | jq .a
+text	yes | head	yes | head -2
+text	sort | head early exit	seq 1 100000 | head -3
+text	split / csplit	split -l 2 list.txt part_; ls part_* | wc -l
+text	expand/unexpand	printf 'a\tb\n' | expand | wc -c
+text	iconv / dos2unix	printf 'a\r\n' | tr -d '\r' | wc -c
+sys	date	date +%Y | grep -c '^20'
+sys	date -u iso	date -u -d @0 +%Y-%m-%dT%H:%M:%SZ
+sys	env / printenv	env | grep -c .  >/dev/null; printenv HOME | grep -c /
+sys	uname / whoami / id / hostname	uname -s; whoami >/dev/null; id -u >/dev/null; echo ok
+sys	nproc / df / free	nproc >/dev/null && echo ok; df . >/dev/null && echo df
+sys	ps / kill / pgrep	ps >/dev/null && echo ps
+sys	sleep	sleep 0.05; echo slept
+sys	timeout	timeout 1 echo t
+sys	true/false/test	true && ! false && test 1 -lt 2 && echo ok
+sys	type / hash / alias	type cd | head -1; alias ll='ls -l'; alias | grep -c ll
+sys	umask / ulimit	umask >/dev/null; ulimit -n >/dev/null; echo ok
+sys	tar	tar cf t.tar src && tar tf t.tar | sort | head -2
+sys	gzip / gunzip	gzip -k a.txt && ls a.txt.gz
+sys	zip / unzip	zip -q z.zip a.txt && unzip -l z.zip | grep -c a.txt
+sys	curl	curl --version | head -1
+sys	wget	wget --version | head -1
+tools	git status	git init -q . && git status --short | wc -l
+tools	git diff / log	git --version
+tools	python3 -c	python3 -c 'print(1+1)'
+tools	python	python -c 'print(1+1)'
+tools	python3 heredoc	python3 - <<'EOF'¶print("py")¶EOF
+tools	node -e	node -e 'console.log(1+1)'
+tools	npm / npx	npm --version
+tools	perl -pe	echo abc | perl -pe 's/b/B/'
+tools	ruby	ruby -e 'puts 1'
+tools	make	make --version | head -1
+tools	cargo	cargo --version
+tools	rustc / gcc / go	gcc --version | head -1
+tools	pip	pip --version
+tools	pytest / jest	pytest --version
+tools	sudo / apt	sudo true

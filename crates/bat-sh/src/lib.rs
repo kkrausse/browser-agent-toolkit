@@ -46,6 +46,13 @@ fn shell_main(sh: &mut Interp, argv: &[String]) -> X {
         }
         for c in a[1..].chars() {
             match c {
+                // `bash -euo pipefail -c …`: an `o` inside a cluster takes the next argument as its option name.
+                'o' => {
+                    if argv.get(i + 1).map(String::as_str) == Some("pipefail") {
+                        sh.s.opts.pipefail = on;
+                    }
+                    i += 1;
+                }
                 'c' => command = true,
                 's' => from_stdin = true,
                 'e' => sh.s.opts.errexit = on,

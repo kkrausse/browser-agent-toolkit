@@ -1,0 +1,305 @@
+same     invoke     bash -lc                 bash -lc 'echo hi > f.txt && cat f.txt | wc -c && ls'
+differs  invoke     /bin/bash -lc            /bin/bash -lc 'echo $0; echo ok'
+         bash: /bin/bash|ok|status=0|  bat-sh: status=126| sh: /bin/bash: cannot execute binary file 
+same     invoke     sh -c                    sh -c 'echo one; exit 3'; echo $?
+same     invoke     zsh -lc                  zsh -lc 'echo z'
+same     invoke     bash -c args             bash -c 'echo "$1-$2"' _ a b
+same     invoke     bash script              printf 'echo script $1\n' > s.sh; bash s.sh x
+same     invoke     bash -euo pipefail       bash -euo pipefail -c 'false | true; echo unreachable'; echo $?
+same     lang       pipeline                 cat list.txt | sort | uniq -c | sort -rn | head -2
+same     lang       and-or                   test -f nope && echo yes || echo no
+same     lang       redirect out/append      echo a > o.txt; echo b >> o.txt; cat o.txt
+same     lang       redirect 2>&1            ls nope 2>&1 | wc -l
+same     lang       redirect &>              ls nope &> all.txt; wc -l < all.txt
+same     lang       redirect 2>/dev/null     cat nope 2>/dev/null; echo $?
+same     lang       pipe |&                  ls nope |& wc -l
+same     lang       glob star                echo src/*.rs *.md
+same     lang       glob recursive **        shopt -s globstar; echo **/*.rs
+same     lang       glob ? and []            echo [ab].txt ?.txt
+same     lang       brace expansion          echo {a,b}.txt src/{main,lib}.rs
+same     lang       subshell                 (cd src && pwd | sed 's|.*/||'); pwd | grep -c .
+same     lang       group                    { echo a; echo b; } | wc -l
+same     lang       cmd subst                echo "n=$(wc -l < list.txt)" `echo back`
+same     lang       arithmetic               x=5; echo $((x*2+1)) $((x>3?1:0))
+same     lang       param expansion          v=src/main.rs; echo ${v##*/} ${v%.rs} ${v/main/lib} ${#v} ${nope:-dflt}
+same     lang       heredoc                  cat <<'EOF' > h.txt
+line $x
+EOF
+cat h.txt
+same     lang       heredoc to file var      x=1; cat > h.txt <<EOF
+v=$x
+EOF
+cat h.txt
+same     lang       here-string              grep -c a <<< "banana"
+same     lang       for loop                 for f in src/*.rs; do echo "f=$f"; done
+same     lang       while read               while IFS= read -r l; do echo "[$l]"; done < a.txt
+same     lang       case                     case README.md in *.md) echo md;; *) echo no;; esac
+same     lang       if/elif                  if [ -d src ]; then echo d; elif [ -f src ]; then echo f; else echo n; fi
+same     lang       function                 f() { local x=$1; echo "<$x>"; return 2; }; f a; echo $?
+differs  lang       [[ ]] regex              [[ main.rs =~ ^(.*)\.rs$ ]] && echo ${BASH_REMATCH[1]}
+         bash: main|status=0|  bat-sh: |status=0| 
+same     lang       [[ ]] glob               [[ -f README.md && README.md == *.md ]] && echo ok
+differs  lang       arrays                   a=(x y z); echo ${a[1]} ${#a[@]}; for i in "${a[@]}"; do echo $i; done
+         bash: y 3|x|y|z|status=0|  bat-sh: status=2| sh: syntax error near unexpected token `(x' 
+differs  lang       assoc arrays             declare -A m; m[k]=v; echo ${m[k]}
+         bash: v|status=0|  bat-sh: |status=0| sh: m[k]=v: command not found 
+differs  lang       process subst            diff <(echo a) <(echo a) && echo same
+         bash: same|status=0|  bat-sh: status=2| sh: syntax error near unexpected token `<(echo' 
+same     lang       $'..' quoting            printf '%s' $'a\tb\n'
+same     lang       set -e                   set -e; false; echo no
+same     lang       set -o pipefail          set -o pipefail; false | true; echo $?
+same     lang       set -x                   set -x; echo traced 2>&1
+same     lang       background + wait        (sleep 0.05; echo bg) & wait; echo done
+same     lang       exit status $?           false; echo $?; true; echo $?
+same     lang       export + env             export FOO=bar; env | grep ^FOO=; FOO=x sh -c 'echo $FOO'
+same     lang       cd + $PWD + ~            cd src && basename "$PWD" && cd - >/dev/null && echo ~ | grep -c /
+same     lang       eval                     c='echo ev'; eval "$c $((1+1))"
+same     lang       trap EXIT                trap 'echo bye' EXIT; echo hi
+same     lang       read -p / stdin          echo "a b" | { read x y; echo "$y"; }
+same     lang       printf -v                printf -v out '%03d' 7; echo $out
+same     lang       [ -nt ] / test ops       [ a.txt -ot b.txt ] || [ a.txt -nt b.txt ] || echo same-time; [ 3 -ge 2 ] && echo ge
+same     lang       multi-line script        set -euo pipefail
+for i in 1 2; do
+  echo "i=$i"
+done
+echo end
+same     lang       semicolon list & comments echo a; # comment
+echo b
+same     lang       stdin redirect           wc -l < list.txt
+same     lang       command -v               command -v ls >/dev/null && echo has; command -v nosuch || echo none
+same     lang       exec                     exec echo replaced
+same     lang       time                     time -p true 2>&1 | grep -c real
+same     lang       select/until/break       i=0; until [ $i -ge 2 ]; do i=$((i+1)); done; echo $i
+same     lang       ${var:offset:len} ${var^^} v=hello; echo ${v:1:3} ${v^^} ${v,,}
+same     lang       $RANDOM $SECONDS $LINENO [ -n "$RANDOM" ] && echo r; echo ${SECONDS:-x} | grep -c .
+missing  lang       pushd/popd               pushd src >/dev/null && pwd | grep -c src && popd >/dev/null
+         sh: pushd: command not found
+same     lang       source                   echo 'v=sourced' > l.sh; source ./l.sh; echo $v
+same     lang       nested quotes            echo "a 'b' \"c\" \$d" 'e "f"'
+same     read       cat                      cat a.txt
+same     read       cat -n                   cat -n a.txt
+same     read       cat multiple             cat a.txt b.txt | wc -l
+missing  read       nl -ba                   nl -ba a.txt
+         sh: nl: command not found
+same     read       head -n / -N             head -n 2 list.txt; head -1 list.txt
+same     read       head -c                  head -c 5 list.txt
+same     read       tail -n / +N             tail -n 2 list.txt; tail -n +5 list.txt
+same     read       tail -c                  tail -c 3 list.txt
+same     read       sed -n range             sed -n '2,3p' src/main.rs
+same     read       sed -n multiple -e       sed -n -e '1p' -e '3p' a.txt
+same     read       wc -l / -c / -w          wc -l list.txt; wc -c < a.txt; wc -w people.txt
+same     read       ls                       ls
+same     read       ls -la count             ls -la | wc -l
+same     read       ls -1 dir                ls -1 src
+same     read       ls -R                    ls -R src
+same     read       ls -lh size col          ls -lh list.txt | wc -l
+same     read       ls -t / -S               ls -S a.txt b.txt list.txt
+same     read       ls -d glob               ls -d src/*/
+same     read       ls -p / -F               ls -p; ls -F src
+missing  read       tree                     tree src
+         sh: tree: command not found
+same     read       stat -c                  stat -c '%s %n' a.txt
+missing  read       file                     file README.md
+         sh: file: command not found
+same     read       du -sh                   du -sh src | cut -f2
+missing  read       less/more                less a.txt
+         sh: less: command not found
+same     read       pwd                      pwd | grep -c /
+same     read       realpath                 realpath src/../a.txt | grep -c a.txt
+same     read       basename/dirname         basename src/main.rs .rs; dirname src/util/helper.rs
+differs  read       od / xxd / hexdump       printf 'AB' | od -c | head -1
+         bash: 0000000   A   B|status=0|  bat-sh: status=0| sh: od: command not found 
+missing  read       xxd                      printf 'AB' | xxd
+         sh: xxd: command not found
+differs  read       strings                  strings a.txt | head -1
+         bash: line1|status=0|  bat-sh: status=0| sh: strings: command not found 
+missing  read       md5sum / sha256sum       printf abc | sha256sum
+         sh: sha256sum: command not found
+missing  read       md5sum                   printf abc | md5sum
+         sh: md5sum: command not found
+missing  read       base64                   printf abc | base64
+         sh: base64: command not found
+missing  read       cmp                      cmp a.txt a.txt && echo same
+         sh: cmp: command not found
+same     search     grep -n                  grep -n apple list.txt
+same     search     grep -rn                 grep -rn "fn " src | sort
+same     search     grep -rn --include       grep -rn --include='*.rs' TODO . | sort
+same     search     grep -rl                 grep -rl fn . | sort
+same     search     grep -E alternation      grep -E 'apple|cherry' list.txt
+same     search     grep -i -c -v            grep -ic APPLE list.txt; grep -vc apple list.txt
+same     search     grep -A/-B/-C            grep -A1 -B1 cherry list.txt
+same     search     grep -o                  grep -o 'an' list.txt
+same     search     grep -w -x               grep -w apple list.txt; grep -x 10 list.txt
+same     search     grep -F                  grep -F 'a + b' src/main.rs
+same     search     grep -P                  grep -P '\d+' list.txt
+same     search     grep -q status           grep -q zzz list.txt; echo $?
+same     search     grep -H / -h multi       grep -h line1 a.txt b.txt; grep -H line1 a.txt
+same     search     grep --exclude-dir       grep -rn --exclude-dir=util fn . | sort
+same     search     grep -e -e               grep -e apple -e cherry list.txt
+same     search     grep -m                  grep -m1 apple list.txt
+same     search     grep -L                  grep -L apple list.txt a.txt
+missing  search     rg pattern               rg -n "fn " src
+         sh: rg: command not found
+differs  search     rg --files               rg --files | sort
+         bash: a.txt|b.txt|Cargo.toml|docs/notes.md|list.txt|package.json|people.txt|README.md|src/main.rs|src/util/helper.rs  bat-sh: status=0| sh: rg: command not found 
+missing  search     rg -l / -g               rg -l fn -g '*.rs'
+         sh: rg: command not found
+same     search     find -name               find . -name '*.rs' | sort
+differs  search     find -type f/-type d     find src -type d | sort; find . -maxdepth 1 -type f | sort
+         bash: src|src/util|./a.txt|./b.txt|./Cargo.toml|./list.txt|./package.json|./people.txt|./README.md|status=0|  bat-sh: src|src/util|./Cargo.toml|./README.md|./a.txt|./b.txt|./list.txt|./package.json|./people.txt|status=0| 
+same     search     find -path / -not        find . -path './src/*' -not -name '*.rs' | sort
+differs  search     find -o / parens         find . \( -name '*.md' -o -name '*.toml' \) | sort
+         bash: ./Cargo.toml|./docs/notes.md|./README.md|status=0|  bat-sh: ./Cargo.toml|./README.md|./docs/notes.md|status=0| 
+same     search     find -exec {} \;         find src -name '*.rs' -exec wc -l {} \; | sort
+same     search     find -exec {} +          find src -name '*.rs' -exec grep -l fn {} + | sort
+same     search     find -print0 | xargs -0  find src -name '*.rs' -print0 | xargs -0 grep -l fn | sort
+same     search     find -newer/-mtime/-size find . -size +0 -name 'a.txt'; find . -mtime -1 -name a.txt
+same     search     find -delete             find . -name 'a.txt' -delete; ls a.txt 2>/dev/null; echo $?
+differs  search     find -iname / -regex     find . -iname 'readme*'; find . -regex '.*/main\.rs'
+         bash: ./README.md|./src/main.rs|status=0|  bat-sh: ./README.md|status=1| find: unknown predicate `-regex' 
+same     search     find -prune              find . -name util -prune -o -name '*.rs' -print | sort
+differs  search     find -empty / -printf    find . -type d -empty; find src -maxdepth 1 -name '*.rs' -printf '%f\n'
+         bash: ./empty|main.rs|status=0|  bat-sh: ./empty|status=1| find: unknown predicate `-printf' 
+same     search     which                    which ls cat grep | wc -l
+missing  search     locate/fd                fd main
+         sh: fd: command not found
+same     edit       sed -i s///              sed -i 's/apple/APPLE/g' list.txt; grep -c APPLE list.txt
+same     edit       sed -i -e multiple       sed -i -e 's/line1/L1/' -e '2d' a.txt; cat a.txt
+same     edit       sed -E groups            sed -E 's/([a-z]+) ([0-9]+)/\2 \1/' people.txt
+same     edit       sed insert/append        sed '2i\inserted' a.txt; sed '$a\appended' a.txt
+same     edit       sed address /re/         sed -n '/fn add/,/^}/p' src/main.rs
+same     edit       sed y / c / =            sed 'y/abc/ABC/' list.txt | head -2; sed -n '$=' list.txt
+same     edit       sed -i.bak               sed -i.bak 's/1/one/' a.txt; ls a.txt.bak
+same     edit       cat > file <<EOF         cat > new.py <<'EOF'
+print("x")
+EOF
+wc -l new.py
+same     edit       printf > file            printf '%s\n' a b c > p.txt; wc -l < p.txt
+same     edit       tee / tee -a             echo x | tee t.txt >/dev/null; echo y | tee -a t.txt | wc -l; cat t.txt
+same     edit       echo >> append           echo more >> a.txt; tail -1 a.txt
+same     edit       mkdir -p                 mkdir -p x/y/z && ls -d x/y/z
+same     edit       rm -rf                   rm -rf src && ls src 2>/dev/null; echo $?
+same     edit       rm -f missing            rm -f nope; echo $?
+same     edit       mv                       mv a.txt c.txt && ls c.txt && mv c.txt src/ && ls src | sort
+same     edit       cp / cp -r / -a          cp a.txt a2.txt; cp -r src src2; cp -a docs docs2; ls src2 docs2 a2.txt
+same     edit       touch                    touch t1 t2 && ls t1 t2
+same     edit       ln -s / readlink         ln -s a.txt l.txt && readlink l.txt && cat l.txt | wc -l
+same     edit       chmod +x / 755           chmod +x a.txt && [ -x a.txt ] && echo x; chmod 644 a.txt; [ -x a.txt ] || echo nox
+same     edit       mktemp                   f=$(mktemp); [ -f "$f" ] && echo made; rm "$f"; d=$(mktemp -d); [ -d "$d" ] && echo dir
+same     edit       truncate / : >           : > a.txt; wc -c < a.txt
+differs  edit       truncate cmd             truncate -s 0 a.txt; wc -c < a.txt
+         bash: 0|status=0|  bat-sh: 18|status=0| sh: truncate: command not found 
+same     edit       install / rmdir          rmdir empty && ls -d empty 2>/dev/null; echo $?
+missing  edit       patch                    printf -- '--- a.txt\n+++ a.txt\n@@ -1,3 +1,3 @@\n line1\n-line2\n+LINE2\n line3\n' | patch -p0 && cat a.txt
+         sh: patch: command not found
+missing  edit       apply_patch              apply_patch <<'EOF'
+*** Begin Patch
+*** Add File: z.txt
++hi
+*** End Patch
+EOF
+         sh: apply_patch: command not found
+differs  edit       ed / ex                  printf '1d\nw\nq\n' | ed -s a.txt; cat a.txt
+         bash: line2|line3|status=0|  bat-sh: line1|line2|line3|status=0| sh: ed: command not found 
+missing  edit       dd                       dd if=a.txt of=d.txt 2>/dev/null; cmp a.txt d.txt && echo ok
+         sh: cmp: command not found
+same     text       sort flags               sort -u list.txt | wc -l; sort -n list.txt | tail -2; sort -r list.txt | head -1
+same     text       sort -k -t               sort -k2 -n people.txt | head -1; sort -t' ' -k3,3 -k1,1r people.txt | head -1
+same     text       uniq -c / -d             sort list.txt | uniq -c | sort -rn | head -1; sort list.txt | uniq -d
+same     text       cut                      cut -d' ' -f1,3 people.txt; cut -c1-3 list.txt | head -1
+same     text       tr                       echo hello | tr a-z A-Z; echo 'a  b' | tr -s ' '; echo abc | tr -d b
+missing  text       awk print col            awk '{print $2}' people.txt
+         sh: awk: command not found
+missing  text       awk -F / sum             awk -F' ' '{s+=$2} END {print s}' people.txt
+         sh: awk: command not found
+missing  text       awk NR range             awk 'NR>=2 && NR<=3' list.txt
+         sh: awk: command not found
+same     text       xargs                    ls *.txt | xargs wc -l | tail -1
+same     text       xargs -I                 printf 'a\nb\n' | xargs -I{} echo "<{}>"
+same     text       xargs -n / -P            echo 1 2 3 4 | xargs -n 2 echo
+differs  text       diff -u                  diff -u a.txt b.txt | tail -n +3; echo $?
+         bash: @@ -1,3 +1,4 @@| line1|-line2|+line2 changed| line3|+line4|0|status=0|  bat-sh: 0|status=0| sh: diff: command not found 
+differs  text       diff -q / -r             diff -q a.txt b.txt; diff -rq src docs | wc -l
+         bash: Files a.txt and b.txt differ|3|status=0|  bat-sh: 0|status=0| sh: diff: command not found sh: diff: command not found 
+differs  text       comm / join / paste      paste a.txt b.txt | head -1
+         bash: line1	line1|status=0|  bat-sh: status=0| sh: paste: command not found 
+differs  text       comm                     comm -12 <(sort a.txt) <(sort b.txt)
+         bash: line1|line3|status=0|  bat-sh: status=2| sh: syntax error near unexpected token `<(sort' 
+missing  text       column -t                column -t people.txt
+         sh: column: command not found
+missing  text       fold / fmt               echo 'aaaa bbbb cccc' | fold -w 5
+         sh: fold: command not found
+same     text       tac / rev                tac a.txt | head -1; echo abc | rev
+same     text       seq                      seq 3; seq 1 2 5 | tr '\n' ' '
+same     text       printf formats           printf '%5s|%-5s|%03d|%.2f|%x\n' a b 7 3.14159 255
+same     text       echo -e / -n             echo -e 'a\tb'; echo -n x; echo
+missing  text       expr / bc                expr 2 + 3; echo '2*3' | bc
+         sh: expr: command not found
+missing  text       jq                       echo '{"a":1}' | jq .a
+         sh: jq: command not found
+differs  text       yes | head               yes | head -2
+         bash: y|y|status=0|  bat-sh: status=0| yes: not available: an endless producer cannot run inside the shell 
+same     text       sort | head early exit   seq 1 100000 | head -3
+differs  text       split / csplit           split -l 2 list.txt part_; ls part_* | wc -l
+         bash: 3|status=0|  bat-sh: 0|status=0| sh: split: command not found ls: cannot access 'part_*': No such file or directory 
+differs  text       expand/unexpand          printf 'a\tb\n' | expand | wc -c
+         bash: 10|status=0|  bat-sh: 0|status=0| sh: expand: command not found 
+same     text       iconv / dos2unix         printf 'a\r\n' | tr -d '\r' | wc -c
+same     sys        date                     date +%Y | grep -c '^20'
+same     sys        date -u iso              date -u -d @0 +%Y-%m-%dT%H:%M:%SZ
+same     sys        env / printenv           env | grep -c .  >/dev/null; printenv HOME | grep -c /
+same     sys        uname / whoami / id / hostname uname -s; whoami >/dev/null; id -u >/dev/null; echo ok
+missing  sys        nproc / df / free        nproc >/dev/null && echo ok; df . >/dev/null && echo df
+         sh: df: command not found
+missing  sys        ps / kill / pgrep        ps >/dev/null && echo ps
+         sh: ps: command not found
+same     sys        sleep                    sleep 0.05; echo slept
+missing  sys        timeout                  timeout 1 echo t
+         sh: timeout: command not found
+same     sys        true/false/test          true && ! false && test 1 -lt 2 && echo ok
+differs  sys        type / hash / alias      type cd | head -1; alias ll='ls -l'; alias | grep -c ll
+         bash: cd is a shell builtin|1|status=0|  bat-sh: cd is a shell builtin|0|status=1| 
+same     sys        umask / ulimit           umask >/dev/null; ulimit -n >/dev/null; echo ok
+missing  sys        tar                      tar cf t.tar src && tar tf t.tar | sort | head -2
+         sh: tar: command not found
+missing  sys        gzip / gunzip            gzip -k a.txt && ls a.txt.gz
+         sh: gzip: command not found
+missing  sys        zip / unzip              zip -q z.zip a.txt && unzip -l z.zip | grep -c a.txt
+         sh: zip: command not found
+differs  sys        curl                     curl --version | head -1
+         bash: curl 8.18.0 (x86_64-pc-linux-gnu) libcurl/8.18.0 OpenSSL/3.5.5 zlib/1.3.1 brotli/1.2.0 zstd/1.5.7 libidn2/2.3.  bat-sh: status=0| sh: curl: command not found 
+differs  sys        wget                     wget --version | head -1
+         bash: GNU Wget 1.25.0 built on linux-gnu.|status=0|  bat-sh: status=0| sh: wget: command not found 
+missing  tools      git status               git init -q . && git status --short | wc -l
+         sh: git: command not found
+missing  tools      git diff / log           git --version
+         sh: git: command not found
+missing  tools      python3 -c               python3 -c 'print(1+1)'
+         sh: python3: command not found
+missing  tools      python                   python -c 'print(1+1)'
+         sh: python: command not found
+missing  tools      python3 heredoc          python3 - <<'EOF'
+print("py")
+EOF
+         sh: python3: command not found
+differs  tools      node -e                  node -e 'console.log(1+1)'
+         bash: 2|status=0|  bat-sh: status=126| sh: node: No such file or directory 
+differs  tools      npm / npx                npm --version
+         bash: 11.16.0|status=0|  bat-sh: 10.9.0|status=0| 
+missing  tools      perl -pe                 echo abc | perl -pe 's/b/B/'
+         sh: perl: command not found
+missing  tools      ruby                     ruby -e 'puts 1'
+         sh: ruby: command not found
+differs  tools      make                     make --version | head -1
+         bash: GNU Make 4.4.1|status=0|  bat-sh: status=0| sh: make: command not found 
+missing  tools      cargo                    cargo --version
+         sh: cargo: command not found
+differs  tools      rustc / gcc / go         gcc --version | head -1
+         bash: gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0|status=0|  bat-sh: status=0| sh: gcc: command not found 
+missing  tools      pip                      pip --version
+         sh: pip: command not found
+missing  tools      pytest / jest            pytest --version
+         sh: pytest: command not found
+missing  tools      sudo / apt               sudo true
+         sh: sudo: command not found
+same=147 differs=28 missing=40 no-ref=0
