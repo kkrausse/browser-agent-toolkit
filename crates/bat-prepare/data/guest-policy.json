@@ -1,7 +1,12 @@
 {
-  "comment": "Guest preparation policy. Data, not code: later work replaces substitution entries with Rust-backed shim packages by changing `with` (e.g. to `dir:<path to shim package>`). See docs/design/image-format.md, 'Guest policy'.",
+  "comment": "Guest preparation policy. Data, not code. `dir:` paths are relative to this file. A substitution's `overlay` lays a shim from packages/guest-shims over the generic package it falls back to; `projectScripts` derive project files from the prepared tree. See docs/design/image-format.md, 'Guest policy', and docs/experiments/2026-10-09-tools.md.",
   "substitutions": [
-    { "package": "esbuild", "with": "npm:esbuild-wasm@{version}", "expect": "esbuild.wasm" },
+    {
+      "package": "esbuild",
+      "with": "npm:esbuild-wasm@{version}",
+      "expect": "esbuild.wasm",
+      "overlay": "dir:../../../packages/guest-shims/esbuild"
+    },
     { "package": "rollup", "with": "npm:@rollup/wasm-node@{version}", "expect": "dist/wasm-node/bindings_wasm_bg.wasm" },
     { "package": "lightningcss", "with": "npm:lightningcss-wasm@{version}", "expect": "lightningcss_node.wasm" },
     {
@@ -44,6 +49,13 @@
       "expect": [".bin/rg", "ripgrep/package.json"]
     }
   },
+  "projectScripts": [
+    {
+      "name": "vite-optimize-deps",
+      "run": ["node", "dir:../../../packages/guest-shims/prepare/vite-optimize-deps.mjs"],
+      "ifExists": "vite/package.json"
+    }
+  ],
   "programs": [{ "name": "opencode-server", "modules": ["/app/server.js"] }],
   "launch": {
     "preview": {
