@@ -1,0 +1,228 @@
+same    invoke  bash -lc
+differs invoke  /bin/bash -lc
+        bash 0 "/bin/bash\nok\n" | here 0 "bash\nok\n" ""
+same    invoke  sh -c
+same    invoke  zsh -lc
+same    invoke  bash -c args
+same    invoke  bash script
+same    invoke  bash -euo pipefail
+same    lang    pipeline
+same    lang    and-or
+same    lang    redirect out/append
+same    lang    redirect 2>&1
+same    lang    redirect &>
+same    lang    redirect 2>/dev/null
+same    lang    pipe |&
+same    lang    glob star
+missing lang    glob recursive **
+same    lang    glob ? and []
+same    lang    brace expansion
+same    lang    subshell
+same    lang    group
+same    lang    cmd subst
+same    lang    arithmetic
+same    lang    param expansion
+same    lang    heredoc
+same    lang    heredoc to file var
+same    lang    here-string
+same    lang    for loop
+same    lang    while read
+same    lang    case
+same    lang    if/elif
+same    lang    function
+differs lang    [[ ]] regex
+        bash 0 "main\n" | here 0 "\n" ""
+same    lang    [[ ]] glob
+differs lang    arrays
+        bash 0 "y 3\nx\ny\nz\n" | here 2 "" "bash: syntax error near unexpected token `(x'\n"
+missing lang    assoc arrays
+differs lang    process subst
+        bash 0 "same\n" | here 2 "" "bash: syntax error near unexpected token `<(echo'\n"
+same    lang    $'..' quoting
+same    lang    set -e
+same    lang    set -o pipefail
+same    lang    set -x
+same    lang    background + wait
+same    lang    exit status $?
+same    lang    export + env
+same    lang    cd + $PWD + ~
+same    lang    eval
+same    lang    trap EXIT
+same    lang    read -p / stdin
+same    lang    printf -v
+differs lang    [ -nt ] / test ops
+        bash 0 "ge\n" | here 0 "same-time\nge\n" ""
+same    lang    multi-line script
+same    lang    semicolon list & comments
+same    lang    stdin redirect
+same    lang    command -v
+same    lang    exec
+same    lang    time
+same    lang    select/until/break
+same    lang    ${var:offset:len} ${var^^}
+same    lang    $RANDOM $SECONDS $LINENO
+missing lang    pushd/popd
+same    lang    source
+same    lang    nested quotes
+same    read    cat
+same    read    cat -n
+same    read    cat multiple
+missing read    nl -ba
+same    read    head -n / -N
+same    read    head -c
+same    read    tail -n / +N
+same    read    tail -c
+same    read    sed -n range
+same    read    sed -n multiple -e
+same    read    wc -l / -c / -w
+same    read    ls
+same    read    ls -la count
+same    read    ls -1 dir
+same    read    ls -R
+same    read    ls -lh size col
+same    read    ls -t / -S
+same    read    ls -d glob
+same    read    ls -p / -F
+missing read    tree
+same    read    stat -c
+missing read    file
+same    read    du -sh
+missing read    less/more
+same    read    pwd
+same    read    realpath
+same    read    basename/dirname
+missing read    od / xxd / hexdump
+missing read    xxd
+missing read    strings
+missing read    md5sum / sha256sum
+missing read    md5sum
+missing read    base64
+missing read    cmp
+same    search  grep -n
+same    search  grep -rn
+same    search  grep -rn --include
+same    search  grep -rl
+same    search  grep -E alternation
+same    search  grep -i -c -v
+same    search  grep -A/-B/-C
+same    search  grep -o
+same    search  grep -w -x
+same    search  grep -F
+same    search  grep -P
+same    search  grep -q status
+same    search  grep -H / -h multi
+same    search  grep --exclude-dir
+same    search  grep -e -e
+same    search  grep -m
+same    search  grep -L
+missing search  rg pattern
+missing search  rg --files
+missing search  rg -l / -g
+same    search  find -name
+same    search  find -type f/-type d
+same    search  find -path / -not
+same    search  find -o / parens
+same    search  find -exec {} \;
+same    search  find -exec {} +
+same    search  find -print0 | xargs -0
+same    search  find -newer/-mtime/-size
+same    search  find -delete
+differs search  find -iname / -regex
+        bash 0 "./README.md\n./src/main.rs\n" | here 1 "./README.md\n" "find: unknown predicate `-regex'\n"
+same    search  find -prune
+differs search  find -empty / -printf
+        bash 0 "./empty\nmain.rs\n" | here 1 "./empty\n" "find: unknown predicate `-printf'\n"
+same    search  which
+missing search  locate/fd
+same    edit    sed -i s///
+same    edit    sed -i -e multiple
+same    edit    sed -E groups
+same    edit    sed insert/append
+same    edit    sed address /re/
+same    edit    sed y / c / =
+same    edit    sed -i.bak
+same    edit    cat > file <<EOF
+same    edit    printf > file
+same    edit    tee / tee -a
+same    edit    echo >> append
+same    edit    mkdir -p
+same    edit    rm -rf
+same    edit    rm -f missing
+same    edit    mv
+same    edit    cp / cp -r / -a
+same    edit    touch
+same    edit    ln -s / readlink
+same    edit    chmod +x / 755
+same    edit    mktemp
+same    edit    truncate / : >
+missing edit    truncate cmd
+same    edit    install / rmdir
+missing edit    patch
+missing edit    apply_patch
+missing edit    ed / ex
+missing edit    dd
+same    text    sort flags
+same    text    sort -k -t
+same    text    uniq -c / -d
+same    text    cut
+same    text    tr
+missing text    awk print col
+missing text    awk -F / sum
+missing text    awk NR range
+same    text    xargs
+same    text    xargs -I
+same    text    xargs -n / -P
+missing text    diff -u
+missing text    diff -q / -r
+missing text    comm / join / paste
+differs text    comm
+        bash 0 "line1\nline3\n" | here 2 "" "bash: syntax error near unexpected token `<(sort'\n"
+missing text    column -t
+missing text    fold / fmt
+same    text    tac / rev
+same    text    seq
+same    text    printf formats
+same    text    echo -e / -n
+missing text    expr / bc
+missing text    jq
+differs text    yes | head
+        bash 0 "y\ny\n" | here 0 "" "yes: not available: an endless producer cannot run inside the shell\n"
+same    text    sort | head early exit
+missing text    split / csplit
+missing text    expand/unexpand
+same    text    iconv / dos2unix
+same    sys     date
+same    sys     date -u iso
+same    sys     env / printenv
+same    sys     uname / whoami / id / hostname
+missing sys     nproc / df / free
+missing sys     ps / kill / pgrep
+same    sys     sleep
+missing sys     timeout
+same    sys     true/false/test
+differs sys     type / hash / alias
+        bash 0 "cd is a shell builtin\n1\n" | here 1 "cd is a shell builtin\n0\n" ""
+missing sys     umask / ulimit
+missing sys     tar
+missing sys     gzip / gunzip
+missing sys     zip / unzip
+missing sys     curl
+missing sys     wget
+missing tools   git status
+missing tools   git diff / log
+missing tools   python3 -c
+missing tools   python
+missing tools   python3 heredoc
+differs tools   node -e
+        bash 0 "2\n" | here 126 "" "sh: node: No such file or directory\n"
+differs tools   npm / npx
+        bash 0 "11.16.0\n" | here 0 "10.9.0\n" ""
+missing tools   perl -pe
+missing tools   ruby
+missing tools   make
+missing tools   cargo
+missing tools   rustc / gcc / go
+missing tools   pip
+missing tools   pytest / jest
+missing tools   sudo / apt
+same=146 differs=12 missing=57

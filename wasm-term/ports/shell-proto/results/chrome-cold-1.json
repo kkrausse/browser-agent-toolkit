@@ -1,0 +1,229 @@
+{
+  "ok": true,
+  "isError": false,
+  "text": "{\n  crossOriginIsolated: true,\n  userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36',\n  exit: { code: 0, signal: undefined, error: undefined },\n  workerStarts: [\n    { slot: 0, ms: 10.8, why: 'on demand' },\n    { slot: 1, ms: 10.7, why: 'on demand' },\n    { slot: 2, ms: 10.6, why: 'on demand' },\n    { slot: 0, ms: 10.6, why: 'replaced after kill' },\n    { slot: 3, ms: 10.6, why: 'on demand' }\n  ],\n  result: {\n    failed: 0,\n    checks: [\n      {\n        name: 'worker: the very first command',\n        ok: true,\n        detail: '\"first\\\\n\" \"\"'\n      },\n      {\n        name: \"inline: bash -lc 'echo hi > f.txt && cat f.txt | wc -c && ls'\",\n        ok: true,\n        detail: 'status 0 stdout \"3\\\\nf.txt\\\\nfrom-rust.txt\\\\n\" stderr \"\"'\n      },\n      {\n        name: 'inline: file written by the shell is read by the rust program (std::fs)',\n        ok: true,\n        detail: '\"hi\\\\n\"'\n      },\n      {\n        name: 'inline: file written by the rust program is read by the shell',\n        ok: true,\n        detail: '\"written by the rust program\\\\n\"'\n      },\n      {\n        name: 'inline: mkdir/mv/rm/ln -s/append by the shell, seen through WASI',\n        ok: true,\n        detail: 'status 0 \"hi\\\\nmore\\\\n\" \"hi\\\\nmore\\\\n\" \"\"'\n      },\n      {\n        name: 'inline: stdout, stderr and exit status kept apart',\n        ok: true,\n        detail: '7 \"out\\\\n\" \"err\\\\n\"'\n      },\n      {\n        name: 'inline: a failing command',\n        ok: true,\n        detail: '\"status 1\\\\n\" \"cat: /nope/missing.txt: No such file or directory\\\\n\"'\n      },\n      {\n        name: 'inline: unknown program is 127',\n        ok: true,\n        detail: '\"127\\\\n\" \"sh: nosuchprogram: command not found\\\\n\"'\n      },\n      {\n        name: 'inline: loop, $(...), glob, pipeline, find, grep -rn, sed',\n        ok: true,\n        detail: '0 \"a/b/g.txt:2\\\\n./a/b/g.txt\\\\n./a/b/g.txt:2:MORE\\\\n\" \"\"'\n      },\n      {\n        name: 'inline: here-doc, sed -i, nested /bin/bash -lc',\n        ok: true,\n        detail: '0 \"# Title\\\\nnested 42\\\\n\" \"\"'\n      },\n      {\n        name: 'inline: output arrives only when the command has ended (expected for inline)',\n        ok: true,\n        detail: '[600.675, 600.6899999999999, 600.7]'\n      },\n      {\n        name: 'inline: timeout enforced by the host (300 ms) on a sleeping command',\n        ok: true,\n        detail: 'status 124 after 302 ms'\n      },\n      {\n        name: \"worker: bash -lc 'echo hi > f.txt && cat f.txt | wc -c && ls'\",\n        ok: true,\n        detail: 'status 0 stdout \"3\\\\nf.txt\\\\nfrom-rust.txt\\\\n\" stderr \"\"'\n      },\n      {\n        name: 'worker: file written by the shell is read by the rust program (std::fs)',\n        ok: true,\n        detail: '\"hi\\\\n\"'\n      },\n      {\n        name: 'worker: file written by the rust program is read by the shell',\n        ok: true,\n        detail: '\"written by the rust program\\\\n\"'\n      },\n      {\n        name: 'worker: mkdir/mv/rm/ln -s/append by the shell, seen through WASI',\n        ok: true,\n        detail: 'status 0 \"hi\\\\nmore\\\\n\" \"hi\\\\nmore\\\\n\" \"\"'\n      },\n      {\n        name: 'worker: stdout, stderr and exit status kept apart',\n        ok: true,\n        detail: '7 \"out\\\\n\" \"err\\\\n\"'\n      },\n      {\n        name: 'worker: a failing command',\n        ok: true,\n        detail: '\"status 1\\\\n\" \"cat: /nope/missing.txt: No such file or directory\\\\n\"'\n      },\n      {\n        name: 'worker: unknown program is 127',\n        ok: true,\n        detail: '\"127\\\\n\" \"sh: nosuchprogram: command not found\\\\n\"'\n      },\n      {\n        name: 'worker: loop, $(...), glob, pipeline, find, grep -rn, sed',\n        ok: true,\n        detail: '0 \"a/b/g.txt:2\\\\n./a/b/g.txt\\\\n./a/b/g.txt:2:MORE\\\\n\" \"\"'\n      },\n      {\n        name: 'worker: here-doc, sed -i, nested /bin/bash -lc',\n        ok: true,\n        detail: '0 \"# Title\\\\nnested 42\\\\n\" \"\"'\n      },\n      {\n        name: 'worker: output arrives while the command is still running',\n        ok: true,\n        detail: '[0.21000000000000002, 200.65, 400.89000000000004]'\n      },\n      {\n        name: 'worker: three children at once under one poll_oneoff',\n        ok: true,\n        detail: '[\"child 1\\\\n!\", \"child 2\\\\n!\", \"child 3\\\\n!\"] in 309 ms, 4 wakeups'\n      },\n      {\n        name: 'worker: kill of a sleeping command (SIGTERM after 300 ms)',\n        ok: true,\n        detail: 'status 143 after 302 ms, stdout \"started\\\\n\"'\n      },\n      {\n        name: 'worker: kill of a busy loop (Worker replaced)',\n        ok: true,\n        detail: 'status 137 after 551 ms, stdout \"spinning\\\\n\"'\n      },\n      {\n        name: 'worker: the next command after a replaced Worker',\n        ok: true,\n        detail: '0 \"alive\\\\n\" in 0.3 ms (queued 0.0 ms)'\n      },\n      {\n        name: 'worker: dropping running children frees their Workers',\n        ok: true,\n        detail: '\"after-drops\\\\n\" in 0.5 ms'\n      },\n      {\n        name: 'worker: 8 MiB of output, reader starts late',\n        ok: true,\n        detail: 'status 0 bytes 8488896'\n      }\n    ],\n    numbers: {\n      'worker: very first command, total ms / of which waiting for the shell Worker': [ 10.2, 8.2 ],\n      'inline: arrival of 3 lines printed 200 ms apart (ms after spawn)': [ 600.7, 600.7, 600.7 ],\n      'worker: arrival of 3 lines printed 200 ms apart (ms after spawn)': [ 0.2, 200.7, 400.9 ],\n      'worker: three 300 ms children at once, wall ms': 309.3,\n      'worker: kill of `sleep 30`: ms from kill to exit event': 2.1,\n      'worker: kill of `while :; do :; done`: ms from kill to exit event': 251.5,\n      'worker: first command on the replacement Worker, total ms': 0.3,\n      'worker: 8 MiB of output: total ms / frames': [ 273, 33 ]\n    }\n  },\n  tail: undefined\n}",
+  "value": {
+    "crossOriginIsolated": true,
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+    "exit": {
+      "code": 0
+    },
+    "workerStarts": [
+      {
+        "slot": 0,
+        "ms": 10.8,
+        "why": "on demand"
+      },
+      {
+        "slot": 1,
+        "ms": 10.7,
+        "why": "on demand"
+      },
+      {
+        "slot": 2,
+        "ms": 10.6,
+        "why": "on demand"
+      },
+      {
+        "slot": 0,
+        "ms": 10.6,
+        "why": "replaced after kill"
+      },
+      {
+        "slot": 3,
+        "ms": 10.6,
+        "why": "on demand"
+      }
+    ],
+    "result": {
+      "failed": 0,
+      "checks": [
+        {
+          "name": "worker: the very first command",
+          "ok": true,
+          "detail": "\"first\\n\" \"\""
+        },
+        {
+          "name": "inline: bash -lc 'echo hi > f.txt && cat f.txt | wc -c && ls'",
+          "ok": true,
+          "detail": "status 0 stdout \"3\\nf.txt\\nfrom-rust.txt\\n\" stderr \"\""
+        },
+        {
+          "name": "inline: file written by the shell is read by the rust program (std::fs)",
+          "ok": true,
+          "detail": "\"hi\\n\""
+        },
+        {
+          "name": "inline: file written by the rust program is read by the shell",
+          "ok": true,
+          "detail": "\"written by the rust program\\n\""
+        },
+        {
+          "name": "inline: mkdir/mv/rm/ln -s/append by the shell, seen through WASI",
+          "ok": true,
+          "detail": "status 0 \"hi\\nmore\\n\" \"hi\\nmore\\n\" \"\""
+        },
+        {
+          "name": "inline: stdout, stderr and exit status kept apart",
+          "ok": true,
+          "detail": "7 \"out\\n\" \"err\\n\""
+        },
+        {
+          "name": "inline: a failing command",
+          "ok": true,
+          "detail": "\"status 1\\n\" \"cat: /nope/missing.txt: No such file or directory\\n\""
+        },
+        {
+          "name": "inline: unknown program is 127",
+          "ok": true,
+          "detail": "\"127\\n\" \"sh: nosuchprogram: command not found\\n\""
+        },
+        {
+          "name": "inline: loop, $(...), glob, pipeline, find, grep -rn, sed",
+          "ok": true,
+          "detail": "0 \"a/b/g.txt:2\\n./a/b/g.txt\\n./a/b/g.txt:2:MORE\\n\" \"\""
+        },
+        {
+          "name": "inline: here-doc, sed -i, nested /bin/bash -lc",
+          "ok": true,
+          "detail": "0 \"# Title\\nnested 42\\n\" \"\""
+        },
+        {
+          "name": "inline: output arrives only when the command has ended (expected for inline)",
+          "ok": true,
+          "detail": "[600.675, 600.6899999999999, 600.7]"
+        },
+        {
+          "name": "inline: timeout enforced by the host (300 ms) on a sleeping command",
+          "ok": true,
+          "detail": "status 124 after 302 ms"
+        },
+        {
+          "name": "worker: bash -lc 'echo hi > f.txt && cat f.txt | wc -c && ls'",
+          "ok": true,
+          "detail": "status 0 stdout \"3\\nf.txt\\nfrom-rust.txt\\n\" stderr \"\""
+        },
+        {
+          "name": "worker: file written by the shell is read by the rust program (std::fs)",
+          "ok": true,
+          "detail": "\"hi\\n\""
+        },
+        {
+          "name": "worker: file written by the rust program is read by the shell",
+          "ok": true,
+          "detail": "\"written by the rust program\\n\""
+        },
+        {
+          "name": "worker: mkdir/mv/rm/ln -s/append by the shell, seen through WASI",
+          "ok": true,
+          "detail": "status 0 \"hi\\nmore\\n\" \"hi\\nmore\\n\" \"\""
+        },
+        {
+          "name": "worker: stdout, stderr and exit status kept apart",
+          "ok": true,
+          "detail": "7 \"out\\n\" \"err\\n\""
+        },
+        {
+          "name": "worker: a failing command",
+          "ok": true,
+          "detail": "\"status 1\\n\" \"cat: /nope/missing.txt: No such file or directory\\n\""
+        },
+        {
+          "name": "worker: unknown program is 127",
+          "ok": true,
+          "detail": "\"127\\n\" \"sh: nosuchprogram: command not found\\n\""
+        },
+        {
+          "name": "worker: loop, $(...), glob, pipeline, find, grep -rn, sed",
+          "ok": true,
+          "detail": "0 \"a/b/g.txt:2\\n./a/b/g.txt\\n./a/b/g.txt:2:MORE\\n\" \"\""
+        },
+        {
+          "name": "worker: here-doc, sed -i, nested /bin/bash -lc",
+          "ok": true,
+          "detail": "0 \"# Title\\nnested 42\\n\" \"\""
+        },
+        {
+          "name": "worker: output arrives while the command is still running",
+          "ok": true,
+          "detail": "[0.21000000000000002, 200.65, 400.89000000000004]"
+        },
+        {
+          "name": "worker: three children at once under one poll_oneoff",
+          "ok": true,
+          "detail": "[\"child 1\\n!\", \"child 2\\n!\", \"child 3\\n!\"] in 309 ms, 4 wakeups"
+        },
+        {
+          "name": "worker: kill of a sleeping command (SIGTERM after 300 ms)",
+          "ok": true,
+          "detail": "status 143 after 302 ms, stdout \"started\\n\""
+        },
+        {
+          "name": "worker: kill of a busy loop (Worker replaced)",
+          "ok": true,
+          "detail": "status 137 after 551 ms, stdout \"spinning\\n\""
+        },
+        {
+          "name": "worker: the next command after a replaced Worker",
+          "ok": true,
+          "detail": "0 \"alive\\n\" in 0.3 ms (queued 0.0 ms)"
+        },
+        {
+          "name": "worker: dropping running children frees their Workers",
+          "ok": true,
+          "detail": "\"after-drops\\n\" in 0.5 ms"
+        },
+        {
+          "name": "worker: 8 MiB of output, reader starts late",
+          "ok": true,
+          "detail": "status 0 bytes 8488896"
+        }
+      ],
+      "numbers": {
+        "worker: very first command, total ms / of which waiting for the shell Worker": [
+          10.2,
+          8.2
+        ],
+        "inline: arrival of 3 lines printed 200 ms apart (ms after spawn)": [
+          600.7,
+          600.7,
+          600.7
+        ],
+        "worker: arrival of 3 lines printed 200 ms apart (ms after spawn)": [
+          0.2,
+          200.7,
+          400.9
+        ],
+        "worker: three 300 ms children at once, wall ms": 309.3,
+        "worker: kill of `sleep 30`: ms from kill to exit event": 2.1,
+        "worker: kill of `while :; do :; done`: ms from kill to exit event": 251.5,
+        "worker: first command on the replacement Worker, total ms": 0.3,
+        "worker: 8 MiB of output: total ms / frames": [
+          273,
+          33
+        ]
+      }
+    }
+  },
+  "valueUnavailable": false,
+  "logs": [],
+  "warnings": [],
+  "aftermath": {
+    "startUrl": "http://127.0.0.1:4797/?",
+    "endUrl": "http://127.0.0.1:4797/?warm=0&arg=cold&arg=quick",
+    "navigations": [
+      "http://127.0.0.1:4797/?warm=0&arg=cold&arg=quick"
+    ],
+    "consoleErrorCount": 0,
+    "pageErrorCount": 0,
+    "handoffs": 0
+  },
+  "session": {
+    "id": "shell-proto",
+    "createdAt": "2026-10-10T14:43:37.657Z",
+    "updatedAt": "2026-10-10T14:47:08.661Z",
+    "connected": true,
+    "pageUrl": "http://127.0.0.1:4797/?warm=0&arg=cold&arg=quick",
+    "stateKeys": []
+  }
+}
