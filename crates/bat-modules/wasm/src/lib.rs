@@ -82,6 +82,7 @@ fn parse_options(bytes: &[u8]) -> Options {
     options.ts.experimental_decorators = flags & (1 << 8) != 0;
     options.ts.emit_decorator_metadata = flags & (1 << 9) != 0;
     options.ts.use_define_for_class_fields = flags & (1 << 10) == 0;
+    options.async_context = flags & (1 << 11) != 0;
 
     let mut pos = 4usize;
     let mut next = || -> Option<String> {

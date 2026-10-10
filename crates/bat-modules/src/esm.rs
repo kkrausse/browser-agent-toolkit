@@ -109,6 +109,7 @@ pub(crate) fn transform_esm<'a>(
     source: &str,
     want_applied: bool,
     dynamic_import: &str,
+    async_context: bool,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> EsmOutput {
     let semantic = SemanticBuilder::new().build(program);
@@ -292,6 +293,7 @@ pub(crate) fn transform_esm<'a>(
         dynamic: false,
         decorator: None,
         statement_start: None,
+        async_context,
     };
     visitor.visit_program(program);
     let EsmVisitor { dynamic_imports, requires, tla, import_meta, dynamic, decorator, .. } = visitor;
@@ -466,6 +468,7 @@ struct EsmVisitor<'v> {
     /// that offset would begin the statement with `(`, which continues the
     /// previous line when that line has no semicolon (`a = b\nimported()`).
     statement_start: Option<u32>,
+    async_context: bool,
 }
 
 impl EsmVisitor<'_> {
@@ -613,6 +616,9 @@ impl<'a> Visit<'a> for EsmVisitor<'_> {
     fn visit_await_expression(&mut self, it: &AwaitExpression<'a>) {
         if self.function_depth == 0 {
             self.tla = true;
+        }
+        if self.async_context {
+            crate::await_hooks(self.edits, it);
         }
         walk::walk_await_expression(self, it);
     }

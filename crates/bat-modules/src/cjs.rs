@@ -22,11 +22,13 @@ pub(crate) fn transform_cjs<'a>(
     source: &str,
     want_applied: bool,
     dynamic_import: &str,
+    async_context: bool,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> CjsOutput {
     let mut visitor = CjsVisitor {
         edits: Edits::default(),
         dynamic_import,
+        async_context,
         exports: NameSet::default(),
         reexports: NameSet::default(),
         requires: NameSet::default(),
@@ -82,6 +84,7 @@ pub(crate) fn transform_cjs<'a>(
 struct CjsVisitor<'v, 'a> {
     edits: Edits,
     dynamic_import: &'v str,
+    async_context: bool,
     exports: NameSet,
     reexports: NameSet,
     requires: NameSet,
@@ -237,6 +240,13 @@ impl<'a> Visit<'a> for CjsVisitor<'_, 'a> {
     fn visit_decorator(&mut self, it: &Decorator<'a>) {
         self.decorator.get_or_insert((it.span.start, it.span.end));
         walk::walk_decorator(self, it);
+    }
+
+    fn visit_await_expression(&mut self, it: &AwaitExpression<'a>) {
+        if self.async_context {
+            crate::await_hooks(&mut self.edits, it);
+        }
+        walk::walk_await_expression(self, it);
     }
 
     fn visit_import_expression(&mut self, it: &ImportExpression<'a>) {

@@ -15,6 +15,8 @@ mod real {
                 Some("commonjs") => PackageType::CommonJs,
                 _ => PackageType::None,
             },
+            // The runtime carries AsyncLocalStorage context across `await` through these hooks.
+            async_context: true,
             ..Options::default()
         };
         let output = transform(source, input.path, &options);

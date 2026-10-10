@@ -107,6 +107,13 @@ pub struct Options {
     /// global hook when transforming code that runs outside a module function
     /// (`new Function`, `vm`, `eval`).
     pub dynamic_import: Option<String>,
+    /// Wrap every `await x` as `__bat_u(await __bat_w(x))`. The two globals are
+    /// the runtime's hooks for carrying async context (AsyncLocalStorage)
+    /// across `await`, which no browser API exposes: `__bat_w` may capture the
+    /// current context with the awaited value, `__bat_u` restores it when the
+    /// function resumes. With both as identity functions the code behaves
+    /// exactly as before. Off by default.
+    pub async_context: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -332,11 +339,11 @@ fn transform_in<'s>(
 
     let (code, mut facts, applied, prelude_len): (Option<String>, Facts, _, u32) = match kind {
         ModuleKind::Esm => {
-            let out = esm::transform_esm(program, js, want_applied, dynamic_import, &mut diagnostics);
+            let out = esm::transform_esm(program, js, want_applied, dynamic_import, options.async_context, &mut diagnostics);
             (Some(out.code), out.facts, out.applied, out.prelude_len)
         }
         _ => {
-            let out = cjs::transform_cjs(program, js, want_applied, dynamic_import, &mut diagnostics);
+            let out = cjs::transform_cjs(program, js, want_applied, dynamic_import, options.async_context, &mut diagnostics);
             (out.code, out.facts, out.applied, 0)
         }
     };
@@ -496,4 +503,13 @@ fn json(source: &str) -> Output<'_> {
         map: None,
         diagnostics: Vec::new(),
     }
+}
+
+/// `await x` -> `__bat_u(await __bat_w(x))` (see [`Options::async_context`]).
+/// Three insertions, so the operand keeps its text, lines and inner edits.
+pub(crate) fn await_hooks(edits: &mut edits::Edits, it: &oxc_ast::ast::AwaitExpression) {
+    use oxc_span::GetSpan;
+    edits.insert(it.span.start, "__bat_u(");
+    edits.insert(it.argument.span().start, "__bat_w(");
+    edits.insert(it.span.end, "))");
 }
