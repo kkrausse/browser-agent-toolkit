@@ -15,6 +15,7 @@ offset 0 ┌──────────────────────�
          │ section table  S × 24 bytes  │   (8-aligned)
          │ in-head section payloads     │   (each 8-aligned)
 head_len ├──────────────────────────────┤   = bodies_off, a multiple of the body alignment
+         │ start-up bodies and records  │   optional: what `--order` names, in that order
          │ original bodies, index order │   each starts on a body-alignment boundary
          │ module records, index order  │   compiled body immediately followed by facts blob
 file_len └──────────────────────────────┘
@@ -53,7 +54,8 @@ table extending past `head_len`, `bodies_off < head_len`, `file_len < bodies_off
 
 The checksum is **not** verified at mount (it is O(head)); `Image::verify_checksum` exists
 for tools. Whole-file identity is the content-addressed file name
-(`image-<first 16 hex of sha256>.batimg`), checked once after download.
+(`image-<first 16 hex of sha256>.batimg`). A browser verifies a download block by block
+against `<image>.sums` before writing it (see "Transfer copy, sums, start-up order").
 
 ## Entry (48 bytes)
 
@@ -196,11 +198,41 @@ __bat_define("/app/server.js",async function*(__bat){<compiled body>
   loader falls back to transforming the original, so programs are purely an optimisation.
 - Which launch uses which program: `manifest.json`, `launch.<name>.programs`.
 
+## Transfer copy, sums, start-up order
+
+Beside every image (and nothing of this is inside it, so it does not change its hash):
+
+- **`<image>.zst`**: the image as one zstd frame (level 9 by default, `--zstd-level` up to
+  19: window ≤ 8 MiB, which is what browsers accept for `Content-Encoding: zstd`; content
+  size and checksum in the frame). The server handler answers a request for `<image>` with
+  it when the client accepts zstd. Program scripts, the derived bundle and the runtime's
+  files get a `.zst` the same way. TODO image: 238.9 MB → 32.2 MB at level 9 (29.0 MB at
+  19, 47 s on a busy machine instead of 2 s).
+- **`<image>.sums`**: SHA-256 of every 1 MiB block of the image (the last one short),
+  32 bytes each, concatenated. The manifest carries the file's own SHA-256. The browser
+  hashes each block of a download with WebCrypto and compares before it writes the block.
+- **Start-up order** (`bat-prepare app --order <file>`; lines `<b|c|bc>\t<guest path>`,
+  from `bat-prepare order <image> <reads.json>`): the named original bodies (`b`) and
+  module records (`c`) are laid out directly after the head, in file order; everything
+  else follows as before. Where they end is `image.firstBytes` in the manifest. Body
+  order is free in the format (entries carry offsets), so readers are unaffected. The
+  order file is an input of the image: changing it changes the hash.
+
+## Layers
+
+`manifest.layers[]` are further images, mounted in order after `manifest.image`, each at
+its `mount`. `bat-prepare app` writes one when the dependency tree has packages that are
+not from the lockfile (workspace members linked with `workspace:`, `file:` directories):
+their store entries are moved from `node_modules/.bun/<id>` to `node_modules/.linked/<id>`
+(links re-pointed both ways) and that directory is packed as its own image, mounted at
+`<workspace>/node_modules/.linked`. The first image then depends only on the lockfile,
+the policy, the pinned application and the start-up order.
+
 ## Prepared output directory (`bat-prepare app`)
 
 ```
 <out>/manifest.json
-<out>/image-<hash16>.batimg
+<out>/image-<hash16>.batimg          (+ .zst, .sums; one more set per layer)
 <out>/program-<name>-<hash16>.js
 <out>.work/            scratch + cache (state.json, staged tree); not served
 ```
@@ -216,7 +248,10 @@ manifest and is installed into the overlay.
 {
   "format": "bat-prepared-v1",
   "image": { "file": "image-86a0af33366510f8.batimg", "bytes": 243425648, "sha256": "…",
-             "mount": "/", "entries": 12110, "headBytes": 1726208 },
+             "mount": "/", "entries": 12110, "headBytes": 1726208, "firstBytes": 13518912,
+             "zstd": { "file": "image-….batimg.zst", "bytes": 32232366, "level": 9 },
+             "sums": { "file": "image-….batimg.sums", "blockBytes": 1048576, "sha256": "…" } },
+  "layers": [ { "file": "image-….batimg", "mount": "/workspace/node_modules/.linked", … } ],
   "programs": [ { "name": "opencode-server", "file": "program-opencode-server-….js",
                   "bytes": 27721261, "sha256": "…", "modules": ["/app/server.js"] } ],
   "launch": {

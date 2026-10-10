@@ -609,3 +609,33 @@ Content-Length, `16` Expect: 100-continue, `32` body runs until close, `64` HTTP
   ignore a worker it has already retired.
 - **`proc::finish` publishes the status before closing the files** (it used to store it
   afterwards, so `waitpid` right after pipe EOF could return 0).
+
+## 17. Images that are still arriving, read trace (first-open work, 2026-10-10)
+
+- **`bat_image_arriving(id, state)`**: download state of image `id`, which only has to be
+  reserved (`bat_image_reserve`), so the supervisor sets it before `bat_image_mount`.
+  `0` complete (the default), `1` arriving, `2` failed. While arriving, a host read
+  (`host_image_read`) that returns fewer bytes than asked for means "not in the file
+  yet", not an error: the file is written front to back by the downloader. A thread that
+  may block waits in the kernel for the chunk (10 ms polls, woken earlier by
+  `bat_image_progress`); the chunk slot is not left in its loading state meanwhile, so a
+  worker killed while waiting holds nothing. A thread that may not block (the page) gets
+  `EAGAIN` as for any fault and retries. `bat_image_fault` (the supervisor's service for
+  threads without a handle) never waits: it answers `-EAGAIN` and does not bump
+  `BAT_FAULT_WORD`. State `2` turns every such read into `EIO`.
+- **`bat_image_progress(id)`**: more of the file is there; wakes the waiters and bumps
+  `BAT_FAULT_WORD`. The page calls it per verified block the downloader reports.
+- The mount itself needs the head: the host mounts once `headBytes` (manifest) are in the
+  file. `kerneld` op `mount` takes `{ name, path, arriving }`.
+- **Handles**: an arriving image's file (`<name>.partial`) is held by its writer in
+  `readwrite-unsafe` mode, which excludes `read-only` handles, so `openImageHandle` falls
+  back to `readwrite-unsafe` when `read-only` is refused. Readers never write.
+- **`bat_image_trace(on)`**, **`bat_image_trace_read(id, from, out, cap) -> pairs`**: record
+  `(offset, length)` of every positioned image read (one relaxed load per read when off);
+  `bat-prepare order` turns the list into a start-up order. The host turns it on before
+  the first mount when `localStorage['bat-image-trace'] === '1'` and exposes
+  `__batImageTrace(id)`.
+- **Walk fast path**: the image's path table answers whenever the overlay has no child
+  with the *next* name (it used to require the overlay directory to be empty), so a mount
+  point or a written file in a directory does not slow lookups of its siblings.
+
