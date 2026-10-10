@@ -681,7 +681,8 @@ function createHttp(rt: Runtime): { http: any; https: any } {
       _held = false
 
       constructor(input: any, options?: any, cb?: any) {
-        super({ emitClose: true, autoDestroy: true })
+        // Not autoDestroy: finishing the request body is not the end of the exchange.
+        super({ emitClose: true, autoDestroy: false })
         let url: URL | undefined
         if (typeof input === 'string') url = new URL(input)
         else if (input instanceof URL) url = input
