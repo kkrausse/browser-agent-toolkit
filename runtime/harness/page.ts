@@ -92,6 +92,11 @@ async function start() {
   const stored = await boot.storeImage(manifest.image.file, `${prepared}${manifest.image.file}`)
   const t2 = performance.now()
   const mounted = await boot.mountImage(manifest.image.file, manifest.image.mount ?? '/')
+  // Packages that are not from the lockfile travel in further images (manifest.layers).
+  for (const layer of manifest.layers ?? []) {
+    await boot.storeImage(layer.file, `${prepared}${layer.file}`)
+    await boot.mountImage(layer.file, layer.mount ?? '/')
+  }
   const t3 = performance.now()
   for (const dir of ['/tmp', '/workspace', '/bin', '/usr/bin', '/usr/local/bin', '/home/user', '/.bat']) k.mkdir(dir, { recursive: true })
   // The shell is built into the runtime (process/sh.ts); these make its conventional paths exist.
