@@ -103,6 +103,33 @@ terminal.onData(data => {
   program.write(data);
 });
 
+// Ctrl+V is the terminal's literal-next key (and scroll-down in Emacs), not
+// paste: paste stays on Cmd+V / Ctrl+Shift+V and the browser's paste event.
+container.addEventListener("keydown", event => {
+  if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && event.code === "KeyV") {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    sent.push("\x16");
+    program.write("\x16");
+  }
+}, { capture: true });
+
+// Focus reporting (DEC mode 1004). ghostty-web tracks whether the program
+// asked for it but leaves producing the reports to the embedder.
+let focused = document.hasFocus() && container.contains(document.activeElement);
+function reportFocus(now: boolean): void {
+  if (now === focused) return;
+  focused = now;
+  if (!terminal.hasFocusEvents()) return;
+  const report = now ? "\x1b[I" : "\x1b[O";
+  sent.push(report);
+  program.write(report);
+}
+container.addEventListener("focusin", () => reportFocus(true));
+container.addEventListener("focusout", () => reportFocus(false));
+window.addEventListener("blur", () => reportFocus(false));
+window.addEventListener("focus", () => reportFocus(container.contains(document.activeElement)));
+
 terminal.onResize(({ cols, rows }) => {
   const { width, height } = cellPixels();
   program.resize(cols, rows, Math.round(width * cols), Math.round(height * rows));

@@ -77,10 +77,10 @@ fn scripted(origin: &str, ws_origin: &str) -> io::Result<()> {
     check("server-initiated close with code and reason", event == WsEvent::Close { code: 1000, reason: "goodbye".into() });
 
     println!("\x1b[1m4. Failure reporting\x1b[0m");
-    let failed = net::fetch("GET", "http://127.0.0.1:9/nothing-listens-here", &[], b"");
+    let failed = net::fetch("GET", "http://127.0.0.1:4799/nothing-listens-here", &[], b"");
     println!("  fetch to a closed port: {failed:?}");
     check("a network error is an Err, not a hang", failed.is_err());
-    let mut bad = WebSocket::connect("ws://127.0.0.1:9/", &[])?;
+    let mut bad = WebSocket::connect("ws://127.0.0.1:4799/", &[])?;
     let event = bad.recv()?;
     println!("  websocket to a closed port: {}", show(&event));
     check("a failed WebSocket reports Error", matches!(event, WsEvent::Error(_)));
@@ -95,7 +95,9 @@ fn interactive(origin: &str, ws_origin: &str) -> io::Result<()> {
     println!("  `tick` toggles a 1 s timer; `quit` (or ^D) leaves.");
     let mut ws = WebSocket::connect(&format!("{ws_origin}/test/ws"), &[])?;
     let mut stream: Option<std::fs::File> = None;
-    let mut ticking = false;
+    // The timer is a deadline, not a per-iteration timeout, so traffic on the
+    // other descriptors cannot starve it.
+    let mut next_tick: Option<Instant> = None;
     let mut ticks = 0;
     let stdin = io::stdin();
     loop {
@@ -103,11 +105,14 @@ fn interactive(origin: &str, ws_origin: &str) -> io::Result<()> {
         if let Some(stream) = &stream {
             fds.push(PollFd::new(stream.as_raw_fd()));
         }
-        let ready = poll(&mut fds, ticking.then_some(Duration::from_secs(1)))?;
-        if ready == 0 {
-            ticks += 1;
-            println!("  [timer] tick {ticks}");
-            continue;
+        let timeout = next_tick.map(|at| at.saturating_duration_since(Instant::now()));
+        poll(&mut fds, timeout)?;
+        if let Some(at) = next_tick {
+            if Instant::now() >= at {
+                ticks += 1;
+                println!("  [timer] tick {ticks}");
+                next_tick = Some(at + Duration::from_secs(1));
+            }
         }
         if fds[1].readable {
             while let Some(event) = ws.try_recv()? {
@@ -138,8 +143,11 @@ fn interactive(origin: &str, ws_origin: &str) -> io::Result<()> {
                 "" => {}
                 "quit" => return Ok(()),
                 "tick" => {
-                    ticking = !ticking;
-                    println!("  timer {}", if ticking { "on" } else { "off" });
+                    next_tick = match next_tick {
+                        None => Some(Instant::now() + Duration::from_secs(1)),
+                        Some(_) => None,
+                    };
+                    println!("  timer {}", if next_tick.is_some() { "on" } else { "off" });
                 }
                 "sse" => {
                     let response = HttpRequest::send("GET", &format!("{origin}/test/sse?count=5&interval=700"), &[], b"")?.response()?;
