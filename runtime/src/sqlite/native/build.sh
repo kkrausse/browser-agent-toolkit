@@ -1,22 +1,64 @@
 #!/bin/sh
 # Build runtime/src/sqlite/sqlite3.wasm from the SQLite amalgamation and bat_sqlite.c.
 #
+# The Wasm file is committed (656 KiB), so `bun run setup` needs none of this. To rebuild it:
+#
+#   sh runtime/src/sqlite/native/build.sh --fetch
+#
+# downloads the three pinned inputs below into $BAT_SQLITE_TOOLCHAIN (default
+# <repo>/target/sqlite-toolchain, gitignored; about 300 MB of downloads, 1 GB unpacked),
+# checks each against its sha256, unpacks them and builds with wasm-opt. An archive that is
+# already there with the right sum is not downloaded again. Linux x86-64 only as written;
+# on another host take the matching wasi-sdk and binaryen archives and use the explicit form:
+#
 #   WASI_SDK=/path/to/wasi-sdk-34.0-x86_64-linux \
 #   SQLITE_SRC=/path/to/sqlite-amalgamation-3530100 \
 #   [WASM_OPT=/path/to/binaryen/bin/wasm-opt] [OPT=-Os] [OUT=…] sh build.sh
 #
-# Inputs used for the committed binary (sha256):
-#   sqlite-amalgamation-3530100.zip  36ad6e7f38540a3b21a2ac36340833f0a9e426bc1c752751c3ba669466827eae
-#   wasi-sdk-34.0-x86_64-linux.tar.gz b761e3a0721dbae9c09a0059e5fdb2bf917d1b4a8a7b430fb3b5aafb0984b2c4
-#   binaryen-version_133-x86_64-linux.tar.gz 2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489
+# Inputs used for the committed binary (sha256), which was built with WASM_OPT set:
+#   https://www.sqlite.org/2026/sqlite-amalgamation-3530100.zip
+#     36ad6e7f38540a3b21a2ac36340833f0a9e426bc1c752751c3ba669466827eae
+#   https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz
+#     b761e3a0721dbae9c09a0059e5fdb2bf917d1b4a8a7b430fb3b5aafb0984b2c4
+#   https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
+#     2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489
 #
 # The result imports only module "bat" (see bat_sqlite.c); the handful of WASI
 # imports wasi-libc would add are not pulled in because SQLITE_OS_OTHER removes
-# every use of the C library's file and clock functions.
+# every use of the C library's file and clock functions. wasi-libc's malloc, string and
+# math functions are linked in (notices: third_party/NOTICES.md).
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
-: "${WASI_SDK:?set WASI_SDK}"
-: "${SQLITE_SRC:?set SQLITE_SRC}"
+
+if [ "${1:-}" = --fetch ]; then
+  dir=${BAT_SQLITE_TOOLCHAIN:-$here/../../../../target/sqlite-toolchain}
+  mkdir -p "$dir/dl"
+  dir=$(cd "$dir" && pwd)
+  # name, sha256, url
+  fetch() {
+    if ! echo "$2  $dir/dl/$1" | sha256sum -c --status 2>/dev/null; then
+      echo "downloading $1" >&2
+      curl -fL --retry 2 -o "$dir/dl/$1.part" "$3"
+      mv "$dir/dl/$1.part" "$dir/dl/$1"
+      echo "$2  $dir/dl/$1" | sha256sum -c --status || { echo "$1 does not match its pinned sha256" >&2; exit 1; }
+    fi
+  }
+  fetch sqlite-amalgamation-3530100.zip 36ad6e7f38540a3b21a2ac36340833f0a9e426bc1c752751c3ba669466827eae \
+    https://www.sqlite.org/2026/sqlite-amalgamation-3530100.zip
+  fetch wasi-sdk-34.0-x86_64-linux.tar.gz b761e3a0721dbae9c09a0059e5fdb2bf917d1b4a8a7b430fb3b5aafb0984b2c4 \
+    https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz
+  fetch binaryen-version_133-x86_64-linux.tar.gz 2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489 \
+    https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
+  # Each archive is unpacked into a directory of its own, once.
+  [ -d "$dir/src/sqlite-amalgamation-3530100" ] || { mkdir -p "$dir/src" && unzip -q "$dir/dl/sqlite-amalgamation-3530100.zip" -d "$dir/src"; }
+  [ -d "$dir/sdk/wasi-sdk-34.0-x86_64-linux" ] || { mkdir -p "$dir/sdk" && tar -xzf "$dir/dl/wasi-sdk-34.0-x86_64-linux.tar.gz" -C "$dir/sdk"; }
+  [ -d "$dir/binaryen/binaryen-version_133" ] || { mkdir -p "$dir/binaryen" && tar -xzf "$dir/dl/binaryen-version_133-x86_64-linux.tar.gz" -C "$dir/binaryen"; }
+  WASI_SDK=$dir/sdk/wasi-sdk-34.0-x86_64-linux
+  SQLITE_SRC=$dir/src/sqlite-amalgamation-3530100
+  WASM_OPT=$dir/binaryen/binaryen-version_133/bin/wasm-opt
+fi
+: "${WASI_SDK:?set WASI_SDK, or run with --fetch}"
+: "${SQLITE_SRC:?set SQLITE_SRC, or run with --fetch}"
 OPT=${OPT:--Os}
 OUT=${OUT:-$here/../sqlite3.wasm}
 EXTRA=${EXTRA:-}
