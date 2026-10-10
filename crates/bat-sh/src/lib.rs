@@ -4,6 +4,7 @@
 //! runtime calls it (runtime/src/process/sh.ts).
 pub mod ast;
 pub mod builtins;
+pub mod diff;
 pub mod expand;
 pub mod files;
 pub mod find;

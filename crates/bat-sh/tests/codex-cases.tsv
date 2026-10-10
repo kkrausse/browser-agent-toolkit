@@ -376,3 +376,40 @@ util	od -x / -t x1 / default	printf abc | od -x; printf abcdefghijklmnopq | od -
 util	od squeezes repeats	printf '%060d' 0 | od -c; seq 100 | tr -d '\n' | tr '0-9' 'a' | od -c -v | tail -2
 util	xxd	xxd a.txt; printf abc | xxd -p; xxd -l 4 a.txt; printf abc | xxd -c 2; xxd -g 1 -l 4 a.txt; seq 30 | xxd -p; xxd bin.dat
 util	hexdump -C	hexdump -C a.txt; head -c 40 src/main.rs | hexdump -C; printf '%052d' 0 | hexdump -C
+diff	diff normal	diff a.txt b.txt; echo $?
+diff	diff same	diff a.txt a.txt; echo $?
+diff	diff -u	diff -u a.txt b.txt | sed '1,2s/\t.*//'; diff -u a.txt b.txt > /dev/null; echo $?
+diff	diff -u header format	diff -u a.txt b.txt | head -2 | sed -E 's/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9} [+-][0-9]{4}$/STAMP/' | cat -A
+diff	diff -u --label	diff -u --label old --label new a.txt b.txt; diff -u -L x -L y a.txt b.txt | head -2
+diff	diff -U N	diff -U 0 a.txt b.txt | tail -n +3; diff -U1 long1.txt long2.txt | tail -n +3; diff --unified=2 long1.txt long2.txt | tail -n +3
+diff	diff -u separate hunks	diff -u long1.txt long2.txt | tail -n +3; diff long1.txt long2.txt
+diff	diff -u merged hunks	diff -U 6 long1.txt long2.txt | tail -n +3
+diff	diff -uN digits	diff -u1 a.txt b.txt | tail -n +3
+diff	diff -q	diff -q a.txt b.txt; echo $?; diff -q a.txt a.txt; echo $?; diff --brief list.txt a.txt
+diff	diff -s	diff -s a.txt a.txt; echo $?; diff -s a.txt b.txt | head -1
+diff	diff -r	diff -r old new; echo $?
+diff	diff -ru	diff -ru old new | sed 's/\t.*//'
+diff	diff -rq	diff -rq old new; echo $?; diff -rq src src; echo $?
+diff	diff -rN	diff -rN old new; diff -ruN old new | sed 's/\t.*//'
+diff	diff -rs	diff -rs old new
+diff	diff dirs without -r	diff old new; echo $?
+diff	diff dir and file	cp b.txt old/a.txt; diff old a.txt; echo $?; diff a.txt old; echo $?
+diff	diff -N missing	diff -N a.txt nope; echo $?; diff -uN nope a.txt | sed 's/\t.*//'
+diff	diff /dev/null	diff -u /dev/null a.txt | sed 's/\t.*//'; diff -u a.txt /dev/null | sed 's/\t.*//'; diff /dev/null /dev/null; echo $?
+diff	diff stdin	cat a.txt | diff - b.txt; printf 'line1\n' | diff -u a.txt - | tail -n +3; echo done | diff - -; echo $?
+diff	diff missing / usage	diff a.txt nope; echo $?; diff a.txt; echo $?; diff a.txt b.txt list.txt; echo $?
+diff	diff no newline at eof	printf 'a\nb' > n1; printf 'a\nb\n' > n2; diff n1 n2; diff -u n1 n2 | sed '1,2s/\t.*//'; diff n2 n1; printf 'a\nc' > n3; diff -u n1 n3 | tail -n +3
+diff	diff empty files	: > e1; diff e1 a.txt; diff a.txt e1; diff -u e1 a.txt | tail -n +3; diff e1 e1; echo $?
+diff	diff -w -b -i -B	printf 'a  b\n\nC\nd\n' > w1; printf 'a b\nc\nd\n\n' > w2; diff -w w1 w2; echo --; diff -b w1 w2; echo --; diff -i w1 w2; echo --; diff -B w1 w2; echo --; diff -wiB w1 w2; echo $?
+diff	diff -B unified	printf 'a\n\nb\nc\n' > w1; printf 'a\nb\nc\n' > w2; diff -B w1 w2; echo $?; diff -uB w1 w2; echo $?
+diff	diff binary	diff bin.dat a.txt; echo $?; cp bin.dat bin2.dat; diff bin.dat bin2.dat; echo $?
+diff	diff insert / delete blocks	seq 1 20 > s1; seq 1 20 | sed '5d;12s/$/ x/;17a new' > s2; diff s1 s2; diff -u s1 s2 | tail -n +3
+diff	diff repeated lines	printf 'a\nb\na\nb\na\n' > r1; printf 'a\nb\na\nb\na\nb\na\n' > r2; diff r1 r2; diff -u r1 r2 | tail -n +3; diff r2 r1
+diff	diff blank line shifts	printf 'x\n\ny\n\nz\n' > r1; printf 'x\n\ny\n\nnew\n\nz\n' > r2; diff -u r1 r2 | tail -n +3; diff r1 r2
+diff	diff function added	printf 'fn a() {\n    1\n}\n\nfn c() {\n    3\n}\n' > f1; printf 'fn a() {\n    1\n}\n\nfn b() {\n    2\n}\n\nfn c() {\n    3\n}\n' > f2; diff -u f1 f2 | tail -n +3; diff f2 f1
+diff	diff moved block	seq 1 12 > m1; (seq 7 12; seq 1 6) > m2; diff m1 m2; diff -u m1 m2 | tail -n +3
+diff	diff total rewrite	diff -u a.txt list.txt | tail -n +3; diff list.txt people.txt
+diff	diff source files	sed 's/hello/goodbye/; 6i // adds two numbers' src/main.rs > m.rs; diff -u src/main.rs m.rs | tail -n +3; diff src/main.rs m.rs
+diff	diff larger random edits	seq 1 400 > g1; sed '37d;74d;111,119d;29s/$/ mod/;58s/$/ mod/;53i ins\n200,203s/^/  /;300a tail one\n301a tail two\n399d' g1 > g2; diff g1 g2 | md5sum; diff -u g1 g2 | tail -n +3 | md5sum
+diff	diff -x	diff -rq -x '*.txt' old new; diff -r --exclude=sub old new | grep -c '^diff'
+diff	diff unsupported -y	diff -y a.txt b.txt | head -1; diff -c a.txt b.txt | tail -n +3
