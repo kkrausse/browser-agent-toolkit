@@ -95,6 +95,18 @@ function findRuntime(explicit?: string): string {
 }
 
 /** Put the runtime the browser boots next to the manifest (`<outDir>/runtime/`). */
+/** A `.zst` beside every program script that has none (start-up programs are written after
+ * `bat-prepare` made its own): megabytes a first open would otherwise download as they are. */
+async function compressPrograms(outDir: string): Promise<void> {
+  const zlib = await import('node:zlib') as unknown as { zstdCompressSync?: (data: Uint8Array, options?: unknown) => Uint8Array; constants: Record<string, number> };
+  if (!zlib.zstdCompressSync) return;
+  const names = await readdir(outDir);
+  for (const name of names) {
+    if (!name.startsWith('program-') || !name.endsWith('.js') || names.includes(name + '.zst')) continue;
+    await writeFile(join(outDir, name + '.zst'), zlib.zstdCompressSync(await readFile(join(outDir, name)), { params: { [zlib.constants.ZSTD_c_compressionLevel ?? 100]: 12 } }));
+  }
+}
+
 async function installRuntime(outDir: string, runtimeDir: string): Promise<void> {
   const target = join(outDir, 'runtime');
   await mkdir(target, { recursive: true });
@@ -157,6 +169,7 @@ export async function prepare(options: PrepareOptions): Promise<EditorManifest> 
   ]);
   await installRuntime(outDir, findRuntime(options.runtimeDir));
   if (options.startupModules) await addStartupPrograms(findBin(options.bin), outDir, manifestPath, resolve(appRoot, options.startupModules));
+  await compressPrograms(outDir);
   return JSON.parse(await readFile(manifestPath, 'utf8'));
 }
 
