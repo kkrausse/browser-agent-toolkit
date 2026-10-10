@@ -91,6 +91,16 @@ fn kernel_smoke() {
     vfs::realpath(b"/workspace/node_modules/real/main.js", &mut rp).unwrap();
     assert_eq!(rp.as_bytes(), b"/workspace/node_modules/.store/real@1/node_modules/real/main.js");
     assert_eq!(ls("/workspace/node_modules"), [".store/", "pkg/", "real"]);
+    // paths wholly inside the image (answered from its path table)
+    assert_eq!(st("/workspace/node_modules/pkg/index.js/x").err(), Some(ENOTDIR));
+    assert_eq!(st("/workspace/node_modules/pkg/nope/deeper/x.js").err(), Some(ENOENT));
+    assert_eq!(st("/workspace/node_modules/nope").err(), Some(ENOENT));
+    assert_eq!(st("/workspace/node_modules/real/nope.js").err(), Some(ENOENT));
+    assert_eq!(st("/workspace/node_modules/real").unwrap().kind, vfs::K_DIR);
+    let mut l = Stat::default();
+    vfs::stat(b"/workspace/node_modules/real", false, &mut l).unwrap();
+    assert_eq!(l.kind, vfs::K_SYMLINK);
+    assert_eq!(st("/workspace/node_modules/pkg/lib/deep").unwrap().kind, vfs::K_DIR);
 
     // writes over the image: create beside, replace, delete, whiteout
     vfs::write_file(b"/workspace/node_modules/pkg/new.js", b"new", 0o644, 0).unwrap();

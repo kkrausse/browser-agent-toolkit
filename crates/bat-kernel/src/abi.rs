@@ -39,10 +39,15 @@ unsafe fn slm<'a>(p: *mut u8, n: usize) -> &'a mut [u8] {
         core::slice::from_raw_parts_mut(p, n)
     }
 }
-/// Normalize a caller path against the process's working directory.
+/// Normalize a caller path against the process's working directory. An
+/// absolute path that is already normalized (the common case) is used in
+/// place, without a copy.
 #[inline]
-unsafe fn abs(p: *const u8, n: usize, out: &mut PathBuf) -> R<()> {
-    let s = sl(p, n);
+unsafe fn abs<'a>(p: *const u8, n: usize, out: &'a mut PathBuf) -> R<&'a [u8]> {
+    let s: &'a [u8] = sl(p, n);
+    if crate::path::is_normalized(s) {
+        return Ok(s);
+    }
     if s.first() != Some(&b'/') {
         if s.is_empty() {
             return Err(ENOENT);
@@ -51,7 +56,8 @@ unsafe fn abs(p: *const u8, n: usize, out: &mut PathBuf) -> R<()> {
         let st = pr.st.lock();
         out.set(&st.cwd)?;
     }
-    out.join(s)
+    out.join(s)?;
+    Ok(out.as_bytes())
 }
 fn copy_out(src: &[u8], buf: *mut u8, cap: usize) -> R<i32> {
     if src.len() > cap {
@@ -81,25 +87,25 @@ pub unsafe extern "C" fn bat_free(p: *mut u8, size: usize) {
 #[no_mangle]
 pub unsafe extern "C" fn bat_stat(p: *const u8, n: usize, flags: u32, out: *mut Stat) -> i32 {
     let mut pb = PathBuf::new();
-    ret(abs(p, n, &mut pb).and_then(|_| vfs::stat(pb.as_bytes(), flags & 1 == 0, &mut *out)).map(|_| 0))
+    ret(abs(p, n, &mut pb).and_then(|pp| vfs::stat(pp, flags & 1 == 0, &mut *out)).map(|_| 0))
 }
 #[no_mangle]
 pub unsafe extern "C" fn bat_readlink(p: *const u8, n: usize, buf: *mut u8, cap: usize) -> i32 {
     let mut pb = PathBuf::new();
-    ret(abs(p, n, &mut pb).and_then(|_| vfs::readlink(pb.as_bytes(), slm(buf, cap))).map(|n| n as i32))
+    ret(abs(p, n, &mut pb).and_then(|pp| vfs::readlink(pp, slm(buf, cap))).map(|n| n as i32))
 }
 #[no_mangle]
 pub unsafe extern "C" fn bat_realpath(p: *const u8, n: usize, buf: *mut u8, cap: usize) -> i32 {
     let mut pb = PathBuf::new();
     let mut out = PathBuf::new();
-    ret(abs(p, n, &mut pb).and_then(|_| vfs::realpath(pb.as_bytes(), &mut out)).and_then(|_| copy_out(out.as_bytes(), buf, cap)))
+    ret(abs(p, n, &mut pb).and_then(|pp| vfs::realpath(pp, &mut out)).and_then(|_| copy_out(out.as_bytes(), buf, cap)))
 }
 /// On ERANGE the needed size is stored in the first 4 bytes of `buf`.
 #[no_mangle]
 pub unsafe extern "C" fn bat_readdir(p: *const u8, n: usize, buf: *mut u8, cap: usize) -> i32 {
     let mut pb = PathBuf::new();
     let mut needed = 0usize;
-    let r = abs(p, n, &mut pb).and_then(|_| vfs::readdir(pb.as_bytes(), slm(buf, cap), &mut needed));
+    let r = abs(p, n, &mut pb).and_then(|pp| vfs::readdir(pp, slm(buf, cap), &mut needed));
     if r == Err(ERANGE) && cap >= 4 {
         (buf as *mut u32).write_unaligned(needed as u32);
     }
@@ -108,59 +114,59 @@ pub unsafe extern "C" fn bat_readdir(p: *const u8, n: usize, buf: *mut u8, cap: 
 #[no_mangle]
 pub unsafe extern "C" fn bat_read_file(p: *const u8, n: usize, flags: u32, buf: *mut u8, cap: usize, st: *mut Stat) -> i32 {
     let mut pb = PathBuf::new();
-    ret(abs(p, n, &mut pb).and_then(|_| vfs::read_file(pb.as_bytes(), flags, slm(buf, cap), &mut *st)).map(|n| n as i32))
+    ret(abs(p, n, &mut pb).and_then(|pp| vfs::read_file(pp, flags, slm(buf, cap), &mut *st)).map(|n| n as i32))
 }
 #[no_mangle]
 pub unsafe extern "C" fn bat_write_file(p: *const u8, n: usize, data: *const u8, len: usize, mode: u32, flags: u32) -> i32 {
     let mut pb = PathBuf::new();
-    ret(abs(p, n, &mut pb).and_then(|_| vfs::write_file(pb.as_bytes(), sl(data, len), mode, flags)).map(|_| 0))
+    ret(abs(p, n, &mut pb).and_then(|pp| vfs::write_file(pp, sl(data, len), mode, flags)).map(|_| 0))
 }
 #[no_mangle]
 pub unsafe extern "C" fn bat_mkdir(p: *const u8, n: usize, mode: u32, recursive: u32) -> i32 {
     let mut pb = PathBuf::new();
-    ret(abs(p, n, &mut pb).and_then(|_| vfs::mkdir(pb.as_bytes(), mode, recursive != 0)).map(|_| 0))
+    ret(abs(p, n, &mut pb).and_then(|pp| vfs::mkdir(pp, mode, recursive != 0)).map(|_| 0))
 }
 #[no_mangle]
 pub unsafe extern "C" fn bat_rmdir(p: *const u8, n: usize) -> i32 {
     let mut pb = PathBuf::new();
-    ret(abs(p, n, &mut pb).and_then(|_| vfs::rmdir(pb.as_bytes())).map(|_| 0))
+    ret(abs(p, n, &mut pb).and_then(|pp| vfs::rmdir(pp)).map(|_| 0))
 }
 #[no_mangle]
 pub unsafe extern "C" fn bat_unlink(p: *const u8, n: usize) -> i32 {
     let mut pb = PathBuf::new();
-    ret(abs(p, n, &mut pb).and_then(|_| vfs::unlink(pb.as_bytes())).map(|_| 0))
+    ret(abs(p, n, &mut pb).and_then(|pp| vfs::unlink(pp)).map(|_| 0))
 }
 #[no_mangle]
 pub unsafe extern "C" fn bat_rename(p: *const u8, n: usize, q: *const u8, m: usize) -> i32 {
     let mut a = PathBuf::new();
     let mut b = PathBuf::new();
-    ret(abs(p, n, &mut a).and_then(|_| abs(q, m, &mut b)).and_then(|_| vfs::rename(a.as_bytes(), b.as_bytes())).map(|_| 0))
+    ret(abs(p, n, &mut a).and_then(|x| abs(q, m, &mut b).and_then(|y| vfs::rename(x, y))).map(|_| 0))
 }
 #[no_mangle]
 pub unsafe extern "C" fn bat_symlink(t: *const u8, tn: usize, p: *const u8, n: usize) -> i32 {
     let mut pb = PathBuf::new();
-    ret(abs(p, n, &mut pb).and_then(|_| vfs::symlink(sl(t, tn), pb.as_bytes())).map(|_| 0))
+    ret(abs(p, n, &mut pb).and_then(|pp| vfs::symlink(sl(t, tn), pp)).map(|_| 0))
 }
 #[no_mangle]
 pub unsafe extern "C" fn bat_link(p: *const u8, n: usize, q: *const u8, m: usize) -> i32 {
     let mut a = PathBuf::new();
     let mut b = PathBuf::new();
-    ret(abs(p, n, &mut a).and_then(|_| abs(q, m, &mut b)).and_then(|_| vfs::link(a.as_bytes(), b.as_bytes())).map(|_| 0))
+    ret(abs(p, n, &mut a).and_then(|x| abs(q, m, &mut b).and_then(|y| vfs::link(x, y))).map(|_| 0))
 }
 #[no_mangle]
 pub unsafe extern "C" fn bat_chmod(p: *const u8, n: usize, mode: u32, flags: u32) -> i32 {
     let mut pb = PathBuf::new();
-    ret(abs(p, n, &mut pb).and_then(|_| vfs::set_meta(pb.as_bytes(), flags & 1 == 0, Some(mode), None)).map(|_| 0))
+    ret(abs(p, n, &mut pb).and_then(|pp| vfs::set_meta(pp, flags & 1 == 0, Some(mode), None)).map(|_| 0))
 }
 #[no_mangle]
 pub unsafe extern "C" fn bat_utimes(p: *const u8, n: usize, mtime_ms: f64, flags: u32) -> i32 {
     let mut pb = PathBuf::new();
-    ret(abs(p, n, &mut pb).and_then(|_| vfs::set_meta(pb.as_bytes(), flags & 1 == 0, None, Some(mtime_ms))).map(|_| 0))
+    ret(abs(p, n, &mut pb).and_then(|pp| vfs::set_meta(pp, flags & 1 == 0, None, Some(mtime_ms))).map(|_| 0))
 }
 #[no_mangle]
 pub unsafe extern "C" fn bat_truncate(p: *const u8, n: usize, size: f64) -> i32 {
     let mut pb = PathBuf::new();
-    ret(abs(p, n, &mut pb).and_then(|_| vfs::truncate(pb.as_bytes(), size as u64)).map(|_| 0))
+    ret(abs(p, n, &mut pb).and_then(|pp| vfs::truncate(pp, size as u64)).map(|_| 0))
 }
 
 // ---- file descriptors ----
@@ -171,8 +177,8 @@ pub unsafe extern "C" fn bat_open(p: *const u8, n: usize, flags: u32, mode: u32)
     let mut canon = PathBuf::new();
     ret((|| {
         let pr = proc::cur()?;
-        abs(p, n, &mut pb)?;
-        let kind = match vfs::open(pb.as_bytes(), flags, mode, &mut canon)? {
+        let pp = abs(p, n, &mut pb)?;
+        let kind = match vfs::open(pp, flags, mode, &mut canon)? {
             vfs::Opened::Ov { ino } => OfKind::Ov { ino },
             vfs::Opened::Img { m, idx, off, len } => OfKind::Img { m, idx, off, len },
             vfs::Opened::Dir => OfKind::Dir,
@@ -422,8 +428,8 @@ pub unsafe extern "C" fn bat_events_take(buf: *mut u32, cap_pairs: usize) -> i32
 pub unsafe extern "C" fn bat_watch_add(p: *const u8, n: usize, recursive: u32) -> i32 {
     let mut pb = PathBuf::new();
     ret((|| {
-        abs(p, n, &mut pb)?;
-        vfs::watch_add(proc::cur_arc()?, pb.as_bytes(), recursive != 0).map(|id| id as i32)
+        let pp = abs(p, n, &mut pb)?;
+        vfs::watch_add(proc::cur_arc()?, pp, recursive != 0).map(|id| id as i32)
     })())
 }
 #[no_mangle]
@@ -463,13 +469,13 @@ pub unsafe extern "C" fn bat_chdir(p: *const u8, n: usize) -> i32 {
     let mut pb = PathBuf::new();
     let mut canon = PathBuf::new();
     ret((|| {
-        abs(p, n, &mut pb)?;
+        let pp = abs(p, n, &mut pb)?;
         let mut st = Stat::default();
-        vfs::stat(pb.as_bytes(), true, &mut st)?;
+        vfs::stat(pp, true, &mut st)?;
         if st.kind != vfs::K_DIR {
             return Err(ENOTDIR);
         }
-        vfs::realpath(pb.as_bytes(), &mut canon)?;
+        vfs::realpath(pp, &mut canon)?;
         let pr = proc::cur()?;
         let c = canon.as_bytes();
         pr.st.lock().cwd = if c == b"/" { Vec::new() } else { c.to_vec() };
@@ -599,9 +605,9 @@ pub extern "C" fn bat_image_reserve() -> u32 {
 pub unsafe extern "C" fn bat_image_mount(id: u32, name: *const u8, nlen: usize, p: *const u8, n: usize) -> i32 {
     let mut pb = PathBuf::new();
     ret((|| {
-        abs(p, n, &mut pb)?;
+        let pp = abs(p, n, &mut pb)?;
         let m = ImageMount::open(id, sl(name, nlen))?;
-        vfs::mount(m, pb.as_bytes())?;
+        vfs::mount(m, pp)?;
         Ok(m.image.len() as i32)
     })())
 }
@@ -644,7 +650,7 @@ pub unsafe extern "C" fn bat_image_section(id: u32, section: u32, out: *mut u32)
 #[no_mangle]
 pub unsafe extern "C" fn bat_persist_exclude(p: *const u8, n: usize) -> i32 {
     let mut pb = PathBuf::new();
-    ret(abs(p, n, &mut pb).and_then(|_| vfs::persist_exclude(pb.as_bytes())).map(|_| 0))
+    ret(abs(p, n, &mut pb).and_then(|pp| vfs::persist_exclude(pp)).map(|_| 0))
 }
 #[no_mangle]
 pub unsafe extern "C" fn bat_persist_replay(p: *const u8, n: usize) -> i32 {

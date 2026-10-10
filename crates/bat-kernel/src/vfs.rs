@@ -257,15 +257,56 @@ impl Vfs {
     /// symlink-free path of the result ("" for the root).
     pub fn walk(&self, path: &[u8], follow: bool, canon: &mut PathBuf) -> R<Loc> {
         let mut cur = PathBuf::new();
-        cur.set(path)?;
         let mut next = PathBuf::new();
+        let mut first = true;
         let mut links = 0;
         'restart: loop {
+            // The first pass reads the caller's bytes; a pass after a symlink
+            // reads the rewritten path. Within one pass every component walked
+            // so far is literal, so the canonical path is the prefix walked.
+            let p: &[u8] = if first { path } else { cur.as_bytes() };
             let mut loc = self.root_loc();
-            canon.clear();
-            let p = cur.as_bytes();
+            // Offset in `p` where the path relative to the current image starts.
+            let mut img_base = if loc.img != NONE { 1 } else { usize::MAX };
             let mut i = 0;
             while i < p.len() {
+                // Everything below `loc` comes from the image alone: answer
+                // from the image's path table instead of walking components.
+                if loc.img != NONE && img_base != usize::MAX && (loc.ov == NONE || self.dir(loc.ov)?.children.is_empty()) {
+                    let m = self.image(loc.img);
+                    let mut k = p.len();
+                    loop {
+                        if let Some(idx) = m.find(&p[img_base.min(k)..k]) {
+                            let e = m.image.entry(idx);
+                            let last = k == p.len();
+                            if let (Some(t), true) = (e.target(), !last || follow) {
+                                links += 1;
+                                if links > MAX_SYMLINKS {
+                                    return Err(ELOOP);
+                                }
+                                let parent = p[..k].iter().rposition(|&b| b == b'/').unwrap_or(0);
+                                next.set(&p[..parent])?;
+                                next.join(t)?;
+                                if !last {
+                                    next.join(&p[k + 1..])?;
+                                }
+                                core::mem::swap(&mut cur, &mut next);
+                                first = false;
+                                continue 'restart;
+                            }
+                            if last {
+                                canon.set(p)?;
+                                return Ok(Loc { ov: NONE, img: loc.img, idx });
+                            }
+                            // The deepest literal prefix exists and the next component does not.
+                            return Err(if e.is_dir() { ENOENT } else { ENOTDIR });
+                        }
+                        k = p[..k].iter().rposition(|&b| b == b'/').unwrap_or(0);
+                        if k <= i {
+                            return Err(ENOENT);
+                        }
+                    }
+                }
                 // p[i] == '/'
                 let start = i + 1;
                 let mut end = start;
@@ -281,20 +322,24 @@ impl Vfs {
                         if links > MAX_SYMLINKS {
                             return Err(ELOOP);
                         }
-                        next.set(canon.as_bytes())?;
+                        next.set(&p[..i])?;
                         next.join(t)?;
-                        if end < p.len() {
+                        if !last {
                             next.join(&p[end + 1..])?;
                         }
                         core::mem::swap(&mut cur, &mut next);
+                        first = false;
                         continue 'restart;
                     }
                 }
-                canon.push(b"/")?;
-                canon.push(name)?;
+                if child.img != NONE && !(loc.img == child.img && child.idx != 0) {
+                    // Crossed a mount point: image paths are relative to here.
+                    img_base = (end + 1).min(p.len());
+                }
                 loc = child;
                 i = end;
             }
+            canon.set(p)?;
             return Ok(loc);
         }
     }

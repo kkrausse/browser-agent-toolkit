@@ -167,18 +167,24 @@ export function createKernel(inst: KernelInstance) {
     u8.set(bytes, at)
     return bytes.length
   }
+  // Copies out of shared memory go through one private buffer: allocating a
+  // fresh ArrayBuffer per call (u8.slice) costs far more than the copy, and
+  // TextDecoder cannot read shared memory directly.
+  let priv = new Uint8Array(4096)
   const text = (ptr: number, len: number): string => {
-    // Short ASCII strings decode faster by hand, and TextDecoder cannot read shared memory.
-    if (len < 64) {
+    if (len <= 24) {
       let s = ''
-      for (let i = 0; i < len; i++) {
+      let i = 0
+      for (; i < len; i++) {
         const c = u8[ptr + i]
-        if (c > 127) return decoder.decode(u8.slice(ptr, ptr + len))
+        if (c > 127) break
         s += String.fromCharCode(c)
       }
-      return s
+      if (i === len) return s
     }
-    return decoder.decode(u8.slice(ptr, ptr + len))
+    if (len > priv.length) priv = new Uint8Array(Math.max(len, priv.length * 2))
+    priv.set(u8.subarray(ptr, ptr + len))
+    return decoder.decode(priv.subarray(0, len))
   }
   const readStat = (): Stat => {
     const w = statP >>> 2
@@ -228,6 +234,28 @@ export function createKernel(inst: KernelInstance) {
     check(x.bat_stat(pathA, put(path, pathA), nofollow ? 1 : 0, statP), nofollow ? 'lstat' : 'stat', path)
     return readStat()
   }
+  /**
+   * Raw stat: returns 0 or -errno and leaves the result in the scratch area,
+   * readable through `st` until the next kernel call on this instance. For
+   * layers that build their own Stats object (or need two fields of it).
+   */
+  function statRaw(path: string, nofollow = false): number {
+    sync()
+    return x.bat_stat(pathA, put(path, pathA), nofollow ? 1 : 0, statP)
+  }
+  const st = {
+    get kind() { return u32[statP >>> 2] },
+    get mode() { return u32[(statP >>> 2) + 1] },
+    get size() { return f64[(statP >>> 3) + 1] },
+    get mtimeMs() { return f64[(statP >>> 3) + 2] },
+    get ctimeMs() { return f64[(statP >>> 3) + 3] },
+    get ino() { return f64[(statP >>> 3) + 4] },
+    get nlink() { return u32[(statP >>> 2) + 10] },
+    get dev() { return u32[(statP >>> 2) + 11] },
+    get facts() { return u32[(statP >>> 2) + 12] },
+    get compiledLen() { return u32[(statP >>> 2) + 13] },
+    get birthtimeMs() { return f64[(statP >>> 3) + 7] },
+  }
   /** Kind of the entry (K_*) or -1 if absent. The cheapest existence probe: no object allocation. */
   function kindOf(path: string): number {
     sync()
@@ -263,6 +291,41 @@ export function createKernel(inst: KernelInstance) {
       if (rc !== -ERANGE) return rc // grew between the two calls: retry
     }
     return rc
+  }
+  /**
+   * Whole file into a caller-owned buffer (a pool, a Buffer slab): no
+   * allocation. Returns the byte count; if `dst` is too small returns
+   * `-(size) - 1` and reads nothing. Stat fields are in `st` afterwards.
+   */
+  function readFileInto(path: string, dst: Uint8Array, compiled = false): number {
+    sync()
+    const n = put(path, pathA)
+    const flags = compiled ? 1 : 0
+    if (dst.length <= DATA_CAP) {
+      const rc = x.bat_read_file(pathA, n, flags, dataP, dst.length, statP)
+      if (rc >= 0) {
+        sync()
+        dst.set(u8.subarray(dataP, dataP + rc))
+        return rc
+      }
+      if (rc === -ERANGE) return -f64[(statP >>> 3) + 1] - 1
+      throw kernelError(rc, 'open', path)
+    }
+    const p = x.bat_alloc(dst.length) >>> 0
+    if (!p) throw kernelError(-12, 'alloc')
+    try {
+      sync()
+      const rc = x.bat_read_file(pathA, put(path, pathA), flags, p, dst.length, statP)
+      if (rc >= 0) {
+        sync()
+        dst.set(u8.subarray(p, p + rc))
+        return rc
+      }
+      if (rc === -ERANGE) return -f64[(statP >>> 3) + 1] - 1
+      throw kernelError(rc, 'open', path)
+    } finally {
+      x.bat_free(p, dst.length)
+    }
   }
   /** Whole file as a private (non-shared) Uint8Array. */
   function readFile(path: string): Uint8Array {
@@ -626,7 +689,7 @@ export function createKernel(inst: KernelInstance) {
       }
       const str = () => {
         const n = r32()
-        const s = decoder.decode(u8.slice(o, o + n))
+        const s = text(o, n)
         o += n
         return s
       }
@@ -758,7 +821,7 @@ export function createKernel(inst: KernelInstance) {
   return {
     inst,
     x,
-    stat, tryStat, kindOf, readFile, tryReadFile, readModule, readText, writeFile, mkdir, rmdir, unlink, rename,
+    stat, tryStat, statRaw, st, kindOf, readFile, readFileInto, tryReadFile, readModule, readText, writeFile, mkdir, rmdir, unlink, rename,
     symlink, link, readlink, realpath, chmod, utimes, truncate, readdir,
     open, close, read, readRaw, write, writeRaw, seek, fstat, ftruncate, fsetmeta, setNonblock, dup, fdPath, pipe,
     listen, connect, accept, shutdown, sockPorts, socketpair,

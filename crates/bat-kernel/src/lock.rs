@@ -144,7 +144,7 @@ impl<T> RwLock<T> {
     pub fn read(&self) -> ReadGuard<'_, T> {
         gate_enter();
         let s = self.s.load(Relaxed);
-        if s & (W | WAIT) != 0 || self.s.compare_exchange_weak(s, s + 1, Acquire, Relaxed).is_err() {
+        if s & W != 0 || self.s.compare_exchange_weak(s, s + 1, Acquire, Relaxed).is_err() {
             self.slow(false);
         }
         ReadGuard { l: self }
@@ -157,23 +157,22 @@ impl<T> RwLock<T> {
         }
         WriteGuard { l: self }
     }
-    fn try_once(&self, write: bool, queued: bool) -> bool {
+    fn try_once(&self, write: bool) -> bool {
         let s = self.s.load(Relaxed);
         if write {
             // A writer may take the lock when nobody holds it, keeping WAIT set
             // if it is one of the waiters (others may still be asleep).
             s & (W | RMASK) == 0 && self.s.compare_exchange_weak(s, s | W, Acquire, Relaxed).is_ok()
         } else {
-            // Readers yield to waiting writers unless they are queued themselves.
-            s & W == 0
-                && (queued || s & WAIT == 0)
-                && self.s.compare_exchange_weak(s, s + 1, Acquire, Relaxed).is_ok()
+            // Reader-preferring: lookups are the hot path and writers are
+            // short; WAIT only means "someone sleeps, wake on release".
+            s & W == 0 && self.s.compare_exchange_weak(s, s + 1, Acquire, Relaxed).is_ok()
         }
     }
     #[cold]
     fn slow(&self, write: bool) {
         for _ in 0..SPINS {
-            if self.try_once(write, false) {
+            if self.try_once(write) {
                 return;
             }
             core::hint::spin_loop();
@@ -182,7 +181,7 @@ impl<T> RwLock<T> {
         loop {
             let seq = self.seq.load(SeqCst);
             self.s.fetch_or(WAIT, SeqCst);
-            if self.try_once(write, true) {
+            if self.try_once(write) {
                 return;
             }
             if can_block {

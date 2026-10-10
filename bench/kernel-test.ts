@@ -38,7 +38,8 @@ async function main() {
     ok('restored whiteout', k.tryStat(`${NM}/react/package.json`) === undefined)
     ok('restored patched image file', k.readText(`${NM}/react/index.js`) === '// patched')
     ok('cache not restored', k.tryStat('/workspace/.cache/tmp.bin') === undefined)
-    ok('journal replayed or snapshot', (boot.restored?.seq ?? 0) > 0, boot.restored)
+    ok('restored from snapshot plus later journal', (boot.restored?.snapshotSeq ?? 0) > 0 && (boot.restored?.journalFrames ?? 0) >= 1 && k.readText('/workspace/after-snapshot.txt') === 'journal on top of snapshot', boot.restored)
+    ok('hard state: child file restored', k.tryReadFile('/workspace/from-child.txt') !== undefined)
     return { phase, ok: fail.length === 0, fail, checks }
   }
 
@@ -151,6 +152,10 @@ async function main() {
   const tf = performance.now()
   await k.flush()
   checks.flushMs = +(performance.now() - tf).toFixed(2)
+  // a snapshot, then one more journaled change on top of it
+  checks.snapshot = await boot.kerneld('snapshot')
+  k.writeFile('/workspace/after-snapshot.txt', 'journal on top of snapshot')
+  await k.flush()
   checks.kerneld = await boot.kerneld('stats')
   checks.procs = k.procList()
   stop()

@@ -24,6 +24,31 @@ pub struct ImageMount {
     wq: WaitQ,
     pub cached_bytes: AtomicU64,
     pub host_reads: AtomicU64,
+    /// Open-addressing table: full image-relative path -> entry index + 1.
+    /// Built at mount (one pass over the index); makes a lookup of a path
+    /// that lies wholly inside the image one hash and one compare instead of
+    /// a binary search per component.
+    table: Box<[u32]>,
+    mask: u32,
+}
+
+#[inline]
+fn hash_path(p: &[u8]) -> u32 {
+    const K: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut h = K ^ p.len() as u64;
+    let mut chunks = p.chunks_exact(8);
+    for c in &mut chunks {
+        h = (h ^ u64::from_le_bytes(c.try_into().unwrap())).wrapping_mul(K);
+        h ^= h >> 32;
+    }
+    let r = chunks.remainder();
+    if !r.is_empty() {
+        let mut w = [0u8; 8];
+        w[..r.len()].copy_from_slice(r);
+        h = (h ^ u64::from_le_bytes(w)).wrapping_mul(K);
+        h ^= h >> 32;
+    }
+    (h ^ (h >> 29)) as u32
 }
 
 /// Bumped when a fault serviced by the supervisor completes; the page waits
@@ -55,6 +80,16 @@ impl ImageMount {
         let file_len = image.file_len();
         let n = file_len.div_ceil(CHUNK as u64) as usize;
         let slots = (0..n).map(|_| AtomicUsize::new(ABSENT)).collect::<Vec<_>>().into_boxed_slice();
+        let size = (image.len() as usize * 2).next_power_of_two().max(16);
+        let mask = size as u32 - 1;
+        let mut table = vec![0u32; size].into_boxed_slice();
+        for idx in 0..image.len() {
+            let mut slot = hash_path(image.entry(idx).path) & mask;
+            while table[slot as usize] != 0 {
+                slot = (slot + 1) & mask;
+            }
+            table[slot as usize] = idx + 1;
+        }
         Ok(Box::leak(Box::new(ImageMount {
             id,
             image,
@@ -64,7 +99,25 @@ impl ImageMount {
             wq: WaitQ::new(),
             cached_bytes: AtomicU64::new(0),
             host_reads: AtomicU64::new(0),
+            table,
+            mask,
         })))
+    }
+
+    /// Entry whose literal path (relative to the image root) is `rel`.
+    #[inline]
+    pub fn find(&self, rel: &[u8]) -> Option<u32> {
+        let mut slot = hash_path(rel) & self.mask;
+        loop {
+            let v = self.table[slot as usize];
+            if v == 0 {
+                return None;
+            }
+            if self.image.entry(v - 1).path == rel {
+                return Some(v - 1);
+            }
+            slot = (slot + 1) & self.mask;
+        }
     }
 
     fn chunk_len(&self, ci: usize) -> usize {

@@ -91,3 +91,30 @@ pub fn components(p: &[u8]) -> impl Iterator<Item = &[u8]> {
 pub fn is_under(p: &[u8], root: &[u8]) -> bool {
     p.len() >= root.len() && &p[..root.len()] == root && (p.len() == root.len() || p[root.len()] == b'/')
 }
+
+/// True if `p` is absolute and already normalized: starts with `/`, no empty,
+/// `.` or `..` components, no trailing slash. ("/" itself is not: the root is "".)
+#[inline]
+pub fn is_normalized(p: &[u8]) -> bool {
+    if p.len() < 2 || p[0] != b'/' || p[p.len() - 1] == b'/' {
+        return false;
+    }
+    let mut i = 0;
+    while i < p.len() {
+        if p[i] == b'/' {
+            // p[i + 1] exists: no trailing slash.
+            let c = p[i + 1];
+            if c == b'/' {
+                return false;
+            }
+            if c == b'.' {
+                let d = p.get(i + 2).copied().unwrap_or(b'/');
+                if d == b'/' || (d == b'.' && p.get(i + 3).copied().unwrap_or(b'/') == b'/') {
+                    return false;
+                }
+            }
+        }
+        i += 1;
+    }
+    true
+}
