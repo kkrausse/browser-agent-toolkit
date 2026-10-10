@@ -20,6 +20,16 @@ pub struct ProgramRecord {
     pub modules: Vec<String>,
 }
 
+/// Function header for a compiled body, from the facts word (`bat-modules` layout:
+/// kind in bits 0..=2 with 1 = CommonJS, 2 = ESM; bit 3 = async).
+pub fn function_header(facts: u32) -> &'static str {
+    match (facts & 0b111, facts & (1 << 3) != 0) {
+        (2, true) => "async function*(__bat){",
+        (2, false) => "function*(__bat){",
+        _ => "function(exports,require,module,__filename,__dirname,__bat){",
+    }
+}
+
 pub fn script_text(modules: &[(String, &Compiled)]) -> Vec<u8> {
     let mut out = Vec::with_capacity(modules.iter().map(|(_, c)| c.code.len() + 128).sum());
     for (path, compiled) in modules {
@@ -27,9 +37,10 @@ pub fn script_text(modules: &[(String, &Compiled)]) -> Vec<u8> {
         out.push(b'(');
         out.extend_from_slice(serde_json::to_string(path).expect("string").as_bytes());
         out.push(b',');
-        out.extend_from_slice(format!("{},", compiled.facts).as_bytes());
+        // The header stays on the first line of the body so line numbers match the source.
+        out.extend_from_slice(function_header(compiled.facts).as_bytes());
         out.extend_from_slice(&compiled.code);
-        out.extend_from_slice(b"\n);\n");
+        out.extend_from_slice(b"\n});\n");
     }
     out
 }

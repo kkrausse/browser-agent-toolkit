@@ -5,7 +5,7 @@ use anyhow::{anyhow, Context, Result};
 use bat_image::writer::{Builder, FileId};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::Read;
 use std::os::unix::fs::FileExt;
@@ -25,9 +25,53 @@ pub struct Compiled {
     pub blob: Vec<u8>,
 }
 
-/// Module precompilation hook: `(guest absolute path, source bytes)` → compiled body and
-/// facts, or `None` when the file is not a module.
-pub type Transform<'a> = dyn Fn(&str, &[u8]) -> Option<Compiled> + Sync + 'a;
+pub struct ModuleInput<'a> {
+    /// Guest absolute path.
+    pub path: &'a str,
+    pub source: &'a [u8],
+    /// `"type"` of the nearest package.json in the same package scope, if any.
+    pub package_type: Option<&'a str>,
+}
+
+/// Module precompilation hook: compiled body and facts, or `None` when the file is not
+/// a module.
+pub type Transform<'a> = dyn Fn(&ModuleInput) -> Option<Compiled> + Sync + 'a;
+
+/// `"type"` per directory that has a package.json (image-relative directory path).
+fn package_types(items: &[Item]) -> HashMap<String, Option<String>> {
+    items
+        .par_iter()
+        .filter_map(|item| {
+            let dir = item.path.strip_suffix("package.json")?;
+            if !(dir.is_empty() || dir.ends_with('/')) {
+                return None;
+            }
+            let bytes = match &item.source {
+                Source::Host { path, .. } => fs::read(path).ok()?,
+                Source::Bytes(bytes) => bytes.clone(),
+                _ => return None,
+            };
+            let ty = serde_json::from_slice::<serde_json::Value>(&bytes)
+                .ok()
+                .and_then(|v| v.get("type")?.as_str().map(str::to_string));
+            Some((dir.trim_end_matches('/').to_string(), ty))
+        })
+        .collect()
+}
+
+/// Node's package scope lookup: nearest package.json upwards, not crossing `node_modules`.
+fn package_type_of<'a>(types: &'a HashMap<String, Option<String>>, path: &str) -> Option<&'a str> {
+    let mut dir = path.rsplit_once('/').map_or("", |(d, _)| d);
+    loop {
+        if let Some(ty) = types.get(dir) {
+            return ty.as_deref();
+        }
+        if dir.is_empty() || dir.ends_with("/node_modules") || dir == "node_modules" {
+            return None;
+        }
+        dir = dir.rsplit_once('/').map_or("", |(d, _)| d);
+    }
+}
 
 pub struct PackOptions<'a> {
     /// Guest mount point of the image root (recorded, and used to form guest paths).
@@ -123,6 +167,7 @@ pub fn sha256_file(path: &Path) -> Result<String> {
 pub fn write_image(items: &[Item], options: PackOptions, out: &Path) -> Result<PackOutput> {
     let started = Instant::now();
     // Phase 1: transform module files (reads them; the bytes are kept for the write).
+    let types = if options.transform.is_some() { package_types(items) } else { HashMap::new() };
     let mut prepared: Vec<Prepared> = items
         .par_iter()
         .map(|item| -> Result<Prepared> {
@@ -131,13 +176,16 @@ pub fn write_image(items: &[Item], options: PackOptions, out: &Path) -> Result<P
                 return Ok(Prepared { original: None, compiled: None });
             }
             let guest = guest_path(&options.root, &item.path);
+            let package_type = package_type_of(&types, &item.path);
             match &item.source {
                 Source::Host { path, .. } => {
                     let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
-                    let compiled = transform(&guest, &bytes);
+                    let compiled = transform(&ModuleInput { path: &guest, source: &bytes, package_type });
                     Ok(Prepared { original: Some(bytes), compiled })
                 }
-                Source::Bytes(bytes) => Ok(Prepared { original: None, compiled: transform(&guest, bytes) }),
+                Source::Bytes(bytes) => {
+                    Ok(Prepared { original: None, compiled: transform(&ModuleInput { path: &guest, source: bytes, package_type }) })
+                }
                 _ => unreachable!(),
             }
         })

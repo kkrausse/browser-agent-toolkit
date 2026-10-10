@@ -9,8 +9,15 @@ license = "MIT"
 name = "bat-prepare"
 path = "src/main.rs"
 
+[features]
+default = ["modules"]
+# Precompile modules with bat-modules while packing. Without it the image carries
+# no compiled bodies and no program scripts are emitted.
+modules = ["dep:bat-modules"]
+
 [dependencies]
 bat-image = { path = "../bat-image" }
+bat-modules = { path = "../bat-modules", optional = true }
 anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
 rayon = "1"

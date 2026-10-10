@@ -80,6 +80,18 @@ enum Command {
         #[arg(long, default_value = "bun", env = "BAT_BUN")]
         bun: String,
     },
+    /// Every entry as TSV: kind, mode, size, body offset, compiled offset, compiled length,
+    /// facts word (hex), facts blob length, path, symlink target.
+    List { image: PathBuf },
+    /// Write one file's body (or its compiled body / facts blob) to stdout.
+    Cat {
+        image: PathBuf,
+        path: String,
+        #[arg(long)]
+        compiled: bool,
+        #[arg(long)]
+        facts: bool,
+    },
     /// Print the embedded guest policy.
     Policy,
     /// Print the header and, with a path, list a directory or describe an entry.
@@ -115,6 +127,48 @@ fn main() -> Result<()> {
             Ok(())
         }
         Command::Info { image, path } => info(&image, path.as_deref()),
+        Command::List { image } => {
+            use std::io::Write;
+            let file = bat_image::writer::ImageFile::open(&image)?;
+            let image = file.image();
+            let mut out = std::io::BufWriter::new(std::io::stdout().lock());
+            for index in 0..image.len() {
+                let e = image.entry(index);
+                let kind = match e.kind {
+                    bat_image::Kind::File => 'f',
+                    bat_image::Kind::Dir => 'd',
+                    bat_image::Kind::Symlink => 'l',
+                };
+                writeln!(
+                    out,
+                    "{kind}\t{:o}\t{}\t{}\t{}\t{}\t{:x}\t{}\t/{}\t{}",
+                    e.mode,
+                    e.size(),
+                    e.body().map_or(0, |b| b.offset),
+                    e.compiled().map_or(0, |b| b.offset),
+                    e.compiled().map_or(0, |b| b.len),
+                    e.facts,
+                    e.facts_blob().map_or(0, |b| b.len),
+                    String::from_utf8_lossy(e.path),
+                    String::from_utf8_lossy(e.target().unwrap_or_default()),
+                )?;
+            }
+            Ok(())
+        }
+        Command::Cat { image, path, compiled, facts } => {
+            use std::io::Write;
+            let file = bat_image::writer::ImageFile::open(&image)?;
+            let Some(index) = file.image().lookup(path.trim_matches('/').as_bytes()) else { bail!("not found: {path}") };
+            let bytes = if compiled {
+                file.read_compiled(index)?.ok_or_else(|| anyhow::anyhow!("no compiled body: {path}"))?
+            } else if facts {
+                file.read_facts_blob(index)?.unwrap_or_default()
+            } else {
+                file.read_body(index)?
+            };
+            std::io::stdout().write_all(&bytes)?;
+            Ok(())
+        }
         Command::Policy => {
             print!("{}", policy::DEFAULT_POLICY);
             Ok(())
