@@ -63,15 +63,22 @@ const done = () => {
 }
 const outcome = await (await page.waitForFunction(done, null, { timeout: ${timeout}, polling: 50 })).jsonValue()
 // The image may still be arriving after the editor is usable: wait for it, so its time is known.
-await page.waitForFunction(() => !window.__batBoot || window.__batBoot.imageComplete !== undefined || window.__batBoot.image !== undefined, null, { timeout: ${timeout}, polling: 100 }).catch(() => {})
-await page.waitForFunction(() => !window.__batBoot || !('imageArriving' in window.__batBoot) || window.__batBoot.imageArriving === false, null, { timeout: ${timeout}, polling: 100 }).catch(() => {})
+await page.waitForFunction(() => {
+  const marks = performance.getEntriesByType('mark').filter((m) => m.name.startsWith('bat:boot.'))
+  const image = marks.find((m) => m.name === 'bat:boot.image')
+  if (!image) return !!window.__batBoot
+  return !image.detail?.imageArriving || marks.some((m) => m.name === 'bat:boot.image-complete')
+}, null, { timeout: ${timeout}, polling: 100 }).catch(() => {})
 const result = await page.evaluate(() => {
   const click = window.__clickAt
   const steps = {}
   for (const m of performance.getEntriesByType('mark')) if (m.name.startsWith('bat:') && !(m.name.slice(4) in steps)) steps[m.name.slice(4)] = Math.round((m.startTime - click) * 10) / 10
   const boot = {}
-  for (const [k, v] of Object.entries(window.__batBoot ?? {})) boot[k] = typeof v === 'number' ? Math.round(v * 10) / 10 : v
-  const transfer = {}
+  // The runtime's own boot timings (ms after bootRuntime began): the details of its `bat:boot.*` marks.
+  const details = performance.getEntriesByType('mark').filter((m) => m.name.startsWith('bat:boot.')).map((m) => m.detail ?? {})
+  for (const [k, v] of Object.entries(Object.assign({}, window.__batBoot ?? {}, ...details))) boot[k] = typeof v === 'number' ? Math.round(v * 10) / 10 : v
+  const complete = performance.getEntriesByName('bat:boot.image-complete')[0]
+  if (complete) steps['image.complete'] = Math.round((complete.startTime - click) * 10) / 10
   return { steps, boot, isolated: crossOriginIsolated, error: document.querySelector('.todo-editor [role=alert]')?.textContent ?? undefined, log: document.querySelector('.todo-editor details pre')?.textContent?.split('\\n').slice(-30) }
 })
 await page.getByRole('button', { name: 'Exit' }).click()
@@ -167,7 +174,7 @@ mkdirSync(dirname(out), { recursive: true })
 await Bun.write(out, JSON.stringify({ meta: { label, port, date: new Date().toISOString(), commit, chrome: 'headed on Xvfb, browser-control' }, summary, samples }, null, 1))
 for (const [kind, s] of Object.entries(summary)) {
   console.log(`\n${label} ${kind}: n=${s.n} load1 ${s.load1?.median} (${s.load1?.min}–${s.load1?.max})  whole open ${s.whole?.median} (${s.whole?.min}–${s.whole?.max})${s.wireMB ? `  wire ${s.wireMB.median} MB` : ''}`)
-  for (const name of ['manifest', 'boot', 'preview.listening', 'preview.visible', 'agent.ready', 'chat.ready']) if (s.steps[name]) console.log(`  ${name.padEnd(20)} ${String(s.steps[name].median).padStart(7)}  (${s.steps[name].min}–${s.steps[name].max})`)
+  for (const name of ['manifest', 'boot', 'preview.listening', 'preview.visible', 'agent.ready', 'chat.ready', 'image.complete']) if (s.steps[name]) console.log(`  ${name.padEnd(20)} ${String(s.steps[name].median).padStart(7)}  (${s.steps[name].min}–${s.steps[name].max})`)
   for (const [name, v] of Object.entries(s.boot)) if (v) console.log(`  boot.${name.padEnd(15)} ${String((v as any).median).padStart(7)}  (${(v as any).min}–${(v as any).max})`)
 }
 console.log(`\n${out}`)

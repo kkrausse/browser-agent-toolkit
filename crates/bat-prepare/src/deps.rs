@@ -136,6 +136,9 @@ pub struct DepsReport {
     /// directories); they live in `node_modules/.linked` and travel in the layer image.
     #[serde(default)]
     pub local_packages: Vec<String>,
+    /// Executable links declared by packages that Bun did not write (it is not consistent).
+    #[serde(default)]
+    pub added_bin_links: u64,
     pub removed_files: u64,
     pub removed_dangling_links: u64,
     pub install_ms: u64,
@@ -675,6 +678,73 @@ pub fn split_local(node_modules: &Path) -> Result<Vec<String>> {
     Ok(ids)
 }
 
+/// Give every `node_modules` directory of the tree the executable links its packages
+/// declare (`bin` in package.json), where Bun did not write them. Returns how many were
+/// added.
+///
+/// Bun's isolated linker does not always write the same set: of four installs of the
+/// TODO tree, one lacked `.bun/update-browserslist-db@…/node_modules/.bin/browserslist`,
+/// and one missing link is a different image hash, i.e. a full download for every
+/// visitor. Links Bun did write are kept as they are; only missing ones are added, in a
+/// fixed order, so the result does not depend on which ones Bun skipped.
+pub fn complete_bins(node_modules: &Path) -> Result<u64> {
+    let mut dirs = vec![node_modules.to_path_buf()];
+    for store in [".bun", LOCAL_STORE] {
+        let Ok(entries) = fs::read_dir(node_modules.join(store)) else { continue };
+        for entry in entries {
+            let inner = entry?.path().join("node_modules");
+            if inner.is_dir() {
+                dirs.push(inner);
+            }
+        }
+    }
+    let mut added = 0;
+    for dir in dirs {
+        // Packages visible here: plain names and one scope level, links or directories.
+        let mut names = Vec::new();
+        for entry in fs::read_dir(&dir)? {
+            let entry = entry?;
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') {
+                continue;
+            }
+            if name.starts_with('@') {
+                if let Ok(scoped) = fs::read_dir(entry.path()) {
+                    for inner in scoped {
+                        names.push(format!("{name}/{}", inner?.file_name().to_string_lossy()));
+                    }
+                }
+            } else {
+                names.push(name);
+            }
+        }
+        names.sort();
+        for name in names {
+            let Ok(text) = fs::read_to_string(dir.join(&name).join("package.json")) else { continue };
+            let Ok(pkg) = serde_json::from_str::<Value>(&text) else { continue };
+            let bins: Vec<(String, String)> = match pkg.get("bin") {
+                Some(Value::String(path)) => vec![(name.rsplit('/').next().unwrap_or(&name).to_string(), path.clone())],
+                Some(Value::Object(map)) => map.iter().filter_map(|(command, path)| Some((command.clone(), path.as_str()?.to_string()))).collect(),
+                _ => continue,
+            };
+            for (command, path) in bins {
+                let path = path.trim_start_matches("./");
+                if command.is_empty() || command.contains('/') || path.is_empty() || path.split('/').any(|part| part == "..") {
+                    continue;
+                }
+                let link = dir.join(".bin").join(&command);
+                if fs::symlink_metadata(&link).is_ok() || !dir.join(&name).join(path).is_file() {
+                    continue;
+                }
+                fs::create_dir_all(dir.join(".bin"))?;
+                std::os::unix::fs::symlink(format!("../{name}/{path}"), &link)?;
+                added += 1;
+            }
+        }
+    }
+    Ok(added)
+}
+
 /// Real package directories in an isolated-linker tree: `.bun/<id>/node_modules/<name>`.
 fn package_roots(node_modules: &Path) -> Result<Vec<(PathBuf, PathBuf)>> {
     let store = node_modules.join(".bun");
@@ -815,6 +885,7 @@ pub fn prepare(options: DepsOptions) -> Result<Deps> {
         (stage.join("node_modules"), Vec::new())
     };
     let local_packages = split_local(&node_modules)?;
+    let added_bin_links = complete_bins(&node_modules)?;
     let before = tree_stats(&node_modules)?;
     let prune_started = Instant::now();
 
@@ -936,7 +1007,7 @@ pub fn prepare(options: DepsOptions) -> Result<Deps> {
         node_modules,
         report: DepsReport {
             installer, workspace: project.is_workspace(), before, after, substitutions: applied, removed_packages,
-            unreachable_packages: unreachable_packages.len() as u64, local_packages, removed_files, removed_dangling_links,
+            unreachable_packages: unreachable_packages.len() as u64, local_packages, added_bin_links, removed_files, removed_dangling_links,
             install_ms, prune_ms: prune_started.elapsed().as_millis() as u64,
         },
     })

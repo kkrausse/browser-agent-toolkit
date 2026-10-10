@@ -318,7 +318,20 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
     let mut state = match cached {
         Some(state) => state,
         None => {
-            let state = build_image(&options, &app, &policy, &pinned, &workspace, &fingerprint)?;
+            // An image that comes out with the bytes it had before (the usual case when only
+            // a local package changed) keeps its transfer copy and sums.
+            let previous: Vec<ImageRecord> = fs::read(&state_path)
+                .ok()
+                .and_then(|b| serde_json::from_slice::<State>(&b).ok())
+                .map(|old| std::iter::once(old.image).chain(old.layers).collect())
+                .unwrap_or_default();
+            let mut state = build_image(&options, &app, &policy, &pinned, &workspace, &fingerprint)?;
+            for record in std::iter::once(&mut state.image).chain(state.layers.iter_mut()) {
+                if let Some(old) = previous.iter().find(|old| old.file == record.file && old.sha256 == record.sha256) {
+                    record.zstd = old.zstd.clone();
+                    record.sums = old.sums.clone();
+                }
+            }
             fs::write(&state_path, serde_json::to_vec_pretty(&state)?)?;
             state
         }
