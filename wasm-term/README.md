@@ -286,7 +286,8 @@ page:
   without a byte (`TCP_RELAY_IDLE_MS`), after 6 hours (`TCP_RELAY_LIFETIME_MS`) or 2 GiB
   (`TCP_RELAY_MAX_BYTES`), and hold at most 32 connections at once (`TCP_RELAY_MAX_CONNECTIONS`);
 - log one line per connection (`journalctl --user -u wasm-term-web | grep '^tcp '`): host, port,
-  bytes each way, seconds, how it ended.
+  bytes each way, seconds, how it ended. `TCP_RELAY_TRACE=1` adds a line per frame, sizes only
+  (for finding where a connection stopped).
 
 **A test CA, for the mock only.** `mock-llm.test` has a certificate from a CA that mock-llm's TLS
 container makes when it starts (`mock-llm/README.md`, "TLS"). The module trusts it in addition to

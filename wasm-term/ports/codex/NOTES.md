@@ -1509,6 +1509,21 @@ C flags (the driver refuses `-mno-atomics` beside `-pthread`); without atomics L
 thread-locals to plain globals. This had been latent in every build since the first session:
 aws-lc was linked and never run. Any C dependency built with `-pthread` had the same fault.
 
+### A lost first write (found by the WebKit smoke)
+
+One turn in the WebKit desktop run hung at "Working" after a tool call; 40 turns in a row in
+Chrome then hung within 5 to 16. `TCP_RELAY_TRACE=1` on the dev server (one line per frame,
+sizes only) showed the stuck connection opened and never written to: the ClientHello had not
+arrived. The page (`host/net.ts`) knew network objects by the guest's descriptor number. codex
+opens a connection per HTTP request, each new descriptor takes the number just freed, and the
+old relay WebSocket's `close` event, arriving a moment later, deleted the entry under that
+number: the new stream's. Its first write was dropped without a trace. Handles are now a
+counter that is never reused (`host/wasi.ts`), which also keeps a closed connection's late
+events off its successor; the same held for the WebSocket and HTTP descriptors, where numbers
+were rarely reused quickly enough to show it. `guests/tcp` has the check (40 connections in a
+row on one descriptor number: 1 echoed before the fix, 40 after), and 120 codex turns in a row
+(about 360 connections) then ran without a hang **[ran]**.
+
 ### Trust
 
 - The baseline is `webpki-roots` (already a dependency of reqwest's rustls backend, now also
@@ -1590,11 +1605,14 @@ percent of a turn.
 
 Reactor **[ran]**: the stream is the first descriptor here that polls writable. With the host's
 edge-triggered mode (`guests/README.md`) an idle open stream gives 2 runtime parks per second
-in `guests/tcp`; no spinning was seen in codex either (the idle TUI's syscall rates with
-`WASM_TERM_TRACE=1` were not re-measured **[inferred]** from the unchanged idle CPU).
+in `guests/tcp`. In codex, signed in with an API key so that the Responses WebSocket stays open
+after a turn, `WASM_TERM_TRACE=1` logged no host call at all in ten idle seconds: the Worker
+sleeps in one `poll_oneoff`.
 
-WebKit **[ran]** (`web/webkit/smoke.sh`, Playwright's WebKit, desktop and iPhone profiles):
-the TLS probe through the tunnel and the codex-local turns pass; numbers in the README.
+WebKit **[ran]** (`web/webkit/smoke.sh`, Playwright's WebKit build, headless): with the tunnel,
+desktop and iPhone profiles both pass, the TLS probe (first request 19.5 and 18.1 ms, 2.4 and
+2.7 ms on the open connection: rustls and aws-lc run on JavaScriptCore) and the two shell
+turns; `NET=fetch` passes too. The first full run is where the lost first write showed up.
 
 ### The default
 
