@@ -546,10 +546,12 @@ function createHttp(rt: Runtime): { http: any; https: any } {
       if (closed || upgraded) return
       parser.recv(fd, sink, more)
     }
-    socket._consumer = (mask: number) => {
+    socket._consumer = () => {
       if (reqDone && responding) {
         // Nothing to read until the response is out; a hang-up means the client left.
-        if (mask & POLLHUP) socket.destroy()
+        // The event's own mask is not trusted: fd numbers are reused, and an event queued
+        // for a closed connection can be delivered to the one that got its number.
+        if (kernel.pollFd(fd) & POLLHUP) socket.destroy()
         return
       }
       pump()
@@ -924,6 +926,5 @@ function createHttp(rt: Runtime): { http: any; https: any } {
     request: secure.request,
     get: secure.get,
   }
-  void kernel
   return { http, https }
 }

@@ -423,14 +423,16 @@ export function createHttpClient(ctx: NetContext) {
   async function request(port: number, req: WireRequest): Promise<WireResponse> {
     if (closed) throw netError('ECONNRESET', 'runtime closed')
     req.signal?.throwIfAborted()
-    for (let attempt = 0; ; attempt++) {
+    for (;;) {
       const conn = await acquire(port, req.signal)
+      const reused = conn.reused
       try {
         return await exchange(conn, req)
       } catch (e) {
-        // A kept-alive connection the server closed while it was idle: retry once on a new one.
-        const stale = conn.reused && (e as any)?.beforeResponse === true && !(req.body instanceof ReadableStream)
-        if (!stale || attempt > 0 || req.signal?.aborted) throw e
+        // A kept-alive connection the server closed while it sat idle: try the next one.
+        // Every stale connection is used up this way; a failure on a fresh one is final.
+        const stale = reused && (e as any)?.beforeResponse === true && !(req.body instanceof ReadableStream)
+        if (!stale || req.signal?.aborted) throw e
       }
     }
   }
