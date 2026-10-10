@@ -256,8 +256,8 @@ missing  tools      python3 heredoc          python3 - <<'EOF'
 print("py")
 EOF
          sh: python3: command not found
-differs  tools      node -e                  node -e 'console.log(1+1)'
-         bash: 2|status=0|  bat-sh: status=126| sh: node: No such file or directory 
+missing  tools      node -e                  node -e 'console.log(1+1)'
+         sh: node: command not found
 differs  tools      npm / npx                npm --version
          bash: 11.16.0|status=0|  bat-sh: 10.9.0|status=0| 
 missing  tools      perl -pe                 echo abc | perl -pe 's/b/B/'
@@ -506,7 +506,7 @@ differs  stub       pip / curl / wget        pip --version >/dev/null; echo $?; 
 differs  stub       make / cargo             make --version >/dev/null; echo $?; cargo --version >/dev/null; echo $?
          bash: 0|1|status=0|  bat-sh: 127|127|status=0| sh: make: command not found sh: cargo: command not found 
 differs  stub       node                     node -e 'console.log(1+1)'; echo $?
-         bash: 2|0|status=0|  bat-sh: 126|status=0| sh: node: No such file or directory 
+         bash: 2|0|status=0|  bat-sh: 127|status=0| sh: node: command not found 
 differs  stub       npm test                 npm test 2>/dev/null; echo $?
          bash: |> demo@1.0.0 test|> echo ok||ok|0|status=0|  bat-sh: |> demo test|> echo ok||ok|0|status=0| 
 same     awk        print field              awk '{print $1}' people.txt
@@ -609,7 +609,7 @@ END { print join(vals, NR, "+") }
 same     awk        regex escapes and classes awk 'BEGIN { print "foo(bar)" ~ /\(bar\)/, "a|b" ~ /a\|b/, "a+b" ~ /a\+b/, "[x]" ~ /\[x\]/, "$5" ~ /^\$5$/, "aaa" ~ /^a{3}$/, "{}" ~ /{}/, "the cat" ~ /\<cat\>/, "concat" ~ /\ycat\y/, "a b" ~ /a\sb/, "a_1" ~ /^\w+$/, "a]" ~ /[]a]+$/, "x_y" ~ /^[[:alnum:]_]+$/ }'
 same     awk        field separators         for s in ':' '\t' ', *' '[' '(' '?' '"' '  ' 'ab+' '\\s+' '\\|' '\\'; do printf 'a:b\tc, d[e(f?g"h  i abbb j|k\\l\n' | awk -F"$s" '{ print NF, $2 }'; done
 differs  awk        errors are loud          awk 'BEGIN { x[1][2] = 3 }'; echo $?; awk 'BEGIN { "date" | getline d; print d }'; echo $?; awk 'BEGIN { print undefined_fn(1) }'; echo $?; awk 'BEGIN { printf "%d %s\n" }'; echo $?; awk 'BEGIN { x[1] = 1; x = 2 }'; echo $?; awk 'BEGIN { next }'; echo $?; awk; echo $?
-         bash: 0|Sat Oct 10 05:29:58 PM UTC 2026|0|2|2|2|1|1|status=0|  bat-sh: 1|2|2|2|2|1|1|status=0| awk: syntax error near '[' awk: getline is not supported by this awk (read the file as an operand, or use the shell) awk
+         bash: 0|Sat Oct 10 05:36:12 PM UTC 2026|0|2|2|2|1|1|status=0|  bat-sh: 1|2|2|2|2|1|1|status=0| awk: syntax error near '[' awk: getline is not supported by this awk (read the file as an operand, or use the shell) awk
 same     bash       array literal and index  a=(x y z); echo ${a[0]} ${a[1]} "${a[2]}" $a ${a[-1]}
 same     bash       array all and count      a=(x "y z" w); echo ${#a[@]} ${#a[*]} ${#a[1]}; printf '<%s>' "${a[@]}"; echo; printf '<%s>' ${a[@]}; echo; printf '<%s>' "${a[*]}"; echo
 same     bash       array append             a=(1 2); a+=(3 "4 5"); a+=(6); echo "${#a[@]}: ${a[@]}"; b=(); b+=(x); echo ${#b[@]} ${b[0]}
@@ -636,4 +636,4 @@ same     bash       process substitution output echo hi | tee >(tr a-z A-Z > up.
 same     bash       nounset with arrays      set -u; a=(1); echo "${a[@]}" "${#a[@]}"; e=(); echo "n=${#e[@]}"; echo "${e[@]:-default}"
 same     util       find -regex              find . -regex '.*/main\.rs'; find src -regex '.*\.\(rs\|py\)' | LC_ALL=C sort; find . -iregex '.*README.*'; find src -regextype posix-extended -regex '.*/(main|helper)\.rs' | LC_ALL=C sort; find . -regex 'main.rs'; echo $?
 same     util       find -printf             find src -maxdepth 1 -name '*.rs' -printf '%f\n'; find src -name '*.rs' -printf '%p %s %y\n' | LC_ALL=C sort; find docs -type f -printf '%h/%f|'; echo; find src -maxdepth 0 -printf '[%p]\t%%\n'
-same=470 differs=35 missing=22 no-ref=0
+same=470 differs=34 missing=23 no-ref=0

@@ -989,6 +989,12 @@ impl Interp {
             Prog::Exec(exec, args) => match self.spawn_child(&exec, &args) {
                 Ok(ch) if may_spawn => Ok(Done::Spawned(ch)),
                 Ok(ch) => Ok(Done::Status(self.reap(ch))),
+                // The host has no such program (a host without child processes answers ENOENT,
+                // or ENOSYS for the pipe): to the script that is a missing command, as in bash.
+                Err(e) if e == sys::ENOENT || e == 38 => {
+                    self.err(&format!("sh: {}: command not found", argv[0]));
+                    Ok(Done::Status(127))
+                }
                 Err(e) => {
                     self.err(&format!("sh: {}: {}", argv[0], sys::strerror(e)));
                     Ok(Done::Status(126))
