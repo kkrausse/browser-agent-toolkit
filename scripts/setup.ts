@@ -12,8 +12,9 @@
 //
 //   1. bun install
 //   2. OpenCode server artefact → .runtime/opencode-2.0.3/ ($BAT_OPENCODE_DIR overrides;
-//      copied from a sibling checkout of the old toolkit when one exists, else downloaded
-//      from the checksummed release asset)
+//      downloaded from the checksummed release asset). The terminal example runs the
+//      server its terminal client was built for instead: 2.0.26, bundled here from the
+//      published packages (scripts/opencode-server) into .runtime/opencode-2.0.26/
 //   3. kernel.wasm, bat_modules.wasm, bat_node_native.wasm, bat_sh.wasm, the bat-prepare CLI
 //   4. runtime bundles → runtime/dist/
 //   5. the toolkit package → packages/toolkit/dist/
@@ -72,6 +73,18 @@ async function openCodeDir(): Promise<string> {
   return local
 }
 
+/** The server version of the terminal example, built from the published packages pinned in scripts/opencode-server/bun.lock. */
+async function builtOpenCodeDir(): Promise<string> {
+  const recipe = join(root, 'scripts/opencode-server')
+  const lock = Bun.JSONC.parse(await Bun.file(join(recipe, 'bun.lock')).text()) as { packages: Record<string, unknown[]> }
+  const local = join(root, '.runtime', String(lock.packages['@opencode/server']![0]).replace('@opencode/server@', 'opencode-'))
+  // The directory describes itself once a build has finished (application.json is written last).
+  if (hasOpenCode(local) && existsSync(join(local, 'application.json'))) return local
+  await run('OpenCode packages', ['bun', 'install', '--frozen-lockfile', '--linker', 'isolated'], { cwd: recipe })
+  await run('OpenCode server bundle', ['bun', 'build.ts', local], { cwd: recipe })
+  return local
+}
+
 export async function setup(): Promise<{ env: Record<string, string> }> {
   await run('bun install', ['bun', 'install'])
   const openCode = await openCodeDir()
@@ -93,6 +106,7 @@ if (import.meta.main) {
   const example = { editor: 'examples/todo-app', terminal: 'examples/terminal-app' }[process.argv[2] ?? '']
   if (example) {
     // The example's own script: prepare (image, manifest, runtime assets), build, serve.
+    if (process.argv[2] === 'terminal' && !process.env.BAT_OPENCODE_DIR) env.BAT_OPENCODE_DIR = await builtOpenCodeDir()
     const child = Bun.spawn(['bun', 'run', 'editor'], { cwd: join(root, example), env: { ...process.env, ...env }, stdout: 'inherit', stderr: 'inherit', stdin: 'inherit' })
     for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => child.kill(signal))
     process.exit(await child.exited)

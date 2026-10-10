@@ -70,13 +70,13 @@ export function serverLaunch(description: LaunchDescription, password: string, m
   })
 }
 
-/** Resolves when the server answers its health check. */
+/** Resolves when the server answers `/api/info` with 200: it answers 503 while its services boot. */
 export async function serverHealthy(endpoint: Pick<RuntimeEndpoint, 'fetch'>, authorization: string, signal: AbortSignal): Promise<void> {
   let last = 'no answer'
   for (const deadline = Date.now() + 60_000; Date.now() < deadline;) {
     signal.throwIfAborted()
     try {
-      const response = await endpoint.fetch('/api/health', { headers: { authorization }, signal: AbortSignal.any([signal, AbortSignal.timeout(3000)]) })
+      const response = await endpoint.fetch('/api/info', { headers: { authorization }, signal: AbortSignal.any([signal, AbortSignal.timeout(3000)]) })
       await response.arrayBuffer()
       if (response.ok) return
       last = `HTTP ${response.status}`

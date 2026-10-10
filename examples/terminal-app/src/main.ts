@@ -16,7 +16,6 @@
 //   ?modelId=<id>        the model id sent in requests. Default `scripted`
 //   ?reset=1             first forget this browser's workspace (source edits, sessions) and the client's saved state
 import { installDerived, installSource, type BootRuntime, type EditorManifest, type RuntimeHost, type RuntimeProcess } from '@kkrausse/browser-agent-toolkit/browser'
-import { olderServer } from './compat'
 import { installDiag } from './diag'
 import { isolate } from './isolate'
 import { installServerConfig, serverHealthy, serverLaunch, toLaunch, workspace, type ModelEndpoint } from './opencode'
@@ -173,13 +172,13 @@ async function main() {
   void Promise.allSettled([appUp, serverUp]).then(() => runtime.started?.())
   await serverUp
 
-  // The client is newer than the server (compat.ts); the server's credential is added here.
-  const toServer = olderServer((path, init) => server.fetch(path, {
+  // Client and server are the same version; only the server's credential is added here.
+  const toServer = (path: string, init: { method: string; headers: [string, string][]; body: Uint8Array | null; signal: AbortSignal }) => server.fetch(path, {
     method: init.method,
     headers: [...init.headers.filter(([name]) => name.toLowerCase() !== 'authorization'), ['authorization', authorization]],
     body: init.body as BodyInit | null,
     signal: init.signal,
-  }))
+  })
   const { mountTerminal } = await wasmTerm
   window.batTerminal.terminal = await mountTerminal({
     container: document.querySelector<HTMLDivElement>('#terminal')!,

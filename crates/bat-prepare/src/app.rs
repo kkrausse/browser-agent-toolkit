@@ -259,6 +259,23 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
         policy.programs.clear();
     }
     let application_dir = options.application_dir.as_deref();
+    // A directory that describes itself (`application.json`: `{ id, files }`, written by the
+    // build that produced it) replaces the policy's pins: another version of the same
+    // application, started the same way.
+    let described = match application_dir.map(|dir| dir.join("application.json")) {
+        Some(path) if path.is_file() => Some(fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?),
+        _ => None,
+    };
+    if let (Some(text), Some(application)) = (&described, policy.application.as_mut()) {
+        #[derive(serde::Deserialize)]
+        struct Described {
+            id: String,
+            files: serde_json::Map<String, Value>,
+        }
+        let described: Described = serde_json::from_str(text).context("parse application.json")?;
+        application.id = described.id;
+        application.files = described.files;
+    }
     let pinned: Vec<(String, Pinned)> = match &policy.application {
         Some(application) => application.pinned()?,
         None => Vec::new(),
@@ -300,6 +317,7 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
     }
     if let Some(dir) = application_dir {
         fp.field("application-dir", dir.to_string_lossy().as_bytes());
+        fp.field("application.json", described.as_deref().unwrap_or("").as_bytes());
         for (name, _) in &pinned {
             fp.tree(&format!("application:{name}"), &dir.join(name))?;
         }
