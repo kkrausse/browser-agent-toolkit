@@ -1,0 +1,35 @@
+   Mock session                  +
+
+  ┃
+  ┃  hello there
+  ┃
+
+     Hello from mock-llm. This is a scripted plain-text reply, streamed in small chunks so the client's
+     incremental rendering is exercised. No model was called and no tokens were spent.
+
+     Build · Mock Model · 334ms · 157.9 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · Mock Model Mock LLM
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  …/kkraus…/random/.claude/worktrees/wasm-term/wasm-term/.state/workspace:master  5.7K (3%)  ctrl+p commands

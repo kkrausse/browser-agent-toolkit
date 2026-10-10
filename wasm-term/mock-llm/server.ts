@@ -1,0 +1,641 @@
+#!/usr/bin/env bun
+// Scripted, deterministic stand-in for the model APIs opencode and codex talk to.
+// No network access, no keys: every reply is generated locally from the scenario
+// table below. See README.md for the scenario keywords and the wire formats.
+
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+const PORT = Number(process.env.MOCK_LLM_PORT ?? 4791);
+const HOST = process.env.MOCK_LLM_HOST ?? "127.0.0.1";
+const DELAY_MS = Number(process.env.MOCK_LLM_DELAY_MS ?? 15);
+const LOG_FILE = process.env.MOCK_LLM_LOG;
+const DUMP_DIR = process.env.MOCK_LLM_DUMP_DIR;
+
+// ---------------------------------------------------------------------------
+// Normalised view of a request, independent of wire format
+// ---------------------------------------------------------------------------
+
+interface ToolDef {
+  name: string;
+  kind: "function" | "custom";
+  schema?: JsonSchema;
+}
+
+interface JsonSchema {
+  type?: string | string[];
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+  items?: JsonSchema;
+}
+
+interface Turn {
+  api: "chat" | "responses" | "anthropic";
+  model: string;
+  stream: boolean;
+  system: string;
+  userText: string;
+  /** Tool outputs that arrived after the last real user message, in order. */
+  toolResults: string[];
+  tools: ToolDef[];
+  messageCount: number;
+  cwd: string;
+}
+
+interface ToolCall {
+  id: string;
+  name: string;
+  kind: "function" | "custom";
+  /** JSON arguments for function tools, raw text for custom (freeform) tools. */
+  payload: string;
+}
+
+interface Step {
+  reasoning?: string;
+  text?: string;
+  tool?: ToolCall;
+}
+
+interface Scenario {
+  name: string;
+  match: RegExp;
+  step: (turn: Turn) => Step;
+}
+
+// ---------------------------------------------------------------------------
+// Scenario scripts
+// ---------------------------------------------------------------------------
+
+const PLAIN_TEXT =
+  "Hello from mock-llm. This is a scripted plain-text reply, streamed in small chunks so the client's incremental rendering is exercised. No model was called and no tokens were spent.";
+
+const MARKDOWN_TEXT = `## Scripted markdown
+
+Here is a **bold** claim, some *emphasis*, and \`inline code\`.
+
+1. First item
+2. Second item
+   - nested bullet
+
+\`\`\`ts
+// mock-llm fenced block
+export function add(a: number, b: number): number {
+  return a + b;
+}
+\`\`\`
+
+| column | value |
+| --- | --- |
+| alpha | 1 |
+| beta | 2 |
+
+> End of the markdown scenario.`;
+
+const LONG_TEXT = [
+  "# Long scripted response",
+  "",
+  "This reply is intentionally long so the transcript has to scroll.",
+  "",
+  ...Array.from({ length: 80 }, (_, i) => {
+    const n = String(i + 1).padStart(2, "0");
+    return `${n}. Line ${n} of 80: the quick brown fox jumps over the lazy dog (mock-llm long scenario).`;
+  }),
+  "",
+  "END-OF-LONG-RESPONSE",
+].join("\n");
+
+const REASONING_TEXT =
+  "The user asked for a reasoning demo. I will think for a moment: step one, restate the request; step two, pick the scripted answer; step three, send it.";
+
+let callSeq = 0;
+const nextCallId = () => `call_mock_${String(++callSeq).padStart(4, "0")}`;
+
+function firstLine(s: string, max = 120): string {
+  const line = s.split("\n").find((l) => l.trim().length > 0) ?? "";
+  return line.length > max ? `${line.slice(0, max)}...` : line;
+}
+
+function findTool(turn: Turn, names: string[]): ToolDef | undefined {
+  for (const n of names) {
+    const t = turn.tools.find((t) => t.name === n);
+    if (t) return t;
+  }
+  return undefined;
+}
+
+function typeOf(s: JsonSchema | undefined): string {
+  const t = s?.type;
+  return Array.isArray(t) ? (t.find((x) => x !== "null") ?? "string") : (t ?? "string");
+}
+
+/** Fill a function tool's arguments from its JSON schema: known keys from `known`, required others by type. */
+function fillArgs(tool: ToolDef, known: Record<string, unknown>): string {
+  const props = tool.schema?.properties ?? {};
+  const required = new Set(tool.schema?.required ?? []);
+  const out: Record<string, unknown> = {};
+  for (const [key, schema] of Object.entries(props)) {
+    if (key in known) {
+      const v = known[key];
+      out[key] = typeOf(schema) === "array" && typeof v === "string" ? ["bash", "-lc", v] : v;
+    } else if (required.has(key)) {
+      const t = typeOf(schema);
+      out[key] = t === "number" || t === "integer" ? 0 : t === "boolean" ? false : t === "array" ? [] : t === "object" ? {} : "";
+    }
+  }
+  if (Object.keys(props).length === 0) Object.assign(out, known);
+  return JSON.stringify(out);
+}
+
+function shellCall(turn: Turn, command: string): ToolCall | undefined {
+  const tool = findTool(turn, ["bash", "shell", "exec_command", "shell_command", "local_shell", "unified_exec"]);
+  if (!tool) return undefined;
+  const payload = fillArgs(tool, {
+    command,
+    cmd: command,
+    description: "Scripted mock-llm shell command",
+    justification: "Scripted mock-llm shell command",
+  });
+  return { id: nextCallId(), name: tool.name, kind: "function", payload };
+}
+
+function readCall(turn: Turn, relPath: string): ToolCall | undefined {
+  const tool = findTool(turn, ["read", "read_file", "view"]);
+  if (!tool) return shellCall(turn, `cat ${relPath}`);
+  const abs = join(turn.cwd, relPath);
+  return { id: nextCallId(), name: tool.name, kind: "function", payload: fillArgs(tool, { filePath: abs, file_path: abs, path: abs }) };
+}
+
+function writeCall(turn: Turn, relPath: string, content: string): ToolCall | undefined {
+  const abs = join(turn.cwd, relPath);
+  const write = findTool(turn, ["write", "write_file"]);
+  if (write) {
+    const payload = fillArgs(write, { filePath: abs, file_path: abs, path: abs, content });
+    return { id: nextCallId(), name: write.name, kind: "function", payload };
+  }
+  const patchTool = findTool(turn, ["apply_patch"]);
+  if (patchTool) {
+    const patch = [
+      "*** Begin Patch",
+      `*** Add File: ${relPath}`,
+      ...content.replace(/\n$/, "").split("\n").map((l) => `+${l}`),
+      "*** End Patch",
+      "",
+    ].join("\n");
+    const payload = patchTool.kind === "custom" ? patch : fillArgs(patchTool, { input: patch, patch });
+    return { id: nextCallId(), name: patchTool.name, kind: patchTool.kind, payload };
+  }
+  return shellCall(turn, `printf '%s' ${JSON.stringify(content)} > ${relPath}`);
+}
+
+/** A scenario that makes one tool call and then answers once the result is back. */
+function toolThenAnswer(
+  label: string,
+  preamble: string,
+  call: (turn: Turn) => ToolCall | undefined,
+): (turn: Turn) => Step {
+  return (turn) => {
+    if (turn.toolResults.length === 0) {
+      const tool = call(turn);
+      if (!tool) return { text: `mock-llm: the ${label} scenario needs a tool the client did not offer (offered: ${turn.tools.map((t) => t.name).join(", ") || "none"}).` };
+      return { text: preamble, tool };
+    }
+    const result = turn.toolResults[turn.toolResults.length - 1] ?? "";
+    return {
+      text: `Tool result received (${result.length} chars). First line: \`${firstLine(result)}\`\n\nThe ${label} scenario is complete. MOCK-TOOL-DONE`,
+    };
+  };
+}
+
+const SCENARIOS: Scenario[] = [
+  {
+    name: "title",
+    // opencode asks a small model for a session title; never answer that with a tool call.
+    match: /$^/,
+    step: () => ({ text: "Mock session" }),
+  },
+  {
+    name: "error",
+    match: /\bmock-error\b/i,
+    step: () => ({ text: "" }), // handled before streaming: HTTP 500
+  },
+  {
+    name: "multi-tool",
+    match: /\bmulti[- ]?tool\b/i,
+    step: (turn) => {
+      const n = turn.toolResults.length;
+      if (n === 0) return { text: "Step 1 of 2: running a shell command.", tool: shellCall(turn, "echo mock-llm-step-1 && pwd") };
+      if (n === 1) return { text: "Step 2 of 2: writing a file.", tool: writeCall(turn, "mock-output.txt", "written by mock-llm (multi-tool)\n") };
+      return { text: `Both tool calls returned (${turn.toolResults.map((r) => r.length).join(" and ")} chars). MOCK-TOOL-DONE` };
+    },
+  },
+  {
+    name: "write",
+    match: /\b(edit|write|patch)\b/i,
+    step: toolThenAnswer("write", "I will create `mock-output.txt`.", (t) =>
+      writeCall(t, "mock-output.txt", "written by mock-llm\nsecond line\n"),
+    ),
+  },
+  {
+    name: "read",
+    match: /\bread\b/i,
+    step: toolThenAnswer("read", "I will read `hello.txt`.", (t) => readCall(t, "hello.txt")),
+  },
+  {
+    name: "shell",
+    match: /\b(tool|bash|shell)\b/i,
+    step: toolThenAnswer("shell", "I will run a shell command.", (t) => shellCall(t, "echo mock-llm-tool-ok && pwd")),
+  },
+  { name: "markdown", match: /\b(markdown|code)\b/i, step: () => ({ text: MARKDOWN_TEXT }) },
+  { name: "long", match: /\b(long|scroll)\b/i, step: () => ({ text: LONG_TEXT }) },
+  {
+    name: "reasoning",
+    match: /\b(think|reason|reasoning)\b/i,
+    step: () => ({ reasoning: REASONING_TEXT, text: "After thinking it through: the scripted answer is 42. MOCK-REASONING-DONE" }),
+  },
+  { name: "plain", match: /(?:)/, step: () => ({ text: PLAIN_TEXT }) },
+];
+
+function isTitleRequest(turn: Turn): boolean {
+  return turn.tools.length === 0 && /\btitle\b/i.test(turn.system) && /generat|thread|conversation|session/i.test(turn.system);
+}
+
+function pickScenario(turn: Turn): Scenario {
+  if (isTitleRequest(turn)) return SCENARIOS[0]!;
+  return SCENARIOS.slice(1).find((s) => s.match.test(turn.userText))!;
+}
+
+// ---------------------------------------------------------------------------
+// Request parsing
+// ---------------------------------------------------------------------------
+
+type Json = Record<string, any>;
+
+function textOf(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((p: Json) => (typeof p === "string" ? p : typeof p?.text === "string" ? p.text : ""))
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** Clients wrap context in pseudo-XML user messages (<environment_context>, <system-reminder>, ...). */
+const isInjected = (text: string) => /^\s*<[a-zA-Z_-]+[ >]/.test(text);
+
+function guessCwd(raw: string): string {
+  const m =
+    raw.match(/<cwd>([^<]+)<\/cwd>/) ??
+    raw.match(/Working directory: ([^\\\n"]+)/) ??
+    raw.match(/Current working directory: ([^\\\n"]+)/i);
+  return m?.[1]?.trim() ?? "/tmp";
+}
+
+function parseChat(body: Json, raw: string): Turn {
+  const messages: Json[] = body.messages ?? [];
+  let system = "";
+  let userText = "";
+  let toolResults: string[] = [];
+  for (const m of messages) {
+    if (m.role === "system" || m.role === "developer") system += `${textOf(m.content)}\n`;
+    else if (m.role === "user") {
+      const t = textOf(m.content);
+      if (!isInjected(t)) {
+        userText = t;
+        toolResults = [];
+      }
+    } else if (m.role === "tool") toolResults.push(textOf(m.content));
+  }
+  const tools: ToolDef[] = (body.tools ?? [])
+    .filter((t: Json) => t.type === "function")
+    .map((t: Json) => ({ name: t.function.name, kind: "function", schema: t.function.parameters }));
+  return { api: "chat", model: body.model ?? "", stream: !!body.stream, system, userText, toolResults, tools, messageCount: messages.length, cwd: guessCwd(raw) };
+}
+
+function parseResponses(body: Json, raw: string): Turn {
+  const input: Json[] = typeof body.input === "string" ? [{ type: "message", role: "user", content: body.input }] : (body.input ?? []);
+  let system = typeof body.instructions === "string" ? body.instructions : "";
+  let userText = "";
+  let toolResults: string[] = [];
+  for (const item of input) {
+    const type = item.type ?? "message";
+    if (type === "message") {
+      const t = textOf(item.content);
+      if (item.role === "system" || item.role === "developer") system += `\n${t}`;
+      else if (item.role === "user" && !isInjected(t)) {
+        userText = t;
+        toolResults = [];
+      }
+    } else if (type.endsWith("_call_output")) {
+      toolResults.push(typeof item.output === "string" ? item.output : textOf(item.output) || JSON.stringify(item.output ?? ""));
+    }
+  }
+  const tools: ToolDef[] = (body.tools ?? []).flatMap((t: Json): ToolDef[] => {
+    if (t.type === "function") return [{ name: t.name, kind: "function", schema: t.parameters }];
+    if (t.type === "custom") return [{ name: t.name, kind: "custom" }];
+    return [];
+  });
+  return { api: "responses", model: body.model ?? "", stream: !!body.stream, system, userText, toolResults, tools, messageCount: input.length, cwd: guessCwd(raw) };
+}
+
+function parseAnthropic(body: Json, raw: string): Turn {
+  const messages: Json[] = body.messages ?? [];
+  const system = textOf(body.system);
+  let userText = "";
+  let toolResults: string[] = [];
+  for (const m of messages) {
+    if (m.role !== "user") continue;
+    const blocks: Json[] = typeof m.content === "string" ? [{ type: "text", text: m.content }] : (m.content ?? []);
+    for (const b of blocks) {
+      if (b.type === "tool_result") toolResults.push(textOf(b.content));
+      else if (b.type === "text" && !isInjected(b.text)) {
+        userText = b.text;
+        toolResults = [];
+      }
+    }
+  }
+  const tools: ToolDef[] = (body.tools ?? [])
+    .filter((t: Json) => t.input_schema)
+    .map((t: Json) => ({ name: t.name, kind: "function", schema: t.input_schema }));
+  return { api: "anthropic", model: body.model ?? "", stream: !!body.stream, system, userText, toolResults, tools, messageCount: messages.length, cwd: guessCwd(raw) };
+}
+
+// ---------------------------------------------------------------------------
+// Streaming helpers
+// ---------------------------------------------------------------------------
+
+/** Deterministic chunker: 1-3 whitespace-delimited tokens per chunk, whitespace preserved. */
+function chunkText(text: string): string[] {
+  const tokens = text.match(/\s*\S+\s*/g) ?? (text ? [text] : []);
+  const chunks: string[] = [];
+  let seed = 7;
+  for (let i = 0; i < tokens.length; ) {
+    seed = (seed * 31 + 11) % 97;
+    const n = 1 + (seed % 3);
+    chunks.push(tokens.slice(i, i + n).join(""));
+    i += n;
+  }
+  return chunks;
+}
+
+function chunkRaw(s: string, size = 24): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < s.length; i += size) out.push(s.slice(i, i + size));
+  return out;
+}
+
+const sleep = (ms: number) => (ms > 0 ? new Promise<void>((r) => setTimeout(r, ms)) : Promise.resolve());
+
+type Emit = (event: string | null, data: unknown) => Promise<void>;
+
+function sseResponse(run: (emit: Emit) => Promise<void>): Response {
+  const enc = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const emit: Emit = async (event, data) => {
+        const payload = typeof data === "string" ? data : JSON.stringify(data);
+        controller.enqueue(enc.encode(`${event ? `event: ${event}\n` : ""}data: ${payload}\n\n`));
+        await sleep(DELAY_MS);
+      };
+      try {
+        await run(emit);
+      } catch (err) {
+        log(`!! stream aborted (client went away?): ${err}`);
+      }
+      try {
+        controller.close();
+      } catch {}
+    },
+  });
+  return new Response(stream, {
+    headers: { ...CORS, "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" },
+  });
+}
+
+const usageFor = (turn: Turn, step: Step) => {
+  const input = Math.max(1, Math.round((turn.system.length + turn.userText.length) / 4));
+  const output = Math.max(1, Math.round(((step.text?.length ?? 0) + (step.reasoning?.length ?? 0) + (step.tool?.payload.length ?? 0)) / 4));
+  return { input, output, reasoning: Math.round((step.reasoning?.length ?? 0) / 4) };
+};
+
+// ---------------------------------------------------------------------------
+// OpenAI Chat Completions
+// ---------------------------------------------------------------------------
+
+function chatReply(turn: Turn, step: Step): Response {
+  const id = `chatcmpl-mock-${Date.now()}`;
+  const created = Math.floor(Date.now() / 1000);
+  const u = usageFor(turn, step);
+  const usage = { prompt_tokens: u.input, completion_tokens: u.output, total_tokens: u.input + u.output, completion_tokens_details: { reasoning_tokens: u.reasoning } };
+  const finish = step.tool ? "tool_calls" : "stop";
+  const toolCalls = step.tool ? [{ id: step.tool.id, type: "function", function: { name: step.tool.name, arguments: step.tool.payload } }] : undefined;
+
+  if (!turn.stream) {
+    return json({
+      id, object: "chat.completion", created, model: turn.model,
+      choices: [{ index: 0, finish_reason: finish, message: { role: "assistant", content: step.text ?? null, reasoning_content: step.reasoning, tool_calls: toolCalls } }],
+      usage,
+    });
+  }
+  return sseResponse(async (emit) => {
+    const chunk = (delta: Json, finish_reason: string | null = null) =>
+      emit(null, { id, object: "chat.completion.chunk", created, model: turn.model, choices: [{ index: 0, delta, finish_reason }] });
+    await chunk({ role: "assistant", content: "" });
+    for (const c of chunkText(step.reasoning ?? "")) await chunk({ reasoning_content: c });
+    for (const c of chunkText(step.text ?? "")) await chunk({ content: c });
+    if (step.tool) {
+      await chunk({ tool_calls: [{ index: 0, id: step.tool.id, type: "function", function: { name: step.tool.name, arguments: "" } }] });
+      for (const c of chunkRaw(step.tool.payload)) await chunk({ tool_calls: [{ index: 0, function: { arguments: c } }] });
+    }
+    await chunk({}, finish);
+    await emit(null, { id, object: "chat.completion.chunk", created, model: turn.model, choices: [], usage });
+    await emit(null, "[DONE]");
+  });
+}
+
+// ---------------------------------------------------------------------------
+// OpenAI Responses
+// ---------------------------------------------------------------------------
+
+function responsesReply(turn: Turn, step: Step): Response {
+  const respId = `resp_mock_${Date.now()}`;
+  const created_at = Math.floor(Date.now() / 1000);
+  const u = usageFor(turn, step);
+  const usage = {
+    input_tokens: u.input, input_tokens_details: { cached_tokens: 0 },
+    output_tokens: u.output, output_tokens_details: { reasoning_tokens: u.reasoning },
+    total_tokens: u.input + u.output,
+  };
+
+  const items: Json[] = [];
+  if (step.reasoning) items.push({ type: "reasoning", id: `rs_mock_${items.length}`, summary: [{ type: "summary_text", text: step.reasoning }] });
+  if (step.text) items.push({ type: "message", id: `msg_mock_${items.length}`, role: "assistant", status: "completed", content: [{ type: "output_text", text: step.text, annotations: [] }] });
+  if (step.tool) {
+    items.push(
+      step.tool.kind === "custom"
+        ? { type: "custom_tool_call", id: `ctc_mock_${items.length}`, status: "completed", call_id: step.tool.id, name: step.tool.name, input: step.tool.payload }
+        : { type: "function_call", id: `fc_mock_${items.length}`, status: "completed", call_id: step.tool.id, name: step.tool.name, arguments: step.tool.payload },
+    );
+  }
+  const base = { id: respId, object: "response", created_at, model: turn.model, output: [] as Json[], usage: null as Json | null };
+  const completed = { ...base, status: "completed", output: items, usage };
+
+  if (!turn.stream) return json(completed);
+
+  return sseResponse(async (emit) => {
+    let seq = 0;
+    const ev = (type: string, data: Json) => emit(type, { type, sequence_number: seq++, ...data });
+    await ev("response.created", { response: { ...base, status: "in_progress" } });
+    await ev("response.in_progress", { response: { ...base, status: "in_progress" } });
+    for (const [output_index, item] of items.entries()) {
+      const item_id = item.id;
+      if (item.type === "reasoning") {
+        await ev("response.output_item.added", { output_index, item: { ...item, summary: [] } });
+        await ev("response.reasoning_summary_part.added", { item_id, output_index, summary_index: 0, part: { type: "summary_text", text: "" } });
+        for (const delta of chunkText(step.reasoning!)) await ev("response.reasoning_summary_text.delta", { item_id, output_index, summary_index: 0, delta });
+        await ev("response.reasoning_summary_text.done", { item_id, output_index, summary_index: 0, text: step.reasoning });
+        await ev("response.reasoning_summary_part.done", { item_id, output_index, summary_index: 0, part: item.summary[0] });
+      } else if (item.type === "message") {
+        await ev("response.output_item.added", { output_index, item: { ...item, status: "in_progress", content: [] } });
+        await ev("response.content_part.added", { item_id, output_index, content_index: 0, part: { type: "output_text", text: "", annotations: [] } });
+        for (const delta of chunkText(step.text!)) await ev("response.output_text.delta", { item_id, output_index, content_index: 0, delta });
+        await ev("response.output_text.done", { item_id, output_index, content_index: 0, text: step.text });
+        await ev("response.content_part.done", { item_id, output_index, content_index: 0, part: item.content[0] });
+      } else if (item.type === "function_call") {
+        await ev("response.output_item.added", { output_index, item: { ...item, status: "in_progress", arguments: "" } });
+        for (const delta of chunkRaw(item.arguments)) await ev("response.function_call_arguments.delta", { item_id, output_index, delta });
+        await ev("response.function_call_arguments.done", { item_id, output_index, arguments: item.arguments });
+      } else {
+        await ev("response.output_item.added", { output_index, item: { ...item, status: "in_progress", input: "" } });
+        for (const delta of chunkRaw(item.input)) await ev("response.custom_tool_call_input.delta", { item_id, output_index, delta });
+        await ev("response.custom_tool_call_input.done", { item_id, output_index, input: item.input });
+      }
+      await ev("response.output_item.done", { output_index, item });
+    }
+    await ev("response.completed", { response: completed });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Anthropic Messages
+// ---------------------------------------------------------------------------
+
+function anthropicReply(turn: Turn, step: Step): Response {
+  const id = `msg_mock_${Date.now()}`;
+  const u = usageFor(turn, step);
+  const stop_reason = step.tool ? "tool_use" : "end_turn";
+  const blocks: Json[] = [];
+  if (step.reasoning) blocks.push({ type: "thinking", thinking: step.reasoning, signature: "mock-signature" });
+  if (step.text) blocks.push({ type: "text", text: step.text });
+  if (step.tool) blocks.push({ type: "tool_use", id: step.tool.id, name: step.tool.name, input: JSON.parse(step.tool.payload) });
+  const message = { id, type: "message", role: "assistant", model: turn.model, stop_sequence: null };
+
+  if (!turn.stream) return json({ ...message, content: blocks, stop_reason, usage: { input_tokens: u.input, output_tokens: u.output } });
+
+  return sseResponse(async (emit) => {
+    const ev = (type: string, data: Json) => emit(type, { type, ...data });
+    await ev("message_start", { message: { ...message, content: [], stop_reason: null, usage: { input_tokens: u.input, output_tokens: 1 } } });
+    for (const [index, b] of blocks.entries()) {
+      if (b.type === "thinking") {
+        await ev("content_block_start", { index, content_block: { type: "thinking", thinking: "" } });
+        for (const c of chunkText(b.thinking)) await ev("content_block_delta", { index, delta: { type: "thinking_delta", thinking: c } });
+        await ev("content_block_delta", { index, delta: { type: "signature_delta", signature: b.signature } });
+      } else if (b.type === "text") {
+        await ev("content_block_start", { index, content_block: { type: "text", text: "" } });
+        for (const c of chunkText(b.text)) await ev("content_block_delta", { index, delta: { type: "text_delta", text: c } });
+      } else {
+        await ev("content_block_start", { index, content_block: { type: "tool_use", id: b.id, name: b.name, input: {} } });
+        for (const c of chunkRaw(step.tool!.payload)) await ev("content_block_delta", { index, delta: { type: "input_json_delta", partial_json: c } });
+      }
+      await ev("content_block_stop", { index });
+    }
+    await ev("message_delta", { delta: { stop_reason, stop_sequence: null }, usage: { output_tokens: u.output } });
+    await ev("message_stop", {});
+  });
+}
+
+// ---------------------------------------------------------------------------
+// HTTP plumbing
+// ---------------------------------------------------------------------------
+
+const CORS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-headers": "*",
+  "access-control-allow-methods": "GET, POST, OPTIONS",
+};
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { ...CORS, "content-type": "application/json" } });
+
+function log(line: string): void {
+  const stamped = `${new Date().toISOString().slice(11, 23)} ${line}`;
+  console.log(stamped);
+  if (LOG_FILE) appendFileSync(LOG_FILE, `${stamped}\n`);
+}
+
+const MODELS = ["mock-model", "mock-small", "mock-reasoning"];
+let requestSeq = 0;
+
+function clip(s: string, max = 80): string {
+  const one = s.replace(/\s+/g, " ").trim();
+  return one.length > max ? `${one.slice(0, max)}...` : one;
+}
+
+async function handleModel(req: Request, path: string, parse: (b: Json, raw: string) => Turn, reply: (t: Turn, s: Step) => Response): Promise<Response> {
+  const n = ++requestSeq;
+  const raw = await req.text();
+  let body: Json;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    log(`#${n} POST ${path} !! invalid JSON (${raw.length} bytes)`);
+    return json({ error: { message: "mock-llm: invalid JSON body", type: "invalid_request_error" } }, 400);
+  }
+  if (DUMP_DIR) {
+    mkdirSync(DUMP_DIR, { recursive: true });
+    const headers = Object.fromEntries(req.headers.entries());
+    writeFileSync(join(DUMP_DIR, `${String(n).padStart(4, "0")}-${path.replace(/\W+/g, "_")}.json`), JSON.stringify({ path, headers, body }, null, 2));
+  }
+  const turn = parse(body, raw);
+  const scenario = pickScenario(turn);
+  const toolNames = turn.tools.map((t) => t.name);
+  log(
+    `#${n} POST ${path} model=${turn.model} stream=${turn.stream} items=${turn.messageCount} tools=${toolNames.length}` +
+      `${toolNames.length ? `[${toolNames.slice(0, 6).join(",")}${toolNames.length > 6 ? ",..." : ""}]` : ""}` +
+      ` results=${turn.toolResults.length} user="${clip(turn.userText)}" ua="${clip(req.headers.get("user-agent") ?? "", 40)}"`,
+  );
+  if (scenario.name === "error") {
+    log(`#${n}   -> scenario=error HTTP 500`);
+    return json({ error: { message: "mock-llm scripted failure (prompt contained mock-error)", type: "server_error" } }, 500);
+  }
+  const step = scenario.step(turn);
+  log(
+    `#${n}   -> scenario=${scenario.name} step=${turn.toolResults.length}` +
+      `${step.reasoning ? ` reasoning=${step.reasoning.length}ch` : ""}${step.text ? ` text=${step.text.length}ch` : ""}` +
+      `${step.tool ? ` tool=${step.tool.name}(${clip(step.tool.payload, 100)})` : ""}`,
+  );
+  return reply(turn, step);
+}
+
+const server = Bun.serve({
+  port: PORT,
+  hostname: HOST,
+  idleTimeout: 120,
+  async fetch(req) {
+    const url = new URL(req.url);
+    const path = url.pathname.replace(/\/+$/, "") || "/";
+    if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+    if (req.method === "GET" && (path === "/" || path === "/health")) return json({ ok: true, service: "mock-llm", models: MODELS });
+    if (req.method === "GET" && /^(\/v1)?\/models$/.test(path)) {
+      log(`GET ${path}${url.search}`);
+      return json({ object: "list", data: MODELS.map((id) => ({ id, object: "model", created: 0, owned_by: "mock-llm" })) });
+    }
+    if (req.method === "POST" && /^(\/v1)?\/chat\/completions$/.test(path)) return handleModel(req, path, parseChat, chatReply);
+    if (req.method === "POST" && /^(\/v1)?\/responses$/.test(path)) return handleModel(req, path, parseResponses, responsesReply);
+    if (req.method === "POST" && /^(\/v1)?\/messages$/.test(path)) return handleModel(req, path, parseAnthropic, anthropicReply);
+    const bodyLen = req.method === "GET" ? 0 : (await req.text()).length;
+    log(`!! unhandled ${req.method} ${path}${url.search} (${bodyLen} bytes) ua="${clip(req.headers.get("user-agent") ?? "", 40)}"`);
+    return json({ error: { message: `mock-llm: no handler for ${req.method} ${path}`, type: "not_found" } }, 404);
+  },
+});
+
+log(`mock-llm listening on http://${server.hostname}:${server.port} (delay ${DELAY_MS}ms/chunk)`);
