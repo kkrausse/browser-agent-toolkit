@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // Build everything the TODO example needs, in order. Each step is incremental, so running
-// it again after a change costs only what changed (about 3 s when nothing did).
+// it again after a change costs only what changed (about 8 s when nothing did).
 //
 //   bun run setup            build
 //   bun run editor           build, then prepare + build + serve examples/todo-app (PORT, default 3000)
