@@ -67,7 +67,7 @@ export async function attachKernel(opts: AttachOptions): Promise<KernelInstance>
     }
   }
   const host: KernelHost = {
-    imageRead: () => -5,
+    imageRead: () => -11, // no handle on this thread: the kernel asks kerneld
     log: (level, message) => (level >= 3 ? console.error(message) : console.log(message)),
     ...opts.host,
   }

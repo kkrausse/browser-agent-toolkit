@@ -1210,25 +1210,22 @@ pub fn truncate(path: &[u8], len: u64) -> R<()> {
     Ok(())
 }
 
-/// Attach image `m` at `path` (created if missing).
+/// Attach image `m` at `path` (created if missing). The mount point is an
+/// ordinary (journaled) overlay directory; the mount itself is not persisted,
+/// the host mounts again at every boot, after the overlay is restored.
 pub fn mount(m: &'static ImageMount, path: &[u8]) -> R<()> {
     let mut v = VFS.write();
-    let was = core::mem::replace(&mut v.journal.enabled, false);
-    let r = (|| {
-        if v.images.len() <= m.id as usize {
-            v.images.resize(m.id as usize + 1, None);
-        }
-        v.images[m.id as usize] = Some(m);
-        v.mkdir(path, 0o755, true)?;
-        let mut canon = PathBuf::new();
-        let l = v.walk(path, true, &mut canon)?;
-        let ino = if l.ov != NONE { l.ov } else { v.ensure_ov(canon.as_bytes())? };
-        v.dir_mut(ino).mount = m.id;
-        BAT_OVERLAY_GEN.fetch_add(1, Relaxed);
-        Ok(())
-    })();
-    v.journal.enabled = was;
-    r
+    if v.images.len() <= m.id as usize {
+        v.images.resize(m.id as usize + 1, None);
+    }
+    v.images[m.id as usize] = Some(m);
+    v.mkdir(path, 0o755, true)?;
+    let mut canon = PathBuf::new();
+    let l = v.walk(path, true, &mut canon)?;
+    let ino = if l.ov != NONE { l.ov } else { v.ensure_ov(canon.as_bytes())? };
+    v.dir_mut(ino).mount = m.id;
+    BAT_OVERLAY_GEN.fetch_add(1, Relaxed);
+    Ok(())
 }
 
 /// Mark `path` (created if missing) as a non-persistent root.
