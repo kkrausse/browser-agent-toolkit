@@ -43,3 +43,11 @@ What was taken is the closure needed by `events`, `stream` (+ `/promises`, `/con
 `buffer`, `util`, `path`, `url`, `querystring`, `string_decoder`, `assert`,
 `timers/promises`, `diagnostics_channel` and `punycode`. `fs`, `readline`, `timers`,
 `async_hooks` and everything that touches the kernel are written in `runtime/src/node/`.
+
+## regex-lite (linked into `bat_sh.wasm`)
+
+`crates/bat-sh` (the guest's `/bin/sh` and coreutils) depends on `regex-lite` 0.1
+(`grep`, `sed`, `[[ =~ ]]`), Copyright (c) The Rust Project Developers, used under the MIT
+license (the crate is dual-licensed MIT OR Apache-2.0). It is a build dependency fetched by
+Cargo, not vendored. The shell's parser, expansion, interpreter and utilities are written
+here; no shell or coreutils crate is used.

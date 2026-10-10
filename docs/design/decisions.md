@@ -599,3 +599,62 @@ Evidence: `docs/experiments/2026-10-09-e2e.md`.
   `target/`) and puts the pinned OpenCode 2.0.3 server in `.runtime/opencode-2.0.3`
   (copied from a sibling old checkout, else the checksummed release asset);
   `bun run editor` adds prepare, build and serve of the example.
+
+## 2026-10-10 shell: `/bin/sh` and the coreutils (`crates/bat-sh`, `runtime/src/process/sh.ts`)
+
+Numbers: `docs/experiments/2026-10-10-first-open-and-shell.md`.
+
+- **The shell is its own Wasm module (`bat_sh.wasm`, 521 KiB, 214 KiB gzip) with its own
+  memory, not part of the kernel and not a WASI executable.** It is written against 24 host
+  calls (`crates/bat-sh/src/sys.rs`: open/read/write/stat/readdir/…, pipe, spawn, wait),
+  which `process/sh.ts` maps onto the kernel binding of whichever process runs it. The
+  kernel stays the size it was; nothing in the kernel knows about the shell (the design's
+  "WASI `.wasm` executables" as a second executable format were not needed for this).
+- **The shell is not a kernel process unless it has to be.** Variables, working directory
+  and the descriptor table (redirections, captures, here-documents) are the shell's own
+  state, and every path it hands the kernel is absolute. So the synchronous calls
+  (`execSync`, `spawnSync` of `sh`/`bash`, of a shell script, or of one of the shell's own
+  commands) run it **inside the calling worker**, output captured in the shell's memory:
+  no spawn, no worker (`execSync('echo hi')` 0.04 ms). The asynchronous calls need a
+  second thread, so they start a kernel process whose executable is `/bin/sh`; the
+  process worker runs the same module on descriptors 0..2.
+- **Builtins, coreutils included, are function calls; only `node` and JavaScript programs
+  are children.** A subshell, a command substitution and a pipeline stage are a clone of
+  the shell state that is thrown away. Cost of the choice: **stages of a pipeline that are
+  builtins run one after the other**, each to its end, through a buffer; an endless
+  producer (`yes | head`) cannot work, and `yes` says so. A child process that is a direct
+  stage gets a kernel pipe and does run alongside the next stage. A compound command put
+  in the background with `&` also runs to its end first; a single program in the
+  background is a real background child.
+- **An in-memory capture is turned into a temporary file when a child must write to it**
+  (`/tmp/.sh-…`, read back and removed at `wait`), rather than a pipe with a pump: the
+  shell has no second thread to drain a pipe while it waits, and a file cannot fill up.
+  Order between a child's output and the shell's own later output is kept because the
+  shell waits before going on; two children writing one capture at once (a pipeline with
+  both stages' stderr captured) are concatenated per child.
+- **Own parser, no shell crate.** `brush-parser` and `deno_task_shell` bring an async
+  executor or a parser generator and their own idea of a process; `yash-syntax` is GPL;
+  `conch-parser` is unmaintained. The grammar needed here is about 800 lines. The only
+  dependency is `regex-lite` (MIT/Apache-2.0) for `grep`, `sed` and `=~`, chosen over
+  `regex` for size; POSIX basic and extended expressions are translated to its syntax.
+- **`grep` is the shell's own, not the shipped `rg`**: a search of `src` is 1.5 ms inside
+  the shell against 31–145 ms for an `rg` child.
+- **A syntax error anywhere stops the whole script before it starts** (the script is
+  parsed in one piece; bash runs the lines before the error).
+- **Signals reach the shell only where it waits** (for a child, in `sleep`): there it takes
+  the process's pending signals, passes them to its children and ends with 128 + signal.
+  A loop of builtins is not interruptible short of SIGKILL (kerneld terminates the worker),
+  and a `timeout` on `execSync` is likewise checked only at a wait or a sleep.
+- **`process.kill(-pid)` signals the process and its descendants.** The kernel has no
+  process groups; a child started `detached` leads a group that is exactly its
+  descendants, which is how OpenCode's shell tool kills a command.
+- **`/bin/sh`, `/bin/bash`, `/usr/bin/env` are stub files** written at boot (overlay), so
+  `existsSync`, `which` and shebang lines find them; what runs is decided by name, in
+  `shellArgv` and in the shell itself. A real program of the same name on `PATH` does
+  not shadow one of the shell's own commands.
+- **`npm run`, `yarn`, `pnpm`, `bun run`, `npx`, `bunx` exist as far as they can without a
+  package manager**: scripts from `package.json` run with `node_modules/.bin` on `PATH`,
+  `npx` runs what is installed, `bun file` is `node file`; `install`/`add` say that they
+  are not available.
+- **Not there**: arrays, `select`, process substitution, job control, traps other than
+  `EXIT`, `awk`, `diff`, `git`, `curl`, `tar`, `jq`.
