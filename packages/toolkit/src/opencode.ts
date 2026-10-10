@@ -93,6 +93,11 @@ export function modelCatalogPluginSource(modelIDs: string[]): string {
 /** Write OpenCode's directories, plugins and global configuration. Nothing else in the workspace is touched. */
 export async function installAgentConfig(fs: RuntimeFs, options: { modelBaseURL: string; models?: Record<string, CatalogModel>; defaultModel?: string }) {
   for (const directory of openCode.directories) await fs.mkdir(directory);
+  // The agent's state lives inside the workspace. Tools that scan the project by its
+  // ignore rules must not see it: Tailwind's Vite plugin scans every unignored file and
+  // answers a change to a scanned non-module file with a full page reload, so each
+  // database or log write of the agent reloaded the preview (three times per chat turn).
+  await fs.writeFile(`${server}/.gitignore`, '*\n');
   const plugins = `${configDirectory}/plugins`;
   await fs.writeFile(`${plugins}/editor-model-headers.js`, modelHeaderPluginSource(options.modelBaseURL));
   await fs.writeFile(`${plugins}/editor-javascript.js`, javascriptPlugin);
@@ -102,6 +107,8 @@ export async function installAgentConfig(fs: RuntimeFs, options: { modelBaseURL:
   else await fs.remove(`${plugins}/editor-model-catalog.js`);
   await fs.writeFile(openCode.configPath, JSON.stringify(agentConfig(options.modelBaseURL, options.models, options.defaultModel)));
 }
+
+const timed = (name: string) => { try { performance.mark(`bat:${name}`); } catch { /* no user timing */ } };
 
 type PluginRow = { id: string; state?: { status: string } };
 
@@ -123,7 +130,7 @@ export async function verifyAgentReady(endpoint: Pick<RuntimeEndpoint, 'fetch'>,
     try {
       const health = await request('/api/health', 'GET', Math.min(3000, remaining));
       await health.arrayBuffer();
-      if (health.ok) break;
+      if (health.ok) { timed('agent.health'); break; }
       lastFailure = Error(`OpenCode health HTTP ${health.status}`);
     } catch (error) { lastFailure = error; }
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -131,10 +138,12 @@ export async function verifyAgentReady(endpoint: Pick<RuntimeEndpoint, 'fetch'>,
   const activated = await request(`/api/plugin/await-activation?${locationQuery}`, 'POST');
   await activated.arrayBuffer();
   if (!activated.ok) throw Error(`OpenCode plugin activation HTTP ${activated.status}`);
+  timed('agent.activated');
   const plugins = await json(`/api/plugin?${locationQuery}`, 'plugins');
   const active = (id: string) => Array.isArray(plugins.data) && plugins.data.some((plugin: PluginRow) => plugin.id === id && plugin.state?.status === 'active');
   if (!active('editor.model-headers')) throw Error('OpenCode model header transport plugin is not active');
   if (!active('editor.javascript')) throw Error('OpenCode guest JavaScript tool plugin is not active');
+  timed('agent.plugins');
   const entries = await json(`/api/config?${locationQuery}`, 'configuration');
   const selected = Array.isArray(entries) && entries.find(entry => entry.type === 'document' && entry.path === openCode.configPath);
   // The config API returns the decoded model selection, even when the JSON
@@ -145,6 +154,7 @@ export async function verifyAgentReady(endpoint: Pick<RuntimeEndpoint, 'fetch'>,
     : selection?.providerID === 'opencode' ? selection.model : undefined;
   const configured = modelID && selected.info?.providers?.opencode?.models?.[modelID];
   if (!configured || typeof configured.package !== 'string' || configured.websocket !== false) throw Error('OpenCode global model configuration not loaded');
+  timed('agent.config');
   const { data } = await json(`/api/model?${locationQuery}`, 'model catalog');
   const model = Array.isArray(data) && data.find(item => item.providerID === 'opencode' && item.id === modelID);
   if (!model?.enabled || !model.capabilities?.tools) throw Error(`OpenCode model ${modelID} is not enabled with tools (present: ${!!model})`);

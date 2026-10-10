@@ -98,9 +98,11 @@ await box.waitFor();
 // Todos live in the server's memory: start from none.
 for (let i = 0; i < 50; i++) {
   await page.locator('main input#title:not(:disabled)').waitFor();
-  const remove = page.getByRole('button', { name: /^Delete / }).first();
-  if (!await remove.count()) break;
-  await remove.click();
+  const buttons = page.getByRole('button', { name: /^Delete / });
+  const count = await buttons.count();
+  if (!count) break;
+  await buttons.first().click({ timeout: 3000 }).catch(() => {});
+  await page.waitForFunction(n => document.querySelectorAll('main li').length < n, count, { timeout: 5000 }).catch(() => {});
 }
 if (demo.reset) {
   await page.getByRole('button', { name: 'Reset workspace', exact: true }).click();
@@ -162,7 +164,7 @@ for (;;) {
 }
 mark('reply');
 await pause(1500);
-const tools = await page.evaluate(() => [...document.querySelectorAll('.todo-editor-chat [role=log] [aria-label="assistant message"]')].at(-1)?.innerText.match(/\\b(read|edit|write|grep|glob|runJavascript)\\s*(completed|error)/g) ?? []);
+const tools = await page.evaluate(() => document.querySelector('.todo-editor-chat [role=log]')?.innerText.match(/\\b(read|edit|write|grep|glob|runJavascript)\\s*(completed|error)/g) ?? []);
 return { replyMs: Date.now() - started, tools, after: await app() };`,
 
   preview: `${prelude}
@@ -240,7 +242,8 @@ async function once(index: number): Promise<RunResult> {
   return result
 }
 
-await control('session', 'list').then(async list => { if (!new RegExp(`^\\s*${session}\\b`, 'm').test(list)) await control('session', 'new', session) })
+// Creating a session that exists fails; that is the common case.
+await control('session', 'new', session).catch(() => {})
 let failures = 0
 for (let i = 0; i < runs; i++) {
   const result = await once(i)
