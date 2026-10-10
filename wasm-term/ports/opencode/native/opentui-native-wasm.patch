@@ -1,0 +1,100 @@
+diff --git a/bun.lock b/bun.lock
+index 27155f5..fa164d3 100644
+--- a/bun.lock
++++ b/bun.lock
+@@ -545,6 +545,22 @@
+ 
+     "@opentui/core": ["@opentui/core@workspace:packages/core"],
+ 
++    "@opentui/core-darwin-arm64": ["@opentui/core-darwin-arm64@0.5.17", "", { "os": "darwin", "cpu": "arm64" }, "sha512-ptobzW+1zM29nHvadwy+8uW9jvV8NJr63vcQXWe2rQNtpwN/6k7lEXWiS5LndeBs9AMV5tTsXMEMhttgts4BDQ=="],
++
++    "@opentui/core-darwin-x64": ["@opentui/core-darwin-x64@0.5.17", "", { "os": "darwin", "cpu": "x64" }, "sha512-6yLbnElIZPxhZSrZSyS4mB5+k0YFlpRO0Q8uX4sLFTmvOy8tIeDPFcTGRQqZQ1Rk938tiAhf7iyAX3P1wL4Liw=="],
++
++    "@opentui/core-linux-arm64": ["@opentui/core-linux-arm64@0.5.17", "", { "os": "linux", "cpu": "arm64" }, "sha512-HO3dYgzQBGJhe58uJauVClIJg3vToYl/LZa7ZzqxQ+3vZ//cxaJ7tgXhHWR2uJE02550yI69e5nqBpSOTT9E8Q=="],
++
++    "@opentui/core-linux-arm64-musl": ["@opentui/core-linux-arm64-musl@0.5.17", "", { "os": "linux", "cpu": "arm64" }, "sha512-QMRdDbmR0LwpmX1HXVbN+V3A44/QsbWzMsF3V7cEz7MaDq6RNBs3CUFqfkPorKgPtI75T0AxM7FdJnjt9C4d0Q=="],
++
++    "@opentui/core-linux-x64": ["@opentui/core-linux-x64@0.5.17", "", { "os": "linux", "cpu": "x64" }, "sha512-lNmtQlcwsio4IVo2trc0QoMyun31UsN0mzmSc2BtYMOeOC5e0PyWaEAZWJb/g6AinOs9xwJGL02JAN5J3QPWsw=="],
++
++    "@opentui/core-linux-x64-musl": ["@opentui/core-linux-x64-musl@0.5.17", "", { "os": "linux", "cpu": "x64" }, "sha512-M2RatQaeET/werHFSH+cg7OkQk/Wn0VoVXZLLEL7DiCDTuhZyMfi3uFDz0+R1IGiiUITqHWpZdZ1LdBY8NCjwQ=="],
++
++    "@opentui/core-win32-arm64": ["@opentui/core-win32-arm64@0.5.17", "", { "os": "win32", "cpu": "arm64" }, "sha512-MyVVpZ0CyGDQ+g4eM0zURqEd/9jDrBIPcZdLyZOmWbdoVu36PLM9KAkqwl/n5ASn/rOrQd+d14jUAsZJvFTqzw=="],
++
++    "@opentui/core-win32-x64": ["@opentui/core-win32-x64@0.5.17", "", { "os": "win32", "cpu": "x64" }, "sha512-etkuzyfclRX9wel4ivCOk90dUdZNtjK7U6vr7ZHmwkZyOik34ec3Gse0B/jyk192Xdx0l50Tl2xgC1h68XRiEQ=="],
++
+     "@opentui/examples": ["@opentui/examples@workspace:packages/examples"],
+ 
+     "@opentui/keymap": ["@opentui/keymap@workspace:packages/keymap"],
+diff --git a/packages/native/build.zig b/packages/native/build.zig
+index b226da7..bd5c249 100644
+--- a/packages/native/build.zig
++++ b/packages/native/build.zig
+@@ -720,7 +720,11 @@ fn buildTarget(
+     build_options: *std.Build.Step.Options,
+     macos_sdk_path: ?[]const u8,
+ ) !void {
+-    const target_query = try std.Target.Query.parse(.{ .arch_os_abi = zig_target });
++    const is_wasm_target = std.mem.startsWith(u8, zig_target, "wasm32");
++    const target_query = try std.Target.Query.parse(.{
++        .arch_os_abi = zig_target,
++        .cpu_features = if (is_wasm_target) "generic+bulk_memory+mutable_globals+nontrapping_fptoint+sign_ext" else null,
++    });
+     const target = b.resolveTargetQuery(target_query);
+ 
+     if (target.result.os.tag == .macos and macos_sdk_path == null) {
+@@ -729,7 +733,8 @@ fn buildTarget(
+     }
+ 
+     const module = b.createModule(.{
+-        .root_source_file = b.path(ROOT_SOURCE_FILE),
++        // wasm-term: lib-wasm.zig is lib.zig minus audio and host clipboard.
++        .root_source_file = b.path(if (is_wasm_target) "src/lib-wasm.zig" else ROOT_SOURCE_FILE),
+         .target = target,
+         .optimize = optimize,
+         // Release symbols must describe this exact optimized code. The package
+@@ -739,7 +744,18 @@ fn buildTarget(
+ 
+     applyDependencies(b, module, optimize, target, build_options);
+ 
+-    const lib = b.addLibrary(.{
++    // wasm-term: a wasm "library" is a WASI reactor: an executable with no
++    // entry point that exports every `export fn` and `_initialize`.
++    const lib = if (is_wasm_target) blk: {
++        const exe = b.addExecutable(.{ .name = LIB_NAME, .root_module = module });
++        exe.entry = .disabled;
++        exe.rdynamic = true;
++        exe.wasi_exec_model = .reactor;
++        // Symbols with no wasm implementation (miniaudio) become "env" imports.
++        exe.import_symbols = true;
++        exe.export_table = true;
++        break :blk exe;
++    } else b.addLibrary(.{
+         .name = LIB_NAME,
+         .root_module = module,
+         .linkage = .dynamic,
+@@ -747,7 +763,11 @@ fn buildTarget(
+ 
+     if (target.result.os.tag == .linux and optimize != .Debug) lib.build_id = .sha1;
+ 
+-    addNativeAudioDependencies(b, module, target, macos_sdk_path);
++    if (is_wasm_target) {
++        module.addIncludePath(b.path("src"));
++        module.link_libc = true;
++        addImageShim(b, module, target, macos_sdk_path);
++    } else addNativeAudioDependencies(b, module, target, macos_sdk_path);
+     addYogaDependencies(b, module);
+ 
+     const install_dir = b.addInstallArtifact(lib, .{
+diff --git a/packages/native/src/renderer-output.zig b/packages/native/src/renderer-output.zig
+index cb7e952..80d5d08 100644
+--- a/packages/native/src/renderer-output.zig
++++ b/packages/native/src/renderer-output.zig
+@@ -588,6 +588,8 @@ pub const BufferedBackend = struct {
+     pub fn setUseThread(self: *BufferedBackend, use_thread: bool) void {
+         if (use_thread and !self.supportsThreading()) return;
+         if (self.useThread == use_thread) return;
++        // wasm-term: single-threaded targets (wasm) always write inline.
++        if (builtin.single_threaded) return;
+ 
+         if (use_thread) {
+             if (self.renderThread == null) {

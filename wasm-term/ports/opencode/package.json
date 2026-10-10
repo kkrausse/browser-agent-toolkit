@@ -1,0 +1,9 @@
+{
+  "name": "wasm-term-port-opencode",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:native": "sh native/build.sh",
+    "demo:core": "bun build/bundle.ts demos/core-hello.ts --target=bun && bun dist/core-hello.js"
+  }
+}
