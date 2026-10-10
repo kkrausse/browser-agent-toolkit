@@ -74,7 +74,7 @@ async function start() {
     kerneldUrl: asset('bat-kerneld.js'),
     processWorkerUrl: processWorkerUrl(new URL(asset('bat-process.js'), location.href).href, {
       nodelibUrl: 'bat-nodelib.js',
-      wasm: { modules: 'bat_modules.wasm', native: 'bat_node_native.wasm', sqlite: 'sqlite3.wasm' },
+      wasm: { modules: 'bat_modules.wasm', native: 'bat_node_native.wasm', sqlite: 'sqlite3.wasm', sh: 'bat_sh.wasm' },
       programs,
       // As the host SDK does: route the guest's global fetch (loopback goes to kernel sockets).
       prewarm: [...DEFAULT_CONFIG.prewarm, 'bat:net-globals'],
@@ -93,7 +93,9 @@ async function start() {
   const t2 = performance.now()
   const mounted = await boot.mountImage(manifest.image.file, manifest.image.mount ?? '/')
   const t3 = performance.now()
-  for (const dir of ['/tmp', '/workspace', '/bin', '/usr/local/bin', '/home/user', '/.bat']) k.mkdir(dir, { recursive: true })
+  for (const dir of ['/tmp', '/workspace', '/bin', '/usr/bin', '/usr/local/bin', '/home/user', '/.bat']) k.mkdir(dir, { recursive: true })
+  // The shell is built into the runtime (process/sh.ts); these make its conventional paths exist.
+  for (const path of ['/bin/sh', '/bin/bash', '/usr/bin/env']) if (k.kindOf(path) < 0) k.writeFile(path, '#!/bin/sh\n# built into the runtime\n', { mode: 0o755 })
   for (const [path, content] of Object.entries<any>(manifest.project ?? {})) {
     const target = `${manifest.workspace}${path}`
     k.mkdir(target.slice(0, target.lastIndexOf('/')), { recursive: true })

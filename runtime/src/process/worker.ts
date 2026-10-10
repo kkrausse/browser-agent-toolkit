@@ -24,6 +24,7 @@ import { parseConfig } from './config'
 import { installGlobals } from './globals'
 import { createLoop, type LoopInternals } from './loop'
 import type { Runtime } from './runtime'
+import { createShell, SHELL_EXEC } from './sh'
 import { trace, traceEnable } from '../trace'
 
 const g: any = globalThis
@@ -229,7 +230,18 @@ function parseLaunch(info: ProcInfo): Launch {
   return l
 }
 
+/** The process is the shell (crates/bat-sh): no loader, no event loop, just the Wasm program on descriptors 0..2. */
+function runShell(info: ProcInfo): never {
+  rt.mark('shell')
+  const r = createShell(rt).run({ argv: info.argv, env: info.env, cwd: info.cwd || kernel.getcwd(), stdio: [0, 1, 2], asProcess: true })
+  kernel.exit(r.signal ? 128 + r.signal : r.status)
+  // As in finish(): kerneld learns of the exit from the kernel and terminates this worker.
+  const never = new Int32Array(new SharedArrayBuffer(4))
+  for (;;) Atomics.wait(never, 0, 0)
+}
+
 function run(info: ProcInfo) {
+  if (info.exec === SHELL_EXEC) runShell(info)
   const launch = parseLaunch(info)
   let script = launch.script
   if (script !== undefined && script !== '-' && !script.startsWith('/')) {

@@ -1,11 +1,15 @@
 // `node:child_process`. A child is a new kernel process, which kerneld runs in
 // a process worker (the warm spare when there is one). What can be executed:
 // `node` / `process.execPath` with a script, a JavaScript file, a file with a
-// node shebang, or a `.bin` shim that links to one. There is no shell: a
-// command line is split into words and run as one command. Anything else
-// fails with ENOENT, as a missing program does on Linux.
+// node shebang, or a `.bin` shim that links to one; and the shell
+// (`sh`/`bash`, `exec`, `{ shell: true }`, shell scripts) with the commands it
+// implements itself (`ls`, `grep`, …), which is crates/bat-sh (process/sh.ts).
+// The synchronous calls run the shell inside this process; the asynchronous
+// ones start it as a process. Anything else fails with ENOENT, as a missing
+// program does on Linux.
 import { POLLHUP, POLLIN, POLLOUT, type StdioSpec } from '../kernel/kernel'
 import type { Runtime } from '../process/runtime'
+import { createShell, shellArgv, SHELL_EXEC, SHELL_NAMES, type Shell } from '../process/sh'
 import { SIGNALS, SIGNAL_NAMES } from './process'
 import { registerBuiltin } from './registry'
 
@@ -13,6 +17,8 @@ interface Command {
   exec: string
   argv: string[]
   env?: Record<string, string>
+  /** Runs in the shell (process/sh.ts) rather than as a node program. */
+  shell?: boolean
 }
 
 function create(rt: Runtime): any {
@@ -22,83 +28,18 @@ function create(rt: Runtime): any {
   const Buffer = rt.require('buffer').Buffer
   const proc = rt.process
   const decoder = new TextDecoder()
+  let shell: Shell | undefined
 
   const enoent = (file: string, args: string[], syscall = 'spawn') =>
     Object.assign(new Error(`${syscall} ${file} ENOENT`), { errno: -2, code: 'ENOENT', syscall: `${syscall} ${file}`, path: file, spawnargs: args })
-
-  /** Split a command line into words: quotes, backslash escapes, `VAR=value` prefixes, `$VAR` expansion. */
-  function splitCommand(line: string, env: Record<string, string>): { words: string[]; env: Record<string, string> } | undefined {
-    const words: string[] = []
-    let cur = ''
-    let has = false
-    let quote = ''
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i]
-      if (quote) {
-        if (c === quote) quote = ''
-        else if (c === '\\' && quote === '"' && i + 1 < line.length) cur += line[++i]
-        else if (c === '$' && quote === '"') {
-          const m = /^\$\{?(\w+)\}?/.exec(line.slice(i))
-          if (m) {
-            cur += env[m[1]] ?? ''
-            i += m[0].length - 1
-          } else cur += c
-        } else cur += c
-      } else if (c === '"' || c === "'") {
-        quote = c
-        has = true
-      } else if (c === '\\' && i + 1 < line.length) {
-        cur += line[++i]
-        has = true
-      } else if (c === ' ' || c === '\t' || c === '\n') {
-        if (has || cur) words.push(cur)
-        cur = ''
-        has = false
-      } else if (c === '$') {
-        const m = /^\$\{?(\w+)\}?/.exec(line.slice(i))
-        if (m) {
-          cur += env[m[1]] ?? ''
-          i += m[0].length - 1
-        } else cur += c
-      } else if ('|&;<>()`'.includes(c)) {
-        return undefined // needs a real shell
-      } else cur += c
-    }
-    if (quote) return undefined
-    if (has || cur) words.push(cur)
-    const extra: Record<string, string> = {}
-    while (words.length && /^\w+=/.test(words[0])) {
-      const w = words.shift()!
-      extra[w.slice(0, w.indexOf('='))] = w.slice(w.indexOf('=') + 1)
-    }
-    return { words, env: extra }
-  }
 
   const isNode = (file: string) => file === proc.execPath || file === 'node' || file === 'nodejs' || file.endsWith('/node')
 
   /** Find what to run for `file`. undefined = no such program. */
   function resolveCommand(file: string, args: string[], env: Record<string, string>, cwd: string): Command | undefined {
     if (isNode(file)) return { exec: 'node', argv: ['node', ...args] }
-    const base = file.slice(file.lastIndexOf('/') + 1)
-    if (base === 'sh' || base === 'bash' || base === 'zsh') {
-      const i = args.indexOf('-c')
-      if (i < 0 || i + 1 >= args.length) return undefined
-      const parsed = splitCommand(args[i + 1], env)
-      if (!parsed || parsed.words.length === 0) return undefined
-      const inner = resolveCommand(parsed.words[0], parsed.words.slice(1), { ...env, ...parsed.env }, cwd)
-      return inner && { ...inner, env: { ...inner.env, ...parsed.env } }
-    }
-    if (base === 'env' && args.length) {
-      const extra: Record<string, string> = {}
-      let i = 0
-      while (i < args.length && /^\w+=/.test(args[i])) {
-        extra[args[i].slice(0, args[i].indexOf('='))] = args[i].slice(args[i].indexOf('=') + 1)
-        i++
-      }
-      if (i >= args.length) return undefined
-      const inner = resolveCommand(args[i], args.slice(i + 1), { ...env, ...extra }, cwd)
-      return inner && { ...inner, env: { ...inner.env, ...extra } }
-    }
+    const shell = shellArgv(file, args)
+    if (shell) return { exec: SHELL_EXEC, argv: shell, shell: true }
     const candidates: string[] = []
     if (file.includes('/')) candidates.push(file.startsWith('/') ? file : `${cwd}/${file}`)
     else for (const dir of (env.PATH ?? '/usr/local/bin:/usr/bin:/bin').split(':')) if (dir) candidates.push(`${dir.startsWith('/') ? dir : `${cwd}/${dir}`}/${file}`)
@@ -126,8 +67,9 @@ function create(rt: Runtime): any {
       if (m) {
         const interp = m[1].endsWith('/env') ? (m[2] ?? '').trim().split(/\s+/).filter((w) => !w.startsWith('-'))[0] ?? '' : m[1]
         if (isNode(interp) || interp === 'bun') return { exec: real, argv: [file, ...args] }
+        if (SHELL_NAMES.includes(interp.slice(interp.lastIndexOf('/') + 1))) return { exec: SHELL_EXEC, argv: ['sh', real, ...args], shell: true }
       }
-      // Present but not something this runtime can execute (a native binary, a shell script).
+      // Present but not something this runtime can execute (a native binary).
       return undefined
     }
     return undefined
@@ -535,6 +477,26 @@ function create(rt: Runtime): any {
     const childEnv = { ...env, ...command.env }
     delete childEnv.NODE_CHANNEL_FD
     const input = o.input !== undefined && o.input !== null ? (typeof o.input === 'string' ? Buffer.from(o.input, o.encoding && o.encoding !== 'buffer' ? o.encoding : 'utf8') : new Uint8Array(o.input.buffer ?? o.input, o.input.byteOffset ?? 0, o.input.byteLength)) : undefined
+    if (command.shell) {
+      // The caller is blocked until the command ends anyway: run the shell here, without a process.
+      const io = (i: number) => {
+        const spec = specs[i]
+        if (spec === 'pipe') return i === 0 && !input?.length ? 'null' : 'memory'
+        return spec === 'null' ? 'null' : spec === 'inherit' ? i : spec.fd
+      }
+      const run = (shell ??= createShell(rt)).run({ argv: command.argv, env: childEnv, cwd, stdio: [io(0), io(1), io(2)], input, timeoutMs: o.timeout })
+      result.pid = k.getpid()
+      if (specs[1] === 'pipe') result.stdout = encode(run.stdout)
+      if (specs[2] === 'pipe') result.stderr = encode(run.stderr)
+      result.output = [null, result.stdout, result.stderr]
+      if (run.timedOut) {
+        result.error = Object.assign(new Error(`spawnSync ${f} ETIMEDOUT`), { code: 'ETIMEDOUT', errno: -110, syscall: `spawnSync ${f}`, path: f, spawnargs: a })
+        result.signal = typeof o.killSignal === 'string' ? o.killSignal : 'SIGTERM'
+      } else if (run.stdout.length + run.stderr.length > (o.maxBuffer ?? Infinity)) {
+        result.error = Object.assign(new Error(`spawnSync ${f} ENOBUFS`), { code: 'ENOBUFS', errno: -105, syscall: `spawnSync ${f}` })
+      } else result.status = run.status
+      return result
+    }
     let r
     try {
       r = k.spawn({ exec: command.exec, argv: command.argv, env: childEnv, cwd, stdio: specs })

@@ -277,7 +277,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
       kerneldUrl: asset('bat-kerneld.js'),
       processWorkerUrl: processWorkerUrl(asset('bat-process.js'), {
         nodelibUrl: 'bat-nodelib.js',
-        wasm: { modules: 'bat_modules.wasm', native: 'bat_node_native.wasm', sqlite: 'sqlite3.wasm' },
+        wasm: { modules: 'bat_modules.wasm', native: 'bat_node_native.wasm', sqlite: 'sqlite3.wasm', sh: 'bat_sh.wasm' },
         programs,
         // The routed global `fetch` exists in every process before guest code runs.
         prewarm: [...DEFAULT_CONFIG.prewarm, 'bat:net-globals'],
@@ -379,7 +379,9 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
         return out
       }
     }
-    for (const dir of ['/tmp', '/workspace', '/bin', '/usr/local/bin', '/home/user', '/.bat']) kernel.mkdir(dir, { recursive: true })
+    for (const dir of ['/tmp', '/workspace', '/bin', '/usr/bin', '/usr/local/bin', '/home/user', '/.bat']) kernel.mkdir(dir, { recursive: true })
+    // The shell is built into the runtime (process/sh.ts); these make its conventional paths exist.
+    for (const path of ['/bin/sh', '/bin/bash', '/usr/bin/env']) if (kernel.kindOf(path) < 0) kernel.writeFile(path, '#!/bin/sh\n# built into the runtime\n', { mode: 0o755 })
     progress({ phase: 'mount' })
     await netd.call('attach', { module: booted.module, memory: booted.memory })
     // Images of other hashes are dead weight once these are mounted (and complete: a

@@ -8,6 +8,7 @@
 //   bat-kerneld.js      the supervisor worker (runtime/src/kernel/kerneld.ts)
 //   bat_modules.wasm    module transform       (crates/bat-modules)
 //   bat_node_native.wasm  zlib and digests     (crates/bat-node-native)
+//   bat_sh.wasm         /bin/sh and coreutils  (crates/bat-sh)
 //
 //   bun runtime/build.ts [--watch-none] [--minify]
 //
@@ -93,6 +94,7 @@ if (existsSync(join(import.meta.dir, 'harness/page.ts'))) await bundle(join(impo
 for (const [from, to] of [
   ['crates/bat-modules/js/bat_modules.wasm', 'bat_modules.wasm'],
   ['crates/bat-node-native/js/bat_node_native.wasm', 'bat_node_native.wasm'],
+  ['crates/bat-sh/js/bat_sh.wasm', 'bat_sh.wasm'],
 ]) {
   if (existsSync(join(root, from))) copyFileSync(join(root, from), join(dist, to))
   else console.warn(`missing ${from} (build it first); ${to} not copied`)

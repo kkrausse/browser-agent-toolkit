@@ -1,0 +1,780 @@
+{
+ "fixture": {
+  "src/a.tsx": "export const a = 1\n",
+  "src/b.tsx": "export const b = 2\nconsole.log(\"b\")\n",
+  "src/sub/c.ts": "x\n",
+  "package.json": "{\n  \"name\": \"demo\",\n  \"version\": \"1.0.0\",\n  \"scripts\": { \"hello\": \"echo hello $npm_lifecycle_event\" }\n}\n",
+  "list.txt": "banana\napple\ncherry\napple\n10\n9\n",
+  "words.txt": "one two three\nfour five six\n"
+ },
+ "cases": [
+  {
+   "script": "echo hi",
+   "stdout": "hi\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "ls src | wc -l",
+   "stdout": "3\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "cat package.json | grep name && echo ok > x; cat x",
+   "stdout": "  \"name\": \"demo\",\nok\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "for f in src/*.tsx; do echo $f; done",
+   "stdout": "src/a.tsx\nsrc/b.tsx\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "NODE_ENV=production node -e \"console.log(process.env.NODE_ENV)\"",
+   "stdout": "production\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "false; echo $?",
+   "stdout": "1\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "cat nope.txt; echo \"status $?\"",
+   "stdout": "status 1\n",
+   "status": 0,
+   "stderr": true
+  },
+  {
+   "script": "nosuchcmd arg; echo $?",
+   "stdout": "127\n",
+   "status": 0,
+   "stderr": true
+  },
+  {
+   "script": "exit 3",
+   "stdout": "",
+   "status": 3,
+   "stderr": false
+  },
+  {
+   "script": "echo \"a  b\"   c 'd  e' \"f\\\"g\" h\\ i",
+   "stdout": "a  b c d  e f\"g h i\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "x=5; echo \"$x ${x} ${x}y $((x*2+1)) ${#x}\"",
+   "stdout": "5 5 5y 11 1\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo ${undefined:-default} ${undefined-def2} \"${x:=set}\" $x ${x:+alt}",
+   "stdout": "default def2 set set alt\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "v=hello.tar.gz; echo ${v%.*} ${v%%.*} ${v#*.} ${v##*.} ${v/l/L} ${v//l/L} ${v:1:3} ${v^^}",
+   "stdout": "hello.tar hello tar.gz gz heLlo.tar.gz heLLo.tar.gz ell HELLO.TAR.GZ\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo $(echo nested $(echo deep)) `echo back`",
+   "stdout": "nested deep back\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo \"$(printf 'a\\nb\\n')\" | wc -l",
+   "stdout": "2\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "a=1; b=2; if [ $a -lt $b ]; then echo lt; elif [ $a -eq $b ]; then echo eq; else echo gt; fi",
+   "stdout": "lt\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "i=0; while [ $i -lt 3 ]; do echo $i; i=$((i+1)); done",
+   "stdout": "0\n1\n2\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "for i in 1 2 3; do if [ $i = 2 ]; then continue; fi; echo $i; done; echo done",
+   "stdout": "1\n3\ndone\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "for i in a b c; do [ $i = b ] && break; echo $i; done",
+   "stdout": "a\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "case foo.txt in *.md) echo md;; *.txt|*.text) echo txt;; *) echo other;; esac",
+   "stdout": "txt\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "f() { echo \"args: $# $1 $2\"; return 4; }; f x y; echo $?",
+   "stdout": "args: 2 x y\n4\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "f() { local v=inner; echo $v; }; v=outer; f; echo $v",
+   "stdout": "inner\nouter\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo a > f1; echo b >> f1; cat f1; cat < f1 | tr a-z A-Z",
+   "stdout": "a\nb\nA\nB\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "ls nope 2>/dev/null; echo $?",
+   "stdout": "2\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "ls nope 2>&1 | wc -l",
+   "stdout": "1\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "{ echo out; echo err >&2; } 2>&1 | sort",
+   "stdout": "err\nout\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo err 1>&2 2>/dev/null; echo ok",
+   "stdout": "ok\n",
+   "status": 0,
+   "stderr": true
+  },
+  {
+   "script": "cat <<EOF2\nhere $((1+1)) \"quoted\" $HOME_NOT_SET.\nEOF2",
+   "stdout": "here 2 \"quoted\" .\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "cat <<'EOF2'\nraw $x $(nope)\nEOF2",
+   "stdout": "raw $x $(nope)\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "cat <<< \"here string\"",
+   "stdout": "here string\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "cd src && pwd | sed 's|.*/||' && cd .. && basename \"$PWD\"",
+   "stdout": "src\nwork\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "(cd src; ls); ls | head -2",
+   "stdout": "a.tsx\nb.tsx\nsub\nempty\nlist.txt\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "export FOO=bar; env | grep '^FOO='; sh -c 'echo $FOO' ",
+   "stdout": "FOO=bar\nbar\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "FOO=tmp env | grep ^FOO; echo \"[$FOO]\"",
+   "stdout": "FOO=tmp\n[]\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo *.txt src/*.tsx nomatch*",
+   "stdout": "list.txt words.txt src/a.tsx src/b.tsx nomatch*\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo {a,b,c}{1,2} {1..5} x{,y}z",
+   "stdout": "a1 a2 b1 b2 c1 c2 1 2 3 4 5 xz xyz\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo \"$@\" | wc -c; set -- a \"b c\" d; echo $# \"$2\"; for a in \"$@\"; do echo \"<$a>\"; done",
+   "stdout": "1\n3 b c\n<a>\n<b c>\n<d>\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "true && echo yes || echo no; false && echo yes || echo no",
+   "stdout": "yes\nno\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "! false; echo $?; ! true; echo $?",
+   "stdout": "0\n1\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo one; echo two | cat; echo three",
+   "stdout": "one\ntwo\nthree\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "mkdir -p d/e/f && touch d/e/f/g.txt && find d -type f && rm -r d && ls d 2>/dev/null; echo $?",
+   "stdout": "d/e/f/g.txt\n2\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "cp list.txt copy.txt && mv copy.txt moved.txt && ls *.txt | sort",
+   "stdout": "list.txt\nmoved.txt\nwords.txt\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "cp -r src src2 && find src2 | sort",
+   "stdout": "src2\nsrc2/a.tsx\nsrc2/b.tsx\nsrc2/sub\nsrc2/sub/c.ts\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "sort list.txt | uniq -c",
+   "stdout": "      1 10\n      1 9\n      2 apple\n      1 banana\n      1 cherry\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "sort -n list.txt | tail -3; sort -r list.txt | head -1; sort -u list.txt | wc -l",
+   "stdout": "cherry\n9\n10\ncherry\n5\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "head -n 2 list.txt; tail -n 2 list.txt; head -1 list.txt; tail -n +5 list.txt",
+   "stdout": "banana\napple\n10\n9\nbanana\n10\n9\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "wc -l list.txt; wc -w words.txt; wc -c < words.txt; wc words.txt",
+   "stdout": "6 list.txt\n6 words.txt\n28\n 2  6 28 words.txt\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "grep -n apple list.txt; grep -c apple list.txt; grep -v apple list.txt | head -1; grep -i APPLE list.txt | wc -l",
+   "stdout": "2:apple\n4:apple\n2\nbanana\n2\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "grep -r \"const\" src | sort; grep -rl b src; grep -E 'a(p+)le|cherry' list.txt; grep -o 'an' list.txt",
+   "stdout": "src/a.tsx:export const a = 1\nsrc/b.tsx:export const b = 2\nsrc/b.tsx\napple\ncherry\napple\nan\nan\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "grep -q zzz list.txt; echo $?; grep -w app list.txt; echo $?",
+   "stdout": "1\n1\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "sed 's/apple/APPLE/' list.txt | head -2; sed -n '2,3p' list.txt; sed '/apple/d' list.txt | wc -l; sed -E 's/(a+)/[\\1]/g' list.txt | head -1",
+   "stdout": "banana\nAPPLE\napple\ncherry\n4\nb[a]n[a]n[a]\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "sed -i 's/banana/BANANA/' list.txt; head -1 list.txt; sed '1d;$d' list.txt",
+   "stdout": "BANANA\napple\ncherry\napple\n10\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "sed 's/\\(o\\)ne/\\1NE/; s/two/& &/' words.txt",
+   "stdout": "oNE two two three\nfour five six\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "find . -name '*.tsx' | sort; find src -type d | sort; find . -maxdepth 1 -type f | sort",
+   "stdout": "./src/a.tsx\n./src/b.tsx\nsrc\nsrc/sub\n./list.txt\n./package.json\n./words.txt\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "find src -name '*.ts*' -exec basename {} \\; | sort; find src -type f | xargs wc -l | tail -1",
+   "stdout": "a.tsx\nb.tsx\nc.ts\n 4 total\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo \"a b c\" | xargs -n 1 echo item; printf 'x\\ny\\n' | xargs -I {} echo \"<{}>\"",
+   "stdout": "item a\nitem b\nitem c\n<x>\n<y>\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "which sh >/dev/null; echo $?; which nosuch; echo $?",
+   "stdout": "0\n1\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "basename /a/b/c.txt .txt; dirname /a/b/c.txt; dirname file; basename /",
+   "stdout": "c\n/a/b\n.\n/\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "printf '%s-%d-%5.2f|%-5s|%05d\\n' str 42 3.14159 ab 7; printf '%s\\n' a b c; printf 'no newline'",
+   "stdout": "str-42- 3.14|ab   |00007\na\nb\nc\nno newline",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo -n no; echo -e 'a\\tb'; echo \"a\\tb\"",
+   "stdout": "noa\tb\na\\tb\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo \"one two three\" | cut -d' ' -f2; echo a,b,c | cut -d, -f1,3; echo hello | cut -c2-4",
+   "stdout": "two\na,c\nell\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo hello | tr 'a-y' 'b-z'; echo \"a  b\" | tr -s ' '; echo abc | tr -d b; echo hello | tr '[:lower:]' '[:upper:]'",
+   "stdout": "ifmmp\na b\nac\nHELLO\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "seq 3; seq 2 2 6; seq -s, 1 3",
+   "stdout": "1\n2\n3\n2\n4\n6\n1,2,3\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "test -f package.json && echo file; test -d src && echo dir; [ -e nope ] || echo missing; [ -z \"\" ] && echo empty; [ \"a\" != \"b\" ] && echo ne",
+   "stdout": "file\ndir\nmissing\nempty\nne\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "[[ foo.txt == *.txt ]] && echo glob; [[ abc =~ ^a.c$ ]] && echo re; [[ -f package.json && ! -d package.json ]] && echo both",
+   "stdout": "glob\nre\nboth\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "x=3; (( x > 2 )) && echo big; (( x++ )); echo $x; echo $(( (x + 1) * 2 % 5 )) $((x == 4 ? 10 : 20)) $((2**10))",
+   "stdout": "big\n4\n0 10 1024\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "x=a; x+=b; echo $x; unset x; echo \"[${x}]\"",
+   "stdout": "ab\n[]\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "IFS=,; set -- a,b,c; for p in $1; do echo $p; done",
+   "stdout": "a\nb\nc\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "while read -r line; do echo \"L:$line\"; done < words.txt",
+   "stdout": "L:one two three\nL:four five six\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "while IFS=' ' read -r a b c; do echo \"$c $a\"; done < words.txt",
+   "stdout": "three one\nsix four\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo \"a b\" | { read x y; echo \"$y $x\"; }",
+   "stdout": "b a\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "cat list.txt | while read l; do n=$((n+1)); done; echo \"n=[$n]\"",
+   "stdout": "n=[]\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "set -e; false; echo not reached",
+   "stdout": "",
+   "status": 1,
+   "stderr": false
+  },
+  {
+   "script": "set -e; if false; then echo no; fi; false || echo ok; echo reached",
+   "stdout": "ok\nreached\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo start; exit 2; echo never",
+   "stdout": "start\n",
+   "status": 2,
+   "stderr": false
+  },
+  {
+   "script": "f() { return 3; }; f || echo \"failed $?\"",
+   "stdout": "failed 3\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "x=$(false); echo $?; y=$(echo val; exit 7); echo $? $y",
+   "stdout": "1\n7 val\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo 'single $x `no`' \"double \\$x \\\\ \\\"q\\\"\"",
+   "stdout": "single $x `no` double $x \\ \"q\"\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo $'tab\\there\\nnewline'",
+   "stdout": "tab\there\nnewline\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "a=\"x y\"; for w in $a; do echo \"[$w]\"; done; for w in \"$a\"; do echo \"[$w]\"; done",
+   "stdout": "[x]\n[y]\n[x y]\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo ~ | grep -c /; echo \"~\"",
+   "stdout": "1\n~\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "touch \"file with space.txt\"; ls *space*; for f in *.txt; do echo \"<$f>\"; done | sort",
+   "stdout": "file with space.txt\n<file with space.txt>\n<list.txt>\n<words.txt>\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "ls -a | head -3; ls -1 src; ls -d src; ls src/sub",
+   "stdout": ".\n..\nempty\na.tsx\nb.tsx\nsub\nsrc\nc.ts\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "ls -la src | wc -l; ls -l package.json | cut -c1-10",
+   "stdout": "6\n-rw-r--r--\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "rm nope; echo $?; rm -f nope; echo $?; rmdir src; echo $?",
+   "stdout": "1\n0\n1\n",
+   "status": 0,
+   "stderr": true
+  },
+  {
+   "script": "mkdir src; echo $?; mkdir newd; [ -d newd ] && echo made; rmdir newd; [ -d newd ] || echo gone",
+   "stdout": "1\nmade\ngone\n",
+   "status": 0,
+   "stderr": true
+  },
+  {
+   "script": "cat words.txt list.txt | wc -l; cat -n words.txt",
+   "stdout": "8\n     1\tone two three\n     2\tfour five six\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "tee out.txt < words.txt | wc -l; cat out.txt | wc -l",
+   "stdout": "2\n2\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo hi > /dev/null; echo \"to stderr\" >&2",
+   "stdout": "",
+   "status": 0,
+   "stderr": true
+  },
+  {
+   "script": "true; echo $? $$ | wc -w; echo $0 | grep -c .",
+   "stdout": "2\n1\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "eval 'echo evaluated $((1+2))'; cmd=\"echo via var\"; $cmd",
+   "stdout": "evaluated 3\nvia var\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "type cd | head -1; command -v ls >/dev/null && echo has-ls",
+   "stdout": "cd is a shell builtin\nhas-ls\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "node -e \"console.log(1+1)\" | cat; node -e \"process.exit(5)\"; echo $?",
+   "stdout": "2\n5\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "node -e \"process.stdin.on('data', d => process.stdout.write(String(d).toUpperCase()))\" < words.txt",
+   "stdout": "ONE TWO THREE\nFOUR FIVE SIX\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo piped | node -e \"process.stdin.on('data', d => process.stdout.write('got ' + d))\"",
+   "stdout": "got piped\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "node -e \"console.log('a\\nb\\nc')\" | grep b | wc -l",
+   "stdout": "1\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "node -e \"console.error('E'); console.log('O')\" 2>&1 | sort",
+   "stdout": "E\nO\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "node -e \"console.log('x')\" > nodeout.txt; cat nodeout.txt",
+   "stdout": "x\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "r=$(node -p \"6*7\"); echo \"r=$r\"",
+   "stdout": "r=42\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "node -e \"console.log('bg')\" & wait; echo after",
+   "stdout": "bg\nafter\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "date +%Y | grep -c '^20'; date -d @0 +%Y-%m-%dT%H:%M:%S; date -u -d '2024-03-01 12:30:00' '+%a %b %e %j'",
+   "stdout": "1\n1970-01-01T00:00:00\nFri Mar  1 061\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "sleep 0.01; echo slept",
+   "stdout": "slept\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "x=10; while [ $x -gt 0 ]; do x=$((x-3)); done; echo $x",
+   "stdout": "-2\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "until [ -f marker ]; do touch marker; done; ls marker",
+   "stdout": "marker\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "if grep -q apple list.txt; then echo found; fi",
+   "stdout": "found\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "[ -n \"$UNSET_VAR\" ] || echo unset; echo \"${UNSET_VAR:-fallback}\"",
+   "stdout": "unset\nfallback\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo \"a:b:c\" | sed 's/:/\\n/g' | wc -l",
+   "stdout": "3\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "printf 'b\\na\\n' | sort | head -1; printf '3\\n1\\n2\\n' | sort -rn | tr '\\n' ' '",
+   "stdout": "a\n3 2 1 ",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo abc | rev; printf '1\\n2\\n' | tac",
+   "stdout": "cba\n2\n1\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "ln -s package.json link.json && readlink link.json && cat link.json | wc -l",
+   "stdout": "package.json\n5\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "realpath src/../src/a.tsx | sed 's|.*/src/|src/|'",
+   "stdout": "src/a.tsx\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "chmod +x list.txt && [ -x list.txt ] && echo exec",
+   "stdout": "exec\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "du -s src >/dev/null && echo du-ok",
+   "stdout": "du-ok\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "A=1 B=2 sh -c 'echo $A$B'",
+   "stdout": "12\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "sh -c 'echo \"$0 $1 $2\"' zero one two",
+   "stdout": "zero one two\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo 'echo from script $1' > s.sh; sh s.sh arg; chmod +x s.sh; ./s.sh direct",
+   "stdout": "from script arg\nfrom script direct\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "printf '#!/bin/sh\\necho shebang $1\\n' > t.sh; chmod +x t.sh; ./t.sh x",
+   "stdout": "shebang x\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo 'x=sourced' > lib.sh; . ./lib.sh; echo $x",
+   "stdout": "sourced\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "trap 'echo bye' EXIT 2>/dev/null; echo trapped-ok",
+   "stdout": "trapped-ok\nbye\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo \"$(cat <<EOF2\ninner heredoc\nEOF2\n)\"",
+   "stdout": "inner heredoc\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "for i in 1 2; do for j in a b; do [ $j = b ] && continue 2; echo $i$j; done; done",
+   "stdout": "1a\n2a\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "getopts_test() { while getopts \"ab:\" o; do echo \"$o ${OPTARG:-}\"; done; }; getopts_test -a -b val",
+   "stdout": "a \nb val\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo \"exit code of pipeline:\"; false | true; echo $?; true | false; echo $?",
+   "stdout": "exit code of pipeline:\n0\n1\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "set -o pipefail; false | true; echo $?",
+   "stdout": "1\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo a | grep b || echo \"no match\"",
+   "stdout": "no match\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "VAR=\"a b\"; echo ${VAR// /_}; echo ${#VAR}; echo \"${VAR%% *}\"",
+   "stdout": "a_b\n3\na\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "arr=\"one two\"; set -- $arr; echo $2 $#; shift; echo $1",
+   "stdout": "two 2\ntwo\n",
+   "status": 0,
+   "stderr": false
+  },
+  {
+   "script": "echo $(( 010 + 0x10 )); echo $((7/2)) $((-7%3)) $((1<<4)) $((5>3 && 2>1))",
+   "stdout": "24\n3 -1 16 1\n",
+   "status": 0,
+   "stderr": false
+  }
+ ]
+}
