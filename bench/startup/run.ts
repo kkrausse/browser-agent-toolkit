@@ -176,7 +176,8 @@ const plan: ('fresh' | 'reopen')[] = [...Array(fresh).fill('fresh'), ...Array(re
 // A reopen needs something to reopen: when no fresh sample precedes, one unrecorded open first.
 const originOf = (p: string) => `http://127.0.0.1:${p}`
 if (!fresh && reopen && !flag('no-prime')) {
-  for (const [, p] of variants) await takeSample('reopen', originOf(p))
+  // --prime N: Chrome produces a script's code cache on its third load.
+  for (let i = 0; i < Number(arg('prime', '1')); i++) for (const [, p] of variants) await takeSample('reopen', originOf(p))
   console.error('primed')
 }
 for (const [i, kind] of plan.entries()) for (const [variant, p] of variants) {
