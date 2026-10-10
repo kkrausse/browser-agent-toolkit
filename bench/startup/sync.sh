@@ -7,15 +7,25 @@
 #   bench/startup/sync.sh setup      copy, then `bun run setup` there (cargo → target-perf)
 #   bench/startup/sync.sh js         copy, then runtime bundles + toolkit only
 #   bench/startup/sync.sh prepare    copy, js, then prepare + build the example
+#   TREE=base REF=<commit> bench/startup/sync.sh prepare    a second tree at a committed state,
+#       for interleaved A/B runs (serve.sh <port> base; run.ts --ports 4120,4121)
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)
-tree=$root/target-perf/tree
+tree=$root/target-perf/${TREE:-tree}
 mkdir -p "$tree"
-rsync -a --delete \
-  --exclude '/target-*' --exclude '/target' --exclude '.git' --exclude '.editor' \
-  --exclude '/runtime/dist' --exclude '/packages/toolkit/dist' --exclude '/examples/todo-app/build' \
-  --exclude '/examples/todo-app/.react-router' --exclude '/bench/startup/out' \
-  "$root/" "$tree/"
+excludes=(--exclude '/target-*' --exclude '/target' --exclude '.git' --exclude '.editor'
+  --exclude '/runtime/dist' --exclude '/packages/toolkit/dist' --exclude '/examples/todo-app/build'
+  --exclude '/examples/todo-app/.react-router' --exclude '/bench/startup/out')
+if [ -n "${REF:-}" ]; then
+  # A committed state (for A/B runs): tracked files of $REF, plus the untracked inputs a build needs.
+  stage=$(mktemp -d)
+  git -C "$root" archive "$REF" | tar -x -C "$stage"
+  rsync -a --delete "${excludes[@]}" --exclude node_modules --exclude '/crates/*/js/*.wasm' --exclude '/packages/guest-shims/**/*.wasm' --exclude '/examples/todo-app/.env.local' "$stage/" "$tree/"
+  rm -rf "$stage"
+  rsync -a "${excludes[@]}" --include '*/' --include 'node_modules/***' --include '/crates/*/js/*.wasm' --include '/packages/guest-shims/**/*.wasm' --include '/examples/todo-app/.env.local' --exclude '*' --prune-empty-dirs "$root/" "$tree/"
+else
+  rsync -a --delete "${excludes[@]}" "$root/" "$tree/"
+fi
 export CARGO_TARGET_DIR=$root/target-perf
 export BAT_PREPARE=$CARGO_TARGET_DIR/release/bat-prepare
 export BAT_OPENCODE_DIR=$root/.runtime/opencode-2.0.3

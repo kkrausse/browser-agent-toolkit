@@ -1,0 +1,213 @@
+{
+ "meta": {
+  "label": "native-compile-cache",
+  "date": "2026-10-10T07:14:13.943Z",
+  "node": "v24.18.0",
+  "prepared": "/home/kkrausse/devfs/repos/kkrausse/bat-rust/target-perf/tree/examples/todo-app/.editor/prepared",
+  "image": "image-346c2eba87c91dbb.batimg"
+ },
+ "summary": {
+  "vite": {
+   "load1": {
+    "n": 5,
+    "median": 4.99,
+    "min": 4.75,
+    "max": 5.17
+   },
+   "listening": {
+    "n": 5,
+    "median": 510,
+    "min": 496,
+    "max": 528.7
+   },
+   "document": {
+    "n": 5,
+    "median": 871.4,
+    "min": 863.3,
+    "max": 944.6
+   },
+   "page": {
+    "n": 5,
+    "median": 1266.6,
+    "min": 1223.4,
+    "max": 1289.7
+   },
+   "requests": {
+    "n": 5,
+    "median": 31,
+    "min": 31,
+    "max": 31
+   },
+   "viteReadyIn": {
+    "n": 5,
+    "median": 485,
+    "min": 471,
+    "max": 507
+   }
+  },
+  "opencode": {
+   "load1": {
+    "n": 5,
+    "median": 4.99,
+    "min": 4.75,
+    "max": 5.07
+   },
+   "listening": {
+    "n": 5,
+    "median": 1205.1,
+    "min": 1175.9,
+    "max": 1215.6
+   },
+   "health": {
+    "n": 5,
+    "median": 1243.2,
+    "min": 1217,
+    "max": 1254.2
+   },
+   "activated": {
+    "n": 5,
+    "median": 1615.4,
+    "min": 1606.3,
+    "max": 1631.4
+   },
+   "ready": {
+    "n": 5,
+    "median": 1649.9,
+    "min": 1642.9,
+    "max": 1667.4
+   }
+  }
+ },
+ "samples": [
+  {
+   "kind": "vite",
+   "load": [
+    5.17,
+    9.04,
+    10.82
+   ],
+   "listening": 499.9,
+   "document": 863.3,
+   "page": 1227.6,
+   "requests": 31,
+   "viteReadyIn": 478,
+   "optimizerRan": false
+  },
+  {
+   "kind": "opencode",
+   "load": [
+    5.07,
+    8.96,
+    10.78
+   ],
+   "listening": 1190.4,
+   "health": 1229.4,
+   "activated": 1606.3,
+   "ready": 1642.9
+  },
+  {
+   "kind": "vite",
+   "load": [
+    5.07,
+    8.96,
+    10.78
+   ],
+   "listening": 513.1,
+   "document": 909.7,
+   "page": 1280,
+   "requests": 31,
+   "viteReadyIn": 490,
+   "optimizerRan": false
+  },
+  {
+   "kind": "opencode",
+   "load": [
+    5.07,
+    8.96,
+    10.78
+   ],
+   "listening": 1215.6,
+   "health": 1254.2,
+   "activated": 1631.4,
+   "ready": 1667.4
+  },
+  {
+   "kind": "vite",
+   "load": [
+    4.99,
+    8.88,
+    10.74
+   ],
+   "listening": 496,
+   "document": 871.4,
+   "page": 1266.6,
+   "requests": 31,
+   "viteReadyIn": 471,
+   "optimizerRan": false
+  },
+  {
+   "kind": "opencode",
+   "load": [
+    4.99,
+    8.88,
+    10.74
+   ],
+   "listening": 1175.9,
+   "health": 1217,
+   "activated": 1619.3,
+   "ready": 1660.2
+  },
+  {
+   "kind": "vite",
+   "load": [
+    4.99,
+    8.88,
+    10.74
+   ],
+   "listening": 510,
+   "document": 867.2,
+   "page": 1223.4,
+   "requests": 31,
+   "viteReadyIn": 485,
+   "optimizerRan": false
+  },
+  {
+   "kind": "opencode",
+   "load": [
+    4.75,
+    8.76,
+    10.7
+   ],
+   "listening": 1210.1,
+   "health": 1247.3,
+   "activated": 1615.4,
+   "ready": 1649.9
+  },
+  {
+   "kind": "vite",
+   "load": [
+    4.75,
+    8.76,
+    10.7
+   ],
+   "listening": 528.7,
+   "document": 944.6,
+   "page": 1289.7,
+   "requests": 31,
+   "viteReadyIn": 507,
+   "optimizerRan": false
+  },
+  {
+   "kind": "opencode",
+   "load": [
+    4.75,
+    8.76,
+    10.7
+   ],
+   "listening": 1205.1,
+   "health": 1243.2,
+   "activated": 1614.9,
+   "ready": 1646.4
+  }
+ ]
+}

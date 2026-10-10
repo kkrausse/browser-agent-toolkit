@@ -5,6 +5,7 @@
 //
 //   bench/startup/sync.sh prepare && bench/startup/serve.sh 4120
 //   bun bench/startup/run.ts --label before [--reopen 5] [--fresh 5] [--trace] [--max-load 14]
+//   bun bench/startup/run.ts --label ab --variants base=4121,new=4120 --reopen 8     (interleaved A/B)
 //
 // A sample is: load the page, wait until it is idle, click "Open editor", wait for the
 // preview to show the app and for the chat to be ready, read the marks, click "Exit".
@@ -36,7 +37,8 @@ const trace = flag('trace')
 const maxLoad = Number(arg('max-load', '0'))
 const settleMs = Number(arg('settle', '800'))
 const out = arg('out', join(import.meta.dir, 'out', `${label}.json`))!
-const origin = `http://127.0.0.1:${port}`
+// --variants a=4120,b=4121: interleave samples of several servers (A/B at the same machine load).
+const variants: [string, string][] = (arg('variants') ?? `${label}=${port}`).split(',').map((v) => v.split('=') as [string, string])
 
 const load = () => readFileSync('/proc/loadavg', 'utf8').split(' ').slice(0, 3).map(Number)
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -58,7 +60,7 @@ async function execute<T>(code: string): Promise<T> {
 }
 
 /** Runs in browser-control: one open, from page load to marks collected and the editor closed again. */
-const sampleCode = (kind: 'fresh' | 'reopen') => `
+const sampleCode = (kind: 'fresh' | 'reopen', origin: string) => `
 const origin = ${JSON.stringify(origin)}, kind = ${JSON.stringify(kind)}, trace = ${trace}, settle = ${settleMs}
 await page.goto(origin + '/')
 if (kind === 'fresh') {
@@ -66,7 +68,16 @@ if (kind === 'fresh') {
     for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister()
     for (const k of await caches.keys()) await caches.delete(k)
     const root = await navigator.storage.getDirectory()
-    for await (const name of root.keys()) await root.removeEntry(name, { recursive: true })
+    // Workers of the page that was just left may hold their file handles a moment longer.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        for await (const name of root.keys()) await root.removeEntry(name, { recursive: true })
+        break
+      } catch (e) {
+        if (attempt > 50) throw e
+        await new Promise((r) => setTimeout(r, 200))
+      }
+    }
     localStorage.clear()
   })
   await page.goto(origin + '/')
@@ -106,6 +117,7 @@ return JSON.stringify({ outcome, before, ...result })
 `
 
 interface Sample {
+  variant: string
   kind: 'fresh' | 'reopen'
   load: number[]
   outcome: string
@@ -148,40 +160,40 @@ function summarize(samples: Sample[]) {
 const samples: Sample[] = []
 const plan: ('fresh' | 'reopen')[] = [...Array(fresh).fill('fresh'), ...Array(reopen).fill('reopen')]
 // A reopen needs something to reopen: when no fresh sample precedes, one unrecorded open first.
+const originOf = (p: string) => `http://127.0.0.1:${p}`
 if (!fresh && reopen && !flag('no-prime')) {
-  await execute(sampleCode('reopen'))
+  for (const [, p] of variants) await execute(sampleCode('reopen', originOf(p)))
   console.error('primed')
 }
-for (const [i, kind] of plan.entries()) {
+for (const [i, kind] of plan.entries()) for (const [variant, p] of variants) {
   await waitForLoad()
   const before = load()
   let r: any
   try {
-    r = await execute<any>(sampleCode(kind))
+    r = await execute<any>(sampleCode(kind, originOf(p)))
   } catch (e) {
-    console.error(`sample ${i + 1} (${kind}) failed: ${(e as Error).message}`)
+    console.error(`sample ${i + 1} (${kind}, ${variant}) failed: ${(e as Error).message}`)
     continue
   }
-  const sample: Sample = { kind, load: before, ...r, stages: stages(r.steps) }
+  const sample: Sample = { variant, kind, load: before, ...r, stages: stages(r.steps) }
   samples.push(sample)
   const st = sample.stages
   console.error(
-    `${String(i + 1).padStart(2)} ${kind.padEnd(6)} load ${before[0].toFixed(1).padStart(5)}  ${r.outcome}  boot ${st['click → booted (manifest, runtime import, boot, mount)']}  listen +${st['vite spawn → listening']}  visible +${st['vite spawn → app visible']}  agent +${st['opencode spawn → attached']}  whole ${st['whole open (click → app visible and chat ready)']}${r.before.visibility !== 'visible' || !r.before.focused ? '  (TAB NOT VISIBLE/FOCUSED)' : ''}${r.error ? `  ERROR ${r.error}` : ''}`,
+    `${String(i + 1).padStart(2)} ${variant.padEnd(8)} ${kind.padEnd(6)} load ${before[0].toFixed(1).padStart(5)}  ${r.outcome}  boot ${st['click → booted (manifest, runtime import, boot, mount)']}  listen +${st['vite spawn → listening']}  visible +${st['vite spawn → app visible']}  agent +${st['opencode spawn → attached']}  whole ${st['whole open (click → app visible and chat ready)']}${r.before.visibility !== 'visible' || !r.before.focused ? '  (TAB NOT VISIBLE/FOCUSED)' : ''}${r.error ? `  ERROR ${r.error}` : ''}`,
   )
 }
 
 const commit = (await $`git -C ${join(import.meta.dir, '../..')} rev-parse --short HEAD`.quiet().nothrow().text()).trim()
-const result = {
-  meta: { label, date: new Date().toISOString(), commit, origin, trace, settleMs, chrome: 'headed on Xvfb, driven by browser-control' },
-  summary: { fresh: summarize(samples.filter((s) => s.kind === 'fresh' && s.outcome === 'ok')), reopen: summarize(samples.filter((s) => s.kind === 'reopen' && s.outcome === 'ok')) },
-  samples,
+const summary: Record<string, any> = {}
+for (const [variant] of variants) for (const kind of ['fresh', 'reopen'] as const) {
+  const mine = samples.filter((s) => s.variant === variant && s.kind === kind && s.outcome === 'ok')
+  if (mine.length) (summary[variant] ??= {})[kind] = summarize(mine)
 }
+const result = { meta: { label, date: new Date().toISOString(), commit, variants: Object.fromEntries(variants.map(([v, p]) => [v, originOf(p)])), trace, settleMs, chrome: 'headed on Xvfb, driven by browser-control' }, summary, samples }
 mkdirSync(dirname(out), { recursive: true })
 await Bun.write(out, JSON.stringify(result, null, 1))
-for (const kind of ['fresh', 'reopen'] as const) {
-  const s = result.summary[kind]
-  if (!s.n) continue
-  console.log(`\n${kind}: n=${s.n}, load1 median ${s.load1?.median} (${s.load1?.min}–${s.load1?.max})`)
+for (const [variant, kinds] of Object.entries(summary)) for (const [kind, s] of Object.entries(kinds) as [string, ReturnType<typeof summarize>][]) {
+  console.log(`\n${variant} ${kind}: n=${s.n}, load1 median ${s.load1?.median} (${s.load1?.min}–${s.load1?.max})`)
   for (const [name, v] of Object.entries(s.stages)) if (v) console.log(`  ${name.padEnd(56)} ${String(v.median).padStart(7)}  (${v.min}–${v.max})`)
 }
 console.log(`\n${out}`)
