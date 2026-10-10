@@ -659,3 +659,54 @@ Numbers: `docs/experiments/2026-10-10-first-open-and-shell.md`.
   are not available.
 - **Not there**: arrays, `select`, process substitution, job control, traps other than
   `EXIT`, `awk`, `diff`, `git`, `curl`, `tar`, `jq`.
+
+## 2026-10-10 startup (measurements: `docs/experiments/2026-10-09-startup.md`)
+
+- **Both programs start at once.** `startupOrder` no longer waits for the preview to listen
+  before starting the agent (that order existed because the old runtime's one kernel thread
+  served both). Each launch has its own process worker; the agent is no longer skipped when
+  the preview never listens (it is started regardless, and the preview's failure is still
+  the one reported).
+- **Boot-time spares are per launch.** kerneld makes one warm process worker per prepared
+  launch (`manifest.launch.*`) before it takes the lock and restores the overlay, and each
+  begins `import()`ing that launch's program scripts as soon as it is warm. A spawn takes the
+  spare whose programs equal its `BAT_PROGRAMS`; other spawns take an uncommitted spare.
+  After boot one uncommitted spare is kept, as before. Workers also open the image handles
+  named in the manifest before the mount (an image file carries its name only when
+  complete).
+- **`launch.programs` is honoured**: the host passes it as `BAT_PROGRAMS` (removed from the
+  environment the guest sees, so children do not load their parent's programs); the worker
+  loads those scripts before the entry.
+- **Start-up module sets** are an add-on to the images, not part of them:
+  `prepare({ startupModules })` takes a recorded list (`{ preview: [guest paths] }`,
+  written by `bench/startup/run.ts --record-modules`), `bat-prepare startup-program` emits
+  the ES modules and the already-strict CommonJS among them as one module script, and the
+  loader prefers a function defined by a loaded program over the image body. The images are
+  unchanged and keep every body, so a stale or missing list only loses the speed-up.
+  **Sloppy CommonJS stays with `eval`** (217 of the example's 669 modules, 12% of the
+  bytes): a module script is strict and there is no cached path for classic scripts in a
+  worker. The list is recorded, not derived at prepare time; a native run with
+  `module.registerHooks` could derive it and was not built.
+  Cost: frames of these modules in stack traces name the program script and its line, not
+  the module file (as OpenCode's program always did).
+- **`preloadEditor()` exists and takes nothing**: manifest fetch, runtime module import,
+  kernel compile. It does not register the service worker, take the lock or create workers,
+  so it is safe on a page whose visitor never opens the editor. Numbers that include it say
+  so.
+- **The TODO example renders the editor panel without `React.lazy`/`Suspense`**: React holds
+  a boundary that showed its fallback for 300 ms, which was 300 ms on every open.
+- **`EditorPreview` navigates when the server listens**, not after the editor's own
+  readiness request.
+- **OpenCode's models.dev document is reduced to provider `opencode` by a `--require`
+  preload** in the agent process (`modelSourcePreloadSource`). The server's `/api/model`
+  is byte-identical with and without it for the example (it lists usable providers only);
+  what changes is what the server stores and copies at each start. Not verified: a chat
+  turn after the change (no messages were sent while measuring); a workspace that had other
+  providers configured through OpenCode itself would lose their catalog entries.
+- **Optimized dependencies are transformed to `map: { mappings: '' }`** by the toolkit's
+  Vite plugin in the guest, so Vite does not inject its fallback source map (6.1 MB for
+  react-dom's 1.1 MB chunk, generated per response).
+- **kerneld snapshots when idle**: journal over 1 MB and no journal write for 5 s. The
+  16 MB limit stays for busy periods. A snapshot holds the kernel's overlay lock while the
+  overlay is serialized.
+- **Agent configuration files are written only when their content differs.**
