@@ -1,12 +1,7 @@
-# Browser Agent Toolkit
+# Browser Agent Toolkit (Rust rewrite branch)
 
-- Commit only your own changes. Do not push unless explicitly requested.
-- Use Bun and TypeScript. Keep library builds and example consumers separate.
-- The editable Vivari runtime is the pinned `vendor/vivari` checkout (or `VIVARI_SOURCE`), not generated
-  `.runtime` output. Read `vivari/DEVELOPMENT.md` before runtime work.
-- Preserve upstream licenses, provenance, source pins, and artifact verification.
+- Read `docs/design/rust-rewrite.md` first; its "Working rules" section binds every agent.
+- Design changes go in `docs/design/decisions.md`; measurements and status reports go in
+  `docs/experiments/`. Older files in `docs/experiments/` describe the previous runtime.
+- Commit only your own paths. Do not push.
 - Browser automation uses the Bun-backed `browser-control` CLI.
-- Keep toolkit experiment results and chronological status reports in `docs/experiments/`
-  in this repository. Keep setup and architecture documentation concise.
-- The original `random` repository is historical reference only; do not write or commit
-  new toolkit reports there.
