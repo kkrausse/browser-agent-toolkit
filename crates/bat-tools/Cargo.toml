@@ -1,0 +1,21 @@
+[package]
+name = "bat-tools"
+version = "0.1.0"
+edition = "2021"
+description = "Tool backends for the guest: esbuild-shaped transform on oxc. Wasm builds live in wasm/ and oxide/ (own workspaces)."
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+oxc_allocator = "0.153.0"
+oxc_ast = "0.153.0"
+oxc_ast_visit = "0.153.0"
+oxc_parser = "0.153.0"
+oxc_semantic = "0.153.0"
+oxc_span = "0.153.0"
+oxc_syntax = "0.153.0"
+oxc_transformer = "0.153.0"
+oxc_codegen = "0.153.0"
+oxc_sourcemap = "9"
+oxc_diagnostics = "0.153.0"
