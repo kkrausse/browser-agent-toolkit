@@ -17,6 +17,8 @@
 // wasm-term's mock-llm (`?model=http://<host>:4791/v1&modelId=mock-model`) has more scripts,
 // but its file scenarios write files of its own sample project, none that this preview shows.
 
+import { appendFile } from 'node:fs/promises'
+
 type Json = Record<string, any>
 interface Tool { name: string; properties: string[] }
 interface Turn { model: string; user: string; results: string[]; tools: Tool[] }
@@ -117,6 +119,7 @@ function reply(turn: Turn, step: Step): Response {
 
 /** What a browser needs from a model endpoint it calls directly. `*` is enough here: the
  * request carries no cookies (the key travels in `Authorization`, which the preflight names). */
+const diagFile = process.env.DIAG_FILE ?? '/tmp/bat-terminal-diag.jsonl'
 const cors = { 'access-control-allow-origin': '*', 'access-control-expose-headers': '*' }
 
 const server = Bun.serve({
@@ -129,6 +132,12 @@ const server = Bun.serve({
       const asked = request.headers.get('access-control-request-headers') ?? ''
       console.log(`[mock] preflight ${url.pathname} from ${origin}: method ${request.headers.get('access-control-request-method')}, headers [${asked}]`)
       return new Response(null, { status: 204, headers: { ...cors, 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': asked || '*', 'access-control-max-age': '600' } })
+    }
+    // The page's diagnostics (src/diag.ts): one JSON line per event.
+    if (request.method === 'POST' && url.pathname === '/diag') {
+      const events = await request.json().catch(() => []) as Json[]
+      await appendFile(diagFile, events.map(event => JSON.stringify({ at: new Date().toISOString(), origin, ...event })).join('\n') + '\n')
+      return new Response(null, { status: 204, headers: cors })
     }
     if (request.method !== 'POST' || !/\/responses$/.test(url.pathname)) return Response.json({ error: { message: `mock model: no handler for ${request.method} ${url.pathname}`, type: 'not_found' } }, { status: 404, headers: cors })
     const turn = parse(await request.json() as Json)

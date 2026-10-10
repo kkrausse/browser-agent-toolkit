@@ -13,6 +13,7 @@
 //   ?reset=1             first forget this browser's workspace (source edits, sessions) and the client's saved state
 import { installDerived, installSource, type BootRuntime, type EditorManifest, type RuntimeHost, type RuntimeProcess } from '@kkrausse/browser-agent-toolkit/browser'
 import { olderServer } from './compat'
+import { installDiag } from './diag'
 import { installServerConfig, serverHealthy, serverLaunch, toLaunch, workspace, type ModelEndpoint } from './opencode'
 import { installPanel } from './panel'
 
@@ -54,13 +55,15 @@ const model: ModelEndpoint = {
 const status = document.querySelector<HTMLPreElement>('#status')!
 const frame = document.querySelector<HTMLIFrameElement>('#app')!
 const logPane = document.querySelector<HTMLPreElement>('#log pre')!
-const say = (text: string, error = false) => { status.textContent = text; status.classList.toggle('error', error) }
+const diag = installDiag(params)
+const say = (text: string, error = false) => { status.textContent = text; status.classList.toggle('error', error); diag.event(error ? 'failed' : 'stage', text) }
 window.batTerminal = { log: [], model }
 document.querySelector('#title')!.textContent = `OpenCode · model ${model.id} at ${new URL(model.baseURL).host}`
 const panel = installPanel({ onOpen: () => window.batTerminal.terminal?.terminal.focus() })
 
 function log(line: string) {
   window.batTerminal.log.push(line)
+  diag.event('log', line.slice(0, 600))
   if (window.batTerminal.log.length > 2000) window.batTerminal.log.shift()
   const pinned = logPane.scrollTop + logPane.clientHeight >= logPane.scrollHeight - 4
   logPane.append(line + '\n')
@@ -169,6 +172,8 @@ async function main() {
     },
   })
   status.remove()
+  diag.event('stage', 'terminal mounted')
+  diag.watchScreen(() => window.batTerminal.terminal!.screen())
   if (!panel.open) (document.activeElement as HTMLElement | null)?.blur()
   await appUp
 }
