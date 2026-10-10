@@ -1,13 +1,17 @@
-# Template for the isolated CODEX_HOME (copied to .state/codex/config.toml by
-# run-codex-server.sh). No credentials: the provider needs none and points at mock-llm.
+# The app-server's config inside the codex container (copied to ~/.codex/config.toml
+# by docker/entrypoint.sh). No credentials: the provider needs none and points at
+# the mock container.
 model = "mock-model"
 model_provider = "mock"
 model_reasoning_summary = "auto"
 
-# The model asks for approval when it wants to leave the sandbox (the mock's
-# `escalate` scenario does). `-c approval_policy="never"` skips all prompts.
+# No codex sandbox: it is bubblewrap-only in 0.162 and bubblewrap cannot create a
+# user namespace under Docker's default seccomp/AppArmor confinement, which is
+# deliberately left in place. The container is the sandbox. These two are only
+# defaults: the client sends its own approvalPolicy and sandbox with each thread
+# and turn (see codex.client.config.toml and the README).
 approval_policy = "on-request"
-sandbox_mode = "workspace-write"
+sandbox_mode = "danger-full-access"
 
 check_for_update_on_startup = false
 
@@ -31,6 +35,6 @@ exporter = "none"
 
 [model_providers.mock]
 name = "Mock LLM"
-base_url = "http://127.0.0.1:4791/v1"
+base_url = "http://mock:4791/v1"
 wire_api = "responses"
 requires_openai_auth = false

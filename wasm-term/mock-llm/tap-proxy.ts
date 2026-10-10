@@ -51,7 +51,8 @@ const show = (m: string | ArrayBuffer | Uint8Array | Buffer) => (typeof m === "s
 
 const server = Bun.serve<WsData, never>({
   port: Number(portArg),
-  hostname: "127.0.0.1",
+  // TAP_HOST=0.0.0.0 inside the codex container, where the edge forwarder connects from another address.
+  hostname: process.env.TAP_HOST ?? "127.0.0.1",
   idleTimeout: 0,
   async fetch(req, srv) {
     const id = ++seq;

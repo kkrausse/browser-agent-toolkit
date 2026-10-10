@@ -10,7 +10,7 @@
       "name": "Mock LLM",
       "npm": "@ai-sdk/openai-compatible",
       "options": {
-        "baseURL": "http://127.0.0.1:4791/v1",
+        "baseURL": "http://mock:4791/v1",
         "apiKey": "mock-key-not-real"
       },
       "models": {

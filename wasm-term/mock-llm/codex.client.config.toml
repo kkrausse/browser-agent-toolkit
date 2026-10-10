@@ -3,8 +3,14 @@
 # app-server's config, but the TUI still reads this file: it sends approvalPolicy
 # and sandbox from here in thread/start and turn/start (an empty home sends
 # sandbox "read-only"), so they are set to match the server template.
+#
+# danger-full-access because the containerised app-server cannot run codex's
+# bubblewrap sandbox: with "workspace-write" every ordinary command fails with a
+# bwrap error. The approval prompt can still be exercised: start the client with
+# -c 'sandbox_mode="workspace-write"' and use the mock's `escalate` scenario,
+# whose command asks to run outside the sandbox and, once approved, does.
 approval_policy = "on-request"
-sandbox_mode = "workspace-write"
+sandbox_mode = "danger-full-access"
 
 # These stop the client's own outbound requests (update check, analytics).
 check_for_update_on_startup = false

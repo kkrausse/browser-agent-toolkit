@@ -1,4 +1,4 @@
-   Mock session               Mock session               Mock session               Mock session            +
+   Mock session                    Mock session                  +
   ┃
   ┃  hello there
   ┃
@@ -6,7 +6,7 @@
      Hello from mock-llm. This is a scripted plain-text reply, streamed in small chunks so the client's
      incremental rendering is exercised. No model was called and no tokens were spent.
 
-     Build · Mock Model · 804ms · 121.0 tok/s
+     Build · Mock Model · 373ms · 155.2 tok/s
 
   ┃
   ┃  please use a tool
@@ -18,18 +18,18 @@
   ┃  $ echo mock-llm-tool-ok && pwd
   ┃
   ┃  mock-llm-tool-ok
-  ┃  /home/kkrausse/devfs/repos/kkrausse/random/.claude/worktrees/wasm-term/wasm-term/.state/workspace
+  ┃  /tmp/wasm-term-workspace
   ┃
 
-     Tool result received (115 chars). First line: mock-llm-tool-ok
+     Tool result received (42 chars). First line: mock-llm-tool-ok
 
      The shell scenario is complete. MOCK-TOOL-DONE
 
-     Build · Mock Model · 3.5s · 73.4 tok/s
+     Build · Mock Model · 543ms · 150.0 tok/s
 
   ┃
   ┃
   ┃
   ┃  Build · Mock Model Mock LLM
   ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
-  …/kkraus…/random/.claude/worktrees/wasm-term/wasm-term/.state/workspace:master  5.8K (3%)  ctrl+p commands
+  /tmp/wasm-term-workspace:master                                                 1.9K (1%)  ctrl+p commands

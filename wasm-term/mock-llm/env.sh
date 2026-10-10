@@ -1,9 +1,9 @@
-# Sourced by the launchers. Defines the isolated homes under wasm-term/.state/
-# and the network guard. Nothing here may point at the user's real state.
+# Sourced by the launchers. Defines the ports, the isolated homes under
+# wasm-term/.state/ for the host-side native TUI clients, and their network guard. Nothing here may point at the user's real state.
 MOCK_LLM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 STATE_DIR="${WASM_TERM_STATE_DIR:-$(cd "$MOCK_LLM_DIR/.." && pwd)/.state}"
 LOG_DIR="$STATE_DIR/logs"
-WORKSPACE_DIR="$STATE_DIR/workspace"
+WORKSPACE_DIR=/tmp/wasm-term-workspace
 
 MOCK_LLM_PORT=4791
 OPENCODE_PORT=4792
@@ -17,20 +17,17 @@ MOCK_OPENCODE_PASSWORD="${MOCK_OPENCODE_PASSWORD:-wasm-term-mock}"
 
 mkdir -p "$LOG_DIR"
 
-# A throwaway project for the agents to run tools in: its own git repo so
-# neither tool walks up into the surrounding checkout.
+# The servers run in containers and work in /tmp/wasm-term-workspace on a docker
+# volume. A native TUI sends its own cwd to the server as the project path, so
+# the client launchers cd into an empty host directory of the same name. It is
+# only a name: it is not mounted into any container and no tool ever runs in it.
 ensure_workspace() {
-  if [ ! -d "$WORKSPACE_DIR/.git" ]; then
-    mkdir -p "$WORKSPACE_DIR"
-    printf 'hello from the wasm-term mock workspace\n' > "$WORKSPACE_DIR/hello.txt"
-    git -C "$WORKSPACE_DIR" init -q
-    git -C "$WORKSPACE_DIR" add hello.txt
-    git -C "$WORKSPACE_DIR" -c user.name=mock -c user.email=mock@invalid commit -q -m "mock workspace"
-  fi
+  mkdir -p "$WORKSPACE_DIR"
 }
 
-# Any non-loopback HTTP(S) request goes to the egress trap, which refuses and
-# logs it. Real provider keys that might be in the caller's shell are dropped.
+# For the host-side clients: any non-loopback HTTP(S) request goes to the egress
+# trap port. With run-egress-trap.sh running it is refused and logged; without
+# it the connection is refused outright, so it fails closed either way. Real provider keys that might be in the caller's shell are dropped.
 guard_network() {
   export HTTP_PROXY="http://127.0.0.1:$EGRESS_TRAP_PORT" HTTPS_PROXY="http://127.0.0.1:$EGRESS_TRAP_PORT"
   export http_proxy="$HTTP_PROXY" https_proxy="$HTTPS_PROXY" ALL_PROXY="$HTTP_PROXY" all_proxy="$HTTP_PROXY"

@@ -1,4 +1,4 @@
-     ~/devfs/repos/kkrausse/random/.claude/worktrees/wasm-term/wasm-term/.state/workspace
+     /tmp/wasm-term-workspace
 
   To get started, describe a task or try one of these commands:
 
@@ -15,7 +15,7 @@
 • Hello from mock-llm. This is a scripted plain-text reply, streamed in small chunks so the client's
   incremental rendering is exercised. No model was called and no tokens were spent.
 
-  Worked for 1s • 10:06 PM
+  Worked for <1s • 10:34 PM
 
 
 › please use a tool
@@ -25,16 +25,16 @@
 
 • Ran echo mock-llm-tool-ok && pwd
   └ mock-llm-tool-ok
-    /home/kkrausse/devfs/repos/kkrausse/random/.claude/worktrees/wasm-term/wasm-term/.state/workspace
+    /tmp/wasm-term-workspace
 
-• Tool result received (218 chars). First line: mock-llm-tool-ok
+• Tool result received (145 chars). First line: mock-llm-tool-ok
 
   The shell scenario is complete. MOCK-TOOL-DONE
 
-  Worked for <1s • 10:06 PM
+  Worked for <1s • 10:34 PM
 
 
 › Ask Codex to do anything
 
-  mock-model default · ~/devfs/repos/kkrausse/random/.claude/worktrees/wasm-term/wasm-term/.state/workspace
+  mock-model default · /tmp/wasm-term-workspace
   ? for shortcuts                                                                    ⚠ 1 warning · f2 to view
