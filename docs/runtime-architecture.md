@@ -1,5 +1,8 @@
 # Runtime architecture
 
+> **Branch `rewrite/rust`:** this document describes the architecture of the previous (Vivari-based) runtime and
+> has not been rewritten. The current design is in [`docs/design/rust-rewrite.md`](design/rust-rewrite.md).
+
 [Editable Excalidraw scene](runtime-architecture.excalidraw).
 PNG/SVG viewing exports are generated locally and untracked; the scene is the
 source of truth, and its `.excs` sibling is an untracked editing projection.

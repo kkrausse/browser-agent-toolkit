@@ -1,5 +1,8 @@
 # Releasing to GitHub Packages
 
+> **Branch `rewrite/rust`:** this document describes the release process of the previous (Vivari-based) runtime and
+> has not been rewritten. The current design is in [`docs/design/rust-rewrite.md`](design/rust-rewrite.md).
+
 The public source is `kkrausse/browser-agent-toolkit`. Releases are manually
 dispatched from a selected committed Git ref using **Publish packages**. Supply
 an explicit, unused version. Pushes do not publish. Nothing publishes to npmjs.
