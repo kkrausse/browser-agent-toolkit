@@ -8,6 +8,7 @@ import { Service } from "@opencode/client/effect/service"
 import { Global } from "@opencode/util/global"
 import { Effect } from "effect"
 import { mkdirSync } from "node:fs"
+import path from "node:path"
 import { remoteTuiInput } from "./tui-input"
 
 declare const OPENCODE_VERSION: string
@@ -22,7 +23,11 @@ export interface StartOptions {
 }
 
 export async function start(options: StartOptions): Promise<void> {
-  const input = remoteTuiInput({ ...options, version: OPENCODE_VERSION })
+  const global = Global.make()
+  for (const directory of [global.data, global.config, global.state, global.cache, global.log, global.tmp]) {
+    mkdirSync(directory, { recursive: true })
+  }
+  const input = remoteTuiInput({ ...options, version: OPENCODE_VERSION, configFile: path.join(global.config, "cli.json") })
   // The native client sends its own working directory, which is also a path
   // on the server's machine. A browser has no such directory: it is given
   // one, or adopts the one the server was started in.
@@ -34,9 +39,5 @@ export async function start(options: StartOptions): Promise<void> {
   mkdirSync(directory, { recursive: true })
   process.chdir(directory)
 
-  const global = Global.make()
-  for (const directory of [global.data, global.config, global.state, global.cache, global.log, global.tmp]) {
-    mkdirSync(directory, { recursive: true })
-  }
   await Effect.runPromise(run(input).pipe(Effect.provideService(Global.Service, global)))
 }

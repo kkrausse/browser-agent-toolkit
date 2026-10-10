@@ -3,9 +3,12 @@
 Target: opencode v2.0.26 (`anomalyco/opencode`, tag `v2.0.26`, commit `9b4ec571`), which pins
 OpenTUI 0.5.17 (`anomalyco/opentui`, tag `v0.5.17`, commit `6f0efd33`).
 
-**Result: it runs.** The real opencode TUI source, unmodified, executes in a browser Web Worker,
-renders through OpenTUI's Zig core compiled to wasm32-wasi into ghostty-web via the wasm-term
-kernel pty, and talks to a remote `opencode serve` with `fetch` + SSE. No server-side PTY.
+**Result: it runs, as a guest on the main dev page.** The real opencode TUI source, unmodified,
+executes in a browser Web Worker on the wasm-term machine's node-style shim (`../../host/node`),
+renders through OpenTUI's Zig core compiled to wasm32-wasi into ghostty-web via the kernel pty, and
+talks to a remote `opencode serve` with `fetch` + SSE. No server-side PTY. Markdown and syntax
+highlighting match the native client cell for cell; settings, history and tabs survive a reload;
+copy and paste go through the page.
 
 Each claim below is marked **[ran]** (verified by running it here) or **[read]** (from source).
 Paths are relative to `wasm-term/vendor/opencode` (`opencode/…`) and `wasm-term/vendor/opentui`
@@ -24,23 +27,32 @@ mkdir -p tools && curl -fsSL https://ziglang.org/download/0.16.0/zig-x86_64-linu
 (cd opencode && bun install --ignore-scripts)    # 2405 packages, 3.2 GB
 
 cd ../ports/opencode
-bun run build:native      # dist/opentui.wasm (about 90 s)
-bun run build:tui         # dist/opencode-tui.browser.js
+bun run build:native      # dist/opentui.wasm: ReleaseFast, debug info stripped (about 2.5 minutes)
+bun run build:tui         # dist/site/: guest.js, tui.js (minified), parser.worker.js, wasm files, grammars (3 s)
 
-# backend (separate terminals): scripted model + isolated opencode serve on :4792
-../../mock-llm/run-mock.sh
-../../mock-llm/run-opencode-server.sh
-
-bun run serve             # http://localhost:4798
+../../mock-llm/up.sh      # backend in Docker: scripted model + opencode serve on :4792
+cd ../../web && bun run dev
 ```
 
-Open
-`http://localhost:4798/?guest=opencode&env=OPENCODE_SERVER_URL=http://127.0.0.1:4792&env=OPENCODE_SERVER_PASSWORD=wasm-term-mock`
+Open <http://127.0.0.1:4790/?guest=opencode> (or <http://127.0.0.1:4790/> for the launcher form).
+`&server=`, `&password=`, `&dir=` choose the server, its password and the project directory; the
+defaults are the mock backend's (`http://127.0.0.1:4792`, `wasm-term-mock`,
+`/tmp/wasm-term-workspace`). `&persist=0` runs without saved state, `&reset=1` forgets it first.
+`&env=WASM_TERM_DEBUG=1` sends the TUI's log to the browser console, `&env=WASM_TERM_FFI_STATS=1`
+logs FFI call and copy volume once a second.
+
+```sh
+../../web/verify/run.sh opencode        # the browser check, 26 assertions
+../../web/verify/run.sh opencode-perf   # load and latency numbers
+../../mock-llm/down.sh
+```
 
 Other entry points:
 
 | Command | What it shows |
 | --- | --- |
+| `bun run build:tui:debug` | the same site with an unminified `tui.js` |
+| `sh native/build.sh ReleaseSmall` | a smaller core: 2.6 MB, 0.49 MB gzipped (ran; no measurable latency difference) |
 | `bun run demo:core` | a 40-line OpenTUI program on the wasm core, under Bun, in your terminal |
 | `bun run demo:opencode-bun` | the opencode TUI on the wasm core, hosted by Bun (real Node APIs, same wasm renderer) |
 | `bun run test:opentui` | OpenTUI's own JS test suite against the wasm core |
@@ -57,7 +69,7 @@ Why it works out well here, specifically:
   type at `:180`) takes the server endpoint, config service, updater and package installer as
   injected values. `packages/cli` is only one host for it
   (`opencode/packages/cli/src/commands/handlers/default.ts:97`). We write another host
-  (`host/tui-input.ts`, 44 lines) and never bundle the CLI. **[ran]**
+  (`host/tui-input.ts`) and never bundle the CLI. **[ran]**
 - OpenTUI has one FFI seam. Every native call goes through `opentui/packages/core/src/platform/ffi.ts`,
   which already abstracts two backends (Bun and Node's `node:ffi`) behind `dlopen/ptr/toArrayBuffer/
   createCallback`. A wasm backend is a third implementation of the same shape. **[ran]**
@@ -85,11 +97,11 @@ What would change my mind:
 
 | | (a) bundle + shims + wasm core | (b) JS runtime in wasm | (c) emulate the native binary | (d) upstream web renderer |
 | --- | --- | --- | --- | --- |
-| Is it the real UI code | Yes: `packages/tui` and OpenTUI TS from source, unmodified on disk; 12 anchor-checked edits in 4 files applied at bundle time, 5 module substitutions | Yes, if the runtime can load it | Yes, bit for bit | n/a |
-| Effort | Done to a working state in this port: ~2.1k lines | Very high. Bun is JavaScriptCore + Zig with no wasm target; QuickJS-class engines in WASI lack `bun:ffi`, Node APIs, a JIT, and still need the wasm core and an FFI bridge between two wasm modules. You redo (a)'s shims inside a slower engine | High. The binary is a 210 MB x86_64 ELF needing a Linux kernel ABI (epoll, threads, mmap, JIT pages). Needs v86/container2wasm-style full system emulation plus an in-emulator network stack bridged to fetch | Does not exist |
+| Is it the real UI code | Yes: `packages/tui` and OpenTUI TS from source, unmodified on disk; 17 anchor-checked edits in 5 files applied at bundle time, 5 module substitutions | Yes, if the runtime can load it | Yes, bit for bit | n/a |
+| Effort | Done in this port: about 2k lines here plus the generic JS-guest shim in `host/node` (about 1k) | Very high. Bun is JavaScriptCore + Zig with no wasm target; QuickJS-class engines in WASI lack `bun:ffi`, Node APIs, a JIT, and still need the wasm core and an FFI bridge between two wasm modules. You redo (a)'s shims inside a slower engine | High. The binary is a 210 MB x86_64 ELF needing a Linux kernel ABI (epoll, threads, mmap, JIT pages). Needs v86/container2wasm-style full system emulation plus an in-emulator network stack bridged to fetch | Does not exist |
 | Performance | Browser's own JS JIT; renderer is wasm. FFI adds one copy in and out per buffer argument | Interpreter-only JS (no JIT in wasm): 10-100x slower for a Solid + Effect app | x86 emulation of a JIT-ed JS engine; tens of MB to boot, seconds to minutes to start | n/a |
-| Download | 3.0 MB gz wasm + 1.3 MB gz JS (unminified, unstripped) | engine (1-10 MB) + the same wasm core + bundle | hundreds of MB | n/a |
-| Upgrades | Re-run the build. Breaks loudly if an anchor moved (12 anchors) or a new Node/Bun API appears on the TUI path | Same shims plus engine maintenance | Zero porting work per release; that is its one advantage | n/a |
+| Download | 0.58 MB gz wasm + 0.87 MB gz JS, plus the tree-sitter runtime and grammars on first use | engine (1-10 MB) + the same wasm core + bundle | hundreds of MB | n/a |
+| Upgrades | Re-run the build. Breaks loudly if an anchor moved (17 anchors) or a new Node/Bun API appears on the TUI path | Same shims plus engine maintenance | Zero porting work per release; that is its one advantage | n/a |
 | Network | Browser `fetch`/`WebSocket` directly | must be bridged out of the wasm engine | TCP in the emulator has to be tunnelled through a WebSocket proxy: effectively a server-side component again | n/a |
 | Verified | **[ran]** end to end | not attempted; assessment from knowledge of the engines | not attempted | **[read]** searched the OpenTUI tree |
 
@@ -120,13 +132,15 @@ prior art. The patch here is small enough to propose upstream (see remaining wor
 | `Bun.sleep` | `tui/src/component/migration-overlay.tsx:19,26`, always mounted | essential → 1-line global |
 | `Bun.file` | `component/prompt/local-attachment.ts:73` (paste of a local path) | stub ("does not exist") |
 | `Bun.stringWidth`, `Bun.plugin`, `Bun.Transpiler`, `bun:sqlite` | only via `bun` variants of package `imports` | avoided by pinning other variants |
-| `process.stdin/stdout`, `setRawMode`, `SIGWINCH`, `env`, `cwd`, `platform`, `on/off/exit/kill` | renderer I/O, layout, signals | essential → `src/node/process.ts` on the kernel pty |
-| `node:fs` (+promises) | kv state, prompt history/stash/frecency, theme lookup, logs, plugin directory scan | essential → `src/node/fs.ts` (in-memory) |
-| `node:path`, `node:os`, `node:url`, `events`, `stream`, `buffer`, `util`, `crypto` | everywhere | essential → bundler polyfills + 3 shims |
+| `process.stdin/stdout`, `setRawMode`, `SIGWINCH`, `env`, `cwd`, `platform`, `on/off/exit/kill` | renderer I/O, layout, signals | essential → `host/node/process.ts` on the kernel pty |
+| `node:fs` (+promises) | kv state, prompt history/stash/frecency, theme lookup, logs, plugin directory scan | essential → `host/node/fs.ts` on the machine's vfs; config and state directories persisted |
+| `node:crypto` | `createHash("sha1")` names the lock taken for every state file write (`util/src/flock.ts`); `randomUUID` | essential → `host/node/modules/crypto.ts` (Bun's polyfill left `createHash` undefined) |
+| `node:path`, `node:os`, `node:url`, `events`, `stream`, `buffer`, `util` | everywhere | essential → bundler polyfills + `host/node/modules` |
 | `node:child_process` | `$EDITOR`, `open` URL, service management | unreachable or stubbed (throws by name) |
-| `node:module`, `node:vm`, `node:sqlite`, `node:worker_threads`, `node:perf_hooks` | plugin loading, Zed integration, tree-sitter worker | stubbed |
+| `node:module`, `node:vm`, `node:sqlite`, `node:worker_threads`, `node:perf_hooks` | plugin loading, Zed integration | stubbed |
+| `Worker` (global) | OpenTUI's tree-sitter parser worker | essential for markdown and highlighting → a nested module Worker, `dist/site/parser.worker.js` |
 | `fetch`, streaming response body, `WebSocket`, `AbortSignal.any`, `Promise.withResolvers` | all server traffic | essential, native in browsers |
-| host clipboard (native threads), audio (miniaudio) | copy/paste, attention sounds | replaced: clipboard bridge shim; audio absent |
+| host clipboard (native threads), audio (miniaudio) | copy/paste, attention sounds | replaced: clipboard through the page (`src/shims/host-clipboard.ts` → the machine's clipboard messages); audio absent |
 
 ## 2. OpenTUI's native core
 
@@ -151,7 +165,8 @@ prior art. The patch here is small enough to propose upstream (see remaining wor
   `renderer.ts:1130`), plus audio and clipboard workers.
 - Upstream wasm/browser target: none **[read]** (see (d) above).
 - Does it compile to wasm **[ran]**: yes, `wasm32-wasi`, Zig 0.16.0 (the only version
-  `build.zig` accepts), 10.2 MB unstripped ReleaseFast, 3.0 MB gzipped.
+  `build.zig` accepts). ReleaseFast: 10.2 MB as linked, of which 7.3 MB is DWARF; 3.0 MB after
+  `native/postprocess.ts` strips it (0.58 MB gzipped). ReleaseSmall: 2.6 MB, 0.49 MB gzipped.
   - First attempt, unpatched (`zig build -Dlibrary-target=wasm32-wasi`), 13 errors in 4 groups:
     ```
     miniaudio.h:16216:31: error: call to undeclared function 'sched_get_priority_min'   (+3 pthread sched)
@@ -166,7 +181,8 @@ prior art. The patch here is small enough to propose upstream (see remaining wor
     `build.zig` producing a WASI reactor with an exported function table and no miniaudio; one
     guard in `renderer-output.zig`) and `native/gen-lib-wasm.ts`, which derives `lib-wasm.zig`
     from `lib.zig` by dropping the 61 audio and host-clipboard exports and adding
-    `wasmTermAlloc/Free`. `native/postprocess.ts` removes the function-table maximum.
+    `wasmTermAlloc/Free`. `native/postprocess.ts` removes the function-table maximum and the
+    `.debug_*` sections.
   - `wasm32-freestanding` was not attempted: Yoga (C++) and the image libraries need libc/libc++.
 - Does it work **[ran]**: OpenTUI's JS test suite against the wasm core
   (`bun run test:opentui`): **5368 pass, 352 fail, 24 skip** of 5744 in 195 files. Failures by
@@ -181,15 +197,15 @@ prior art. The patch here is small enough to propose upstream (see remaining wor
 
 | bun:ffi behaviour | wasm backend |
 | --- | --- |
-| native reads/writes a JS buffer argument in place | copy into linear memory before the call, copy back after, free |
+| native reads/writes a JS buffer argument in place | copy into linear memory before the call, copy back after, free; an argument declared output-only (`FfiHint`) is not copied in and only the bytes written come back |
 | `ptr(view)` yields an address native may retain | pinned mirror of the view's whole ArrayBuffer, re-synced on each `ptr()`, freed by `FinalizationRegistry` |
-| `toArrayBuffer(addr, off, len)` aliases native memory | returns a copy |
+| `toArrayBuffer(addr, off, len)` aliases native memory | returns a copy; the call site that needs aliasing uses `view()` (below) |
 | declared types (`u64`, `usize`, `bool`, `ptr`) | coerced per the module's real signature, parsed from the wasm type section |
 | `JSCallback` | generated one-import-one-export trampoline module per signature, placed in the function table |
 | symbol missing from the library | throwing stub, recorded in `stats.missingSymbols` |
 
 Things that were wrong on wasm32 and are fixed by anchor-checked edits in
-`build/opentui-wasm-plugin.ts` **[ran]** (each was an observed failure):
+`build/opentui-wasm-plugin.ts` **[ran]** (each was an observed failure; 17 anchors in 5 files now):
 
 - `StyledChunk.text_len`/`link_len` and `ExternalCapabilities.term_name_len`/`term_version_len`
   are `usize` in Zig (`text-buffer.zig:45,52`, `lib.zig:1520,1522`) but `"u64"` in
@@ -200,12 +216,23 @@ Things that were wrong on wasm32 and are fixed by anchor-checked edits in
   modules out of order across import cycles: `TypeError: The superclass is not a constructor`
   at `solid/src/elements/slot.ts:18`. Both TLAs are replaced by synchronous code.
 
-FFI gaps that remain (**[read]** the call sites; not hit by opencode in testing):
+The two FFI gaps the first version left open, and what was done **[ran]**:
 
 - `toArrayBuffer` aliasing. `core/src/buffer.ts:94-97` exposes a buffer's cell arrays as typed
-  arrays over native memory; with the copy, JS writes to `buffer.buffers.*` do not reach the
-  renderer. `NativeSpanFeed` state views likewise (unused when output goes to fd 1).
-- Buffer arguments are copied both ways on every call, including large read-only inputs.
+  arrays over native memory and caches them. With a copy that cache was a snapshot taken once:
+  the renderer's link hit-testing (`renderer.ts:3882`, `buffer.buffers.attributes[...]`) read
+  stale cells and writes through `buffer.buffers.*` went nowhere. The plugin now points those
+  four arrays at `ffi.view()`, real typed arrays over linear memory, and re-derives them when
+  the memory has grown (growth detaches the old ArrayBuffer). A caller that keeps one of the
+  arrays across a growth holds a zero-length array; upstream code re-reads `buffer.buffers`
+  each time. `NativeSpanFeed` state views are still copies (unused when output goes to fd 1).
+- Buffer arguments copied both ways. Measured with `WASM_TERM_FFI_STATS=1`: 15 MB/s copied in
+  (and again out) while typing on the home screen, all of it `editBufferGetText`, which fills a
+  1 MiB scratch buffer several times per keystroke; under 0.6 MB/s for everything else while a
+  long reply streams. The ten OpenTUI functions of that shape (`fn(handle, out, max) written`)
+  are declared output-only in `src/opentui-ffi-hints.ts`. Read-only *input* buffers are still
+  copied back after the call; at the measured volumes that is noise, and telling them apart
+  needs per-symbol knowledge the FFI declarations do not carry.
 
 ## 3. Network (`--server` mode)
 
@@ -215,7 +242,7 @@ FFI gaps that remain (**[read]** the call sites; not hit by opencode in testing)
 - Auth **[ran]**: HTTP Basic, user `opencode`, password = the server's
   `OPENCODE_SERVER_PASSWORD` (`client/src/service-probe.ts:93`). There is no flag to disable it;
   a foreground `opencode serve` prints a random password if none is set.
-- CORS **[ran]** from Chrome at origin `http://localhost:4798`: preflights and requests with
+- CORS **[ran]** from Chrome at origins `http://localhost:4798` and `http://127.0.0.1:4790`: preflights and requests with
   `Authorization` pass with no server flags. The allow-list is `http://localhost:*`,
   `http://127.0.0.1:*`, `https://*.opencode.ai`, Tauri origins (`server/src/cors.ts:3-20`); any
   other origin needs `opencode serve --cors <origin>` (see `../../mock-llm/README.md` for the
@@ -225,91 +252,165 @@ FFI gaps that remain (**[read]** the call sites; not hit by opencode in testing)
 - Not exercised: persistent-PTY WebSocket panes, an `https` page talking to a non-loopback
   `http` server (mixed content will block it), remote origins needing `--cors`.
 
-## PoC status
+## Status
 
-All **[ran]** against the mock-backed isolated server (`../../mock-llm`), Chrome on this machine
-(canvas renderer; WebGL2 was unavailable under Xvfb), terminal 192x55 and 150x47.
+All **[ran]** in Chrome on this machine (Xvfb, so ghostty-web's canvas renderer: WebGL2 is not
+available here) against the containerised backend (`../../mock-llm/up.sh`), by
+`../../web/verify/opencode.js` (26 assertions, re-runnable: `../../web/verify/run.sh opencode`).
 
-Works in the browser:
+| Function | How it was checked |
+| --- | --- |
+| Launcher, settings | the form on `/` lists the guest with the mock defaults; submitting starts it with `server`/`password`/`dir` in the URL |
+| Connect | home screen shows the server's model and `/tmp/wasm-term-workspace:master` |
+| Plain prompt | screen equals `mock-llm/baseline/opencode-plain.txt` (blank lines, tab bar, timings and token counts aside) |
+| Streaming | the long reply's on-screen text was sampled every 50 ms and grew in 10+ steps |
+| Tool call + permission | dialog equals `opencode-tool-permission.txt`; after Allow once the screen equals `opencode-tool.txt` |
+| Markdown, highlighting | every cell of the reply (text, colour, bold, italic) equals a native capture (`../../web/verify/baseline/opencode-markdown.json`, taken with `termctrl show --format json`) |
+| Long reply, scrolling | mouse wheel scrolls the transcript back and forward to `END-OF-LONG-RESPONSE` |
+| Command palette | `ctrl+p` (a kitty keyboard sequence) opens it; filtering; running an entry |
+| Mouse | clicking a palette entry runs it; wheel; drag selection |
+| Sessions | new session, session list (`ctrl+x l`), switching back shows the earlier transcript |
+| Resize | the window is sized to 110x36 and 120x47; the TUI relays out |
+| Paste | the browser's paste event arrives as a bracketed paste and lands in the prompt |
+| Clipboard read | `ctrl+v` reaches the TUI as a key (`CSI 118;5u`); it asks the machine, the page answers, the text is inserted |
+| Clipboard write | selecting transcript text with the mouse calls the page's `navigator.clipboard.writeText` with it (resolved OK) |
+| Persistence | after a reload: open tabs restored, prompt history on arrow-up, chosen theme still applied; IndexedDB holds `cli.json`, `prompt-history.jsonl`, `tui/tabs.json` and no lock files |
+| Exit | `ctrl+c` twice: exit code 0 reported to the page, alternate screen left, mouse tracking off |
 
-- Home screen, connection to the server, model and workspace shown.
-- Typing through the kernel line discipline in raw mode; kitty keyboard sequences (`ctrl+p`).
-- Prompt → streamed reply over SSE; shell tool call; "Permission required" dialog → Allow once →
-  tool output → final answer (`captures/browser-opencode-tool.png`, `.txt`).
-- Markdown reply with a table; command palette; mouse wheel scrolling; window resize relayout;
-  `ctrl+c` exit: exit code 0 reported to the page, alternate screen left.
+One thing in that list is not the real thing: Chrome asks the user before the first clipboard
+*read*, and that prompt cannot be answered under automation, so the check replaces the page's
+clipboard object (`window.wasmTerm.clipboard`) and exercises everything between it and the TUI.
+`navigator.clipboard.readText()` itself was not exercised.
 
-Works under Bun on the same wasm core: the above flow (`captures/bun-host-wasm-core-tool.txt`),
-and the minimal `demos/core-hello.ts`.
+### What was wrong with markdown
 
-Known gaps and things not checked:
+In the PoC a reply showed `## heading` and `**bold**` literally and code was not coloured. The
+native client conceals the markup and highlights (compared on the same mock reply). OpenTUI does
+both from tree-sitter, which runs in a worker; three separate things stopped it **[ran]**:
 
-- Syntax highlighting and markdown concealment: tree-sitter runs in an OpenTUI parser worker
-  loaded from asset paths that are placeholders here (`src/shims/opentui-runtime-assets.ts`).
-  Markdown rendered with its markup visible (`## heading`, `**bold**`). Whether the native
-  client conceals it in the same reply was not compared.
-- Nothing persists: `src/node/fs.ts` is in-memory, so prompt history, kv settings and theme
-  choice reset on reload.
-- Host clipboard: `src/shims/host-clipboard.ts` needs the embedder to install
-  `globalThis.__wasmTermClipboard`; nothing does yet. OSC 52 through the terminal is untested.
-- Terminal output flow control (`H_OUT_ACK`/`OUT_WINDOW` in `host/protocol.ts`) is not honoured
-  by `host/worker-main.ts`; it posts output as produced.
-- Not tested: paste, text selection, images, terminal panes (WebSocket PTY), session switching,
-  long sessions (memory growth of pinned mirrors), Safari/Firefox, WebGL renderer.
-- No frame-time or FFI overhead measurements were taken; it felt immediate at mock speeds
-  (64-138 tok/s streamed) but that is an impression, not a number.
-- The opencode TUI's local config service is a stub returning `{}` (`host/tui-input.ts`).
+1. The worker script and grammar locations were placeholder paths (`/wasm-term/assets/...`), so
+   the Worker 404ed. `build/build-site.ts` now bundles `parser.worker.ts` (unmodified) with the
+   node shim and copies `tree-sitter.wasm` and OpenTUI's bundled grammars and queries into
+   `dist/site/`; `src/shims/opentui-runtime-assets.ts` returns their URLs.
+2. OpenTUI calls `new Worker(path)`, a classic script; the bundle is an ES module. `host/guest.ts`
+   wraps `Worker` to add `type: "module"`.
+3. `parser.worker.ts` stores each grammar in its cache directory and passes web-tree-sitter the
+   cache *path*. Under Node that is a file read; anywhere else web-tree-sitter calls `fetch(path)`,
+   which asked the dev server for `/home/user/.local/share/opentui/tree-sitter/languages/*.wasm`.
+   `src/tree-sitter-worker-globals.ts` gives the worker a private in-memory filesystem and a
+   `fetch` that answers paths existing in it.
 
-### Glue for :4790
+Languages other than markdown, JavaScript, TypeScript and Zig come from opencode's
+`parsers-config.ts`, which downloads grammars from `github.com` release assets and queries from
+`raw.githubusercontent.com` on first use. In the browser those are cross-origin fetches from the
+worker; whether GitHub's release-asset redirect passes CORS was not tested (the native client in
+the mock setup cannot reach them either, its egress is blocked).
 
-`web/` and `host/` were not edited. `web/server.ts` on :4798 here serves wasm-term's own
-`web/index.html` and `web/client.ts` unchanged and substitutes the worker. For the guest to be
-selectable on :4790, `web/` needs:
+### Persistence
 
-1. `web/client.ts`: choose `workerUrl` per guest (today a constant `"/worker.js"`), e.g.
-   `/opencode-worker.js` when `guest=opencode`.
-2. `web/server.ts`: bundle `ports/opencode/host/worker-main.ts` and serve it at that URL; serve
-   `ports/opencode/dist/opentui.wasm` at `/guests/opencode.wasm` and
-   `ports/opencode/dist/opencode-tui.browser.js` (+ `.map`) at the site root.
-3. Pass `OPENCODE_SERVER_URL` / `OPENCODE_SERVER_PASSWORD` (already possible with `&env=`).
+The client's files live in the machine's vfs through `host/node/fs.ts`; the guest descriptor
+(`web/guest.ts`) names `~/.config/opencode` and `~/.local/state/opencode` as persistent and
+excludes `/locks/`. The machine does the rest (IndexedDB on the page; see `../../docs/abi.md`
+4.1). Two port-side fixes were needed **[ran]**:
 
-`host/worker-main.ts` reuses `host/kernel.ts`, `host/ring.ts` and `host/protocol.ts` as they
-are. `docs/abi.md` did not exist when this was written; the JS-program side of the machine
-(async pump instead of blocking syscalls, `process` on the pty, Node-style timers) lives in
-`host/worker-main.ts` and `src/node/` and is what a generic "JS program on node shim" guest in
-`host/` would absorb.
+- Every state write goes through a file lock named `createHash("sha1")` of the path, and Bun's
+  browser polyfill of `node:crypto` exported `createHash` as undefined: "Failed to persist session
+  tabs" in the TUI's console overlay, and only the append-only prompt history ever reached disk.
+  `node:crypto` is now `host/node/modules/crypto.ts`.
+- The settings service passed to `run()` was an in-memory stub. `host/tui-input.ts` now keeps it
+  in `<config>/cli.json`, the file the native CLI uses (as plain JSON, without the CLI's
+  comment-preserving edits or its v1 migration).
+
+### Size and speed
+
+What the browser downloads for this guest, as served (gzip) **[ran]**:
+
+| File | Raw | Gzipped | Was |
+| --- | --- | --- | --- |
+| `opentui.wasm` | 3.0 MB | 0.58 MB | 10.2 MB / 3.0 MB (7.3 MB of DWARF) |
+| `tui.js` | 3.0 MB | 0.87 MB | 6.7 MB / 1.3 MB (unminified, with crypto-browserify) |
+| `parser.worker.js`, `tree-sitter.wasm`, grammars on first use | 0.14 + 0.2 + 0.4-1.4 MB each | | not served |
+
+First numbers, from `../../web/verify/opencode-perf.js` on this machine (12 cores shared with a
+Rust build, load average 15-25; loopback; canvas renderer). Treat them as an order of magnitude:
+
+| | Now | Before the size and FFI changes |
+| --- | --- | --- |
+| Navigation to the prompt being on screen | 0.55-0.9 s | 1.1-1.3 s |
+| Key press to the program's next output reaching the terminal | median 13 ms, p90 19 ms | median 16 ms, p90 33 ms |
+| Wheel event to next output | median 3 ms, max 18 ms | median 10 ms, max 390 ms |
+| Long reply (80 lines over 12 s) | about 700 frames, 0.54 MB of terminal output | |
+
+The latency is measured to `terminal.write`; the emulator's paint on the next animation frame is
+on top. Not measured: frame time inside the wasm renderer, memory growth over a long session
+(linear memory went from 18 MB at start to 39 MB after one long reply), anything on a phone.
+
+### Known gaps, in priority order
+
+1. **Only Chrome was run.** Safari/iOS matters and has known differences, none of them tested:
+   - The page must be cross-origin isolated, which browsers only grant in a secure context:
+     `http://127.0.0.1` works, `http://<tailscale-name>:4790` from a phone does not. It needs
+     HTTPS in front of the dev server, and then the opencode server must be HTTPS too (mixed
+     content) and started with `--cors <page origin>`.
+   - Clipboard: Safari allows `navigator.clipboard` calls only inside a user gesture. A request
+     that arrives from the Worker is not one, so `ctrl+v` paste and copy-on-select will be
+     refused there (the TUI shows its own error). Cmd+V and the paste event still work, since
+     they are a bracketed paste. A gesture-synchronous path (the page reading the clipboard in
+     the key handler and handing it over) would fix read; write needs the selection text before
+     the gesture ends, which the TUI only knows asynchronously.
+   - `Atomics.waitAsync` exists from Safari 16.4; before that the pump polls every 8 ms.
+     Nested module Workers (tree-sitter) need Safari 15.5.
+   - No touch input mapping (scroll gestures to wheel reports, an on-screen way to send
+     `ctrl+p`), and the canvas renderer is the only one tried.
+2. **Clipboard read is unverified against the real browser API** (see above), and images in the
+   clipboard are not offered: the bridge carries text only, so pasting a screenshot does nothing.
+3. **tree-sitter grammars beyond the four bundled ones** depend on cross-origin downloads that
+   were not exercised (Python, Rust, Go, ... in code blocks and diffs).
+4. **Not tested**: file attachments and `@` file mentions, the diff viewer, terminal panes
+   (WebSocket PTY), the model/agent pickers beyond opening them, `opencode pair`, MCP dialogs,
+   very long sessions, a non-loopback server.
+5. **Absent by construction**: attention sounds (no audio in the wasm core), `$EDITOR`, opening
+   URLs in a browser from the TUI (`child_process`), local plugins and themes loaded from disk,
+   embedded terminal (ghostty-vt), the updater.
+6. **Persistence** is whole-file and asynchronous: a write in the instant before the tab closes
+   can be lost, two tabs on the same guest overwrite each other's state (the file locks are per
+   tab), and there is no quota handling. The log (`~/.local/share/opencode/log`) is deliberately
+   not persisted.
+7. **FFI**: read-only input buffers are still copied back after each call; `NativeSpanFeed`
+   views are copies; pinned mirrors are only freed when the JS buffer is collected.
+8. OpenTUI's own test suite on the wasm core was last run in full before these changes (5368
+   pass, 352 fail, mostly audio and embedded terminal). After them only `buffer`, `edit-buffer`
+   and `text-buffer` were re-run: 227 pass, 1 fail (`loadFile`, no filesystem behind WASI in the
+   test host). The native baseline of the suite has still not been run.
 
 ## Remaining work, in order
 
-1. Wire the guest into `web/` (three changes above) so it is on :4790 with the other guests.
-2. Persist the filesystem (IndexedDB/OPFS behind `src/node/fs.ts`), at least `Global.state`
-   and `Global.config`; implement the TUI config service over it.
-3. Tree-sitter: serve `parser.worker.js`, `tree-sitter.wasm` and grammars, and make
-   `resolveDefaultTreeSitterWorkerPath` return real URLs (a nested Worker; `core/src/platform/
-   worker.ts` already prefers `globalThis.Worker`).
-4. Honour output flow control in the JS-guest pump; move the pump and `process` shim into `host/`.
-5. Clipboard bridge to the page (`navigator.clipboard` lives on the main thread).
-6. Close the two FFI gaps: real views over linear memory for `buffer.ts:94-97` (needs
-   non-detaching memory: fixed-size or shared), and skip copy-back for read-only buffer
-   arguments.
-7. Run the native baseline of the OpenTUI suite and diff it against the wasm run; turn the
-   remaining unexpected failures into fixes.
-8. Size: strip debug info (`strip = false` in `build.zig`), try ReleaseSmall, drop the image
-   stack if unused, minify the JS (unminified today so anchors and stack traces stay readable).
-9. Offer upstream OpenTUI the wasm target (build branch, single-threaded guard, `usize` struct
-   fields declared honestly) so the patch and most of the twelve edits disappear.
-10. Test matrix: Safari/iOS, Firefox, WebGL renderer, paste/selection/mouse drag, terminal
-    panes, non-loopback servers with `--cors`.
+1. An HTTPS path for the dev page and a server reachable from it, then Safari/iOS: isolation,
+   input (touch, on-screen modifier keys), the clipboard gesture rule, the WebGL renderer.
+2. Gesture-synchronous clipboard read in the page; image paste.
+3. Serve or proxy the extra tree-sitter grammars so highlighting does not depend on GitHub CORS.
+4. Exercise attachments, the diff viewer and terminal panes; run a long session and watch memory.
+5. Re-run OpenTUI's full suite and its native baseline; turn unexpected failures into fixes.
+6. Offer upstream OpenTUI the wasm target (build branch, single-threaded guard, `usize` struct
+   fields declared honestly, an output-buffer annotation) so the patch and most of the anchored
+   edits disappear.
+7. Size: drop the image stack from the core if unused; lazy-load rarely used parts of the bundle.
 
 ## Layout
 
 | Path | What |
 | --- | --- |
-| `native/` | wasm build of the Zig core: `build.sh`, patch, `gen-lib-wasm.ts`, `postprocess.ts` |
-| `src/wasm-ffi.ts`, `src/boot.ts` | the `bun:ffi`-shaped backend and its installer |
-| `build/` | bundler plugin (anchored edits), opencode and demo bundlers, test preload |
+| `host/guest.ts` | the JavaScript guest entry (`main(context)`): boots the wasm core, wires tree-sitter, clipboard, Bun globals, then imports the TUI |
+| `host/worker-app.ts`, `host/tui-input.ts` | the TUI bundle's entry and the remote-only `TuiInput` (settings in `cli.json`) |
+| `host/bun-main.ts` | the same TUI hosted by Bun |
+| `web/guest.ts` | how the dev page offers this port: directory, launcher fields, persistent directories |
+| `native/` | wasm build of the Zig core: `build.sh`, patch, `gen-lib-wasm.ts`, `postprocess.ts` (growable table, strip) |
+| `src/wasm-ffi.ts`, `src/opentui-ffi-hints.ts`, `src/boot.ts` | the `bun:ffi`-shaped backend, its output-buffer hints, its installer |
+| `src/tree-sitter-worker.ts`, `src/tree-sitter-worker-globals.ts` | entry of `parser.worker.js` |
 | `src/shims/` | replacements for 5 modules (runtime assets, host clipboard, sounds, sqlite, plugin source) |
-| `src/node/` | Node built-ins for the browser: `process` on the pty, in-memory `fs`, `os`, `url`, `path`, `console`, timers |
-| `host/` | `tui-input.ts` (remote-only `TuiInput`), `worker-main.ts` (Worker entry), `worker-app.ts`, `bun-main.ts` |
-| `web/server.ts` | dev server on :4798 |
-| `demos/`, `captures/`, `notes/` | Bun-hosted demos, evidence, API survey |
+| `build/` | `build-site.ts` (everything under `dist/site/`), the bundler plugin with the anchored edits, demo bundler, test preload |
+| `demos/`, `captures/`, `notes/` | Bun-hosted demos, evidence from the PoC, API survey |
+
+The generic part (process on the pty, `node:fs` on the vfs, timers, the pump, persistence, the
+clipboard messages) is not here: it is `../../host/node` and `../../host`, documented in
+`../../docs/abi.md` section 4, and a second guest (`?guest=js-demo`) runs on it.

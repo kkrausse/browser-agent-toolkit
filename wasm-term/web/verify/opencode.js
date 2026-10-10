@@ -229,6 +229,15 @@ await waitFor("MOCK-TOOL-DONE");
 check("session switch: the previous session's transcript is shown", (await text()).includes("please use a tool") && !(await text()).includes("END-OF-LONG-RESPONSE"));
 
 // ---- persistence across a reload ---------------------------------------------------------------------
+const background = () => page.evaluate(() => {
+  const buffer = window.wasmTerm.terminal.buffer.active;
+  return buffer.getLine(buffer.viewportY + 2).getCell(100).getBgColor().toString(16);
+});
+const defaultBackground = await background();
+await press("Control+p"); await type("switch theme"); await press("Enter", 600);
+await waitFor("Themes");
+await type("dracula"); await press("Enter", 800);
+check("settings: the theme picker changes the theme", (await background()) !== defaultBackground, [defaultBackground, await background()]);
 await page.waitForTimeout(500);
 await page.goto(`${BASE}/?guest=opencode`);
 await waitFor("Mock Model", 30000);
@@ -247,6 +256,7 @@ check("persistence: after a reload the open sessions are restored (tabs.json)", 
 await press("Control+x"); await press("n", 800);
 await waitFor("Ask anything");
 await press("ArrowUp");
+check("persistence: the chosen theme survives the reload (cli.json): dracula's background", (await background()) === "282a36" && stored.some(path => path.endsWith("/opencode/cli.json")), await background());
 check("persistence: prompt history survives the reload", /long scroll|show me markdown|please use a tool/.test(await text()), (await rows()).filter(line => line.includes("┃")));
 await press("Control+c");
 
@@ -258,6 +268,15 @@ const after = await page.evaluate(() => ({ buffer: window.wasmTerm.terminal.buff
 check("exit: ctrl+c ends the program with code 0, alternate screen left, mouse tracking off", status?.code === 0 && after.buffer === "normal" && !after.mouse, { status, after });
 await shot("opencode-exit");
 
+// Leave no saved state behind: the next person to open the page gets the defaults.
+await page.evaluate(() => new Promise((resolve) => {
+  const request = indexedDB.open("wasm-term");
+  request.onsuccess = () => {
+    const transaction = request.result.transaction("files", "readwrite");
+    transaction.objectStore("files").delete(IDBKeyRange.bound("opencode\n", "opencode\n\uffff"));
+    transaction.oncomplete = resolve;
+  };
+}));
 } catch (error) {
   check("the script ran to the end", false, String(error?.stack ?? error).slice(0, 600));
 }

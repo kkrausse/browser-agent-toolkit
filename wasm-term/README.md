@@ -54,8 +54,8 @@ Testing never calls a real model: `mock-llm/` serves scripted responses.
 | Path | What |
 | --- | --- |
 | `kernel/` | Rust crate(s): pty + line discipline, compiled to wasm |
-| `host/` | TypeScript: worker runtime, WASI + custom imports, vfs, net bridge |
-| `web/` | Bun dev server (COOP/COEP) and the page wiring ghostty-web to a program |
+| `host/` | TypeScript: worker runtime, WASI + custom imports, vfs, net bridge, persistence; `host/node/` runs JavaScript programs on the same machine (node-style `process`, `fs`, ...) |
+| `web/` | Bun dev server (COOP/COEP), the launcher and the page wiring ghostty-web to a program; `web/verify/` browser checks |
 | `guests/` | Test programs built for the guest ABI |
 | `mock-llm/` | Scripted model server + isolated opencode/codex server configs |
 | `ports/opencode/`, `ports/codex/` | Per-client port work and notes |
@@ -70,31 +70,76 @@ Testing never calls a real model: `mock-llm/` serves scripted responses.
 | 4792 | `opencode serve` (container) |
 | 4793 | `codex app-server` (container) |
 | 4796 | browser-facing codex proxy (container); strips `Origin`, which `codex app-server` rejects |
-| 4798, 4799 | per-port dev servers in `ports/opencode`, `ports/codex` |
+| 4799 | per-port dev server in `ports/codex` (opencode is served by `web/` on 4790) |
 
 ## Run it
 
-Phase 1 (the emulated machine and its test programs). Needs bun, cargo with
-the `wasm32-unknown-unknown` and `wasm32-wasip1` targets, and network access
-once (to clone the crossterm fork).
+Needs bun, cargo with the `wasm32-unknown-unknown` and `wasm32-wasip1`
+targets, and network access once (to clone the crossterm fork).
 
 ```sh
 cd wasm-term/kernel && cargo test          # line discipline against termios behaviour
 cd ../web && bun install
 bun run build                               # kernel wasm + guests -> guests/dist/*.wasm
-bun run dev                                 # http://127.0.0.1:4790/?guest=repl
+bun run dev                                 # http://127.0.0.1:4790/
 ```
 
-Guests: `?guest=repl` (cooked mode), `tui` (ratatui, raw mode), `async-tui`
-(tokio + crossterm `EventStream` + WebSocket), `net`, `events`. Add
-`&arg=...` / `&env=K=V`; `&env=WASM_TERM_TRACE=1` logs syscall rates to the
-console.
+`http://127.0.0.1:4790/` is a launcher listing every guest; `/?guest=<name>`
+runs one directly.
 
-`web/verify/run.sh` drives the page in Chrome through `browser-control` and
-checks each terminal function (screenshots land in `docs/screenshots/`).
+| Guest | What |
+| --- | --- |
+| `repl` | cooked mode, the line discipline, a raw-mode key dump |
+| `tui` | ratatui on crossterm, raw mode, mouse |
+| `async-tui` | tokio + crossterm `EventStream` + WebSocket |
+| `net`, `events` | network descriptors; raw event dump |
+| `js-demo` | a JavaScript program on the node-style shim (`host/node/demo-guest.ts`) |
+| `opencode` | the real opencode 2.0.26 TUI, attached to a remote `opencode serve` |
 
-The guest ABI is `docs/abi.md`. How crossterm/ratatui/tokio run on it, and
-what the codex port should reuse, is `guests/README.md`.
+Page parameters: `&arg=...`, `&env=K=V` (`&env=WASM_TERM_TRACE=1` logs
+syscall rates to the console), `&persist=0` (no saved files), `&reset=1`
+(forget the guest's saved files first). Each guest's home directory is kept in
+IndexedDB across reloads; opencode keeps its config and state directories.
+
+### opencode in the browser
+
+```sh
+# once: checkouts, toolchain and dependencies under wasm-term/vendor (see ports/opencode/NOTES.md)
+cd wasm-term/ports/opencode
+bun run build:native                        # dist/opentui.wasm, OpenTUI's Zig core (about 2.5 minutes)
+bun run build:tui                           # dist/site/: the TUI bundle, tree-sitter worker and grammars (3 s)
+
+cd ../.. && mock-llm/up.sh                  # token-free backend in Docker: opencode serve on :4792
+cd web && bun run dev
+```
+
+Open <http://127.0.0.1:4790/?guest=opencode>, or the launcher to change the
+settings. The parameters and their defaults (the mock backend):
+
+| Parameter | Default | |
+| --- | --- | --- |
+| `server` | `http://127.0.0.1:4792` | an `opencode serve` the browser can reach; origins other than `localhost`/`127.0.0.1` need `opencode serve --cors <page origin>` |
+| `password` | `wasm-term-mock` | the server's `OPENCODE_SERVER_PASSWORD` (user `opencode`) |
+| `dir` | `/tmp/wasm-term-workspace` | project directory, a path on the server; empty = where the server runs |
+
+`mock-llm/down.sh` stops the backend. Prompts that select scripted replies
+(`please use a tool`, `show me markdown`, `long scroll`, ...) are listed in
+`mock-llm/README.md`.
+
+### Checks
+
+`web/verify/run.sh [terminal-functions|opencode|opencode-perf]` drives the
+page in Chrome through `browser-control` (dev server up; the opencode ones
+also need `mock-llm/up.sh`). `terminal-functions` checks each terminal
+function with the Rust guests and the JavaScript shim with `js-demo`;
+`opencode` runs the TUI through connect, prompts, the permission dialog,
+markdown, scrolling, palette, sessions, clipboard, reload and exit, comparing
+screens with the native client's captures; `opencode-perf` prints load and
+input-latency numbers. Screenshots land in `docs/screenshots/`.
+
+The guest ABI, the page-side API and the JavaScript shim are `docs/abi.md`.
+How crossterm/ratatui/tokio run on it, and what the codex port should reuse,
+is `guests/README.md`.
 
 ## Rules for working here
 

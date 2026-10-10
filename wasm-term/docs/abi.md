@@ -5,6 +5,10 @@ machine it runs on. The implementation is `host/wasi.ts` (imports),
 `host/machine.ts` (signals, network handles, the event ring) and `kernel/`
 (the pty and line discipline). Rust bindings: `guests/wasm-term-sys`.
 
+Sections 1 to 3 are that contract. A program written in JavaScript runs on the
+same machine through a node-style shim instead of these imports; that, and the
+page-side API, is section 4.
+
 A guest:
 
 - exports `memory` and `_start` (a WASI *command*);
@@ -122,9 +126,24 @@ Any mix of subscriptions; blocks until at least one is ready.
 An in-memory tree, created fresh for every program start, with `/dev/tty`,
 `/dev/null`, `/tmp`, `/etc` and `$HOME` present. Files, directories, symlinks,
 hard links, rename, readdir, seek/pread/pwrite, truncate all work. There are
-no permissions and nothing persists. The page can pre-populate files
-(`ProgramOptions.files`). `fd_filestat_set_times` and
-`path_filestat_set_times` succeed and do nothing.
+no permissions. The page can pre-populate files (`ProgramOptions.files`).
+`fd_filestat_set_times` and `path_filestat_set_times` succeed and do nothing.
+
+**Persistent directories.** The page may name directories whose regular files
+survive a reload (`ProgramOptions.persist`; the dev page names `$HOME` for
+wasm guests). Nothing changes for the guest: it reads and writes files as
+usual. Rules a guest can rely on:
+
+- A file below a persistent directory is saved when the guest closes it, on
+  `fd_sync`/`fd_datasync`, on rename and unlink, and at exit. A file that is
+  only written and kept open is not saved until one of those.
+- Whole files are saved, so keep them small (configuration, history), not
+  databases that are rewritten in place.
+- Only regular files: empty directories, symlinks and timestamps do not
+  survive. On the next start the saved files are simply there, with their
+  parent directories.
+- Saving is asynchronous on the page; a write made in the instant before the
+  tab is closed can be lost.
 
 ### Sockets
 
@@ -350,6 +369,8 @@ For whoever embeds the machine in a page (`host/index.ts`):
 const program = startProgram({
   guestUrl, kernelUrl, workerUrl, args, env, files,
   cols, rows, xpixel, ypixel,
+  persist: { namespace, roots: ["/home/user"], exclude: ["/locks/"] },   // optional
+  clipboard: { readText, writeText },             // optional; default navigator.clipboard
   onOutput(bytes) { terminal.write(bytes) },   // pty master output
   onExit(status) { ... },                      // { code, signal?, error? }
 });
@@ -360,36 +381,105 @@ program.kill();                   // terminate the Worker now
 await program.exited;
 ```
 
+`workerUrl` selects the kind of guest: the bundled `host/worker.ts` runs a
+wasm module (sections 1 to 3), the bundled `host/js-worker.ts` runs a
+JavaScript module (4.2). Everything else is the same for both.
+
 The page must be cross-origin isolated (`Cross-Origin-Opener-Policy:
 same-origin`, `Cross-Origin-Embedder-Policy: require-corp`), because the
 Worker blocks in `Atomics.wait` on a `SharedArrayBuffer`.
 
-Data paths:
+### 4.1 Data paths
 
 - page → Worker: a single-producer/single-consumer frame ring in a
   `SharedArrayBuffer` (`host/ring.ts`, `host/protocol.ts`), because a Worker
   blocked in a syscall never services `postMessage`. Frames: terminal input,
-  resize, signal, network event. Frames that do not fit wait on the page.
-- Worker → page: `postMessage` (terminal output, exit, network requests).
+  resize, signal, network event, clipboard reply. Frames that do not fit wait
+  on the page.
+- Worker → page: `postMessage` (terminal output, exit, network requests,
+  changed persistent files, clipboard requests).
   Output is flow-controlled: the Worker pauses when 1 MiB is unacknowledged.
+  That holds for both kinds of guest (`machine.flushOutput()`).
 
-### Other kinds of guest
+Persistence (`host/persist.ts`, `host/persist-store.ts`). The vfs stays in
+memory. The Worker posts `{ t: "persist", path, data | null }` for every file
+below a persistent root that changed or disappeared; the page stores them in
+IndexedDB (database `wasm-term`, key `<namespace>\n<path>`) and passes them
+back as `files` on the next start. The page does the storing because a wasm
+guest's Worker is blocked and would never run IndexedDB's callbacks, and
+IndexedDB rather than OPFS because it behaves the same in every browser.
+`namespace` keeps programs apart; `exclude` leaves out paths containing a
+substring (lock directories).
+
+Clipboard. A Worker has no clipboard API. A program asks with
+`{ t: "clipboard_read", id }` and gets a `FRAME_CLIPBOARD` frame (`u32 id`,
+`u32 ok`, then the text or the error message in UTF-8); it writes with
+`{ t: "clipboard_write", text }`. The page serves both from
+`ProgramOptions.clipboard`. Browsers gate the real thing: Chrome asks the user
+before the first read; Safari only allows a read from inside a user gesture,
+which a request arriving from a Worker is not, so there a read fails and the
+program sees the error (the browser's own paste, Cmd+V or the paste event,
+still works: it reaches the program as a bracketed paste). There is no wasm
+import for this yet; only JavaScript guests can ask (4.2). OSC 52 is not
+handled by the terminal emulator.
+
+### 4.2 JavaScript guests: the node-style shim
 
 `host/machine.ts` is the machine without WASI: the pty (`machine.pty`),
 `pump()` (process everything the page sent), `waitUntil(deadline)` (block for
 more), signal dispositions and queues, network handles. `host/wasi.ts` is one
-consumer. A node-style shim for a JavaScript program would be another, built
-on the same object:
+consumer. `host/node/` is the other: it runs a program written against Node's
+APIs, such as a bundled TUI framework application.
+
+A guest is an ES module that exports `main`:
+
+```ts
+import type { JsGuestContext } from "wasm-term/host/node/runtime";
+
+export async function main(context: JsGuestContext): Promise<number | void> {
+  process.stdout.write(`${process.stdout.columns}x${process.stdout.rows}\n`);
+  ...
+}
+```
+
+The module is imported only after the shim is installed, because bundles read
+`process` and friends while their modules are evaluated. The program ends
+when `main` returns (the number is the exit code), when it calls
+`process.exit`, or when a signal's default action ends it.
+`host/node/demo-guest.ts` (`?guest=js-demo`) is a complete small example.
+
+What is installed, and what it maps to:
 
 | node API | machine |
 | --- | --- |
-| `process.stdin.setRawMode(on)` | `pty.getTermios()` / `pty.setTermios()` with the `cfmakeraw` bits |
-| `process.stdin.on("data")` | `pty.slaveRead()` after each `pump()` |
-| `process.stdout.write` | `pty.slaveWrite()` + `flushOutput()` |
-| `process.stdout.columns` / `.rows` | `pty.getWinsize()` |
-| `process.stdout.on("resize")`, `process.on("SIGINT")` | a signal queue from `openSignalQueue(mask)` with the dispositions set to catch |
+| `process.stdin.setRawMode(on)` | `pty.getTermios()` / `pty.setTermios()` with the bits libuv's raw mode changes (like `cfmakeraw`, but `OPOST` stays on) |
+| `process.stdin.on("data")`, `.read()`, `"end"` | `pty.slaveRead()` after each `pump()`; data stays in the tty until there is a consumer; `end` on EOF (`^D`) |
+| `process.stdout.write`, `process.stderr.write` | `pty.slaveWrite()` + `flushOutput()`; blocks the program while the page is more than 1 MiB behind |
+| `process.stdout.columns` / `.rows`, `getWindowSize()` | `pty.getWinsize()` |
+| `process.stdout.on("resize")`, `process.on("SIGWINCH")` | a signal queue from `openSignalQueue(mask)`; `SIGWINCH` is always caught |
+| `process.on("SIGINT" / "SIGTERM" / ...)` | the signal's disposition is *catch* while a listener exists; otherwise the default action applies (`^C` in cooked mode ends the program with 130) |
+| `process.env`, `argv`, `cwd()`, `chdir()`, `exit()`, `kill()`, `hrtime`, `nextTick`, `platform` = `"linux"` | the init message; `kill` raises on the machine |
+| `Buffer`, `setTimeout`/`setInterval` returning handles with `ref`/`unref`/`refresh`, `setImmediate` | globals |
+| `node:fs`, `node:fs/promises` | the same vfs wasm guests get, including persistent directories (`host/node/fs.ts`): the sync calls, their promise twins, `createWriteStream`; `watch` never fires |
+| `node:os`, `node:url`, `node:path`, `node:console`, `node:process` | fixed Linux-like values, the installed objects |
+| `node:crypto` | `createHash` for `sha1` and `sha256` (synchronous), `randomBytes`, `randomUUID`; the rest throws by name |
+| `node:child_process`, `module`, `vm`, `sqlite`, `worker_threads`, `perf_hooks`, `tty`, `net` | importable; calling into them throws by name |
+| network | the browser's own `fetch` and `WebSocket`: a JavaScript guest returns to its event loop, so it does not need the machine's network descriptors |
+| clipboard | `context.clipboard.readText()` / `.writeText()` (4.1) |
 
-A JavaScript program has to return to its event loop, so it cannot block in
-`waitUntil`. It should wait with `Atomics.waitAsync` on the ring's wake
-counter (`H_WAKE`) and call `pump()` when it resolves. That shim is not
-built; nothing in the machine needs to change for it.
+A bundle gets those `node:` modules through `nodeShimsPlugin()` from
+`host/node/bun-plugin.ts` (`Bun.build({ target: "browser", plugins: [...] })`);
+`events`, `buffer`, `stream`, `util`, `assert` come from Bun's own browser
+polyfills.
+
+A JavaScript program has to return to its event loop, so the shim does not
+block in `waitUntil`. It waits with `Atomics.waitAsync` on the ring's wake
+counter (`H_WAKE`) and calls `pump()` when it resolves; where `waitAsync` is
+missing (Safari before 16.4) it polls every 8 ms. The one place it does block
+is output flow control. Differences from Node worth knowing: there is one
+thread and no child processes; `stdin` has no `"readable"` event; signals are
+delivered between event-loop turns, not preemptively.
+
+`context` also carries `machine`, `vfs`, `fs`, `guestUrl` (resolve the
+program's other files against it), `log()` (a line for the page's console)
+and `machine.outputStats()` (bytes written, times paused by flow control).
