@@ -1,0 +1,17 @@
+{
+  "name": "wasm-term-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "cd ../kernel && cargo build --release --target wasm32-unknown-unknown && ../guests/build.sh",
+    "dev": "bun server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@random/ghostty-web": "file:../../ghostty-web"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "typescript": "^5.9.3"
+  }
+}

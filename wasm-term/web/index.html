@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>wasm-term</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: #16161d; overflow: hidden; }
+    #terminal { position: fixed; inset: 0; }
+    #fatal { position: fixed; inset: 0; margin: 0; padding: 16px; color: #e06c75; font: 14px/1.4 monospace; white-space: pre-wrap; display: none; }
+  </style>
+</head>
+<body>
+  <div id="terminal"></div>
+  <pre id="fatal"></pre>
+  <script type="module" src="/client.js"></script>
+</body>
+</html>
