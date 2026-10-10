@@ -61,7 +61,8 @@ const server = Bun.serve<WsData, never>({
     if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
       log(`#${id} WS-UPGRADE ${path} :: ${headerSummary(req.headers)}`);
       const headers: Record<string, string> = {};
-      for (const k of ["authorization", "origin", "user-agent", "sec-websocket-protocol"]) {
+      // Origin is deliberately not forwarded: codex app-server rejects any request that has one.
+      for (const k of ["authorization", "user-agent", "sec-websocket-protocol"]) {
         const v = req.headers.get(k);
         if (v) headers[k] = v;
       }

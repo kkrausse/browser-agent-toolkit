@@ -1,0 +1,22 @@
+# Template for the TUI's own CODEX_HOME (copied to .state/codex-client/config.toml
+# by run-codex-client.sh). In --remote mode the model and provider come from the
+# app-server's config, but the TUI still reads this file: it sends approvalPolicy
+# and sandbox from here in thread/start and turn/start (an empty home sends
+# sandbox "read-only"), so they are set to match the server template.
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+# These stop the client's own outbound requests (update check, analytics).
+check_for_update_on_startup = false
+
+[analytics]
+enabled = false
+
+[feedback]
+enabled = false
+
+[otel]
+exporter = "none"
+
+[tui]
+show_tooltips = false

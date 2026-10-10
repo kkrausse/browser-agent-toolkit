@@ -107,11 +107,16 @@ const LONG_TEXT = [
 const REASONING_TEXT =
   "The user asked for a reasoning demo. I will think for a moment: step one, restate the request; step two, pick the scripted answer; step three, send it.";
 
+// Ids are unique for the life of the process: clients key transcript items on them.
+let itemSeq = 0;
+const itemId = (prefix: string) => `${prefix}_mock_${String(++itemSeq).padStart(4, "0")}`;
 let callSeq = 0;
 const nextCallId = () => `call_mock_${String(++callSeq).padStart(4, "0")}`;
 
+/** First meaningful line of a tool result (codex prefixes exec output with a metadata header ending in "Output:"). */
 function firstLine(s: string, max = 120): string {
-  const line = s.split("\n").find((l) => l.trim().length > 0) ?? "";
+  const body = s.includes("\nOutput:\n") ? s.slice(s.indexOf("\nOutput:\n") + 9) : s;
+  const line = body.split("\n").find((l) => l.trim().length > 0) ?? "";
   return line.length > max ? `${line.slice(0, max)}...` : line;
 }
 
@@ -146,14 +151,21 @@ function fillArgs(tool: ToolDef, known: Record<string, unknown>): string {
   return JSON.stringify(out);
 }
 
-function shellCall(turn: Turn, command: string): ToolCall | undefined {
+/**
+ * `escalate` asks codex to run the command outside its sandbox, which is what makes
+ * codex show an approval prompt under approval_policy=on-request. Tools without
+ * those parameters (opencode's shell) just get the plain command.
+ */
+function shellCall(turn: Turn, command: string, escalate = false): ToolCall | undefined {
   const tool = findTool(turn, ["bash", "shell", "exec_command", "shell_command", "local_shell", "unified_exec"]);
   if (!tool) return undefined;
   const payload = fillArgs(tool, {
     command,
     cmd: command,
     description: "Scripted mock-llm shell command",
-    justification: "Scripted mock-llm shell command",
+    ...(escalate
+      ? { sandbox_permissions: "require_escalated", justification: "mock-llm wants to run this outside the sandbox. Allow?" }
+      : {}),
   });
   return { id: nextCallId(), name: tool.name, kind: "function", payload };
 }
@@ -184,7 +196,8 @@ function writeCall(turn: Turn, relPath: string, content: string): ToolCall | und
     const payload = patchTool.kind === "custom" ? patch : fillArgs(patchTool, { input: patch, patch });
     return { id: nextCallId(), name: patchTool.name, kind: patchTool.kind, payload };
   }
-  return shellCall(turn, `printf '%s' ${JSON.stringify(content)} > ${relPath}`);
+  // No file tool offered (codex with fallback model metadata): write through the shell.
+  return shellCall(turn, `cat > ${relPath} <<'MOCK_EOF'\n${content.replace(/\n$/, "")}\nMOCK_EOF`);
 }
 
 /** A scenario that makes one tool call and then answers once the result is back. */
@@ -241,6 +254,13 @@ const SCENARIOS: Scenario[] = [
     step: toolThenAnswer("read", "I will read `hello.txt`.", (t) => readCall(t, "hello.txt")),
   },
   {
+    name: "escalate",
+    match: /\b(escalate|approval|permission)\b/i,
+    step: toolThenAnswer("escalate", "I need approval to run a command outside the sandbox.", (t) =>
+      shellCall(t, "echo mock-llm-escalated-ok && pwd", true),
+    ),
+  },
+  {
     name: "shell",
     match: /\b(tool|bash|shell)\b/i,
     step: toolThenAnswer("shell", "I will run a shell command.", (t) => shellCall(t, "echo mock-llm-tool-ok && pwd")),
@@ -256,7 +276,10 @@ const SCENARIOS: Scenario[] = [
 ];
 
 function isTitleRequest(turn: Turn): boolean {
-  return turn.tools.length === 0 && /\btitle\b/i.test(turn.system) && /generat|thread|conversation|session/i.test(turn.system);
+  // opencode puts the instruction in the system prompt, codex in the user message.
+  if (turn.tools.length > 0) return false;
+  const text = `${turn.system}\n${turn.userText.slice(0, 400)}`;
+  return /\btitle\b/i.test(text) && /generat|thread|conversation|session/i.test(text);
 }
 
 function pickScenario(turn: Turn): Scenario {
@@ -422,7 +445,7 @@ const usageFor = (turn: Turn, step: Step) => {
 // ---------------------------------------------------------------------------
 
 function chatReply(turn: Turn, step: Step): Response {
-  const id = `chatcmpl-mock-${Date.now()}`;
+  const id = itemId("chatcmpl");
   const created = Math.floor(Date.now() / 1000);
   const u = usageFor(turn, step);
   const usage = { prompt_tokens: u.input, completion_tokens: u.output, total_tokens: u.input + u.output, completion_tokens_details: { reasoning_tokens: u.reasoning } };
@@ -457,7 +480,7 @@ function chatReply(turn: Turn, step: Step): Response {
 // ---------------------------------------------------------------------------
 
 function responsesReply(turn: Turn, step: Step): Response {
-  const respId = `resp_mock_${Date.now()}`;
+  const respId = itemId("resp");
   const created_at = Math.floor(Date.now() / 1000);
   const u = usageFor(turn, step);
   const usage = {
@@ -467,13 +490,13 @@ function responsesReply(turn: Turn, step: Step): Response {
   };
 
   const items: Json[] = [];
-  if (step.reasoning) items.push({ type: "reasoning", id: `rs_mock_${items.length}`, summary: [{ type: "summary_text", text: step.reasoning }] });
-  if (step.text) items.push({ type: "message", id: `msg_mock_${items.length}`, role: "assistant", status: "completed", content: [{ type: "output_text", text: step.text, annotations: [] }] });
+  if (step.reasoning) items.push({ type: "reasoning", id: itemId("rs"), summary: [{ type: "summary_text", text: step.reasoning }] });
+  if (step.text) items.push({ type: "message", id: itemId("msg"), role: "assistant", status: "completed", content: [{ type: "output_text", text: step.text, annotations: [] }] });
   if (step.tool) {
     items.push(
       step.tool.kind === "custom"
-        ? { type: "custom_tool_call", id: `ctc_mock_${items.length}`, status: "completed", call_id: step.tool.id, name: step.tool.name, input: step.tool.payload }
-        : { type: "function_call", id: `fc_mock_${items.length}`, status: "completed", call_id: step.tool.id, name: step.tool.name, arguments: step.tool.payload },
+        ? { type: "custom_tool_call", id: itemId("ctc"), status: "completed", call_id: step.tool.id, name: step.tool.name, input: step.tool.payload }
+        : { type: "function_call", id: itemId("fc"), status: "completed", call_id: step.tool.id, name: step.tool.name, arguments: step.tool.payload },
     );
   }
   const base = { id: respId, object: "response", created_at, model: turn.model, output: [] as Json[], usage: null as Json | null };
@@ -520,7 +543,7 @@ function responsesReply(turn: Turn, step: Step): Response {
 // ---------------------------------------------------------------------------
 
 function anthropicReply(turn: Turn, step: Step): Response {
-  const id = `msg_mock_${Date.now()}`;
+  const id = itemId("msg");
   const u = usageFor(turn, step);
   const stop_reason = step.tool ? "tool_use" : "end_turn";
   const blocks: Json[] = [];
@@ -600,7 +623,7 @@ async function handleModel(req: Request, path: string, parse: (b: Json, raw: str
   const toolNames = turn.tools.map((t) => t.name);
   log(
     `#${n} POST ${path} model=${turn.model} stream=${turn.stream} items=${turn.messageCount} tools=${toolNames.length}` +
-      `${toolNames.length ? `[${toolNames.slice(0, 6).join(",")}${toolNames.length > 6 ? ",..." : ""}]` : ""}` +
+      `${toolNames.length ? `[${toolNames.slice(0, 16).join(",")}${toolNames.length > 16 ? ",..." : ""}]` : ""}` +
       ` results=${turn.toolResults.length} user="${clip(turn.userText)}" ua="${clip(req.headers.get("user-agent") ?? "", 40)}"`,
   );
   if (scenario.name === "error") {

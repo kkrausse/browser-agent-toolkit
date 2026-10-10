@@ -9,6 +9,8 @@ MOCK_LLM_PORT=4791
 OPENCODE_PORT=4792
 CODEX_PORT=4793
 EGRESS_TRAP_PORT=4794
+OPENCODE_TAP_PORT=4795
+CODEX_TAP_PORT=4796
 # Not a secret: fixed so the server, the native client and a browser client agree.
 # opencode serve generates a random password when none is given; it cannot be turned off.
 MOCK_OPENCODE_PASSWORD="${MOCK_OPENCODE_PASSWORD:-wasm-term-mock}"
@@ -51,7 +53,9 @@ opencode_env() {
   export OPENCODE_SERVER_PASSWORD="$MOCK_OPENCODE_PASSWORD"
 }
 
+# The server and the TUI get separate homes so the baseline matches a browser
+# client, which cannot see the server's CODEX_HOME. $1 is "server" or "client".
 codex_env() {
-  export CODEX_HOME="$STATE_DIR/codex"
+  export CODEX_HOME="$STATE_DIR/codex-$1"
   mkdir -p "$CODEX_HOME"
 }
