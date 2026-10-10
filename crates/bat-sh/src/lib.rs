@@ -16,6 +16,7 @@ pub mod sed;
 pub mod sys;
 pub mod test;
 pub mod text;
+pub mod util;
 
 use interp::{basename, Flow, Interp, Io, X, SHELL_NAMES};
 

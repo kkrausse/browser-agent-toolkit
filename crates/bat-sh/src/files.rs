@@ -108,11 +108,16 @@ fn each(sh: &mut Interp, a: &[String], with_value: &str, mut f: impl FnMut(&mut 
 fn cat(sh: &mut Interp, a: &[String]) -> i32 {
     let args = Args::parse(a, "");
     let number = args.has('n');
+    // -A = -vET, -e = -vE, -t = -vT
+    let ends = args.has('A') || args.has('E') || args.has('e');
+    let tabs = args.has('A') || args.has('T') || args.has('t');
+    let nonprinting = args.has('A') || args.has('v') || args.has('e') || args.has('t');
+    let visible = ends || tabs || nonprinting;
     let mut st = 0;
     let mut line_no = 0;
     let files: Vec<String> = if args.rest.is_empty() { vec!["-".into()] } else { args.rest.clone() };
     for f in &files {
-        if f == "-" && !number {
+        if f == "-" && !number && !visible {
             // Stream: the input may be a pipe from a running process.
             let mut buf = vec![0u8; 65536];
             loop {
@@ -125,12 +130,31 @@ fn cat(sh: &mut Interp, a: &[String]) -> i32 {
         }
         let data = if f == "-" { Ok(sh.read_stdin_all()) } else { sys::read_file(&sh.abs(f)) };
         match data {
-            Ok(d) if number => {
+            Ok(d) if number || visible => {
                 let mut out = Vec::with_capacity(d.len() + d.len() / 8);
                 for line in d.split_inclusive(|c| *c == b'\n') {
                     line_no += 1;
-                    out.extend_from_slice(format!("{line_no:6}\t").as_bytes());
-                    out.extend_from_slice(line);
+                    if number {
+                        out.extend_from_slice(format!("{line_no:6}\t").as_bytes());
+                    }
+                    if !visible {
+                        out.extend_from_slice(line);
+                        continue;
+                    }
+                    for &c in line {
+                        match c {
+                            b'\n' => out.extend_from_slice(if ends { b"$\n" } else { b"\n" }),
+                            b'\t' if tabs => out.extend_from_slice(b"^I"),
+                            b'\t' => out.push(c),
+                            _ if !nonprinting => out.push(c),
+                            0..=31 => out.extend_from_slice(&[b'^', c + 64]),
+                            127 => out.extend_from_slice(b"^?"),
+                            128..=159 => out.extend_from_slice(&[b'M', b'-', b'^', c - 128 + 64]),
+                            160..=254 => out.extend_from_slice(&[b'M', b'-', c - 128]),
+                            255 => out.extend_from_slice(b"M-^?"),
+                            _ => out.push(c),
+                        }
+                    }
                 }
                 sh.out(&out);
             }

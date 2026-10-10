@@ -316,3 +316,63 @@ rg	subdir root, parent anchored rule	rg --files --sort path docs
 rg	-U multiline unsupported	rg -U 'main\(\) \{\n' src/main.rs; echo $?
 rg	look-around unsupported	rg -P 'fn(?= main)' src/main.rs; echo $?
 rg	--json unsupported	rg --json fn src/main.rs | head -c 20; echo
+nl	nl file	nl a.txt
+nl	nl -ba	nl -ba src/main.rs
+nl	nl default skips empty	nl blank.txt | cat -A
+nl	nl -b a / t / n	nl -b a blank.txt; nl -b t blank.txt; nl -bn a.txt
+nl	nl -b pREGEX	nl -b 'p^line[23]' a.txt
+nl	nl -w	nl -w 3 a.txt; nl -ba -w2 blank.txt
+nl	nl -s	nl -s ': ' a.txt; nl -ba -s' | ' -w4 blank.txt
+nl	nl -v -i	nl -v 10 a.txt; nl -v5 -i 5 a.txt
+nl	nl -n ln/rn/rz	nl -n ln a.txt | cat -A; nl -n rn a.txt; nl -nrz -w4 a.txt
+nl	nl stdin	printf 'x\ny\n' | nl; nl -ba < a.txt; cat a.txt | nl -ba -
+nl	nl several files	nl -ba a.txt b.txt
+nl	nl missing file	nl a.txt nope b.txt; echo $?
+nl	nl no trailing newline	printf 'a\nb' | nl -ba | cat -A
+nl	nl | sed range	nl -ba src/main.rs | sed -n '2,4p'
+nl	nl long options	nl --body-numbering=a --number-width=2 --number-separator=') ' a.txt
+util	base64 file / stdin	base64 a.txt; printf 'hello world' | base64; base64 < list.txt
+util	base64 wraps at 76	base64 src/main.rs
+util	base64 -w	base64 -w 20 src/main.rs; base64 --wrap=8 a.txt
+util	base64 -w 0	base64 -w 0 src/main.rs | wc -c; printf hi | base64 -w0; echo
+util	base64 -d	printf 'aGVsbG8gd29ybGQ=\n' | base64 -d; echo; base64 a.txt | base64 --decode; base64 src/main.rs > e; base64 -d e | cmp - src/main.rs; echo $?
+util	base64 -d invalid / missing	printf 'a!!!' | base64 -d; echo $?; base64 nope; echo $?
+util	base64 binary round trip	base64 bin.dat | base64 -d | od -c
+util	sha256sum	sha256sum a.txt b.txt; printf abc | sha256sum; sha256sum < a.txt
+util	sha256sum empty / long	: > z; sha256sum z; seq 1 2000 | sha256sum
+util	sha256sum -c	sha256sum a.txt b.txt > sums; sha256sum -c sums; echo $?; echo x >> a.txt; sha256sum -c sums; echo $?
+util	sha256sum -c missing / bad	sha256sum a.txt > sums; rm a.txt; sha256sum -c sums; echo $?; echo junk > sums; sha256sum -c sums; echo $?
+util	sha256sum missing file	sha256sum nope a.txt; echo $?
+util	sha1sum / md5sum	sha1sum a.txt; md5sum a.txt list.txt; printf '' | md5sum; seq 1 500 | sha1sum; seq 1 500 | md5sum
+util	shasum -a 256	shasum -a 256 a.txt; shasum a.txt
+util	tree	LC_COLLATE=C tree
+util	tree dir	LC_COLLATE=C tree src; LC_COLLATE=C tree src docs
+util	tree -a	LC_COLLATE=C tree -a
+util	tree -L	LC_COLLATE=C tree -L 1; LC_COLLATE=C tree -L 2 src; tree -L 0; echo $?
+util	tree -d	LC_COLLATE=C tree -d; LC_COLLATE=C tree -d -L 1
+util	tree -I	LC_COLLATE=C tree -I 'target|build|*.txt'; LC_COLLATE=C tree -a -I '.git|web'
+util	tree --noreport	LC_COLLATE=C tree --noreport src; LC_COLLATE=C tree -a --noreport -L 1 web
+util	tree -f / -F / -i	LC_COLLATE=C tree -f src/util; LC_COLLATE=C tree -F -L 1; LC_COLLATE=C tree -i src
+util	tree -P / --dirsfirst	LC_COLLATE=C tree -P '*.rs' src web; LC_COLLATE=C tree --dirsfirst -L 2 src
+util	tree --charset ascii	LC_COLLATE=C tree --charset ascii src
+util	tree missing / file / empty	tree nope; echo $?; tree a.txt; echo $?; tree empty
+util	tree symlink	ln -s a.txt lnk; ln -s src lnd; LC_COLLATE=C tree -L 1 | tail -8
+util	cmp	cmp a.txt a.txt; echo $?; cmp a.txt b.txt; echo $?; cmp -s a.txt b.txt; echo $?
+util	cmp eof / missing / stdin	head -c 8 a.txt > p; cmp a.txt p; echo $?; cmp a.txt nope; echo $?; cat a.txt | cmp - a.txt; echo $?
+util	paste	paste a.txt b.txt; paste -d, a.txt list.txt | head -4; paste -d ':;' a.txt a.txt a.txt
+util	paste -s / stdin	paste -s a.txt; paste -sd+ a.txt; seq 5 | paste - -; seq 4 | paste -sd,
+util	comm	sort a.txt > s1; sort b.txt > s2; comm s1 s2; comm -12 s1 s2; comm -23 s1 s2; comm -3 s1 s2 | cat -A
+util	expr arithmetic	expr 1 + 2; expr 7 / 2; expr 7 % 3; expr 2 \* 3; expr \( 1 + 2 \) \* 3; expr 10 - 2 - 3; expr -5 + 2; expr 2 + 3 \* 4
+util	expr comparison and status	expr 3 \> 2; expr 1 - 1; echo $?; expr a = a; expr abc \< abd; expr 10 \< 9; echo $?; expr 3 '>=' 3; expr foo '!=' bar
+util	expr strings	expr length hello; expr substr hello 2 3; expr index hello l; expr abc : 'a\(.*\)'; expr abc : 'ab'; expr x : y; echo $?; expr match abc 'a.'
+util	expr | & errors	expr a \| b; expr '' \| b; expr 0 \& 1; echo $?; expr 1 +; echo $?; expr a + 1; echo $?; expr 9 / 0; echo $?; expr; echo $?
+util	expr in $( )	i=5; i=$(expr $i + 1); echo $i; n=`expr $i \* 2`; echo $n
+util	fold	printf 'aaaa bbbb cccc dddd\n' | fold -w 7; printf 'aaaa bbbb cccc dddd\n' | fold -s -w 7 | cat -A; fold -w 3 a.txt; printf 'abcdef' | fold -w4 | cat -A
+util	fold default width	seq -s ' ' 1 60 | fold | wc -l; seq -s ' ' 1 60 | fold -s | head -1 | wc -c
+util	column -t	printf 'a bb ccc\ndddd e f\n' | column -t | cat -A; column -t people.txt; printf 'a b\n\n  c   d e\n' | column -t | cat -A
+util	column -t -s	column -t -s, data.csv; printf 'a,,b\n,c\n' | column -t -s, | cat -A; printf 'a:b\n' | column -s: -t -o ' | '
+util	od -c	od -c a.txt; od -c -An a.txt; printf '\001\377a\t\0' | od -c; od -c -N 3 a.txt
+util	od -x / -t x1 / default	printf abc | od -x; printf abcdefghijklmnopq | od -t x1; printf abc | od; printf abc | od -An -tx1; printf abc | od -A x -t x1; printf abcd | od -t o1
+util	od squeezes repeats	printf '%060d' 0 | od -c; seq 100 | tr -d '\n' | tr '0-9' 'a' | od -c -v | tail -2
+util	xxd	xxd a.txt; printf abc | xxd -p; xxd -l 4 a.txt; printf abc | xxd -c 2; xxd -g 1 -l 4 a.txt; seq 30 | xxd -p; xxd bin.dat
+util	hexdump -C	hexdump -C a.txt; head -c 40 src/main.rs | hexdump -C; printf '%052d' 0 | hexdump -C
