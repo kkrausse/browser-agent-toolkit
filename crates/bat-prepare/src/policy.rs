@@ -20,6 +20,9 @@ pub struct Policy {
     pub programs: Vec<ProgramSpec>,
     #[serde(default)]
     pub launch: Map<String, Value>,
+    /// Programs run after the image is ready whose output files become project files.
+    #[serde(default)]
+    pub project_scripts: Vec<ProjectScript>,
     /// Directory `dir:` paths are relative to: the policy file's directory; for the
     /// embedded policy `$BAT_POLICY_BASE`, else `data/` of the crate the tool was built from.
     #[serde(skip)]
@@ -40,6 +43,29 @@ pub struct Substitution {
     /// `package.json` (top-level keys replace); the directory's own `package.json`,
     /// `node_modules` and `.git` are not copied.
     pub overlay: Option<String>,
+}
+
+/// A host program that derives project files from the prepared guest tree (for example a
+/// dependency-optimizer cache). It is run with these environment variables and every file
+/// it leaves under `BAT_SCRIPT_OUT` is added to the manifest's project files at the same
+/// workspace-relative path:
+///
+/// - `BAT_APP`: the application directory on the host
+/// - `BAT_GUEST_NODE_MODULES`: the pruned guest `node_modules` the image was packed from
+/// - `BAT_PROJECT_FILES`: JSON file, the project files so far (`{"/path": text | {encoding, data}}`)
+/// - `BAT_WORKSPACE`: the guest workspace path; `BAT_LAUNCH`: JSON of the launch descriptions
+/// - `BAT_IMAGE_SHA256`: identity of the dependency image
+/// - `BAT_SCRIPT_OUT` (emptied before the run), `BAT_SCRIPT_CACHE` (kept between runs)
+///
+/// A failing script is reported and skipped: the guest then does that work itself.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectScript {
+    pub name: String,
+    /// Command and arguments; a `dir:<path>` argument is resolved like a shim directory.
+    pub run: Vec<String>,
+    /// Run only if this path exists below the guest `node_modules`.
+    pub if_exists: Option<String>,
 }
 
 impl Policy {

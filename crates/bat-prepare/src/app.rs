@@ -14,6 +14,7 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs;
+use std::os::fd::AsFd;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -59,6 +60,9 @@ struct State {
     pack: PackStats,
     application: Value,
     build_ms: Value,
+    /// Host path of the guest `node_modules` the image was packed from (for project scripts).
+    #[serde(default)]
+    node_modules: Option<PathBuf>,
 }
 
 struct Fingerprint(Sha256);
@@ -301,6 +305,7 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
     if let Some(preview) = &options.preview {
         merge(&mut launch["preview"], preview);
     }
+    let scripts = run_project_scripts(&policy, &options, &app, &state, &workspace, &launch, &mut project)?;
     if policy.application.is_none() {
         if let Some(map) = launch.as_object_mut() {
             map.remove("agent");
@@ -325,6 +330,7 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
         "project": project,
         "application": state.application,
         "dependencies": state.dependencies,
+        "scripts": scripts,
     });
     let manifest_bytes = serde_json::to_vec(&manifest)?;
     let manifest_changed = write_if_changed(&options.out.join("manifest.json"), &manifest_bytes)?;
@@ -353,6 +359,65 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
         "buildMs": state.build_ms,
         "ms": { "fingerprint": fingerprint_ms, "image": image_ms, "manifest": ms(manifest_started), "total": ms(started) },
     }))
+}
+
+/// Run the policy's project scripts (see `policy::ProjectScript`) and add their output
+/// files to `project`. Returns one report per script for the manifest.
+fn run_project_scripts(policy: &Policy, options: &AppOptions, app: &Path, state: &State, workspace: &str, launch: &Value, project: &mut Map<String, Value>) -> Result<Vec<Value>> {
+    let mut reports = Vec::new();
+    for script in &policy.project_scripts {
+        let started = Instant::now();
+        let Some(node_modules) = state.node_modules.as_deref().filter(|p| p.is_dir()) else {
+            eprintln!("project script {}: skipped, the guest node_modules is gone (rebuild with --force)", script.name);
+            reports.push(json!({ "name": script.name, "ok": false, "skipped": "no guest node_modules" }));
+            continue;
+        };
+        if script.if_exists.as_ref().is_some_and(|path| !node_modules.join(path).exists()) {
+            continue;
+        }
+        let dir = options.work.canonicalize()?.join("scripts").join(&script.name);
+        let (out, cache, files) = (dir.join("out"), dir.join("cache"), dir.join("project.json"));
+        if out.exists() {
+            fs::remove_dir_all(&out)?;
+        }
+        fs::create_dir_all(&out)?;
+        fs::create_dir_all(&cache)?;
+        fs::write(&files, serde_json::to_vec(&project)?)?;
+        let args: Vec<PathBuf> = script.run.iter().map(|arg| policy.local_dir(arg).unwrap_or_else(|| PathBuf::from(arg))).collect();
+        let Some((command, rest)) = args.split_first() else { bail!("project script {} has no command", script.name) };
+        let status = std::process::Command::new(command)
+            .args(rest)
+            .current_dir(app)
+            .env("BAT_APP", app)
+            .env("BAT_GUEST_NODE_MODULES", node_modules)
+            .env("BAT_PROJECT_FILES", &files)
+            .env("BAT_WORKSPACE", workspace)
+            .env("BAT_LAUNCH", launch.to_string())
+            .env("BAT_IMAGE_SHA256", &state.image.sha256)
+            .env("BAT_SCRIPT_OUT", &out)
+            .env("BAT_SCRIPT_CACHE", &cache)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::from(std::io::stderr().as_fd().try_clone_to_owned()?))
+            .status();
+        let ok = matches!(&status, Ok(status) if status.success());
+        if !ok {
+            eprintln!("project script {} failed ({status:?}); continuing without its files", script.name);
+            reports.push(json!({ "name": script.name, "ok": false, "ms": ms(started) }));
+            continue;
+        }
+        let mut items = Vec::new();
+        tree::walk(&out, "", &mut items)?;
+        let (mut count, mut bytes) = (0u64, 0u64);
+        for item in items {
+            let Source::Host { path, len } = &item.source else { continue };
+            check_relative(&item.path)?;
+            project.insert(format!("/{}", item.path), project_file(fs::read(path)?));
+            count += 1;
+            bytes += len;
+        }
+        reports.push(json!({ "name": script.name, "ok": true, "files": count, "bytes": bytes, "ms": ms(started) }));
+    }
+    Ok(reports)
 }
 
 fn project_len(manifest: &Value) -> usize {
@@ -453,6 +518,7 @@ fn build_image(options: &AppOptions, app: &Path, policy: &Policy, pinned: &[(Str
         dependencies: installed.report,
         pack: stats,
         application,
+        node_modules: Some(installed.node_modules.clone()),
         build_ms: json!({ "dependencies": deps_ms, "collect": collect_ms, "pack": pack_ms, "programs": ms(program_started), "verify": verify_ms, "total": ms(started) }),
     })
 }
