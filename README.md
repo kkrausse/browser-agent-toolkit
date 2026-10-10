@@ -12,34 +12,116 @@ your app's dev server, all in the user's tab.
   sending anything to another origin (planned).
 - **Live preview.** The agent edits your app's source and it hot-reloads.
 - **The real OpenCode, not a reimplementation.**
-- **Fits an existing app.** Two packages, optional React helpers.
+- **Fits an existing app.** One package, optional React helpers.
 
-![The TODO example: add todos, open the browser editor, ask OpenCode for a dark theme and a todos-left counter, and the live preview updates](docs/media/todo-editor-demo.gif)
+![The TODO example: two todos are added, "Open editor" starts the app's dev server and OpenCode inside the tab, the agent is asked for a dark theme and a todos-left counter, and the live preview updates](docs/media/todo-editor-demo-rust.gif)
 
-The [TODO example](examples/todo-app/README.md), recorded in Chrome. Editor
-startup plays at 3x and the agent's run at 5x; the rest is real time.
+The [TODO example](examples/todo-app/README.md), recorded in Chrome on this branch. The
+editor opens in real time (1.7 s here, the first open of a reset workspace); only the
+model's 22 s of work plays at 4x, where the "4x" label shows. Everything else is real time.
 
 ## Try it
 
-With the [prerequisites](#local-setup) installed:
+With the [prerequisites](#prerequisites) installed, from the repository root:
 
 ```sh
-bun run setup
-cd examples/todo-app
+cp examples/todo-app/.env.example examples/todo-app/.env.local   # put the model key in it; optional
 bun run editor
 ```
 
-Open `http://127.0.0.1:3000` and choose **Open editor**. Chat needs a provider key
-in `examples/todo-app/.env.local`; see the
-[example's README](examples/todo-app/README.md).
+That builds the Rust and TypeScript pieces, fetches the pinned OpenCode server, prepares
+and builds the example and serves it. Open `http://127.0.0.1:3000` (`PORT=…` to change it)
+in Chrome and choose **Open editor**. Without a key the editor and the preview work and
+the chat explains what is missing. A first build takes about two minutes (113 s measured
+from a fresh clone with warm Cargo and Bun caches); after that, a few seconds.
 
-## Status
+## Startup
 
-Experimental (`0.1.0-alpha.1`). This is a compatibility proof of concept, not
-arbitrary native Linux or stock Node/Bun execution: OpenCode and its tools are
-delivered through explicit compatibility packaging. The example needs a host
-server for its API and model proxy, so it is not a static-only site. There is no
-hosted demo, and no bring-your-own-key or provider login yet.
+"Open editor" in the TODO example: Vite 7 with React Router and Tailwind, and the real
+OpenCode 2.0.3 server, both started inside the tab. Chrome 154 on a 12-core Linux machine
+that was busy with other work (load average 4.6–4.9); milliseconds, median (min–max) of
+12 reopens.
+
+| | Previous runtime | Now | Native Node 24, same programs |
+| --- | --- | --- | --- |
+| Runtime boot, dependency tree mounted | ~2,000 | 90 (81–122) | – |
+| Dev server listening, after its spawn | 1,600 | 426 (379–554) | 406 (377–433) |
+| App visible in the preview, after the spawn | 3,900 | 1,004 (865–1,268) | 880 (863–952), requests only |
+| OpenCode attached, after its spawn | 3,200 | 1,032 (880–1,393) | 1,336 (1,286–1,394) |
+| Click to app visible and chat ready | 7,200 | **1,171** (998–1,545) | – |
+
+A visitor's very first open, with the 32 MB compressed dependency image still to download,
+took 2.5 s on localhost (n = 4); the image finishes arriving in the background. Sample
+sizes, the native method, what is slower and everything not yet measured (an idle machine,
+a real network, any browser but Chrome) are in the
+[summary](docs/experiments/2026-10-10-rust-rewrite-summary.md).
+
+## How it works
+
+- **A library kernel in Rust**, compiled to one Wasm module that every worker instantiates
+  over the same shared memory: filesystem, pipes, sockets, HTTP and WebSocket codecs,
+  process table and Node module resolution. A system call is a function call; there is no
+  kernel thread and no message protocol.
+- **The dependency tree is one immutable image file** in the browser's private file
+  system (OPFS). Opening the editor reads its index; file bodies are read when used.
+  Everything written goes to an overlay that is journaled to OPFS.
+- **Modules are compiled at prepare time** by a native Rust tool (oxc): each dependency is
+  stored already in the loader's format, and the modules a program needs to start are
+  emitted as one script the browser keeps compiled between visits.
+- **Programs are real**: each `node` process is a Web Worker running the app's own Vite
+  and the real OpenCode 2.0.3 server bundle against Node's built-in modules.
+- **Rust**: kernel, image format, the prepare tool, the module transform, a POSIX shell
+  with coreutils, zlib and digests, and the backends that stand in for native tools
+  (esbuild-shaped transforms, Tailwind's scanner). **TypeScript**, because these are
+  JavaScript APIs or browser glue by nature: the objects guest programs touch (`fs`,
+  `http`, `child_process`, …, thin over kernel calls; pure-JS modules are Node's own
+  `lib/`), the worker bootstrap and module loader, the service worker that routes the
+  preview frame, and the toolkit package with its React chat UI.
+
+Design: [`docs/design/rust-rewrite.md`](docs/design/rust-rewrite.md); what changed while
+building it: [`docs/design/decisions.md`](docs/design/decisions.md).
+
+## Using it in an app
+
+One package, `@kkrausse/browser-agent-toolkit` ([its README](packages/toolkit/README.md)),
+five entry points for three moments:
+
+1. **Prepare**, at build time. `./prepare` packs the app's dependencies into the image,
+   lists the source the agent may edit and writes a directory of static files. `./vite` is
+   the plugin for the app's Vite config (the guest's base path, and which of the host's
+   chunks are private to the editor).
+2. **Serve**. `./server` gives a fetch handler for that directory and a proxy for model
+   requests, so the provider key stays on the server. The app decides who may edit before
+   calling it, and adds the handler's cross-origin isolation headers to its own pages.
+3. **Open**, in the browser. `./browser` has `openEditor()`, which boots the runtime,
+   installs the source, starts the dev server and OpenCode and returns the files, the
+   preview and the chat controller; `preloadEditor()` warms it up when the button is
+   shown. `./react` has the preview frame, the chat view and a hook.
+
+[`examples/todo-app`](examples/todo-app/README.md) is all of it in a small app.
+
+## Status and limits
+
+Experimental; nothing is published. This is not a general Linux or Node: it runs these two
+programs and what they need.
+
+- **Chrome only so far.** Firefox and Safari have not been tried.
+- The pages that host the editor must be **cross-origin isolated** (COOP `same-origin`,
+  COEP `require-corp`); the server handler supplies the headers.
+- The app needs a server for its API and the model proxy; it is not a static site. No
+  hosted demo, no bring-your-own-key or provider login yet.
+- **The agent has no shell tool.** It reads, edits, searches (ripgrep) and runs JavaScript
+  (`runJavascript`, where `child_process` has a real shell). OpenCode's own shell tool is
+  not enabled.
+- **No package install inside the guest**: the agent works with the dependencies the app
+  was prepared with.
+- `worker_threads.Worker` is missing, and the Node surface is what Vite and OpenCode use.
+- One editor per origin at a time; a second tab is told so.
+- A dependency change means a new 239 MB image (32 MB compressed) for every visitor.
+- The IRS tools have not been migrated to this API.
+
+The ranked list of known gaps is in the
+[summary](docs/experiments/2026-10-10-rust-rewrite-summary.md#6-known-gaps-and-unverified-items-ranked).
 
 # Development
 
@@ -47,122 +129,67 @@ hosted demo, and no bring-your-own-key or provider login yet.
 
 | Directory | Purpose |
 | --- | --- |
-| `workspace-api/` | `@kev-browser-agent-kit/workspace`: filesystem/persistence, execution, endpoints, previews, explicit preparation/delivery operations, optional React lifecycle helpers |
-| `opencode-chat/` | `@kev-browser-agent-kit/opencode-chat`: OpenCode artifacts/config/start/readiness/client plus optional chat/editor UI |
-| `examples/todo-app/` | Local React Router + Bun/tRPC TODO application with an optional browser editor |
-| `vivari/` | Runtime source pins, build/packaging tools, and runtime qualification support |
+| `crates/bat-kernel/` | the library kernel (Rust, `wasm32-wasip1-threads`, shared memory) |
+| `crates/bat-image/` | dependency image format: reader and writer |
+| `crates/bat-modules/` | module transform and CommonJS/ESM facts (oxc); native library and Wasm build |
+| `crates/bat-prepare/` | native CLI: dependency tree to image, compiled modules, program scripts |
+| `crates/bat-sh/` | the guest's `/bin/sh` and coreutils |
+| `crates/bat-node-native/` | zlib and digests for the guest's `zlib` and `crypto` |
+| `crates/bat-tools/` | Wasm backends for esbuild-shaped transforms and Tailwind's scanner |
+| `runtime/` | TypeScript: kernel bindings, process worker, loader, Node built-ins, SQLite, page host, service worker; `harness/` runs guest scripts in Chrome |
+| `packages/toolkit/` | `@kkrausse/browser-agent-toolkit`: prepare, server, browser, react, vite |
+| `packages/guest-shims/` | packages laid over native-tool packages in the guest (esbuild, lightningcss, Tailwind oxide) |
+| `examples/todo-app/` | React Router + Bun/tRPC TODO app with the editor; `demo/` drives and records the scenario |
+| `bench/` | the drivers behind the numbers in `docs/experiments/` |
+| `third_party/` | Node's `lib/` and the notices |
+| `docs/design/`, `docs/experiments/` | design, decisions, formats; measurements and reports |
 
-Development package names are retained. Source lives at
-[`kkrausse/browser-agent-toolkit`](https://github.com/kkrausse/browser-agent-toolkit).
-Versioned external consumers use GitHub Packages; local builds remain supported.
-See [releasing and consuming packages](docs/RELEASING.md) for the manual workflow,
-exact-version installs, runtime asset delivery and local overrides.
-The first published version is [`0.1.0-alpha.1`](docs/releases/0.1.0-alpha.1.md),
-an experimental release with clean CI packaging and browser runtime checks.
+## Prerequisites
 
-## Local setup
+None of these is installed by the repository:
 
-Prerequisites, none of which this repository installs:
+- Bun (1.4.0 used) and Node 24 on `PATH`;
+- Rust (1.99 used) with `rustup target add wasm32-wasip1-threads wasm32-unknown-unknown`;
+- `tar` and network access for the first setup (npm packages, crates, the OpenCode server);
+- Chrome.
 
-- Bun 1.4.0, git, tar and network access.
-- Rust 1.93.0 with `wasm32-unknown-unknown` and `wasm32-wasip1`, and wasm-pack
-  0.13.1 (`cargo install wasm-pack --version 0.13.1 --locked`), for the runtime.
-- Rust 1.95.0 with `wasm32-wasip1-threads`, for the Tailwind backend.
+Optional: bubblewrap on Linux (prepare then builds Vite's dependency cache at the guest's
+own paths; without it a fallback is used that has only been run on Linux), and `wasm-opt`
+on `PATH` (smaller Wasm). Three Wasm files are committed, so their toolchains are not
+needed: SQLite (`runtime/src/sqlite/native/build.sh --fetch` rebuilds it with a pinned
+wasi-sdk), the esbuild-shaped transform and the Tailwind scanner
+(`crates/bat-tools/build-wasm.sh`, `crates/bat-tools/oxide/build-wasm.sh`).
 
-From the repository root:
-
-```sh
-bun run setup
-```
-
-Setup reuses whatever already exists and never resets a checkout. In order it:
-
-1. clones the pinned runtime fork into the gitignored `vendor/vivari`
-   (`vivari/scripts/setup-runtime.ts`, only when absent);
-2. builds the runtime, native Wasm included (`vivari/scripts/build-runtime.ts`);
-3. downloads and verifies the prepared OpenCode 2.0.3 application
-   (`scripts/setup-opencode.ts`);
-4. builds the source-pinned Tailwind backend once
-   (`vivari/scripts/setup-tailwind-candidate.ts`; fetches the pinned Node into
-   `vivari/.runtime`);
-5. installs and builds both packages, packages the runtime distribution into
-   `workspace-api/dist/runtime`, then installs and builds the example
-   (`scripts/build.ts --install`).
-
-A first run took about two minutes on an Apple-silicon laptop with warm Cargo and
-Bun download caches, mostly the two Rust builds; a repeat run takes about ten
-seconds. Then start the example with its browser editor:
+## Commands
 
 ```sh
-cd examples/todo-app
-bun run editor
+bun run setup       # build everything the example needs; incremental
+bun run editor      # setup, then prepare + build + serve examples/todo-app (PORT, default 3000)
+bun run typecheck   # runtime, toolkit, example
+bun run build       # the toolkit package only
 ```
 
-Open `http://127.0.0.1:3000` and choose **Open editor**. See
-[`examples/todo-app/README.md`](examples/todo-app/README.md) for the model key,
-catalog and port. The ordinary TODO application does not require a model key.
+`bun run setup` runs, in order: `bun install`; the OpenCode 2.0.3 server into the
+gitignored `.runtime/` (downloaded from a checksummed release asset, or
+`BAT_OPENCODE_DIR`); `kernel.wasm`, `bat_modules.wasm`, `bat_node_native.wasm`,
+`bat_sh.wasm` and the `bat-prepare` CLI into `target/`; the runtime bundles into
+`runtime/dist/`; the toolkit into `packages/toolkit/dist/`. After a change to Rust or
+runtime code, run it again and restart the example.
 
-Other root commands:
-
-```sh
-bun run build           # rebuild both packages and repackage the runtime distribution
-bun run dev             # rebuild/refresh local packages, then start the example in dev mode
-bun run build:example   # rebuild/refresh and produce the example production build
-bun run test
-bun run typecheck
-```
-
-`bun run build` builds the library packages in dependency order. Root commands
-refresh Bun's installed local package copies, so changes are included on the next
-build without version bumps or a manual dependency update. Local consumers use
-`workspace-api/dist/lib` and `opencode-chat/dist`. After editing the runtime fork,
-run `bun vivari/scripts/build-runtime.ts` and then `bun run build`; see
-[`vivari/DEVELOPMENT.md`](vivari/DEVELOPMENT.md).
-
-**Live cross-package watching is not wired yet.** During a running example dev
-session, toolkit source changes need a restart via `bun run dev` to rebuild and
-refresh dependencies. Ordinary example source edits use the app's existing HMR.
-The automatic toolkit watcher and `irs-tools` build/deploy integration are later
-work, not guarantees of this extraction.
-
-### Prepared OpenCode prerequisite
-
-The chat build verifies an exact OpenCode 2.0.3 artifact and receipt before copying
-them into the package. The artifact is generated, ignored, and not included in a
-source checkout. `bun run setup` fetches the previously qualified artifact from its
-checksummed GitHub Release asset into `vivari/.runtime/opencode-release-2.0.3`
-(`bun scripts/setup-opencode.ts` does only that step). Without network access,
-seed it from another checkout that has it, or point `OPENCODE_PACKAGE_DIR` at the
-directory holding the qualified `build-receipt.json` and
-`.runtime/opencode-bun-server/` payload:
-
-```sh
-bun scripts/import-opencode.ts /path/to/integration/vivari
-```
-
-The rebuild recipe is in `vivari/experiments/opencode-release-server/`. Rebuilding
-on another host may change artifact identities; a new build is not automatically
-qualified and must not silently replace the pinned contract.
-
-## Runtime and application delivery
-
-The JS library packages, Vivari workers/WASM distribution, and prepared application
-dependencies are separate build inputs. The runtime is the fork's single-kernel
-line: one kernel worker plus guest process workers, and distribution packaging
-rejects any other worker layout. Runtime changes require reloading the browser
-workspace.
+Checks that exist: `runtime/harness/check.sh` (guest scripts in Chrome through the
+`browser-control` CLI), `examples/todo-app/demo/run.ts` (the scenario above, one real
+model conversation per run), `bench/startup/run.ts` and `bench/first-open/run.ts`.
 
 ## History and licensing
 
-This repository starts with a clean source snapshot from
-`kkrausse/random` commit `0bcad3e36753b51bdcad3234d75ac9fc30907966`, under
-`browser-container-poc/`. Original history and chronological status/acceptance
-documents remain there. They describe the original environment, not fresh
-qualification of this checkout.
+This branch is a rewrite. The previous toolkit and its Vivari-based runtime are on `main`;
+nothing here depends on them at build or run time, and the reports in `docs/experiments/`
+dated before 2026-10-09, `docs/RELEASING.md`, `docs/runtime-architecture.md` and the CI
+workflows still describe them.
 
-New toolkit experiment results and status reports live in [`docs/experiments/`](docs/experiments/)
-in this repository, alongside the implementation and reproduction harnesses.
-
-Package licenses, upstream notices, and provenance are retained in their source
-directories. See `opencode-chat/PROVENANCE.md`, its `LICENSE*` files, and
-`vivari/LICENSE*`. No new umbrella licensing decision is made by this extraction.
+No umbrella license has been chosen for this repository. Third-party code that is
+vendored or embedded (Node.js `lib/`, shims from Vivari, SQLite and wasi-libc, the
+Tailwind scanner, oxc and the other Rust crates, lightningcss files) is listed with its
+license in [`third_party/NOTICES.md`](third_party/NOTICES.md); what the toolkit package
+took from OpenCode, shadcn/ui and Marked is in
+[`packages/toolkit/NOTICES.md`](packages/toolkit/NOTICES.md).

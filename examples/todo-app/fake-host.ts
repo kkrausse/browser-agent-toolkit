@@ -6,16 +6,16 @@ import { resolve } from 'node:path'
 /**
  * Development only: run the editor's two programs natively (see the toolkit's `./fake`).
  *   EDITOR_FAKE_DIR        scratch directory holding /workspace and /app (default /tmp/bat-toolkit-todo)
- *   BAT_OPENCODE_DIR       directory with the pinned OpenCode server.js and tree-sitter wasm
+ *   BAT_OPENCODE_DIR       directory with the pinned OpenCode server.js and tree-sitter wasm (default <repo>/.runtime/opencode-2.0.3)
  *   EDITOR_PREVIEW_PORT, EDITOR_AGENT_PORT   native loopback ports for guest ports 5173 and 4096
  */
 export async function createTodoFakeHost(hostOrigin: string) {
   const directory = resolve(process.env.EDITOR_FAKE_DIR ?? '/tmp/bat-toolkit-todo')
-  const openCode = process.env.BAT_OPENCODE_DIR
-    ?? resolve(import.meta.dirname, '../../../browser-agent-toolkit/vivari/.runtime/opencode-release-2.0.3/.runtime/opencode-bun-server')
+  // Where `bun run setup` puts it.
+  const openCode = process.env.BAT_OPENCODE_DIR ?? resolve(import.meta.dirname, '../../.runtime/opencode-2.0.3')
   const app = resolve(directory, 'app')
   if (!existsSync(resolve(app, 'server.js'))) {
-    if (!existsSync(resolve(openCode, 'server.js'))) throw Error(`OpenCode server.js not found in ${openCode}; set BAT_OPENCODE_DIR`)
+    if (!existsSync(resolve(openCode, 'server.js'))) throw Error(`OpenCode server.js not found in ${openCode}; run \`bun run setup\` in the repository root or set BAT_OPENCODE_DIR`)
     await mkdir(app, { recursive: true })
     // The artifact listens on a fixed port. Natively that port must be ours to choose, so
     // this scratch copy (never the artifact) reads it from the fake host's environment.
