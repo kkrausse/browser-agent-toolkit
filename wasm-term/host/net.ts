@@ -85,7 +85,7 @@ export function createNetBridge(ring: RingWriter, options: NetOptions = {}): Net
       event(handle, WS_ERROR, encoder.encode(`WebSocket error (${url})`));
     });
     socket.addEventListener("close", close => {
-      sockets.delete(handle);
+      if (sockets.get(handle) === socket) sockets.delete(handle);
       if (finished) return;
       finished = true;
       const reason = encoder.encode(close.reason);
@@ -138,6 +138,7 @@ export function createNetBridge(ring: RingWriter, options: NetOptions = {}): Net
       tcpError(handle, code, message);
     };
     socket.addEventListener("message", message => {
+      if (state.finished) return;
       if (typeof message.data !== "string") {
         event(handle, TCP_DATA, new Uint8Array(message.data as ArrayBuffer));
         return;
@@ -159,7 +160,7 @@ export function createNetBridge(ring: RingWriter, options: NetOptions = {}): Net
     });
     socket.addEventListener("error", () => fail("unreachable", `tcp relay: WebSocket error (${host}:${port})`));
     socket.addEventListener("close", close => {
-      streams.delete(handle);
+      if (streams.get(handle) === state) streams.delete(handle);
       // After the peer's end of file the relay closing is the stream's ordinary end (reads see the end
       // of file; a write would be into a closed connection); before it, a reset.
       if (state.ended) fail("pipe", `${host}:${port}: the connection is closed`);

@@ -1488,8 +1488,8 @@ What came back, compared with the fetch transport:
   key) turns go over `wss://<host>/v1/responses` with the `Authorization` header in the
   handshake, prewarm and incremental requests, as natively; the mock records them as
   `ws /v1/responses`. The `mock` provider has no `supports_websockets`, so it stays on the HTTP
-  stream, also as natively. Not exercised: permessage-deflate before this session's last change
-  to the mock (see "Gaps").
+  stream, also as natively. permessage-deflate, which codex offers, is negotiated with the mock
+  (through nginx) and a long reply arrives whole over it.
 - Request bodies are streamed by hyper and sent as codex made them (zstd with ChatGPT
   sign-in when it uses HTTP), headers are the native ones with nothing enveloped, cookies are
   hyper's cookie layer, redirects are reqwest's.

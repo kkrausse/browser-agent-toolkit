@@ -305,7 +305,7 @@ of `codex-api/src/endpoint/responses_websocket.rs` and `core/src/client.rs`, the
 body with `"type": "response.create"`; the reply is the same event sequence as the HTTP stream,
 one JSON text frame per event. A request with `previous_response_id` carries only the input
 items added since that response, so the mock keeps each connection's conversation by response
-id. `"generate": false` is codex's prewarm: answered with an empty completed response. The
+id. permessage-deflate is accepted when offered (codex offers it). `"generate": false` is codex's prewarm: answered with an empty completed response. The
 handshake's headers (`Authorization`, `ChatGPT-Account-ID`, `User-Agent`, `originator`) are what
 `/auth/state` reports for such a request, with `path` = `ws /v1/responses`. A prompt containing
 `mock-error` gets an `{"type":"error","status":400,...}` frame.

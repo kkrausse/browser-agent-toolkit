@@ -34,6 +34,8 @@ export class ProcessExit extends Error {
 
 export interface WsHandle {
   kind: "ws";
+  /** The handle in messages to and from the page (unique for the program's life). */
+  id: number;
   events: { kind: number; data: Uint8Array }[];
   /** A CLOSE or ERROR event has been queued; nothing more will arrive. */
   finished: boolean;
@@ -41,6 +43,8 @@ export interface WsHandle {
 
 export interface HttpHandle {
   kind: "http";
+  /** The handle in messages to and from the page (unique for the program's life). */
+  id: number;
   head: { status: number; headers: Uint8Array } | null;
   chunks: Uint8Array[];
   ended: boolean;
@@ -57,6 +61,8 @@ export interface SignalQueue {
 /** A TCP stream through the page's relay (docs/abi.md 3.3, "TCP"). */
 export interface TcpHandle {
   kind: "tcp";
+  /** The handle in messages to and from the page (unique for the program's life). */
+  id: number;
   state: "connecting" | "open" | "failed";
   /** Why it failed: a WASI errno and what the relay or the browser said. */
   errno: number;

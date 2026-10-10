@@ -174,6 +174,36 @@ async fn asynchronous(report: &mut Report) -> io::Result<()> {
         format!("{received} bytes in {} ms, tail {:?}", started.elapsed().as_millis(), String::from_utf8_lossy(&tail)),
     );
 
+    // Connections one after another: each new descriptor gets the number of the one just closed, while
+    // the page is still hearing about the old connection's end. (The page once knew streams by descriptor
+    // number, and the old one's close event took the new stream's entry with it: its first write vanished.)
+    let mut numbers = std::collections::BTreeSet::new();
+    let mut echoed = 0;
+    for round in 0..40u32 {
+        let attempt = tokio::time::timeout(Duration::from_secs(5), async {
+            let mut stream = TcpStream::connect("tcp-echo.test", 7).await?;
+            let fd = stream.as_raw_fd();
+            let message = format!("round {round}");
+            stream.write_all(message.as_bytes()).await?;
+            let mut buf = [0u8; 32];
+            let n = stream.read(&mut buf).await?;
+            io::Result::Ok((fd, buf[..n] == *message.as_bytes()))
+        })
+        .await;
+        match attempt {
+            Ok(Ok((fd, true))) => {
+                numbers.insert(fd);
+                echoed += 1;
+            }
+            _ => break,
+        }
+    }
+    report.check(
+        "tokio: 40 connections in a row, each on the descriptor number the last one had, all echo",
+        echoed == 40 && numbers.len() <= 2,
+        format!("{echoed} echoed, descriptor numbers {numbers:?}"),
+    );
+
     let denied = TcpStream::connect("example.com", 80).await;
     report.check("a destination outside the allowlist is refused (EACCES)", denied.as_ref().is_err_and(|error| error.kind() == io::ErrorKind::PermissionDenied), kind_of(&denied));
     let private = TcpStream::connect("localhost", 7).await;

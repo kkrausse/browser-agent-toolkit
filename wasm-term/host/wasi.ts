@@ -80,6 +80,10 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
   const bytes = (ptr: number, len: number) => new Uint8Array(memory.buffer, ptr >>> 0, len >>> 0);
   const readString = (ptr: number, len: number) => decoder.decode(bytes(ptr, len));
   const nonblocking = (fd: Fd) => (fd.flags & FDFLAG_NONBLOCK) !== 0;
+  // What the page knows a network object by. Never a descriptor number: those are reused at once, and an
+  // event of a closed connection that is still on its way would land on whatever was opened next.
+  let netSeq = 0;
+  const netId = () => ++netSeq;
 
   // ---- blocking reads ---------------------------------------------------
 
@@ -129,7 +133,7 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
         const taken = chunk.subarray(0, cap);
         if (taken.length === chunk.length) handle.chunks.shift();
         else handle.chunks[0] = chunk.subarray(taken.length);
-        machine.post({ t: "http_ack", handle: fdNumber, bytes: taken.length });
+        machine.post({ t: "http_ack", handle: handle.id, bytes: taken.length });
         return taken;
       }
       if (handle.error !== null) {
@@ -165,7 +169,7 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
         }
         handle.buffered -= out.length;
         handle.readEdge = handle.buffered > 0 || handle.eof || handle.state === "failed";
-        if (out.length > 0) machine.post({ t: "tcp_ack", handle: fdNumber, bytes: out.length });
+        if (out.length > 0) machine.post({ t: "tcp_ack", handle: handle.id, bytes: out.length });
         return out;
       }
       // End of file before a failure: after the peer's FIN the only "failure" left is the
@@ -190,7 +194,7 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
       if (space > 0 || (data.length === 0 && handle.state === "open")) {
         const taken = data.subarray(0, space);
         if (taken.length > 0) {
-          machine.post({ t: "tcp_send", handle: fdNumber, data: taken.slice() });
+          machine.post({ t: "tcp_send", handle: handle.id, data: taken.slice() });
           handle.sent += taken.length;
         }
         // Cut short: the window is full now, and its reopening is the next writable edge.
@@ -451,8 +455,8 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
       if (fd.kind === "sig") machine.closeSignalQueue(fd.queue);
       if (fd.kind === "proc") processes?.close(fd.proc);
       if (fd.kind === "ws" || fd.kind === "http" || fd.kind === "tcp") {
-        machine.net.delete(fdNumber);
-        machine.post({ t: "net_close", handle: fdNumber });
+        machine.net.delete(fd.handle.id);
+        machine.post({ t: "net_close", handle: fd.handle.id });
       }
       fds.delete(fdNumber);
       if (fd.kind === "file") onFsChange?.();
@@ -762,7 +766,7 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
       // A TCP stream's sending side really closes (the peer reads end of file); the receiving side needs nothing.
       if (fd.kind === "tcp" && how & SDFLAGS_WR && !fd.handle.writeShut) {
         fd.handle.writeShut = true;
-        if (fd.handle.state !== "failed") machine.post({ t: "tcp_end", handle: fdNumber });
+        if (fd.handle.state !== "failed") machine.post({ t: "tcp_end", handle: fd.handle.id });
       }
       return ERRNO.SUCCESS;
     },
@@ -830,10 +834,10 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
         return ERRNO.INVAL;
       }
       const protocols = readString(protocolsPtr, protocolsLen).split(",").map(item => item.trim()).filter(Boolean);
-      const handle: WsHandle = { kind: "ws", events: [], finished: false };
+      const handle: WsHandle = { kind: "ws", id: netId(), events: [], finished: false };
       const fdNumber = allocFd({ kind: "ws", flags: 0, handle });
-      machine.net.set(fdNumber, handle);
-      machine.post({ t: "ws_open", handle: fdNumber, url, protocols });
+      machine.net.set(handle.id, handle);
+      machine.post({ t: "ws_open", handle: handle.id, url, protocols });
       view().setUint32(fdPtr, fdNumber, true);
       return ERRNO.SUCCESS;
     },
@@ -844,7 +848,7 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
       machine.pump();
       if (fd.handle.finished) return ERRNO.NOTCONN;
       const data = bytes(ptr, len).slice();
-      machine.post({ t: "ws_send", handle: fdNumber, data: kind === WS_TEXT ? decoder.decode(data) : data });
+      machine.post({ t: "ws_send", handle: fd.handle.id, data: kind === WS_TEXT ? decoder.decode(data) : data });
       return ERRNO.SUCCESS;
     },
     ws_recv(fdNumber: number, bufPtr: number, bufLen: number, outPtr: number, flags: number) {
@@ -866,7 +870,7 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
     ws_close(fdNumber: number, code: number, reasonPtr: number, reasonLen: number) {
       const fd = netFd(fdNumber, "ws");
       if (typeof fd === "number") return fd;
-      machine.post({ t: "ws_close", handle: fdNumber, code, reason: readString(reasonPtr, reasonLen) });
+      machine.post({ t: "ws_close", handle: fd.handle.id, code, reason: readString(reasonPtr, reasonLen) });
       return ERRNO.SUCCESS;
     },
 
@@ -879,12 +883,12 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
         const colon = line.indexOf(":");
         if (colon > 0) headers.push([line.slice(0, colon).trim(), line.slice(colon + 1).trim()]);
       }
-      const handle: HttpHandle = { kind: "http", head: null, chunks: [], ended: false, error: null };
+      const handle: HttpHandle = { kind: "http", id: netId(), head: null, chunks: [], ended: false, error: null };
       const fdNumber = allocFd({ kind: "http", flags: 0, handle, headTaken: false });
-      machine.net.set(fdNumber, handle);
+      machine.net.set(handle.id, handle);
       machine.post({
         t: "http_open",
-        handle: fdNumber,
+        handle: handle.id,
         method: readString(methodPtr, methodLen) || "GET",
         url: readString(urlPtr, urlLen),
         headers,
@@ -924,12 +928,12 @@ export function createWasi({ args, env, machine, vfs, onFsChange, processes }: W
       }
       const edge = (flags & TCP_EDGE) !== 0;
       const handle: TcpHandle = {
-        kind: "tcp", state: "connecting", errno: 0, error: "", chunks: [], buffered: 0, eof: false,
+        kind: "tcp", id: netId(), state: "connecting", errno: 0, error: "", chunks: [], buffered: 0, eof: false,
         sent: 0, acked: 0, writeShut: false, edge, readEdge: false, writeEdge: true,
       };
       const fdNumber = allocFd({ kind: "tcp", flags: 0, handle });
-      machine.net.set(fdNumber, handle);
-      machine.post({ t: "tcp_open", handle: fdNumber, host, port });
+      machine.net.set(handle.id, handle);
+      machine.post({ t: "tcp_open", handle: handle.id, host, port });
       view().setUint32(fdPtr, fdNumber, true);
       return ERRNO.SUCCESS;
     },

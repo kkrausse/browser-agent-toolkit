@@ -252,7 +252,7 @@ const tcpResult = await page.evaluate(async () => {
   try { return JSON.parse(await window.wasmTerm.readFile("/home/user/tcp-result.json")); } catch (error) { return { failed: -1, checks: [], error: String(error), tail: window.wasmTerm.screen().slice(-12) }; }
 });
 for (const item of tcpResult.checks) check(`tcp: ${item.name}`, item.ok, item.detail);
-check("tcp: the guest's checks all ran and passed", tcpResult.failed === 0 && tcpResult.checks.length >= 14, tcpResult.error ?? tcpResult.tail);
+check("tcp: the guest's checks all ran and passed", tcpResult.failed === 0 && tcpResult.checks.length >= 15, tcpResult.error ?? tcpResult.tail);
 // The relay itself, from the page: another site's WebSocket is refused before any connection is made.
 const tcpPlain = await page.evaluate(async () => (await fetch("/proxy/tcp?host=example.com&port=80")).status);
 check("tcp relay: a plain request for a host outside the allowlist is 403", tcpPlain === 403, tcpPlain);

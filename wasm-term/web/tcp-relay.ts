@@ -45,6 +45,8 @@ const WINDOW = 256 * 1024;
 
 export interface TcpTunnel {
   kind: "tcp";
+  /** For trace lines. */
+  id?: number;
   /** As the program named it. */
   host: string;
   port: number;
@@ -129,6 +131,12 @@ export function createTcpRelay(options: TcpRelayOptions) {
   const capturing = process.env.TCP_RELAY_CAPTURE === "1";
   const captures: { host: string; port: number; up: Uint8Array[]; down: Uint8Array[] }[] = [];
   let open = 0;
+  /** Debugging (TCP_RELAY_TRACE=1): one line per frame, sizes and control messages only. */
+  const tracing = process.env.TCP_RELAY_TRACE === "1";
+  let serial = 0;
+  const trace = (tunnel: TcpTunnel, what: string) => {
+    if (tracing) console.log(`tcp#${tunnel.id} ${performance.now().toFixed(1)} ${what} (unread ${tunnel.unread}, unwritten ${tunnel.unwritten})`);
+  };
 
   // ---- test endpoints (the `tcp` guest, web/verify) ---------------------------
   // On loopback, on ports the system picks; reachable only by name through the allowlist below.
@@ -234,6 +242,8 @@ export function createTcpRelay(options: TcpRelayOptions) {
       if (tunnel.closed) return;
       tunnel.outcome = "open";
       touch();
+      tunnel.id = ++serial;
+      trace(tunnel, `open ${tunnel.host}:${tunnel.port}`);
       ws.send(JSON.stringify({ t: "open" }));
     });
     socket.on("data", (chunk: Buffer) => {
@@ -242,11 +252,12 @@ export function createTcpRelay(options: TcpRelayOptions) {
       tunnel.down += chunk.length;
       tunnel.unread += chunk.length;
       tunnel.capture?.down.push(new Uint8Array(chunk));
-      ws.send(chunk);
+      trace(tunnel, `down ${chunk.length} -> send ${ws.send(chunk)}`);
       if (tunnel.unread >= WINDOW) socket.pause();
       if (tunnel.up + tunnel.down > maxBytes) finish(ws, tunnel, "byte limit", { code: "limit", message: "the connection reached the relay's byte limit" });
     });
     socket.on("end", () => {
+      trace(tunnel, "peer end");
       if (!tunnel.closed) ws.send(JSON.stringify({ t: "end" }));
     });
     socket.on("error", (error: NodeJS.ErrnoException) => {
@@ -315,6 +326,7 @@ export function createTcpRelay(options: TcpRelayOptions) {
       if (typeof message === "string") {
         let control: { t?: string; bytes?: number };
         try { control = JSON.parse(message); } catch { return; }
+        trace(tunnel, `page ${message}`);
         if (control.t === "ack" && Number.isFinite(control.bytes)) {
           tunnel.unread = Math.max(0, tunnel.unread - Number(control.bytes));
           if (tunnel.unread < WINDOW) tunnel.socket?.resume();
@@ -332,9 +344,11 @@ export function createTcpRelay(options: TcpRelayOptions) {
       tunnel.unwritten += chunk.length;
       if (tunnel.unwritten > 4 * WINDOW) return finish(ws, tunnel, "protocol error", { code: "reset", message: "more data than the window allows" });
       tunnel.capture?.up.push(chunk.slice());
+      trace(tunnel, `up ${chunk.length}`);
       socket.write(chunk, error => {
         if (error || tunnel.closed) return;
         tunnel.unwritten -= chunk.length;
+        trace(tunnel, `written ${chunk.length}`);
         ws.send(JSON.stringify({ t: "ack", bytes: chunk.length }));
       });
     },

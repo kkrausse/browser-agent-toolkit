@@ -1052,6 +1052,8 @@ const server = Bun.serve<ResponsesSocket>({
   hostname: HOST,
   idleTimeout: 120,
   websocket: {
+    // codex offers permessage-deflate for the Responses WebSocket; accept it, as the real endpoint may.
+    perMessageDeflate: true,
     message(ws, message) {
       const raw = typeof message === "string" ? message : new TextDecoder().decode(message);
       ws.data.queue = ws.data.queue.then(() => responsesSocketMessage(ws, raw)).catch((err) => log(`!! websocket request failed: ${err}`));
