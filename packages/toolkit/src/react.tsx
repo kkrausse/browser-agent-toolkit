@@ -16,24 +16,34 @@ export interface UseEditor {
   snapshot: EditorSnapshot;
   /** Close and open again. */
   retry(): void;
+  /** Close, run `between` once the workspace is released (`resetWorkspace`, say), then open
+   * again with the options of that moment. Resolves like `openEditor` (booted, programs
+   * starting; `editor.ready` is the rest) and rejects with what failed the open, `between`
+   * included, or when another reopen or the unmount came first. */
+  reopen(between?: () => Promise<void>): Promise<Editor>;
 }
 
 /** Opens the editor on mount and closes it on unmount. `options` are read once per open. */
-export function useEditor(options: Pick<OpenEditorOptions, 'base' | 'boot' | 'onEvent'> = {}): UseEditor {
+export function useEditor(options: Pick<OpenEditorOptions, 'base' | 'boot' | 'onEvent' | 'initialWorkspace' | 'chat'> = {}): UseEditor {
   const [attempt, setAttempt] = useState(0);
   const [editor, setEditor] = useState<Editor>();
   const [snapshot, setSnapshot] = useState(opening);
   const current = useRef(options); current.current = options;
+  const next = useRef<{ between?: () => Promise<void>; resolve(editor: Editor): void; reject(error: unknown): void }>(undefined);
   useEffect(() => {
     const abort = new AbortController();
     setEditor(undefined); setSnapshot(opening);
     const previous = lastClose;
     let closed!: () => void;
     lastClose = new Promise<void>(resolve => { closed = resolve; });
+    const request = next.current;
+    next.current = undefined;
     void (async () => {
       await previous;
-      if (abort.signal.aborted) return closed();
+      if (abort.signal.aborted) { request?.reject(Error('The editor was closed')); return closed(); }
       try {
+        await request?.between?.();
+        if (abort.signal.aborted) { request?.reject(Error('The editor was closed')); return closed(); }
         const opened = await openEditor({
           ...current.current, signal: abort.signal,
           onEvent(event) {
@@ -41,13 +51,15 @@ export function useEditor(options: Pick<OpenEditorOptions, 'base' | 'boot' | 'on
             current.current.onEvent?.(event);
           },
         });
-        if (abort.signal.aborted) await opened.close().catch(() => {});
+        if (abort.signal.aborted) { request?.reject(Error('The editor was closed')); await opened.close().catch(() => {}); }
         else {
           setEditor(opened);
+          request?.resolve(opened);
           abort.signal.addEventListener('abort', () => void opened.close().catch(() => {}).finally(closed), { once: true });
           return;
         }
       } catch (error) {
+        request?.reject(error);
         if (!abort.signal.aborted) setSnapshot(value => value.status === 'failed' ? value : { ...value, status: 'failed', message: 'The editor could not open.', error: error instanceof Error ? error.message : String(error) });
       }
       closed();
@@ -56,7 +68,12 @@ export function useEditor(options: Pick<OpenEditorOptions, 'base' | 'boot' | 'on
     window.addEventListener('pagehide', leave);
     return () => { window.removeEventListener('pagehide', leave); abort.abort(); };
   }, [attempt]);
-  return { editor, snapshot, retry: () => setAttempt(value => value + 1) };
+  const reopen = (between?: () => Promise<void>) => new Promise<Editor>((resolve, reject) => {
+    next.current?.reject(Error('Superseded by another reopen'));
+    next.current = { between, resolve, reject };
+    setAttempt(value => value + 1);
+  });
+  return { editor, snapshot, retry: () => void reopen().catch(() => {}), reopen };
 }
 
 export const useEditorSnapshot = (editor: Editor) => useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);

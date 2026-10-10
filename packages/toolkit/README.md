@@ -42,8 +42,17 @@ stale (paths that no longer exist are skipped):
   The file bodies a start reads are laid out first in the image, so a visitor's first open
   starts when the head of the image has arrived and the rest downloads in the background.
 
-Also: `preview` (changes to the dev-server launch, default Vite on port 5173), `files`
-(extra project files), `manifestOnly` (no image, for the development fake).
+Also: `preview` (changes to the dev-server launch, default Vite on port 5173;
+`defaultPreview` is exported for adding arguments), `files` (extra project files),
+`refresh` (project paths that stay the app's: rewritten at every open when they differ, for
+injected configuration), `modelCatalog` (written into the manifest), `workDir` (where
+`bat-prepare` keeps the installed dependency tree; default `<outDir>.work`), `policy`,
+`manifestOnly` (no image, for the development fake).
+
+Where the tool and its data come from: `$BAT_PREPARE`, then the package
+`@kkrausse/browser-agent-prepare-<platform>-<arch>` installed in the app, then a cargo
+`target` directory above; the guest policy, its shim packages and the OpenCode server from
+`prepare/` of a released package (see "Releasing" below), else from the repository.
 
 ## `./server` (serve time)
 
@@ -62,6 +71,10 @@ Bun.serve({ async fetch(request) {
   return response
 } })
 ```
+
+`previewHeaders` are response headers for everything the preview frame is served (a
+`Connection-Allowlist`, a CSP); they are bound into the service worker script as the handler
+delivers it, because those responses never pass the app's server.
 
 The handler serves the prepared directory and proxies model requests; the provider key stays
 on the server. Who may edit is the app's decision, made before `editor.fetch`.
@@ -90,6 +103,29 @@ starts no program, so it is safe on a page whose visitor never opens the editor.
 
 `resetWorkspace({ base? })` deletes this browser's copy of the workspace (edits, sessions,
 caches; not the dependency image); it rejects while the editor is open in any tab.
+
+`openEditor({ initialWorkspace, chat })`: `initialWorkspace({ prepared, signal })` is asked
+only when this browser holds no workspace (a first open, or after `resetWorkspace`) and may
+resolve with `{ files, sessions?, selectedSession? }` to start from a saved workspace
+instead of the prepared source; `chat: { startNewSession: true }` opens on a fresh chat.
+
+Saving and restoring a workspace is the app's feature (storage, naming, UI); the two ends
+are here:
+
+```ts
+import { captureSource, unpackSource, resetWorkspace } from '@kkrausse/browser-agent-toolkit/browser'
+
+const archive = await captureSource(editor.fs)            // { bytes: ZIP, files, uncompressedBytes }
+const sessions = await editor.sessions.export()           // resumable OpenCode sessions
+// … later, with the editor closed (useEditor().reopen(() => resetWorkspace()) does both):
+await resetWorkspace()
+await openEditor({ initialWorkspace: () => ({ files: unpackSource(bytes), sessions, selectedSession }) })
+```
+
+`captureSource` leaves out `managedNames` (`.git`, `.server`, `.browser-editor-cache`,
+`node_modules`) and `exclude`, honours `.gitignore` files, and enforces limits (25,000
+files, 100 MiB); `unpackSource` rejects an archive with escaping paths or managed state
+before anything is written.
 
 `Editor` also has `fs`, `preview` and `agent` (`{ endpoint, ready, stop }`), `restartPreview()`,
 `restartAgent()`, `setHostPaths()`, `flush()`, `sessions.export()` / `sessions.import()`,
@@ -144,6 +180,22 @@ program scripts (`programs`) the runtime loads before the entry runs.
 (`createFakeHost`) back the same interface with native processes behind a dev server, for
 working on the UI without the runtime. It is not a sandbox: loopback and development only.
 See `examples/todo-app` (`bun run editor:fake`).
+
+## Releasing
+
+`bun scripts/release.ts` (repository root; `--skip-setup` when everything is built,
+`--allow-dirty` for a trial) writes two tarballs to `.release/<version>-<commit>/`, for an
+app that vendors the toolkit instead of using a checkout:
+
+- `kkrausse-browser-agent-toolkit-<version>-<commit>.tgz`: this package with the browser
+  runtime in `dist/runtime/` and `prepare/` (guest policy, shim packages, OpenCode server);
+- `kkrausse-browser-agent-prepare-<platform>-<arch>-<version>-<commit>.tgz`: the
+  `bat-prepare` executable for the machine the script ran on.
+
+The app depends on both by `file:` path. Prepare then needs only `bun` and `node` 24 on
+`PATH` (bubblewrap when present), no Rust and no download but the app's own packages. Each
+tarball has a `BUILD-PROVENANCE.json`. On another platform run the script there, or build
+`bat-prepare` and set `BAT_PREPARE`.
 
 ## Limits
 

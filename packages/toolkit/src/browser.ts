@@ -8,6 +8,8 @@ import { exportSessions, importSessions, type SessionBundle } from './sessions';
 export type { BootRuntime, RuntimeHost, RuntimeFs, RuntimeEndpoint, RuntimeProcess, Launch } from './runtime-host';
 export type { EditorManifest, LaunchDescription } from './manifest';
 export type { SessionBundle } from './sessions';
+export { captureSource, unpackSource, managedNames, type CaptureSourceOptions, type SourceArchive, type SourceLimits } from './source-archive';
+export { workspaceRoot } from './manifest';
 export { createChatController, canSend } from './chat/controller';
 export type * from './chat/types';
 
@@ -69,9 +71,28 @@ export interface Editor {
   snapshot(): EditorSnapshot;
 }
 
+/** What a workspace starts from instead of the prepared source (`OpenEditorOptions.initialWorkspace`). */
+export interface InitialWorkspace {
+  /** Project files by path below the workspace (`/src/home.tsx`), e.g. from `unpackSource`.
+   * They are the whole source: prepared files that are not among them are not installed. */
+  files: Record<string, SourceFile | Uint8Array>;
+  /** Native sessions (`editor.sessions.export()`) imported before the chat attaches. */
+  sessions?: SessionBundle[];
+  /** The saved id of the session the chat opens on. Default: the chat's usual choice. */
+  selectedSession?: string;
+}
+
 export interface OpenEditorOptions {
   /** Where the server handler is mounted. Default `/editor/`. */
   base?: string;
+  /** Called only when this browser holds no workspace yet (a first open, or the first open
+   * after `resetWorkspace`), before any source is written: resolve with the source and
+   * sessions to start from (a saved workspace), or with nothing for the prepared source.
+   * `prepared` is the prepared source, for files the app wants to take from it. A rejection
+   * fails the open and leaves the workspace empty, so the next open asks again. */
+  initialWorkspace?(context: { prepared: Readonly<Record<string, SourceFile>>; signal?: AbortSignal }): Promise<InitialWorkspace | undefined | void> | InitialWorkspace | undefined | void;
+  /** `startNewSession`: open on a new chat session instead of the most recent one. */
+  chat?: { startNewSession?: boolean };
   /** Every step, log line and state change, from the first moment of the open. */
   onEvent?(event: EditorEvent): void;
   /** Aborting closes the editor. */
@@ -100,22 +121,48 @@ export async function startupOrder(preview: { ready: Promise<void> }, startAgent
 /** Write the prepared project files below `/workspace`. Existing files are kept: edits made
  * in this browser win over newly prepared source. A workspace that was installed once owns
  * its whole tree, so files the agent removed are not resurrected. */
-export async function installSource(fs: RuntimeFs, source: EditorManifest['project']): Promise<{ installed: number; preserved: boolean }> {
+export async function installSource(
+  fs: RuntimeFs, source: EditorManifest['project'],
+  /** Asked once the workspace is known to be new: what to install instead of `source`. */
+  initial?: () => Promise<InitialWorkspace | undefined | void>,
+): Promise<{ installed: number; preserved: boolean; initial?: InitialWorkspace }> {
   if (await fs.stat(sourceMarker).then(() => true, () => false)) return { installed: 0, preserved: true };
+  const supplied = await initial?.() || undefined;
   let installed = 0;
   const made = new Set<string>();
-  for (const [path, file] of Object.entries(source).sort(([a], [b]) => a < b ? -1 : 1)) {
+  for (const [path, file] of Object.entries(supplied?.files ?? source).sort(([a], [b]) => a < b ? -1 : 1)) {
     if (!validPath(path)) throw Error(`Invalid source path: ${path}`);
     const target = workspaceRoot + path;
-    if (await fs.stat(target).then(() => true, () => false)) continue;
+    // Prepared source never replaces a file that is there; a supplied workspace is the
+    // whole truth, also over what an interrupted earlier attempt left behind.
+    if (!supplied && await fs.stat(target).then(() => true, () => false)) continue;
     const parent = target.slice(0, target.lastIndexOf('/'));
     if (!made.has(parent)) { await fs.mkdir(parent); made.add(parent); }
-    await fs.writeFile(target, decodeSourceFile(file));
+    await fs.writeFile(target, file instanceof Uint8Array ? file : decodeSourceFile(file));
     installed++;
   }
   await fs.mkdir(`${workspaceRoot}/.server`);
-  await fs.writeFile(sourceMarker, new Date().toISOString());
-  return { installed, preserved: false };
+  // With sessions still to import the workspace is not complete: the marker is written
+  // after the import (see `openEditor`), so an interrupted start asks for it again.
+  if (!supplied?.sessions?.length) await fs.writeFile(sourceMarker, new Date().toISOString());
+  return { installed, preserved: false, initial: supplied };
+}
+
+/** Prepared files the app owns (`manifest.refresh`, from `prepare({ refresh })`): written
+ * again at every open when they differ, unlike source, which is the visitor's once installed. */
+export async function refreshOwnedFiles(fs: RuntimeFs, manifest: EditorManifest): Promise<number> {
+  let written = 0;
+  for (const path of manifest.refresh ?? []) {
+    const file = manifest.project[path];
+    if (file === undefined || !validPath(path)) continue;
+    const want = decodeSourceFile(file), target = workspaceRoot + path;
+    const have = await fs.readFile(target).catch(() => undefined);
+    if (have && have.length === want.length && have.every((byte, index) => byte === want[index])) continue;
+    await fs.mkdir(target.slice(0, target.lastIndexOf('/')));
+    await fs.writeFile(target, want);
+    written++;
+  }
+  return written;
 }
 
 const derivedMarker = `${workspaceRoot}/.server/derived-installed`;
@@ -254,6 +301,7 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
   let closing: Promise<void> | undefined;
 
   let manifest: EditorManifest;
+  let initial: InitialWorkspace | undefined;
   try {
     const manifestUrl = new URL(base + 'manifest.json', location.href).href;
     const response = await fetch(manifestUrl, { signal: options.signal, cache: 'no-store' });
@@ -270,9 +318,13 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
     }
     mark('boot');
     publish({ message: 'Installing project source…' });
-    const source = await installSource(runtime.fs, manifest.project);
+    const source = await installSource(runtime.fs, manifest.project,
+      options.initialWorkspace && (async () => options.initialWorkspace!({ prepared: manifest.project, signal: options.signal })));
+    initial = source.initial;
     timed('source.project');
-    log('editor', source.preserved ? 'Kept the workspace already in this browser' : `Installed ${source.installed} source files`);
+    log('editor', source.preserved ? 'Kept the workspace already in this browser' : `Installed ${source.installed} source files${initial ? ' of the supplied workspace' : ''}`);
+    const refreshed = await refreshOwnedFiles(runtime.fs, manifest);
+    if (refreshed) log('editor', `Refreshed ${refreshed} app-owned files`);
     const derived = await installDerived(runtime.fs, manifest, manifestUrl, options.signal);
     timed('source.derived');
     if (derived.installed) log('editor', `Installed ${derived.installed} prepared cache files`);
@@ -392,21 +444,39 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
   let adoptFirst!: (start: Promise<void>) => void;
   let agentUp = new Promise<void>(resolve => { adoptFirst = resolve; });
   void agentUp.catch(() => {});
-  const startAgent = () => {
-    const start = agent.start();
-    agentUp = start.ready;
-    adoptFirst(start.ready);
-    return start;
-  };
-  /** The agent as its API clients reach it: authorized, and not before it is verified. */
-  const agentFetch = async (path: string, init: RequestInit = {}) => {
-    await agentUp;
+  const authorized = (path: string, init: RequestInit = {}) => {
     const headers = new Headers(init.headers);
     headers.set('authorization', authorization);
     return agent.endpoint.fetch(path, { ...init, headers });
   };
+  // A supplied workspace's sessions go in once, on the first verified start, before any API
+  // client (the chat) sees the agent; then the workspace is complete and gets its marker.
+  let pendingSessions = initial?.sessions?.length ? initial.sessions : undefined;
+  let selectedSession: string | undefined;
+  const startAgent = () => {
+    const start = agent.start();
+    const ready = !pendingSessions ? start.ready : start.ready.then(async () => {
+      const bundles = pendingSessions;
+      if (!bundles) return;
+      const ids = await importSessions({ fetch: authorized }, openCode.directory, bundles);
+      pendingSessions = undefined;
+      if (initial?.selectedSession) selectedSession = ids.get(initial.selectedSession);
+      await host.fs.writeFile(sourceMarker, new Date().toISOString());
+      log('editor', `Imported ${bundles.length} sessions of the supplied workspace`);
+    });
+    void ready.catch(() => {});
+    agentUp = ready;
+    adoptFirst(ready);
+    return { ...start, ready };
+  };
+  /** The agent as its API clients reach it: authorized, and not before it is verified. */
+  const agentFetch = async (path: string, init: RequestInit = {}) => {
+    await agentUp;
+    return authorized(path, init);
+  };
   const chat = createChatController({
     endpoint: { fetch: agentFetch }, directory: openCode.directory, autoCreateSession: true,
+    startNewSession: options.chat?.startNewSession && !initial?.selectedSession,
     // Counted from now, and the agent has not been started yet.
     handshakeTimeoutMs: 120_000,
     onDiagnostic: (event, data) => emit({ type: 'chat', event, data }),
@@ -416,6 +486,7 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
     agentStarted = true;
     await startAgent().ready;
     await chat.ready;
+    if (selectedSession && chat.getSnapshot().sessionID !== selectedSession) await chat.selectSession(selectedSession);
     mark('chat.ready');
   };
   const order = preview.start();

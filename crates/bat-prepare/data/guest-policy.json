@@ -24,7 +24,7 @@
     "packages": [],
     "nativePackages": true,
     "extensions": [".node"],
-    "paths": ["**/@kkrausse/browser-agent-toolkit/dist/runtime/**"],
+    "paths": ["**/@kkrausse/browser-agent-toolkit/dist/runtime/**", "**/@kkrausse/browser-agent-toolkit/prepare/**", "**/@kkrausse/browser-agent-prepare-*/bat-prepare"],
     "duplicatesOfApplication": true
   },
   "application": {

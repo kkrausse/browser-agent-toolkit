@@ -441,7 +441,12 @@ export function createChatController(options: ChatOptions): ChatController {
       publish({ sessions, models, defaultModel, connection: "connected" });
       if (selection !== selectionAtStart) return;
       const id = state.sessionID ?? sessions[0]?.id;
-      if (options.startNewSession && !state.sessionID) await createSession();
+      if (options.startNewSession && !state.sessionID) {
+        // The chat an earlier open created and nobody wrote in is as new as a new one:
+        // without this every open leaves one more empty session in the list.
+        if (sessions[0]) await selectSession(sessions[0].id);
+        if (!sessions[0] || state.messages.length || state.hasOlder) await createSession();
+      }
       else if (id) await selectSession(id);
       else if (options.autoCreateSession) await createSession();
       else publish({ loading: false, execution: "idle" });

@@ -3,7 +3,7 @@ import { buildUIStyles } from './scripts/build-ui-styles';
 
 await $`rm -rf dist`;
 await $`bunx tsc`;
-const external = ['react', 'react/jsx-runtime', 'react-dom', 'react-dom/*', '@base-ui/react/*', 'lucide-react', 'marked', 'clsx', 'class-variance-authority', 'tailwind-merge'];
+const external = ['react', 'react/jsx-runtime', 'react-dom', 'react-dom/*', '@base-ui/react/*', 'lucide-react', 'marked', 'clsx', 'class-variance-authority', 'tailwind-merge', 'fflate', 'ignore'];
 // Browser entries share chunks, so one page never holds two copies of the chat code.
 for (const [target, entrypoints] of [
   ['browser', ['src/browser.ts', 'src/react.tsx', 'src/fake/browser.ts']],

@@ -33,7 +33,8 @@ export interface ChatOptions {
   directory: string;
   sessionID?: string;
   autoCreateSession?: boolean;
-  /** Create a fresh session at initial connection rather than hydrating the latest history. */
+  /** Open on a fresh session at initial connection rather than on the latest history (the
+   * latest session itself when it is still empty). */
   startNewSession?: boolean;
   pageSize?: number;
   handshakeTimeoutMs?: number;

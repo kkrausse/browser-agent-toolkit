@@ -785,3 +785,63 @@ Numbers: `docs/experiments/2026-10-10-first-open-and-shell.md`.
   Seen when the change above was deployed; left as it is.
 - **The harness defaults to the setup's outputs** (`examples/todo-app/.editor/prepared`,
   `target/`), then the earlier build directories.
+
+## 2026-10-10 first consumer outside the repository (IRS tools)
+
+What the IRS tools migration needed that the TODO example never asked for. Each is a general
+hook; nothing names that app.
+
+- **Release shape: two npm tarballs** (`scripts/release.ts`). The toolkit package carries
+  `dist/` with the browser runtime, plus `prepare/`: the guest policy with `dir:` paths
+  rewritten to the shim packages beside it, and the pinned OpenCode server. The
+  `bat-prepare` executable is its own package per platform,
+  `@kkrausse/browser-agent-prepare-<platform>-<arch>`, which `prepare()` resolves from the
+  app; no `os`/`cpu` fields, so installing the wrong one is harmless and the error names
+  what to build. Measured: 8.1 MB and 2.2 MB (the stripped executable is 6 MB). Both are
+  pruned from the guest image by the policy (`prune.paths`); pruning the whole binary
+  package broke prepare's "required dependency is missing" check, so only the executable
+  goes. The executable links glibc dynamically (built on Ubuntu 26.04): an older host needs
+  its own build. Only linux-x64 has been built.
+- **A tarball dependency is a lockfile package**, so re-pinning the toolkit gives the large
+  dependency image a new identity (435 MB, 52.7 MB compressed for IRS tools) although the
+  guest uses one file of it (`dist/vite.js`). Not addressed; treating `file:` tarballs like
+  the non-lockfile layer would fix it.
+- **`--configLoader native` means Node's rules for the app's Vite config**: an extensionless
+  relative import (`./src/config`) fails in prepare's native optimizer run. The app writes
+  the extension. The launch was not changed.
+- **`prepare({ refresh })`**: project paths that stay the app's and are rewritten at every
+  open when they differ. Source is the visitor's once installed, which is wrong for
+  configuration the app injects (IRS: public config read by its Vite config). Written by
+  `prepare.ts` into the manifest, like the start-up programs; `bat-prepare` does not know.
+- **`prepare({ modelCatalog })`** writes the catalog into the manifest, for an app that
+  fetches it at prepare time; the handler's serve-time catalog still replaces it.
+  `prepare({ workDir })` passes `--work`: the default `<outDir>.work` put 420 MB into a
+  release directory.
+- **Saved workspaces are the app's; the toolkit has the two ends.** `captureSource(fs)`
+  (ZIP of the workspace source: managed directories out, ignore files honoured, limits) and
+  `unpackSource(bytes)` (validated before anything is written), and
+  `openEditor({ initialWorkspace })`, asked only when the browser holds no workspace: files
+  to install instead of the prepared source, sessions imported before the chat attaches,
+  and the session to open on. Restore is close → `resetWorkspace()` → open
+  (`useEditor().reopen(between)`), not a replacement under running programs: measured in
+  IRS tools at 7.0–7.3 s for a whole switch (save the outgoing workspace, download, reset,
+  reopen; the reopen itself is 2.0–2.5 s), against about 11.5 s on the previous runtime.
+  The source marker is written after the session import, so an interrupted start asks
+  again. Dependencies added: `fflate`, `ignore`.
+- **`createEditorHandler({ previewHeaders })`**: response headers for everything the service
+  worker serves the preview frame, bound into `sw.js` as the handler delivers it (a global
+  the worker reads once). The frame's documents never pass the app's server, so a
+  `Connection-Allowlist` or CSP set there did not reach them. Bound at the authorized
+  script delivery rather than sent by the page, so neither the page nor the guest can
+  change it. A change reaches a browser with the worker's next update.
+- **`chat.startNewSession` reuses the latest session when it is empty.** Opening on a fresh
+  chat every time left one more empty session per open (eight after eight opens).
+- **The Vite plugin prebundles the toolkit's browser entries in a host dev server**
+  (`optimizeDeps.include`) instead of excluding the package: excluded, its CommonJS
+  dependencies (`ignore`, `use-sync-external-store/shim` under Base UI) reached the browser
+  unconverted and the editor chunk failed to import. The example never met this because it
+  serves a production build.
+- **Seen, not fixed**: IRS tools' preview listens after 1.3 s on a reopen (TODO: 0.43 s)
+  without a start-up module recording; `bench/startup/run.ts --record-modules` is written
+  for the example's page. Page screenshots through CDP timed out twice while a Base UI
+  select popup was open; the page itself stayed responsive.

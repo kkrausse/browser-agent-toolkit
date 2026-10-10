@@ -28,7 +28,10 @@ export function browserEditor(options: BrowserEditorOptions): any {
   return {
     name: 'browser-editor', enforce: 'pre' as const,
     config() {
-      if (!isGuest()) return { optimizeDeps: { exclude: ['@kkrausse/browser-agent-toolkit'] } };
+      // A dev server prebundles the browser entries in its first pass, together (they share
+      // the chat code) and with their CommonJS dependencies converted; found later, they
+      // would cost a second pass and a page reload when the editor is first opened.
+      if (!isGuest()) return { optimizeDeps: { include: ['@kkrausse/browser-agent-toolkit/browser', '@kkrausse/browser-agent-toolkit/react'] } };
       return {
         base: previewBase(),
         // Outside node_modules/.vite: that tree is the read-only image.

@@ -40,9 +40,12 @@ export interface EditorManifest {
    * below the workspace. Fetched and installed only when it differs from what the workspace
    * holds; the `owns` directories are removed first. */
   derived?: { file: string; bytes: number; sha256: string; owns: string[] } | null;
+  /** Paths in `project` that belong to the app, not to the visitor: written again at every
+   * open when they differ (`prepare({ refresh })`). */
+  refresh?: string[];
   /** Runtime module to import, relative to the manifest. Default `runtime/host.js`. */
   runtime?: { entry?: string };
-  /** Added by the server handler when it was given a catalog; never written by prepare. */
+  /** From `prepare({ modelCatalog })`, or replaced by the server handler when it was given a catalog. */
   modelCatalog?: ModelCatalog['models'];
   defaultModel?: string;
 }

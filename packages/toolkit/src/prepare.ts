@@ -2,9 +2,13 @@ import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs
 import { existsSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { parseModelCatalog, type ModelCatalog } from './model-catalog';
 import { defaultPreview, encodeSourceFile, workspaceRoot, type EditorManifest, type LaunchDescription, type SourceFile } from './manifest';
 
 export type { EditorManifest, LaunchDescription } from './manifest';
+export { defaultPreview } from './manifest';
+export { parseModelCatalog, type ModelCatalog, type CatalogModel } from './model-catalog';
 
 export interface PrepareOptions {
   /** The application directory (package.json + lockfile): its dependencies become the guest image. */
@@ -18,11 +22,31 @@ export interface PrepareOptions {
   preview?: Partial<LaunchDescription>;
   /** Extra project files: path below the workspace → local file. */
   files?: Record<string, string>;
-  /** Directory holding the pinned OpenCode `server.js` and tree-sitter wasm. Default: `$BAT_OPENCODE_DIR`. */
+  /** Project paths (below the workspace, as in `files` or `source`) that stay the app's:
+   * a workspace kept in a browser gets the newly prepared content at its next open, where
+   * every other project file is the visitor's once installed. For configuration the app
+   * injects, not for source the agent edits. */
+  refresh?: string[];
+  /** Public model catalog and default, written into the manifest: the editor then offers only
+   * these models. Never a credential. `createEditorHandler({ modelCatalog })` replaces it at
+   * serve time, when the catalog should change without a new preparation. */
+  modelCatalog?: ModelCatalog;
+  /** Scratch and cache directory of `bat-prepare` (the installed dependency tree, hundreds
+   * of megabytes). Default `<outDir>.work`; name one outside a directory that gets shipped. */
+  workDir?: string;
+  /** Directory holding the pinned OpenCode `server.js` and tree-sitter wasm. Default:
+   * `$BAT_OPENCODE_DIR`, then the copy a released package carries (`prepare/opencode`). */
   openCodeDir?: string;
-  /** The `bat-prepare` executable. Default: `$BAT_PREPARE`, then `release/bat-prepare` under `target` or `target-prepare`
-   * in an enclosing cargo workspace, then `bat-prepare` on PATH. */
+  /** The `bat-prepare` executable. Default: `$BAT_PREPARE`; then the released binary package
+   * for this machine, `@kkrausse/browser-agent-prepare-<platform>-<arch>` (resolved from the
+   * app, then from this package); then `release/bat-prepare` under `target` or
+   * `target-prepare` in an enclosing cargo workspace; then `bat-prepare` on PATH. */
   bin?: string;
+  /** Guest policy file (what replaces native packages in the guest, what is pruned, the
+   * launches). Default: the one a released package carries (`prepare/guest-policy.json`,
+   * with its shim packages beside it), else the one built into `bat-prepare`, whose shims
+   * are in the repository it was built from. */
+  policy?: string;
   /** Directory of built runtime assets (`host.js`, worker scripts, Wasm, `sw.js`), copied to
    * `<outDir>/runtime/` where the manifest's default `runtime/host.js` points. Default:
    * `$BAT_RUNTIME_DIR`, then `runtime/` beside this module (the published package), then
@@ -72,9 +96,21 @@ export async function readSource(appRoot: string, source: string[]): Promise<Rec
   return files;
 }
 
-function findBin(explicit?: string): string {
+/** `prepare/` of a released package (scripts/release.ts): the policy with its shim packages, and OpenCode. */
+const packaged = (name: string): string | undefined => {
+  const path = resolve(import.meta.dirname, '../prepare', name);
+  return existsSync(path) ? path : undefined;
+};
+
+export const preparePackage = `@kkrausse/browser-agent-prepare-${process.platform}-${process.arch}`;
+
+function findBin(explicit?: string, appRoot?: string): string {
   if (explicit) return explicit;
   if (process.env.BAT_PREPARE) return process.env.BAT_PREPARE;
+  for (const from of [appRoot, import.meta.dirname]) {
+    if (!from) continue;
+    try { return createRequire(join(from, 'package.json')).resolve(`${preparePackage}/bat-prepare`); } catch { /* not installed */ }
+  }
   for (let directory = import.meta.dirname; ; directory = resolve(directory, '..')) {
     for (const target of ['target', 'target-prepare']) {
       const candidate = join(directory, target, 'release/bat-prepare');
@@ -128,7 +164,7 @@ function run(command: string, args: string[]): Promise<void> {
   return new Promise((done, fail) => {
     // Its stdout is a JSON summary; progress and errors are on stderr.
     const child = spawn(command, args, { stdio: ['ignore', 'ignore', 'inherit'] });
-    child.on('error', error => fail(Error(`Could not run ${command}: ${error.message}. Build it with \`cargo build --release -p bat-prepare\` or set BAT_PREPARE.`)));
+    child.on('error', error => fail(Error(`Could not run ${command}: ${error.message}. No ${preparePackage} package is installed for this machine: build the tool from the toolkit repository (\`cargo build --release -p bat-prepare\`) and set BAT_PREPARE to it.`)));
     child.on('exit', code => code === 0 ? done() : fail(Error(`${command} exited with code ${code}`)));
   });
 }
@@ -156,21 +192,45 @@ export async function prepare(options: PrepareOptions): Promise<EditorManifest> 
       project,
     };
     await writeFile(manifestPath, JSON.stringify(manifest));
+    await addAppFields(manifestPath, options);
     return manifest;
   }
-  await run(findBin(options.bin), [
+  const bin = findBin(options.bin, appRoot);
+  const policy = options.policy ?? packaged('guest-policy.json');
+  const openCodeDir = options.openCodeDir ?? (process.env.BAT_OPENCODE_DIR ? undefined : packaged('opencode'));
+  await run(bin, [
     'app', appRoot, '-o', outDir,
+    ...(policy ? ['--policy', resolve(policy)] : []),
+    ...(options.workDir ? ['--work', resolve(options.workDir)] : []),
     ...options.source.flatMap(path => ['--source', path]),
     ...Object.entries(options.files ?? {}).flatMap(([guest, local]) => ['--file', `${guest}=${resolve(local)}`]),
     ...(options.preview ? ['--preview', JSON.stringify(options.preview)] : []),
-    ...(options.openCodeDir ? ['--opencode', resolve(options.openCodeDir)] : []),
+    ...(openCodeDir ? ['--opencode', resolve(openCodeDir)] : []),
     ...(options.startupOrder ? ['--order', resolve(options.startupOrder)] : []),
     ...(options.compressionLevel ? ['--zstd-level', String(options.compressionLevel)] : []),
   ]);
+  await addAppFields(manifestPath, options);
   await installRuntime(outDir, findRuntime(options.runtimeDir));
-  if (options.startupModules) await addStartupPrograms(findBin(options.bin), outDir, manifestPath, resolve(appRoot, options.startupModules));
+  if (options.startupModules) await addStartupPrograms(bin, outDir, manifestPath, resolve(appRoot, options.startupModules));
   await compressPrograms(outDir);
   return JSON.parse(await readFile(manifestPath, 'utf8'));
+}
+
+/** What `bat-prepare` does not know about: the app-owned paths and the model catalog. */
+async function addAppFields(manifestPath: string, options: PrepareOptions): Promise<void> {
+  if (!options.refresh?.length && !options.modelCatalog) return;
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as EditorManifest;
+  if (options.refresh?.length) {
+    manifest.refresh = options.refresh.map(path => '/' + path.replace(/^\//, ''));
+    const missing = manifest.refresh.find(path => !Object.hasOwn(manifest.project, path));
+    if (missing) throw Error(`prepare({ refresh }): ${missing} is not a project file`);
+  }
+  if (options.modelCatalog) {
+    const catalog = parseModelCatalog(options.modelCatalog);
+    manifest.modelCatalog = catalog.models;
+    manifest.defaultModel = catalog.defaultModel;
+  }
+  await writeFile(manifestPath, JSON.stringify(manifest));
 }
 
 function capture(command: string, args: string[]): Promise<{ code: number | null; stdout: string }> {

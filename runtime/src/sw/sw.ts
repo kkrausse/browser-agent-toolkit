@@ -17,6 +17,10 @@ const ISOLATION: [string, string][] = [
   // The preview is embedded by a cross-origin-isolated page.
   ['Cross-Origin-Embedder-Policy', 'require-corp'],
   ['Cross-Origin-Resource-Policy', 'same-origin'],
+  // The app's policy for what the preview is served (a Connection-Allowlist, a CSP): the
+  // server handler binds it into this script as it delivers it (`previewHeaders`), so it
+  // comes from the app's server and not from the page or the guest.
+  ...(((self as unknown as { __batPreviewHeaders?: unknown }).__batPreviewHeaders as [string, string][] | undefined) ?? []),
 ]
 const SHIM = `<script>(${previewShim.toString()})()</script>`
 const route = /^\/preview\/(\d+)(\/.*)?$/

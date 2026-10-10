@@ -47,6 +47,12 @@ export interface EditorHandlerOptions {
    * Vite plugin emits, those chunks are served only through this handler (`matches` is true
    * for them), so the app's authorization covers them. */
   clientDir?: string;
+  /** Response headers for everything the preview frame is served by the runtime's service
+   * worker (documents and assets of the guest dev server), e.g. a `Connection-Allowlist` or
+   * a Content-Security-Policy. They are bound into the worker script as this handler delivers
+   * it, behind the app's authorization: nothing the guest or the page says can change them.
+   * A change reaches a browser when it next updates the worker. */
+  previewHeaders?: Record<string, string>;
   /** Model proxy activity: ids, status and timing only, never headers or bodies. Must not throw. */
   onEvent?(event: EditorServerEvent): void;
 }
@@ -78,6 +84,10 @@ export function createEditorHandler(options: EditorHandlerOptions): EditorHandle
   // Fail at construction, not on a browser's first manifest request.
   const modelCatalog = options.modelCatalog && parseModelCatalog(options.modelCatalog);
   const event = (value: EditorServerEvent) => { try { options.onEvent?.(value); } catch { /* observer failure */ } };
+  for (const [name, value] of Object.entries(options.previewHeaders ?? {})) new Headers([[name, value]]);
+  // The worker reads this global when it starts (runtime/src/sw/sw.ts).
+  const previewHeaderScript = options.previewHeaders && Object.keys(options.previewHeaders).length
+    ? `self.__batPreviewHeaders=${JSON.stringify(Object.entries(options.previewHeaders))};\n` : '';
   let privateAssets: Promise<string[]> | undefined;
   const isPrivateAsset = async (path: string) => !!options.clientDir
     && (await (privateAssets ??= Bun.file(resolve(options.clientDir, 'editor-assets.json')).json().catch(() => []))).includes(path);
@@ -177,6 +187,11 @@ export function createEditorHandler(options: EditorHandlerOptions): EditorHandle
         const body = modelCatalog ? { ...manifest, modelCatalog: modelCatalog.models, defaultModel: modelCatalog.defaultModel } : manifest;
         const response = Response.json(body, { headers: { ...editorHeaders, 'Cache-Control': 'no-store' } });
         return request.method === 'HEAD' ? new Response(null, { headers: response.headers }) : response;
+      }
+      if (previewHeaderScript && relative === 'runtime/sw.js') {
+        const source = Bun.file(target);
+        if (!await source.exists()) return plain('Not found', 404);
+        return new Response(request.method === 'HEAD' ? null : previewHeaderScript + await source.text(), { headers: { ...editorHeaders, 'Content-Type': 'text/javascript;charset=utf-8', 'Cache-Control': 'no-cache' } });
       }
       return file(request, target, contentAddressed(relative) ? 'public, max-age=31536000, immutable' : 'no-cache');
     },
