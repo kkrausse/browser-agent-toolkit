@@ -3,7 +3,7 @@
 // own elements. Bundle this file for the browser and serve next to the bundle,
 // under `assets`:
 //
-//   ghostty-vt.wasm     @random/ghostty-web's vendor/ghostty-vt.wasm
+//   ghostty-vt.wasm     @random/ghostty-web's vendor/ghostty-vt.wasm (third_party/ghostty-web)
 //   kernel.wasm         kernel/target/wasm32-unknown-unknown/release/wasm_term_kernel.wasm
 //   js-worker.js        host/js-worker.ts, bundled (target browser, format esm)
 //   <guest>/guest.js    the guest's built directory (opencode: ports/opencode/dist/site)

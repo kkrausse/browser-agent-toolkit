@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@random/ghostty-web": "file:../../ghostty-web"
+    "@random/ghostty-web": "file:../third_party/ghostty-web"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",

@@ -8,7 +8,10 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@random/ghostty-web": ["./node_modules/@random/ghostty-web/src/index.ts"]
+    }
   },
   "include": ["*.ts", "../host/**/*.ts"]
 }

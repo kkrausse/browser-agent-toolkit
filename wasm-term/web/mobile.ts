@@ -1,8 +1,9 @@
 // Touch devices: no hardware keyboard, a viewport the on-screen keyboard
 // shrinks, and fingers instead of a wheel. This is the minimum that makes a
-// TUI operable from a phone, done the way the sibling bun-web-terminal does it
+// TUI operable from a phone, done the way bun-web-terminal does it
 // (the same ghostty-web package on a phone, in daily use). Its touch gestures,
-// viewport rule and wheel forwarding are imported as they are; only the keys
+// viewport rule and wheel forwarding are imported as they are (the three files
+// in ../third_party/bun-web-terminal, a snapshot); only the keys
 // row is local, because its one (installMobileControls) is tied to that app's
 // connection, dictation and file upload.
 //
@@ -15,9 +16,9 @@
 //     not open the keyboard (it would on every click in a TUI): the first key does.
 
 import type { Terminal } from "@random/ghostty-web";
-import { forwardWheelSteps } from "../../bun-web-terminal/src/scroll";
-import { installTerminalTouchControls } from "../../bun-web-terminal/src/touch";
-import { terminalViewport } from "../../bun-web-terminal/src/viewport";
+import { forwardWheelSteps } from "../third_party/bun-web-terminal/src/scroll";
+import { installTerminalTouchControls } from "../third_party/bun-web-terminal/src/touch";
+import { terminalViewport } from "../third_party/bun-web-terminal/src/viewport";
 
 export interface MobileControls {
   /** Applies a pending Ctrl from the keys row to typed input: returns what to send, or "" when it was sent as a key. */
