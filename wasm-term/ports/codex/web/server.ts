@@ -19,7 +19,7 @@ const root = join(import.meta.dir, "../../..");
 const port = Number(process.env.PORT ?? 4799);
 const kernelWasm = join(root, "kernel/target/wasm32-unknown-unknown/release/wasm_term_kernel.wasm");
 const codexWasm = join(import.meta.dir, "../dist/codex.wasm");
-const ghosttyWasm = Bun.fileURLToPath(import.meta.resolve("@random/ghostty-web/ghostty-vt.wasm", join(root, "web/")));
+const ghosttyWasm = Bun.resolveSync("@random/ghostty-web/ghostty-vt.wasm", join(root, "web"));
 
 const guests: GuestInfo[] = [{
   name: "codex",

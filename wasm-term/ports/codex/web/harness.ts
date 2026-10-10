@@ -3,7 +3,7 @@
 // the program gets replies to its terminal queries and the screen can be
 // printed as text. For shaking out startup problems without a browser.
 //
-//   bun harness.ts [--cols N] [--rows N] [--guest path.wasm] [--env K=V]... [--trace] -- <guest args...> ::: <steps...>
+//   bun harness.ts [--cols N] [--rows N] [--guest path.wasm] [--env K=V]... [--trace] @@ <guest args...> ::: <steps...>
 //
 // Steps run in order after the program starts:
 //   wait:MS        sleep
@@ -27,7 +27,7 @@ let rows = 30;
 let guest = join(import.meta.dir, "../dist/codex.wasm");
 const env: Record<string, string> = {};
 const files: Record<string, string> = {};
-while (argv.length && argv[0] !== "--") {
+while (argv.length && argv[0] !== "@@") {
   const flag = argv.shift()!;
   if (flag === "--cols") cols = Number(argv.shift());
   else if (flag === "--rows") rows = Number(argv.shift());

@@ -22,4 +22,5 @@ codex-build-info = { workspace = true }
 codex-config = { workspace = true }
 codex-tui = { workspace = true }
 codex-utils-cli = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt", "time", "macros", "net"] }

@@ -53,17 +53,25 @@ fn main() -> anyhow::Result<()> {
         .raw_overrides
         .splice(0..0, top_cli.config_overrides.raw_overrides);
 
-    prepare_emulated_home()?;
+    prepare_emulated_home()
+        .map_err(|err| anyhow::anyhow!("failed to prepare the home directory: {err}"))?;
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
-        .build()?;
+        .build()
+        .map_err(|err| anyhow::anyhow!("failed to start the tokio runtime: {err}"))?;
     let exit_info = runtime.block_on(run_main(
         inner,
-        Arg0DispatchPaths::default(),
+        // There is no executable to re-exec; the path only has to be present,
+        // because local-environment setup refuses to run without one.
+        Arg0DispatchPaths {
+            codex_self_exe: Some(std::path::PathBuf::from("/usr/bin/codex")),
+            ..Default::default()
+        },
         LoaderOverrides::default(),
         Some(endpoint),
-    ))?;
+    ))
+    .map_err(|err| anyhow::anyhow!("codex TUI failed: {err:?}"))?;
 
     let is_fatal = match &exit_info.exit_reason {
         ExitReason::Fatal(message) => {
@@ -92,6 +100,12 @@ fn prepare_emulated_home() -> anyhow::Result<()> {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/home/user".to_string());
     let codex_home = std::env::var("CODEX_HOME").unwrap_or_else(|_| format!("{home}/.codex"));
     std::fs::create_dir_all(&codex_home)?;
+    // `dirs::home_dir()` has no WASI arm, so the default (`~/.codex`) cannot be derived.
+    // SAFETY: single-threaded, before anything reads the environment concurrently.
+    unsafe { std::env::set_var("CODEX_HOME", &codex_home) };
+    // `std::env::temp_dir()` panics on WASI ("not supported by WASI yet"); the
+    // tempfile crate asks it unless told where to go.
+    let _ = tempfile::env::override_temp_dir(std::path::Path::new("/tmp"));
     if std::env::current_dir().is_ok_and(|cwd| cwd == std::path::Path::new("/")) {
         std::env::set_current_dir(&home)?;
     }
