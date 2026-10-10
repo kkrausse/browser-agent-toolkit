@@ -390,10 +390,14 @@ function createHttp(rt: Runtime): { http: any; https: any } {
     _write(chunk: any, _encoding: string, cb: (err?: Error | null) => void) {
       if (!this.headersSent) this._sendHead()
       const out = this.socket?._out
-      if (!out || this.socket.destroyed) return cb(Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }))
+      // The client went away (aborted fetch, closed event stream): Node drops what is
+      // written to such a response; it does not raise 'error' on it. Raising EPIPE here
+      // killed OpenCode, whose responses have no 'error' listener. The handler learns of
+      // the departure from 'close' on the request and response.
+      if (!out || this.socket.destroyed) return cb()
       if (!this._hasBody || chunk.length === 0) return cb()
       this.socket.bytesWritten += chunk.length
-      out.write(chunk, this.chunkedEncoding, (err?: Error) => cb(err ? Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }) : null))
+      out.write(chunk, this.chunkedEncoding, () => cb())
     }
     _final(cb: (err?: Error | null) => void) {
       if (!this.headersSent) {
