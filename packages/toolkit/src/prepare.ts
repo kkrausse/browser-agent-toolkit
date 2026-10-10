@@ -95,7 +95,7 @@ async function installRuntime(outDir: string, runtimeDir: string): Promise<void>
   // each file, which the server handler answers with (`Content-Encoding: zstd`).
   const { unlink } = await import('node:fs/promises');
   const zlib = await import('node:zlib') as unknown as { zstdCompressSync?: (data: Uint8Array, options?: unknown) => Uint8Array; constants: Record<string, number> };
-  const zstd = zlib.zstdCompressSync && ((data: Uint8Array) => zlib.zstdCompressSync!(data, { params: { [zlib.constants.ZSTD_c_compressionLevel]: 19 } }));
+  const zstd = zlib.zstdCompressSync && ((data: Uint8Array) => zlib.zstdCompressSync!(data, { params: { [zlib.constants.ZSTD_c_compressionLevel ?? 100]: 19 } }));
   for (const entry of await readdir(runtimeDir, { withFileTypes: true })) {
     if (!entry.isFile() || entry.name.startsWith('.') || entry.name.endsWith('.zst')) continue;
     await copyFile(join(runtimeDir, entry.name), join(target, entry.name));
