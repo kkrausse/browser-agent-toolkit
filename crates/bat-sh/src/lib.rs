@@ -11,6 +11,7 @@ pub mod glob;
 pub mod interp;
 pub mod parser;
 pub mod pkg;
+pub mod rg;
 pub mod sed;
 pub mod sys;
 pub mod test;

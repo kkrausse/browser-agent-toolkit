@@ -31,14 +31,48 @@ setup() {
   printf 'line1\nline2\nline3\n' > a.txt
   printf 'line1\nline2 changed\nline3\nline4\n' > b.txt
   printf 'notes\n' > docs/notes.md
+  case "$2" in invoke|lang|read|search|edit|sys|text|tools) ;; *) setup_more ;; esac
+}
+
+# More files for the groups added after the first recorded run (rg, nl, diff, ...):
+# ignore files, hidden and binary files, a deeper tree, two directories to compare.
+# The first eight groups keep the fixture they were recorded with.
+setup_more() {
+  mkdir -p .git target build src/build src/util/deep .config web/dist old/sub new/sub
+  printf 'target/\n*.log\n!keep.log\n/build\ndocs/*.tmp\n' > .gitignore
+  printf 'scratch*\n' > .ignore
+  printf 'fn generated() {}\n' > target/out.rs
+  printf 'fn in debug log\n' > debug.log
+  printf 'fn kept\n' > keep.log
+  printf 'fn gen() {}\n' > build/gen.rs
+  printf 'pub fn build() {}\n' > src/build/mod.rs
+  printf 'fn hidden() {}\n' > .hidden.rs
+  printf '{"fn": true}\n' > .config/settings.json
+  printf 'def add(a, b):\n    return a + b  # TODO\n' > src/util/deep/more.py
+  printf 'function add(a, b) {\n  return a + b; // TODO\n}\nmodule.exports = { add };\n' > web/app.js
+  printf '<html>\n<body>fn Demo</body>\n</html>\n' > web/index.html
+  printf 'body { margin: 0; }\n' > web/style.css
+  printf 'dist/\n' > web/.gitignore
+  printf 'function add(a,b){return a+b}\n' > web/dist/bundle.js
+  printf 'fn scratch() {}\n' > scratch.rs
+  printf 'fn early\nmid\0dle fn\nfn late\n' > bin.dat
+  printf 'draft fn\n' > docs/draft.tmp
+  printf 'one\n\ntwo\n   \nthree\n' > blank.txt
+  printf 'a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nn\no\np\n' > long1.txt
+  printf 'a\nb\nC\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nN\no\np\nq\n' > long2.txt
+  printf 'same\n' > old/same.txt; printf 'same\n' > new/same.txt
+  printf 'x\ny\n' > old/mod.txt; printf 'x\nz\n' > new/mod.txt
+  printf 'gone\n' > old/gone.txt; printf 'added\n' > new/added.txt
+  printf 'deep old\n' > old/sub/d.txt; printf 'deep new\n' > new/sub/d.txt
+  printf 'id,name,qty\n1,apple,3\n2,banana,12\n3,cherry,7\n' > data.csv
 }
 
 n_same=0; n_diff=0; n_missing=0; n_noref=0
 run_case() {
   local group=$1 label=$2 cmd=$3
   echo "$group/$label" | grep -Eq "$filter" || return
-  setup "$work/w"; local exp; exp=$(cd "$work/w" && TZ=UTC HOME=$work/w bash -c "$cmd" </dev/null 2>"$work/ref.err"; echo "status=$?")
-  setup "$work/w"; local got; got=$(cd "$work/w" && TZ=UTC HOME=$work/w PATH=/nonexistent /usr/bin/timeout 10 "$bin" -c "$cmd" </dev/null 2>"$work/got.err"; echo "status=$?")
+  setup "$work/w" "$group"; local exp; exp=$(cd "$work/w" && TZ=UTC HOME=$work/w bash -c "$cmd" </dev/null 2>"$work/ref.err"; echo "status=$?")
+  setup "$work/w" "$group"; local got; got=$(cd "$work/w" && TZ=UTC HOME=$work/w PATH=/nonexistent /usr/bin/timeout 10 "$bin" -c "$cmd" </dev/null 2>"$work/got.err"; echo "status=$?")
   local verdict detail=""
   if grep -q 'command not found' "$work/got.err" && echo "$got" | grep -q 'status=127$'; then
     verdict=missing; n_missing=$((n_missing+1)); detail=$(head -1 "$work/got.err")

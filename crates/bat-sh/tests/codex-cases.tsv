@@ -112,7 +112,7 @@ search	grep -e -e	grep -e apple -e cherry list.txt
 search	grep -m	grep -m1 apple list.txt
 search	grep -L	grep -L apple list.txt a.txt
 search	rg pattern	rg -n "fn " src
-search	rg --files	rg --files | sort
+search	rg --files	rg --files | LC_ALL=C sort
 search	rg -l / -g	rg -l fn -g '*.rs'
 search	find -name	find . -name '*.rs' | sort
 search	find -type f/-type d	find src -type d | sort; find . -maxdepth 1 -type f | sort
@@ -214,3 +214,105 @@ tools	rustc / gcc / go	gcc --version | head -1
 tools	pip	pip --version
 tools	pytest / jest	pytest --version
 tools	sudo / apt	sudo true
+rg	pattern (cwd)	rg fn | LC_ALL=C sort
+rg	pattern --sort path	rg --sort path fn
+rg	pattern file	rg fn src/main.rs
+rg	pattern dir	rg --sort path fn src
+rg	pattern ./dir	rg --sort path TODO ./src
+rg	pattern .	rg --sort path TODO .
+rg	pattern dir/	rg --sort path TODO src/ web/
+rg	pattern two files	rg --sort path line a.txt b.txt; rg -c line b.txt a.txt | LC_ALL=C sort
+rg	pattern abs path	rg -c fn "$PWD/src/main.rs"
+rg	-n file	rg -n fn src/main.rs
+rg	-n dir	rg -n --sort path 'fn \w+' src
+rg	--line-number / -N	rg --line-number add src/main.rs; rg -N add src/main.rs; rg -n --no-line-number add src/main.rs
+rg	-i	rg -i --sort path 'todo|DEMO'
+rg	-S smart case	rg -S --sort path todo; rg -S Todo; echo $?
+rg	-s after -i	rg -i -s todo; echo $?
+rg	-l	rg -l --sort path fn
+rg	--files-with-matches dir	rg --files-with-matches add src web | LC_ALL=C sort
+rg	--files-without-match	rg --files-without-match --sort path fn; echo $?; rg --files-without-match fn src/main.rs; echo $?
+rg	-c	rg -c --sort path fn
+rg	-c single file	rg -c fn src/main.rs; rg -c nomatch src/main.rs; echo $?
+rg	-c -H / --include-zero	rg -c -H fn src/main.rs; rg -c --include-zero --sort path add src
+rg	--count-matches	rg --count-matches --sort path a src
+rg	--files	rg --files | LC_ALL=C sort
+rg	--files --sort path	rg --files --sort path
+rg	--files path	rg --files --sort path src web
+rg	--files ./path and file	rg --files --sort path ./web a.txt
+rg	--files -g	rg --files --sort path -g '*.rs'
+rg	--files -g negation	rg --files --sort path -g '!*.rs' -g '!web'
+rg	--files several -g	rg --files --sort path -g '*.md' -g '*.toml'
+rg	--files -g braces	rg --files --sort path -g '*.{js,css}'
+rg	--files -g path glob	rg --files --sort path -g 'src/**/*.rs'; rg --files -g 'util/*.rs' src; echo $?
+rg	--files -g dir negation	rg --files --sort path --glob '!src/' --glob='!docs/**'
+rg	--files --iglob	rg --files --sort path --iglob '*.MD'; rg --files -g '*.MD'; echo $?
+rg	--files --hidden	rg --files --hidden --sort path
+rg	--files -u / -uu	rg --files -u --sort path; echo --; rg --files -uu --sort path
+rg	--files --no-ignore	rg --files --no-ignore --sort path
+rg	--files --no-ignore-vcs	rg --files --no-ignore-vcs --sort path
+rg	--files --max-depth	rg --files --max-depth 1 --sort path; echo --; rg --files --max-depth 2 --sort path src
+rg	--files -t	rg --files --sort path -t rust; rg --files -tpy -tjs --sort path
+rg	--files -T	rg --files --sort path -T rust -Tmd
+rg	--files types	for t in ts md json toml yaml sh html css c cpp go java; do rg --files --sort path -t $t; echo "$t=$?"; done
+rg	--files none / missing	rg --files -g 'zzz*'; echo $?; rg --files nope; echo $?
+rg	--files --sortr	rg --files --sortr path
+rg	--files in ignored dir	rg --files --sort path target web/dist
+rg	--files from subdir	cd src && rg --files --sort path && cd util && rg -c --sort path fn
+rg	-g with pattern	rg --sort path fn -g '*.rs'; rg --sort path -n add -g '!*.rs'
+rg	-t with pattern	rg --sort path -trust fn; rg --sort path --type py --type js add
+rg	-T with pattern	rg --sort path -Trust -T log fn
+rg	bad type	rg -t rs fn; echo $?
+rg	-C	rg -C1 -n hello src/main.rs
+rg	-C dir with separators	rg -C1 -n --sort path 'fn|TODO' src web
+rg	-A	rg -A1 add src/main.rs
+rg	-B	rg -B2 -n 'a \+ b' src/main.rs
+rg	-A -B overlap	rg -n -A2 -B1 '^[cgk]$' long1.txt
+rg	--context=N long forms	rg --context=1 d long1.txt; rg --after-context 1 --before-context 0 o long1.txt
+rg	-F	rg -F 'add(' --sort path; rg -F 'a.b'; echo $?
+rg	-w	rg -w a --sort path src; rg -w lin a.txt; echo $?
+rg	-x	rg -x '}' --sort path src; rg -x line a.txt; echo $?
+rg	-v	rg -v fn src/main.rs; rg -v -c line a.txt; echo $?
+rg	-o	rg -o 'fn \w+' --sort path; rg -on 'a\w' src/main.rs
+rg	-e several	rg -e hello -e TODO --sort path; rg -n -e '^fn' -e '^}' src/main.rs
+rg	-e leading dash	rg -e '-> u32' src; rg -- '-> i32' src/main.rs
+rg	-m	rg -m1 --sort path fn; rg --max-count 2 -n line b.txt
+rg	-m with -A	rg -m1 -A1 -n fn src/main.rs
+rg	--hidden	rg --hidden --sort path fn
+rg	-u / -uu	rg -u --sort path 'fn \w'; echo --; rg -uu --sort path 'fn \w'
+rg	--no-ignore	rg --no-ignore --sort path -l fn
+rg	gitignore negation and anchor	rg -l --sort path 'fn (kept|build|gen)'
+rg	nested and parent ignore	rg -l add web | LC_ALL=C sort; cd web && rg -l fn --sort path
+rg	.ignore	rg -c scratch; echo $?; rg -c --no-ignore-dot scratch
+rg	explicit ignored file	rg --sort path fn debug.log target/out.rs
+rg	--max-depth	rg --max-depth 1 --sort path fn; rg --max-depth 2 -l --sort path fn
+rg	--no-heading	rg --no-heading --sort path TODO
+rg	--heading	rg --heading -n --sort path TODO
+rg	-H / --with-filename	rg -H fn src/main.rs; rg --with-filename -n hello src/main.rs
+rg	-I / --no-filename	rg -I --sort path fn src; rg --no-filename -n --sort path TODO
+rg	--color never	rg --color never -n hello src; rg --color=never hello src/main.rs; rg --color always --version >/dev/null
+rg	-q	rg -q fn; echo $?; rg -q nomatch; echo $?
+rg	no match status	rg nomatch; echo $?; rg nomatch src/main.rs; echo $?
+rg	error status	rg fn nope; echo $?; rg fn nope src/main.rs; echo $?
+rg	bad regex	rg 'fn(' src; echo $?
+rg	no pattern	rg; echo $?
+rg	unknown flag	rg --bogus fn; echo $?
+rg	nothing searched	rg fn -g 'zzz*'; echo $?
+rg	binary skipped	rg -c --sort path 'fn (early|late)'; echo $?
+rg	binary explicit	rg fn bin.dat; rg -n fn bin.dat a.txt; rg -c fn bin.dat
+rg	-a binary as text	rg -a 'fn l' bin.dat
+rg	stdin pipe	printf 'one\ntwo\nthree\n' | rg -n t; cat a.txt | rg -c line
+rg	stdin -	printf 'one\ntwo\n' | rg o -; printf 'one\n' | rg -H -n o
+rg	stdin redirect	rg hello < src/main.rs
+rg	--column / --vimgrep	rg --column add src/main.rs; rg --vimgrep --sort path add src
+rg	-r replace	rg -r 'sum($1)' 'add\((.*?)\)' src/main.rs; rg -o -r '<$0>' 'l\w+' a.txt
+rg	--trim / -M	rg --trim -n 'a \+ b' src/main.rs; rg -M 15 fn src/main.rs
+rg	-0 with -l	rg -0 -l --sort path fn | tr '\0' '\n'; rg --files -0 --sort path src | tr '\0' ' '
+rg	regex classes	rg -n '^\s+\d+ //' src; rg -c '[[:upper:]]{4}' --sort path; rg -o '\bfn\b \w+\(' src/main.rs
+rg	alternation and groups	rg -o --sort path '(pub )?fn (main|helper)' src
+rg	combined short flags	rg -in --sort path TODO; rg -nC1 hello src/main.rs; rg -lF 'add(' | LC_ALL=C sort
+rg	no .git: gitignore still applies	rm -rf .git; rg --files --sort path | head -5
+rg	subdir root, parent anchored rule	rg --files --sort path docs
+rg	-U multiline unsupported	rg -U 'main\(\) \{\n' src/main.rs; echo $?
+rg	look-around unsupported	rg -P 'fn(?= main)' src/main.rs; echo $?
+rg	--json unsupported	rg --json fn src/main.rs | head -c 20; echo

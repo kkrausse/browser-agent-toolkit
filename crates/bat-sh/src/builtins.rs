@@ -77,7 +77,7 @@ pub const BUILTINS: &[&str] = &[
     "exec", "exit", "export", "false", "find", "getopts", "grep", "egrep", "fgrep", "head", "hostname", "id", "local", "ln", "ls", "mkdir", "mktemp", "mv", "printenv",
     "printf", "pwd", "read", "readlink", "readonly", "realpath", "return", "rm", "rmdir", "sed", "seq", "set", "shift", "sleep", "sort", "source", "tail",
     "tee", "test", "touch", "tr", "trap", "true", "type", "umask", "uname", "uniq", "unset", "wait", "wc", "which", "whoami", "xargs", "npm", "npx", "bunx",
-    "yarn", "pnpm", "bun", "unalias", "declare", "typeset", "let", "nproc", "stat", "rev", "tac", "yes", "clear", "sync",
+    "yarn", "pnpm", "bun", "unalias", "declare", "typeset", "let", "nproc", "stat", "rev", "tac", "yes", "clear", "sync", "rg",
 ];
 
 /// Shell builtins proper: these are not found as programs by `which`.
@@ -228,6 +228,7 @@ pub fn run(sh: &mut Interp, argv: &[String]) -> Option<X> {
         "head" | "tail" | "wc" | "grep" | "egrep" | "fgrep" | "sed" | "sort" | "uniq" | "tr" | "cut" | "tee" | "seq" | "date" | "uname" | "whoami" | "hostname" | "id"
         | "nproc" | "rev" | "tac" | "yes" => crate::text::run(sh, a),
         "find" => crate::find::run(sh, a),
+        "rg" => crate::rg::run(sh, a),
         _ => return None,
     };
     Some(r)
