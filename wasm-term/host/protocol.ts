@@ -65,6 +65,8 @@ export interface InitMessage {
   persist?: PersistRoots;
   /** Child processes (`proc_*`): the shell the guest may run commands in. Absent: `proc_spawn` fails with NOSYS. */
   proc?: ProcInit;
+  /** JavaScript guests: `fetch` of URLs under these prefixes goes to the page over this port (page-fetch.ts). */
+  pageFetch?: import("./page-fetch").PageFetchInit;
 }
 
 export interface ProcInit {

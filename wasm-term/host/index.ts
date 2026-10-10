@@ -6,6 +6,7 @@
 //   terminal.onResize(({ cols, rows }) => program.resize(cols, rows));
 
 import { createNetBridge } from "./net";
+import { type PageFetchOptions, servePageFetch } from "./page-fetch";
 import { openPersistStore, type PersistStore } from "./persist-store";
 import {
   FILE_LIST, FILE_READ, FRAME_CLIPBOARD, FRAME_FILE, FRAME_INPUT, FRAME_PROC, FRAME_RESIZE, FRAME_SIGNAL, H_OUT_ACK, H_OUT_WAITING, H_WAKE, HEADER_BYTES,
@@ -81,6 +82,8 @@ export interface ProgramOptions {
   shell?: ShellOptions;
   /** Clipboard for programs that ask the host for it. Default: `navigator.clipboard`. */
   clipboard?: ClipboardBridge;
+  /** JavaScript guests: `fetch` of URLs under these prefixes is answered by the page (page-fetch.ts), e.g. by a server that runs in this tab. */
+  pageFetch?: PageFetchOptions;
   /** Bytes for the terminal emulator (pty master output). */
   onOutput(data: Uint8Array): void;
   onExit?(status: ExitStatus): void;
@@ -211,6 +214,7 @@ export function startProgram(options: ProgramOptions): Program {
     if (finished) return;
     finished = true;
     net.dispose();
+    stopPageFetch?.();
     dropShells();
     if (lingers) lingering = true;
     else dropWorker();
@@ -290,6 +294,14 @@ export function startProgram(options: ProgramOptions): Program {
     files: options.files,
     persist: options.persist && { roots: options.persist.roots, exclude: options.persist.exclude },
   };
+  let stopPageFetch: (() => void) | undefined;
+  const transfer: Transferable[] = [];
+  if (options.pageFetch) {
+    const channel = new MessageChannel();
+    stopPageFetch = servePageFetch(channel.port1, options.pageFetch);
+    init.pageFetch = { port: channel.port2, prefixes: options.pageFetch.prefixes };
+    transfer.push(channel.port2);
+  }
   // Input, resizes and signals sent before the stored files and the shell module have loaded wait in the ring.
   const stored = store
     ? store.load().catch(error => (console.warn("wasm-term: could not read persisted files", error), {} as Record<string, Uint8Array>))
@@ -315,7 +327,7 @@ export function startProgram(options: ProgramOptions): Program {
         spinUs: options.shell.spinUs ?? 50,
       };
     }
-    if (!finished) worker.postMessage(init);
+    if (!finished) worker.postMessage(init, transfer);
   });
 
   return {

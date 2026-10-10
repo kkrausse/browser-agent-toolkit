@@ -16,6 +16,7 @@
 
 import { loadKernel } from "../kernel";
 import { createMachine, type Machine, ProcessExit } from "../machine";
+import { installPageFetch } from "../page-fetch";
 import { createPersister } from "../persist";
 import { H_WAKE, type InitMessage, type WorkerMessage } from "../protocol";
 import { createRingReader } from "../ring";
@@ -95,6 +96,8 @@ export async function runJsGuest(init: InitMessage, post: Post): Promise<void> {
   globals.kCustomPromisifiedSymbol ??= Symbol.for("nodejs.util.promisify.custom");
   installNodeTimers();
   installNodeGlobals({ fs, process: node.process });
+  // Before the guest is imported: a bundle may keep a reference to `fetch` while its modules are evaluated.
+  if (init.pageFetch) installPageFetch(init.pageFetch);
 
   let nextClipboardId = 1;
   const clipboardReads = new Map<number, { resolve(text: string): void; reject(error: Error): void }>();
