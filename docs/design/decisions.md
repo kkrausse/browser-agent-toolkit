@@ -43,3 +43,17 @@
 - **Need from `bat-modules`, not blocking:** `transform` takes the nearest package.json
   `type`; prepare computes it per package scope. Source maps for lowered TS/JSX are not
   stored in the image yet (no field asked for them).
+- **Apps that are Bun workspace members are relocated, not re-resolved** (added when
+  `examples/todo-app` became a member of this repo's workspace with
+  `"@kkrausse/browser-agent-toolkit": "workspace:*"` and no lock of its own). Prepare
+  stages the workspace root (root manifest + lock, every member's package.json, the
+  `files` of linked members), installs there frozen, then builds a standalone
+  `node_modules`: the store moves to `node_modules/.bun`, the member's links are
+  re-pointed, each linked workspace package is copied to
+  `.bun/<name>@workspace/node_modules/<name>` with links to its dependencies and peers
+  (not devDependencies), and store packages nothing reaches are removed (288 of 417 in
+  this repo: the toolkit's build-time dependencies). Rewriting the manifest to `file:`
+  and letting Bun resolve again would have dropped the lock's pins.
+- **The image's meta section carries nothing build-specific.** It briefly held the input
+  fingerprint, which includes the tool binary's mtime, so every rebuild of `bat-prepare`
+  changed the image hash and would have forced a 236 MB re-download for identical content.

@@ -151,7 +151,7 @@ legal and is read through the positioned read.
 | --- | --- | --- |
 | 1 | resolution table | reserved; not written yet |
 | 2 | program scripts | UTF-8 JSON: `[{"name": "opencode-server", "modules": ["/app/server.js"]}]`, guest paths in registration order. File names of the scripts are content-addressed and therefore live in `manifest.json`, not in the image. |
-| 3 | meta | UTF-8 JSON, informational: `{"tool", "transform", "mount", "fingerprint"}` |
+| 3 | meta | UTF-8 JSON, informational: `{"tool", "transform", "mount"}` (nothing that varies between builds of equal inputs) |
 
 ## Reader API (`bat_image`, `default-features = false` in the kernel)
 

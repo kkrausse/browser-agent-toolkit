@@ -206,9 +206,8 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
     if !workspace.starts_with('/') {
         bail!("--workspace must be an absolute guest path");
     }
-    let manifest_text = fs::read_to_string(app.join("package.json")).context("read package.json")?;
-    let lock_text = fs::read_to_string(app.join("bun.lock")).context("read bun.lock")?;
-    let pkg: Value = serde_json::from_str(&manifest_text).context("parse package.json")?;
+    let project = deps::Project::discover(&app)?;
+    let (manifest_text, pkg) = project.app_manifest()?;
     if options.application_dir.is_none() {
         policy.application = None;
         policy.programs.clear();
@@ -228,9 +227,23 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
     fp.field("workspace", workspace.as_bytes());
     fp.field("bun", options.bun.as_bytes());
     fp.field("package.json", serde_json::to_string(&dependency_view(&pkg))?.as_bytes());
-    fp.field("bun.lock", lock_text.as_bytes());
-    for input in deps::local_inputs(&app)? {
-        fp.tree(&format!("local:{}", input.display()), &input)?;
+    fp.field("bun.lock", project.lock_text.as_bytes());
+    for input in &project.local {
+        fp.tree(&format!("local:{}", input.display()), input)?;
+    }
+    if project.is_workspace() {
+        let root_pkg: Value = serde_json::from_str(&project.root_manifest_text)?;
+        fp.field("workspace-root", serde_json::to_string(&dependency_view(&root_pkg))?.as_bytes());
+        for member in &project.members {
+            fp.field(&format!("member:{}", member.rel), serde_json::to_string(&dependency_view(&member.manifest))?.as_bytes());
+        }
+        for member in &project.linked {
+            let dir = project.root.join(&member.rel);
+            fp.field(&format!("linked:{}", member.rel), member.manifest_text.as_bytes());
+            for path in deps::member_files(&dir, &member.manifest) {
+                fp.tree(&format!("linked:{}", path.display()), &path)?;
+            }
+        }
     }
     for sub in &policy.substitutions {
         if let Some(dir) = sub.with.strip_prefix("dir:") {
@@ -270,10 +283,13 @@ pub fn prepare_app(options: AppOptions) -> Result<Value> {
 
     // ---- Manifest: launch descriptions and project files. Always recomputed.
     let manifest_started = Instant::now();
+    let (project_is_workspace, lock_text) = (project.is_workspace(), project.lock_text.clone());
     let mut project = Map::new();
     collect_source(&app, &options.source, &mut project)?;
     project.insert("/package.json".into(), Value::String(manifest_text));
-    project.insert("/bun.lock".into(), Value::String(lock_text));
+    if !project_is_workspace {
+        project.insert("/bun.lock".into(), Value::String(lock_text));
+    }
     for (guest, host) in &options.files {
         check_relative(guest.trim_start_matches('/'))?;
         let bytes = fs::read(host).with_context(|| format!("read {}", host.display()))?;
@@ -383,7 +399,7 @@ fn build_image(options: &AppOptions, app: &Path, policy: &Policy, pinned: &[(Str
 
     let program_modules: HashSet<String> = policy.programs.iter().flat_map(|p| p.modules.iter().cloned()).collect();
     let transform = modules::transform();
-    let meta = json!({ "tool": concat!("bat-prepare ", env!("CARGO_PKG_VERSION")), "transform": modules::TRANSFORM_VERSION, "mount": "/", "fingerprint": fingerprint });
+    let meta = json!({ "tool": concat!("bat-prepare ", env!("CARGO_PKG_VERSION")), "transform": modules::TRANSFORM_VERSION, "mount": "/" });
     let tmp_image = options.out.join("image.partial.batimg");
     let output = pack::write_image(
         &items,
