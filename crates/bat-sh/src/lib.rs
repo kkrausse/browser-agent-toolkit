@@ -3,6 +3,7 @@
 //! calls. `main` is the whole program; the Wasm exports below are how the
 //! runtime calls it (runtime/src/process/sh.ts).
 pub mod ast;
+pub mod awk;
 pub mod builtins;
 pub mod diff;
 pub mod expand;
