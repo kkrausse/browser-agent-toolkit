@@ -182,10 +182,9 @@ model conversation per run), `bench/startup/run.ts` and `bench/first-open/run.ts
 
 ## History and licensing
 
-This branch is a rewrite. The previous toolkit and its Vivari-based runtime are on `main`;
-nothing here depends on them at build or run time, and the reports in `docs/experiments/`
-dated before 2026-10-09, `docs/RELEASING.md`, `docs/runtime-architecture.md` and the CI
-workflows still describe them.
+This is a from-scratch rewrite (2026-10-09). The previous toolkit and its Vivari-based
+runtime, with their reports, release notes and CI, are in the git history up to commit
+`44dcd92`; nothing here depends on them.
 
 No umbrella license has been chosen for this repository. Third-party code that is
 vendored or embedded (Node.js `lib/`, shims from Vivari, SQLite and wasi-libc, the

@@ -11,8 +11,8 @@ const useBuild = isProduction || !!process.env.SERVE_BUILD
 const port = Number(process.env.PORT) || (useBuild ? 3000 : 3001)
 const todos = new Map<string, Todo>()
 // Bun loads the gitignored .env.local in this directory; the key never leaves the server.
-const modelKey = process.env.VIVARI_MODEL_API_KEY
-const needsKey = 'Chat needs a model key: put VIVARI_MODEL_API_KEY=<key> in examples/todo-app/.env.local and restart the server. The editor, files and preview work without it.'
+const modelKey = process.env.EDITOR_MODEL_API_KEY
+const needsKey = 'Chat needs a model key: put EDITOR_MODEL_API_KEY=<key> in examples/todo-app/.env.local and restart the server. The editor, files and preview work without it.'
 // The checked-in catalog applies once a key exists; the provider refuses its models without one.
 const modelCatalogPath = process.env.MODEL_CATALOG ?? (modelKey ? resolve(import.meta.dirname, 'model-catalog.json') : undefined)
 

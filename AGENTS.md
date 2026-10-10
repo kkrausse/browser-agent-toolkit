@@ -4,9 +4,8 @@
   Then `docs/experiments/2026-10-10-rust-rewrite-summary.md`: what works, the measured
   numbers, and the ranked list of what is missing.
 - Design changes go in `docs/design/decisions.md` (append-only); measurements and status
-  reports go in `docs/experiments/`. Files there dated before 2026-10-09, and
-  `docs/RELEASING.md`, `docs/runtime-architecture.md` and `.github/workflows/`, describe
-  the previous runtime.
+  reports go in `docs/experiments/`. The previous toolkit and its Vivari runtime are
+  only in git history (up to `44dcd92`).
 - One command builds and serves the example: `PORT=<port> bun run editor` (`bun run setup`
   is the build alone, incremental). Generated output is gitignored: `target/`, `target-*/`,
   `runtime/dist`, `packages/toolkit/dist`, `examples/todo-app/.editor`, `.runtime/`.

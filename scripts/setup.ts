@@ -51,12 +51,6 @@ async function openCodeDir(): Promise<string> {
     mkdirSync(local, { recursive: true })
     for (const name of openCodeFiles) cpSync(join(from, name), join(local, name))
   }
-  const sibling = resolve(root, '../browser-agent-toolkit/vivari/.runtime/opencode-release-2.0.3', openCodeRelease.payload)
-  if (hasOpenCode(sibling)) {
-    copy(sibling)
-    console.log(`[setup] OpenCode 2.0.3 copied from ${sibling}`)
-    return local
-  }
   const response = await fetch(openCodeRelease.url, { signal: AbortSignal.timeout(300_000) })
   if (!response.ok) throw Error(`OpenCode download: HTTP ${response.status} ${openCodeRelease.url}`)
   const bytes = new Uint8Array(await response.arrayBuffer())

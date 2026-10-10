@@ -26,7 +26,7 @@ const modulesHarness = join(here, "../../../../crates/bat-modules/harness");
 const useNative = process.argv.includes("--native");
 const directory =
   process.argv.find((a, i) => i > 1 && !a.startsWith("--")) ??
-  "/home/kkrausse/devfs/repos/kkrausse/browser-agent-toolkit/vivari/.runtime/opencode-release-2.0.3/.runtime/opencode-bun-server";
+  join(here, "../../../../.runtime/opencode-2.0.3");
 
 /** Count and time every call into a node:sqlite module object. */
 function instrument(sqlite) {

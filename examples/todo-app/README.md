@@ -20,7 +20,7 @@ runtime and the toolkit, fetches the pinned OpenCode server, then prepares, buil
 serves this example):
 
 ```sh
-cp examples/todo-app/.env.example examples/todo-app/.env.local   # optional: VIVARI_MODEL_API_KEY=<key> for chat
+cp examples/todo-app/.env.example examples/todo-app/.env.local   # optional: EDITOR_MODEL_API_KEY=<key> for chat
 PORT=3000 bun run editor
 ```
 

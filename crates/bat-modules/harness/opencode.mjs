@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 
 const directory =
   process.argv.find((a, i) => i > 1 && !a.startsWith("--")) ??
-  "/home/kkrausse/devfs/repos/kkrausse/browser-agent-toolkit/vivari/.runtime/opencode-release-2.0.3/.runtime/opencode-bun-server";
+  fileURLToPath(new URL("../../../.runtime/opencode-2.0.3", import.meta.url));
 
 if (process.argv.includes("--child")) {
   const { createLoader } = await import("./loader.mjs");

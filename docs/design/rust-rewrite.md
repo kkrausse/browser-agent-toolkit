@@ -1,6 +1,7 @@
 # Rust rewrite: design (2026-10-09)
 
-Branch `rewrite/rust`, worktree `/home/kkrausse/devfs/repos/kkrausse/bat-rust`. The previous
+(Written at the start of the rewrite, when it lived on branch `rewrite/rust`; the old code it
+refers to is now only in git history, up to `44dcd92`.) The previous
 toolkit and its Vivari runtime are reference only; they stay readable in the main checkout
 `/home/kkrausse/devfs/repos/kkrausse/browser-agent-toolkit` (runtime source in its
 `vendor/vivari`). Nothing here depends on them at build or run time.
