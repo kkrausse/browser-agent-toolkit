@@ -75,6 +75,10 @@ type Ws = ServerWebSocket<TcpTunnel>;
 export interface TcpRelayOptions {
   /** Hosts allowed on port 443 (the HTTP relay's https hosts). */
   https: string[];
+  /** Page origins (`https://app.example`) that may open tunnels besides pages this server serves itself: for a relay that runs apart from the page (tcp-relay-main.ts). */
+  origins?: string[];
+  /** The test names (`mock-llm.test`, `tcp-echo.test`, ...) and their loopback servers. Default true; a relay by itself has none. */
+  testEndpoints?: boolean;
 }
 
 /** Addresses the relay never connects to on a name's say-so. */
@@ -138,26 +142,6 @@ export function createTcpRelay(options: TcpRelayOptions) {
     if (tracing) console.log(`tcp#${tunnel.id} ${performance.now().toFixed(1)} ${what} (unread ${tunnel.unread}, unwritten ${tunnel.unwritten})`);
   };
 
-  // ---- test endpoints (the `tcp` guest, web/verify) ---------------------------
-  // On loopback, on ports the system picks; reachable only by name through the allowlist below.
-  const testServer = (onConnection: (socket: Socket) => void): number => {
-    const server = createServer({ allowHalfOpen: true }, socket => {
-      socket.on("error", () => {});
-      onConnection(socket);
-    }).listen(0, "127.0.0.1");
-    return (server.address() as { port: number }).port;
-  };
-  // Echo. When the client closes its sending side: "bye\n", then the server's own FIN.
-  const echoPort = testServer(socket => {
-    socket.pipe(socket, { end: false });
-    socket.on("end", () => socket.end("bye\n"));
-  });
-  // Sends "hello\n", then resets the connection at the first byte it is sent.
-  const resetPort = testServer(socket => {
-    socket.write("hello\n");
-    socket.once("data", () => socket.resetAndDestroy());
-  });
-
   /** `host:port` as the program names it -> where it goes (undefined: wherever the name resolves, if public). */
   const allow = new Map<string, { host: string; port: number } | undefined>();
   for (const host of options.https) allow.set(`${host}:443`, undefined);
@@ -165,19 +149,41 @@ export function createTcpRelay(options: TcpRelayOptions) {
     const colon = target.lastIndexOf(":");
     allow.set(name, { host: target.slice(0, colon), port: Number(target.slice(colon + 1)) });
   };
-  // mock-llm behind its TLS front (mock-llm/compose.yaml, service `tls`): the same server the HTTP relay
-  // reaches as `mock-llm.test`, here with a certificate for that name from the mock's private CA.
-  const mockTls = process.env.MOCK_LLM_TLS_UPSTREAM ?? "127.0.0.1:4797";
-  alias("mock-llm.test:443", mockTls);
-  // Two ways for that server to be the wrong one, for checking that a program verifies certificates:
-  // a certificate no CA vouches for, and the good certificate under a name it does not cover.
-  alias("untrusted.mock-llm.test:443", process.env.MOCK_LLM_TLS_UNTRUSTED ?? "127.0.0.1:4798");
-  alias("wrong-name.mock-llm.test:443", mockTls);
-  alias("tcp-echo.test:7", `127.0.0.1:${echoPort}`);
-  alias("tcp-reset.test:7", `127.0.0.1:${resetPort}`);
-  alias("tcp-closed.test:7", "127.0.0.1:1"); // nothing listens: connection refused
-  // Allowed by name and still refused, because the name resolves to loopback: the rule a test can see.
-  allow.set("localhost:7", undefined);
+  if (options.testEndpoints !== false) {
+    // ---- test endpoints (the `tcp` guest, web/verify) ---------------------------
+    // On loopback, on ports the system picks; reachable only by name through the allowlist below.
+    const testServer = (onConnection: (socket: Socket) => void): number => {
+      const server = createServer({ allowHalfOpen: true }, socket => {
+        socket.on("error", () => {});
+        onConnection(socket);
+      }).listen(0, "127.0.0.1");
+      return (server.address() as { port: number }).port;
+    };
+    // Echo. When the client closes its sending side: "bye\n", then the server's own FIN.
+    const echoPort = testServer(socket => {
+      socket.pipe(socket, { end: false });
+      socket.on("end", () => socket.end("bye\n"));
+    });
+    // Sends "hello\n", then resets the connection at the first byte it is sent.
+    const resetPort = testServer(socket => {
+      socket.write("hello\n");
+      socket.once("data", () => socket.resetAndDestroy());
+    });
+
+    // mock-llm behind its TLS front (mock-llm/compose.yaml, service `tls`): the same server the HTTP relay
+    // reaches as `mock-llm.test`, here with a certificate for that name from the mock's private CA.
+    const mockTls = process.env.MOCK_LLM_TLS_UPSTREAM ?? "127.0.0.1:4797";
+    alias("mock-llm.test:443", mockTls);
+    // Two ways for that server to be the wrong one, for checking that a program verifies certificates:
+    // a certificate no CA vouches for, and the good certificate under a name it does not cover.
+    alias("untrusted.mock-llm.test:443", process.env.MOCK_LLM_TLS_UNTRUSTED ?? "127.0.0.1:4798");
+    alias("wrong-name.mock-llm.test:443", mockTls);
+    alias("tcp-echo.test:7", `127.0.0.1:${echoPort}`);
+    alias("tcp-reset.test:7", `127.0.0.1:${resetPort}`);
+    alias("tcp-closed.test:7", "127.0.0.1:1"); // nothing listens: connection refused
+    // Allowed by name and still refused, because the name resolves to loopback: the rule a test can see.
+    allow.set("localhost:7", undefined);
+  }
   for (const entry of (process.env.TCP_RELAY_ALLOW ?? "").split(/[\s,]+/).filter(Boolean)) {
     const [name, target] = entry.split("=");
     if (target) alias(name!.toLowerCase(), target);
@@ -286,7 +292,7 @@ export function createTcpRelay(options: TcpRelayOptions) {
       if (origin) {
         let sameSite = false;
         try { sameSite = new URL(origin).host === (request.headers.get("host") ?? url.host); } catch {}
-        if (!sameSite) return refuse("cross-site request");
+        if (!sameSite && !options.origins?.includes(origin)) return refuse("cross-site request");
       }
       if (!host || !Number.isInteger(port)) return refuse("host and port are required", 400);
       const key = `${host}:${port}`;

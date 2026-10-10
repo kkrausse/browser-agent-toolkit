@@ -221,8 +221,10 @@ const program = startProgram({
   xpixel: Math.round(pixels.width * terminal.cols),
   ypixel: Math.round(pixels.height * terminal.rows),
   persist,
-  // Where a program's `tcp_connect` goes: this server's TCP relay (web/tcp-relay.ts), allowlisted hosts only.
-  tcpRelay: STATIC ? undefined : "/proxy/tcp",
+  // Where a program's `tcp_connect` goes: this server's TCP relay (web/tcp-relay.ts), allowlisted hosts only,
+  // or with `&tcp=<wss://host/path>` a relay that runs by itself somewhere else (web/tcp-relay-main.ts).
+  // The static build has no server of its own, so there it is `&tcp=` or nothing.
+  tcpRelay: params.get("tcp") || (STATIC ? undefined : "/proxy/tcp"),
   http: {
     seen: requests.seen,
     blocked: direct ? request => explainBlocked(request) : undefined,
