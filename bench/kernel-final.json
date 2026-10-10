@@ -1,0 +1,996 @@
+{
+  "summary": {
+    "runs": 6,
+    "workers": 2,
+    "tree": {
+      "files": 10415,
+      "bytes": 195456329,
+      "symlinks": 518,
+      "samplePaths": 3398
+    },
+    "kernelWasmCompileMs": {
+      "median": 3.935,
+      "min": 3.54,
+      "max": 9.01
+    },
+    "pageAttachMs": {
+      "median": 0.57,
+      "min": 0.5,
+      "max": 1.51
+    },
+    "kerneldStartMs": {
+      "median": 36.37,
+      "min": 21.14,
+      "max": 45.06
+    },
+    "imageDownloadToOpfs": {
+      "bytes": 196999168,
+      "ms": 2338.23,
+      "mbPerS": 84.3
+    },
+    "mountMs": {
+      "median": 4.64,
+      "min": 3.83,
+      "max": 9.5
+    },
+    "mountOpenHandleMs": {
+      "median": 2.625,
+      "min": 1.64,
+      "max": 7.4
+    },
+    "mountIndexMs": {
+      "median": 1.915,
+      "min": 1.83,
+      "max": 2.84
+    },
+    "bootToMountedMs": {
+      "median": 56.41,
+      "min": 48.35,
+      "max": 62.61
+    },
+    "mixed40kColdUsPerCall": {
+      "median": 2.722,
+      "min": 2.266,
+      "max": 2.808
+    },
+    "mixed40kColdWallMs": {
+      "median": 55.78,
+      "min": 46.5,
+      "max": 60.31
+    },
+    "mixed40kColdOpfsChunkReads": {
+      "median": 304,
+      "min": 304,
+      "max": 304
+    },
+    "mixed40kWarmUsPerCall": {
+      "median": 1.663,
+      "min": 1.576,
+      "max": 1.888
+    },
+    "mixed40kWarmWallMs": {
+      "median": 35.475,
+      "min": 32.97,
+      "max": 40.69
+    },
+    "mixed40kPooledUsPerCall": {
+      "median": 1.05,
+      "min": 0.878,
+      "max": 1.248
+    },
+    "mixed40kPooledWallMs": {
+      "median": 22.98,
+      "min": 18.27,
+      "max": 25.98
+    },
+    "statHitUs": {
+      "median": 0.601,
+      "min": 0.513,
+      "max": 0.717
+    },
+    "statMissUs": {
+      "median": 0.512,
+      "min": 0.457,
+      "max": 0.669
+    },
+    "kindOfHitUs": {
+      "median": 0.552,
+      "min": 0.5,
+      "max": 0.675
+    },
+    "smallReadWarmUs": {
+      "median": 4.779,
+      "min": 4.399,
+      "max": 5.018
+    },
+    "smallReadIntoWarmUs": {
+      "median": 1.293,
+      "min": 1.173,
+      "max": 1.376
+    },
+    "smallReadAvgBytes": 3277,
+    "realpathUs": {
+      "median": 1.302,
+      "min": 1.142,
+      "max": 1.509
+    },
+    "overlayWrite2kUs": {
+      "median": 6.784,
+      "min": 5.48,
+      "max": 7.857
+    },
+    "pageStatHitUs": {
+      "median": 0.75,
+      "min": 0.614,
+      "max": 0.95
+    },
+    "pageStatMissUs": {
+      "median": 0.581,
+      "min": 0.503,
+      "max": 0.63
+    },
+    "bigFileBytes": 27721680,
+    "bigFileColdMs": {
+      "median": 46.325,
+      "min": 44.55,
+      "max": 49.93
+    },
+    "bigFileWarmMs": {
+      "median": 19.85,
+      "min": 19.11,
+      "max": 21.23
+    },
+    "spawnToFirstOutputMs": {
+      "median": 3.315,
+      "min": 2.76,
+      "max": 3.53
+    },
+    "kernelMemoryMb": {
+      "median": 91.8,
+      "min": 91.8,
+      "max": 91.8
+    }
+  },
+  "results": [
+    {
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "workers": 2,
+      "tree": {
+        "files": 10415,
+        "bytes": 195456329,
+        "symlinks": 518,
+        "samplePaths": 3398
+      },
+      "boot": {
+        "compileMs": 9.01,
+        "attachMs": 1.51,
+        "kerneldMs": 21.14
+      },
+      "store": {
+        "bytes": 196999168,
+        "ms": 2338.23,
+        "cached": false,
+        "mbPerS": 84.3
+      },
+      "mount": {
+        "entries": 12197,
+        "ms": 4.48,
+        "openHandleMs": 1.64,
+        "indexMs": 2.84
+      },
+      "bootToMountedMs": 60.3,
+      "firstStatAfterMount": 1106,
+      "benchWorkersReadyMs": 16.74,
+      "bigFile": {
+        "bytes": 27721680,
+        "coldMs": 45.99,
+        "warmMs": 19.55,
+        "coldMbPerS": 602.78,
+        "warmMbPerS": 1417.99
+      },
+      "mixedCold": {
+        "calls": 40000,
+        "wallMs": 56.81,
+        "usPerCall": 2.783,
+        "callsPerSecond": 704101,
+        "found": 10000,
+        "bytes": 32644756,
+        "opfsChunkReads": 304
+      },
+      "mixedWarm": {
+        "calls": 40000,
+        "wallMs": 34.12,
+        "usPerCall": 1.628,
+        "callsPerSecond": 1172505,
+        "found": 10000,
+        "bytes": 32644756
+      },
+      "mixedPooled": {
+        "calls": 40000,
+        "wallMs": 19.96,
+        "usPerCall": 0.925,
+        "callsPerSecond": 2004008,
+        "found": 10000,
+        "bytes": 32644756
+      },
+      "statHit": {
+        "calls": 40000,
+        "wallMs": 15.93,
+        "usPerCall": 0.602,
+        "callsPerSecond": 2510986,
+        "found": 40000,
+        "bytes": 0
+      },
+      "statMiss": {
+        "calls": 40000,
+        "wallMs": 13.64,
+        "usPerCall": 0.669,
+        "callsPerSecond": 2931477,
+        "found": 0,
+        "bytes": 0
+      },
+      "kindOfHit": {
+        "calls": 40000,
+        "wallMs": 10.17,
+        "usPerCall": 0.5,
+        "callsPerSecond": 3935071,
+        "found": 40000,
+        "bytes": 0
+      },
+      "smallRead": {
+        "calls": 40000,
+        "wallMs": 99.98,
+        "usPerCall": 4.956,
+        "callsPerSecond": 400080,
+        "found": 0,
+        "bytes": 131088368
+      },
+      "smallReadInto": {
+        "calls": 40000,
+        "wallMs": 26.72,
+        "usPerCall": 1.32,
+        "callsPerSecond": 1497006,
+        "found": 0,
+        "bytes": 131088368
+      },
+      "realpath": {
+        "calls": 40000,
+        "wallMs": 28.39,
+        "usPerCall": 1.399,
+        "callsPerSecond": 1408699,
+        "found": 40000,
+        "bytes": 0
+      },
+      "overlayWrite2k": {
+        "calls": 10000,
+        "wallMs": 44.47,
+        "usPerCall": 7.857,
+        "callsPerSecond": 224896,
+        "found": 0,
+        "bytes": 0
+      },
+      "image": {
+        "entries": 12197,
+        "fileLen": 196999168,
+        "cachedBytes": 71563264,
+        "hostReads": 546
+      },
+      "page": {
+        "statHitUs": 0.95,
+        "statMissUs": 0.63,
+        "readdirBunEntries": 160,
+        "readdirMs": 0.615,
+        "found": 20000
+      },
+      "spawnToFirstOutputMs": [
+        6.98,
+        3.1,
+        3.38,
+        3.13,
+        3.35
+      ],
+      "memoryMb": 91.8,
+      "ok": true
+    },
+    {
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "workers": 2,
+      "tree": {
+        "files": 10415,
+        "bytes": 195456329,
+        "symlinks": 518,
+        "samplePaths": 3398
+      },
+      "boot": {
+        "compileMs": 3.69,
+        "attachMs": 0.5,
+        "kerneldMs": 35.74
+      },
+      "store": {
+        "bytes": 196999168,
+        "ms": 0,
+        "cached": true,
+        "mbPerS": null
+      },
+      "mount": {
+        "entries": 12197,
+        "ms": 4.21,
+        "openHandleMs": 2.28,
+        "indexMs": 1.93
+      },
+      "bootToMountedMs": 48.35,
+      "firstStatAfterMount": 1106,
+      "benchWorkersReadyMs": 18.75,
+      "bigFile": {
+        "bytes": 27721680,
+        "coldMs": 46.66,
+        "warmMs": 19.64,
+        "coldMbPerS": 594.06,
+        "warmMbPerS": 1411.49
+      },
+      "mixedCold": {
+        "calls": 40000,
+        "wallMs": 56.45,
+        "usPerCall": 2.762,
+        "callsPerSecond": 708654,
+        "found": 10000,
+        "bytes": 32644756,
+        "opfsChunkReads": 304
+      },
+      "mixedWarm": {
+        "calls": 40000,
+        "wallMs": 33.57,
+        "usPerCall": 1.667,
+        "callsPerSecond": 1191718,
+        "found": 10000,
+        "bytes": 32644756
+      },
+      "mixedPooled": {
+        "calls": 40000,
+        "wallMs": 24.9,
+        "usPerCall": 1.139,
+        "callsPerSecond": 1606426,
+        "found": 10000,
+        "bytes": 32644756
+      },
+      "statHit": {
+        "calls": 40000,
+        "wallMs": 11.68,
+        "usPerCall": 0.552,
+        "callsPerSecond": 3423192,
+        "found": 40000,
+        "bytes": 0
+      },
+      "statMiss": {
+        "calls": 40000,
+        "wallMs": 10.49,
+        "usPerCall": 0.489,
+        "callsPerSecond": 3814974,
+        "found": 0,
+        "bytes": 0
+      },
+      "kindOfHit": {
+        "calls": 40000,
+        "wallMs": 11.71,
+        "usPerCall": 0.537,
+        "callsPerSecond": 3417343,
+        "found": 40000,
+        "bytes": 0
+      },
+      "smallRead": {
+        "calls": 40000,
+        "wallMs": 101.39,
+        "usPerCall": 5.018,
+        "callsPerSecond": 394497,
+        "found": 0,
+        "bytes": 131088368
+      },
+      "smallReadInto": {
+        "calls": 40000,
+        "wallMs": 23.96,
+        "usPerCall": 1.178,
+        "callsPerSecond": 1669798,
+        "found": 0,
+        "bytes": 131088368
+      },
+      "realpath": {
+        "calls": 40000,
+        "wallMs": 25.96,
+        "usPerCall": 1.225,
+        "callsPerSecond": 1540832,
+        "found": 40000,
+        "bytes": 0
+      },
+      "overlayWrite2k": {
+        "calls": 10000,
+        "wallMs": 35.75,
+        "usPerCall": 6.847,
+        "callsPerSecond": 279759,
+        "found": 0,
+        "bytes": 0
+      },
+      "image": {
+        "entries": 12197,
+        "fileLen": 196999168,
+        "cachedBytes": 71563264,
+        "hostReads": 546
+      },
+      "page": {
+        "statHitUs": 0.614,
+        "statMissUs": 0.503,
+        "readdirBunEntries": 160,
+        "readdirMs": 0.155,
+        "found": 20000
+      },
+      "spawnToFirstOutputMs": [
+        3.33,
+        2.76,
+        2.76,
+        2.75,
+        2.94
+      ],
+      "memoryMb": 91.8,
+      "ok": true
+    },
+    {
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "workers": 2,
+      "tree": {
+        "files": 10415,
+        "bytes": 195456329,
+        "symlinks": 518,
+        "samplePaths": 3398
+      },
+      "boot": {
+        "compileMs": 4.18,
+        "attachMs": 0.6,
+        "kerneldMs": 37
+      },
+      "store": {
+        "bytes": 196999168,
+        "ms": 0,
+        "cached": true,
+        "mbPerS": null
+      },
+      "mount": {
+        "entries": 12197,
+        "ms": 6.94,
+        "openHandleMs": 5.11,
+        "indexMs": 1.84
+      },
+      "bootToMountedMs": 59.59,
+      "firstStatAfterMount": 1106,
+      "benchWorkersReadyMs": 24.99,
+      "bigFile": {
+        "bytes": 27721680,
+        "coldMs": 49.93,
+        "warmMs": 20.06,
+        "coldMbPerS": 555.16,
+        "warmMbPerS": 1381.94
+      },
+      "mixedCold": {
+        "calls": 40000,
+        "wallMs": 60.31,
+        "usPerCall": 2.808,
+        "callsPerSecond": 663295,
+        "found": 10000,
+        "bytes": 32644756,
+        "opfsChunkReads": 304
+      },
+      "mixedWarm": {
+        "calls": 40000,
+        "wallMs": 38.99,
+        "usPerCall": 1.888,
+        "callsPerSecond": 1026036,
+        "found": 10000,
+        "bytes": 32644756
+      },
+      "mixedPooled": {
+        "calls": 40000,
+        "wallMs": 25.98,
+        "usPerCall": 1.248,
+        "callsPerSecond": 1539646,
+        "found": 10000,
+        "bytes": 32644756
+      },
+      "statHit": {
+        "calls": 40000,
+        "wallMs": 14.53,
+        "usPerCall": 0.717,
+        "callsPerSecond": 2752925,
+        "found": 40000,
+        "bytes": 0
+      },
+      "statMiss": {
+        "calls": 40000,
+        "wallMs": 11.26,
+        "usPerCall": 0.542,
+        "callsPerSecond": 3552398,
+        "found": 0,
+        "bytes": 0
+      },
+      "kindOfHit": {
+        "calls": 40000,
+        "wallMs": 14.4,
+        "usPerCall": 0.675,
+        "callsPerSecond": 2777778,
+        "found": 40000,
+        "bytes": 0
+      },
+      "smallRead": {
+        "calls": 40000,
+        "wallMs": 96.29,
+        "usPerCall": 4.711,
+        "callsPerSecond": 415390,
+        "found": 0,
+        "bytes": 131088368
+      },
+      "smallReadInto": {
+        "calls": 40000,
+        "wallMs": 29.39,
+        "usPerCall": 1.376,
+        "callsPerSecond": 1361007,
+        "found": 0,
+        "bytes": 131088368
+      },
+      "realpath": {
+        "calls": 40000,
+        "wallMs": 35.12,
+        "usPerCall": 1.509,
+        "callsPerSecond": 1138952,
+        "found": 40000,
+        "bytes": 0
+      },
+      "overlayWrite2k": {
+        "calls": 10000,
+        "wallMs": 34.65,
+        "usPerCall": 6.661,
+        "callsPerSecond": 288600,
+        "found": 0,
+        "bytes": 0
+      },
+      "image": {
+        "entries": 12197,
+        "fileLen": 196999168,
+        "cachedBytes": 71563264,
+        "hostReads": 546
+      },
+      "page": {
+        "statHitUs": 0.789,
+        "statMissUs": 0.548,
+        "readdirBunEntries": 160,
+        "readdirMs": 0.175,
+        "found": 20000
+      },
+      "spawnToFirstOutputMs": [
+        3.71,
+        3.28,
+        3.51,
+        3.46,
+        4.38
+      ],
+      "memoryMb": 91.8,
+      "ok": true
+    },
+    {
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "workers": 2,
+      "tree": {
+        "files": 10415,
+        "bytes": 195456329,
+        "symlinks": 518,
+        "samplePaths": 3398
+      },
+      "boot": {
+        "compileMs": 3.65,
+        "attachMs": 0.53,
+        "kerneldMs": 40
+      },
+      "store": {
+        "bytes": 196999168,
+        "ms": 0,
+        "cached": true,
+        "mbPerS": null
+      },
+      "mount": {
+        "entries": 12197,
+        "ms": 3.83,
+        "openHandleMs": 1.93,
+        "indexMs": 1.9
+      },
+      "bootToMountedMs": 51.39,
+      "firstStatAfterMount": 1106,
+      "benchWorkersReadyMs": 14.48,
+      "bigFile": {
+        "bytes": 27721680,
+        "coldMs": 44.55,
+        "warmMs": 19.11,
+        "coldMbPerS": 622.19,
+        "warmMbPerS": 1450.64
+      },
+      "mixedCold": {
+        "calls": 40000,
+        "wallMs": 47.27,
+        "usPerCall": 2.323,
+        "callsPerSecond": 846113,
+        "found": 10000,
+        "bytes": 32644756,
+        "opfsChunkReads": 304
+      },
+      "mixedWarm": {
+        "calls": 40000,
+        "wallMs": 36.83,
+        "usPerCall": 1.658,
+        "callsPerSecond": 1086219,
+        "found": 10000,
+        "bytes": 32644756
+      },
+      "mixedPooled": {
+        "calls": 40000,
+        "wallMs": 18.27,
+        "usPerCall": 0.878,
+        "callsPerSecond": 2189382,
+        "found": 10000,
+        "bytes": 32644756
+      },
+      "statHit": {
+        "calls": 40000,
+        "wallMs": 10.38,
+        "usPerCall": 0.513,
+        "callsPerSecond": 3855422,
+        "found": 40000,
+        "bytes": 0
+      },
+      "statMiss": {
+        "calls": 40000,
+        "wallMs": 9.49,
+        "usPerCall": 0.46,
+        "callsPerSecond": 4214963,
+        "found": 0,
+        "bytes": 0
+      },
+      "kindOfHit": {
+        "calls": 40000,
+        "wallMs": 10.38,
+        "usPerCall": 0.501,
+        "callsPerSecond": 3851709,
+        "found": 40000,
+        "bytes": 0
+      },
+      "smallRead": {
+        "calls": 40000,
+        "wallMs": 89.04,
+        "usPerCall": 4.399,
+        "callsPerSecond": 449262,
+        "found": 0,
+        "bytes": 131088368
+      },
+      "smallReadInto": {
+        "calls": 40000,
+        "wallMs": 25.84,
+        "usPerCall": 1.266,
+        "callsPerSecond": 1547988,
+        "found": 0,
+        "bytes": 131088368
+      },
+      "realpath": {
+        "calls": 40000,
+        "wallMs": 26.39,
+        "usPerCall": 1.261,
+        "callsPerSecond": 1515726,
+        "found": 40000,
+        "bytes": 0
+      },
+      "overlayWrite2k": {
+        "calls": 10000,
+        "wallMs": 33.81,
+        "usPerCall": 6.721,
+        "callsPerSecond": 295727,
+        "found": 0,
+        "bytes": 0
+      },
+      "image": {
+        "entries": 12197,
+        "fileLen": 196999168,
+        "cachedBytes": 71563264,
+        "hostReads": 546
+      },
+      "page": {
+        "statHitUs": 0.665,
+        "statMissUs": 0.607,
+        "readdirBunEntries": 160,
+        "readdirMs": 0.215,
+        "found": 20000
+      },
+      "spawnToFirstOutputMs": [
+        4.29,
+        3.04,
+        3.28,
+        3.43,
+        3.26
+      ],
+      "memoryMb": 91.8,
+      "ok": true
+    },
+    {
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "workers": 2,
+      "tree": {
+        "files": 10415,
+        "bytes": 195456329,
+        "symlinks": 518,
+        "samplePaths": 3398
+      },
+      "boot": {
+        "compileMs": 4.5,
+        "attachMs": 0.67,
+        "kerneldMs": 34.14
+      },
+      "store": {
+        "bytes": 196999168,
+        "ms": 0,
+        "cached": true,
+        "mbPerS": null
+      },
+      "mount": {
+        "entries": 12197,
+        "ms": 4.8,
+        "openHandleMs": 2.97,
+        "indexMs": 1.83
+      },
+      "bootToMountedMs": 53.23,
+      "firstStatAfterMount": 1106,
+      "benchWorkersReadyMs": 25.12,
+      "bigFile": {
+        "bytes": 27721680,
+        "coldMs": 45.55,
+        "warmMs": 21.23,
+        "coldMbPerS": 608.6,
+        "warmMbPerS": 1305.78
+      },
+      "mixedCold": {
+        "calls": 40000,
+        "wallMs": 46.5,
+        "usPerCall": 2.266,
+        "callsPerSecond": 860123,
+        "found": 10000,
+        "bytes": 32644756,
+        "opfsChunkReads": 304
+      },
+      "mixedWarm": {
+        "calls": 40000,
+        "wallMs": 32.97,
+        "usPerCall": 1.576,
+        "callsPerSecond": 1213408,
+        "found": 10000,
+        "bytes": 32644756
+      },
+      "mixedPooled": {
+        "calls": 40000,
+        "wallMs": 23.13,
+        "usPerCall": 1.026,
+        "callsPerSecond": 1729356,
+        "found": 10000,
+        "bytes": 32644756
+      },
+      "statHit": {
+        "calls": 40000,
+        "wallMs": 13.8,
+        "usPerCall": 0.601,
+        "callsPerSecond": 2899601,
+        "found": 40000,
+        "bytes": 0
+      },
+      "statMiss": {
+        "calls": 40000,
+        "wallMs": 9.34,
+        "usPerCall": 0.457,
+        "callsPerSecond": 4280364,
+        "found": 0,
+        "bytes": 0
+      },
+      "kindOfHit": {
+        "calls": 40000,
+        "wallMs": 12.58,
+        "usPerCall": 0.567,
+        "callsPerSecond": 3179650,
+        "found": 40000,
+        "bytes": 0
+      },
+      "smallRead": {
+        "calls": 40000,
+        "wallMs": 90.94,
+        "usPerCall": 4.445,
+        "callsPerSecond": 439875,
+        "found": 0,
+        "bytes": 131088368
+      },
+      "smallReadInto": {
+        "calls": 40000,
+        "wallMs": 23.73,
+        "usPerCall": 1.173,
+        "callsPerSecond": 1685985,
+        "found": 0,
+        "bytes": 131088368
+      },
+      "realpath": {
+        "calls": 40000,
+        "wallMs": 23.81,
+        "usPerCall": 1.142,
+        "callsPerSecond": 1679614,
+        "found": 40000,
+        "bytes": 0
+      },
+      "overlayWrite2k": {
+        "calls": 10000,
+        "wallMs": 29.63,
+        "usPerCall": 5.48,
+        "callsPerSecond": 337439,
+        "found": 0,
+        "bytes": 0
+      },
+      "image": {
+        "entries": 12197,
+        "fileLen": 196999168,
+        "cachedBytes": 71563264,
+        "hostReads": 546
+      },
+      "page": {
+        "statHitUs": 0.719,
+        "statMissUs": 0.561,
+        "readdirBunEntries": 160,
+        "readdirMs": 1.115,
+        "found": 20000
+      },
+      "spawnToFirstOutputMs": [
+        3.33,
+        2.82,
+        2.82,
+        2.7,
+        2.74
+      ],
+      "memoryMb": 91.8,
+      "ok": true
+    },
+    {
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "workers": 2,
+      "tree": {
+        "files": 10415,
+        "bytes": 195456329,
+        "symlinks": 518,
+        "samplePaths": 3398
+      },
+      "boot": {
+        "compileMs": 3.54,
+        "attachMs": 0.54,
+        "kerneldMs": 45.06
+      },
+      "store": {
+        "bytes": 196999168,
+        "ms": 0,
+        "cached": true,
+        "mbPerS": null
+      },
+      "mount": {
+        "entries": 12197,
+        "ms": 9.5,
+        "openHandleMs": 7.4,
+        "indexMs": 2.1
+      },
+      "bootToMountedMs": 62.61,
+      "firstStatAfterMount": 1106,
+      "benchWorkersReadyMs": 17.86,
+      "bigFile": {
+        "bytes": 27721680,
+        "coldMs": 48.02,
+        "warmMs": 21.06,
+        "coldMbPerS": 577.35,
+        "warmMbPerS": 1316.32
+      },
+      "mixedCold": {
+        "calls": 40000,
+        "wallMs": 55.11,
+        "usPerCall": 2.682,
+        "callsPerSecond": 725821,
+        "found": 10000,
+        "bytes": 32644756,
+        "opfsChunkReads": 304
+      },
+      "mixedWarm": {
+        "calls": 40000,
+        "wallMs": 40.69,
+        "usPerCall": 1.874,
+        "callsPerSecond": 983043,
+        "found": 10000,
+        "bytes": 32644756
+      },
+      "mixedPooled": {
+        "calls": 40000,
+        "wallMs": 22.83,
+        "usPerCall": 1.073,
+        "callsPerSecond": 1752081,
+        "found": 10000,
+        "bytes": 32644756
+      },
+      "statHit": {
+        "calls": 40000,
+        "wallMs": 13.72,
+        "usPerCall": 0.672,
+        "callsPerSecond": 2916515,
+        "found": 40000,
+        "bytes": 0
+      },
+      "statMiss": {
+        "calls": 40000,
+        "wallMs": 11.09,
+        "usPerCall": 0.534,
+        "callsPerSecond": 3608480,
+        "found": 0,
+        "bytes": 0
+      },
+      "kindOfHit": {
+        "calls": 40000,
+        "wallMs": 12.69,
+        "usPerCall": 0.621,
+        "callsPerSecond": 3150847,
+        "found": 40000,
+        "bytes": 0
+      },
+      "smallRead": {
+        "calls": 40000,
+        "wallMs": 97.32,
+        "usPerCall": 4.846,
+        "callsPerSecond": 411036,
+        "found": 0,
+        "bytes": 131088368
+      },
+      "smallReadInto": {
+        "calls": 40000,
+        "wallMs": 27.91,
+        "usPerCall": 1.341,
+        "callsPerSecond": 1433178,
+        "found": 0,
+        "bytes": 131088368
+      },
+      "realpath": {
+        "calls": 40000,
+        "wallMs": 28.99,
+        "usPerCall": 1.344,
+        "callsPerSecond": 1379786,
+        "found": 40000,
+        "bytes": 0
+      },
+      "overlayWrite2k": {
+        "calls": 10000,
+        "wallMs": 39.23,
+        "usPerCall": 7.811,
+        "callsPerSecond": 254874,
+        "found": 0,
+        "bytes": 0
+      },
+      "image": {
+        "entries": 12197,
+        "fileLen": 196999168,
+        "cachedBytes": 71563264,
+        "hostReads": 546
+      },
+      "page": {
+        "statHitUs": 0.782,
+        "statMissUs": 0.6,
+        "readdirBunEntries": 160,
+        "readdirMs": 0.215,
+        "found": 20000
+      },
+      "spawnToFirstOutputMs": [
+        3.69,
+        3.36,
+        3.59,
+        3.41,
+        3.53
+      ],
+      "memoryMb": 91.8,
+      "ok": true
+    }
+  ]
+}

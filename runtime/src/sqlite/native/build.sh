@@ -36,7 +36,7 @@ if [ "${1:-}" = --fetch ]; then
   dir=$(cd "$dir" && pwd)
   # name, sha256, url
   fetch() {
-    if ! echo "$2  $dir/dl/$1" | sha256sum -c --status 2>/dev/null; then
+    if [ ! -f "$dir/dl/$1" ] || ! echo "$2  $dir/dl/$1" | sha256sum -c --status; then
       echo "downloading $1" >&2
       curl -fL --retry 2 -o "$dir/dl/$1.part" "$3"
       mv "$dir/dl/$1.part" "$dir/dl/$1"
