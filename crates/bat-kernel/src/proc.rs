@@ -282,6 +282,10 @@ pub fn finish(p: &Arc<Process>, status: i32) {
     if p.state.swap(ST_EXITED, SeqCst) == ST_EXITED {
         return;
     }
+    // Before the files are closed: a parent in spawnSync sees EOF on the pipes
+    // and calls waitpid at once, which reads the status as soon as the state
+    // says exited.
+    p.status.store(status, SeqCst);
     let fds = core::mem::take(&mut p.st.lock().fds);
     for (i, f) in fds.iter().enumerate() {
         if let Some(f) = f {
@@ -290,7 +294,6 @@ pub fn finish(p: &Arc<Process>, status: i32) {
     }
     drop(fds);
     crate::vfs::watch_remove_all(p.pid);
-    p.status.store(status, SeqCst);
     p.exit_wq.wake_all();
     match get(p.ppid) {
         Ok(parent) if parent.state.load(SeqCst) != ST_EXITED => parent.post(TOKEN_CHILD | p.pid, status as u32),
