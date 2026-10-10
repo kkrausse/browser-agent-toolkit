@@ -1,0 +1,129 @@
+{
+ "meta": {
+  "label": "native-after-opencode",
+  "date": "2026-10-10T08:51:24.998Z",
+  "node": "v24.18.0",
+  "prepared": "/home/kkrausse/devfs/repos/kkrausse/bat-rust/target-perf/cand/examples/todo-app/.editor/prepared",
+  "image": "image-5ac8e77d1366c361.batimg"
+ },
+ "summary": {
+  "opencode": {
+   "load1": {
+    "n": 7,
+    "median": 4.05,
+    "min": 4.05,
+    "max": 4.23
+   },
+   "listening": {
+    "n": 7,
+    "median": 1050.4,
+    "min": 1002.9,
+    "max": 1078.5
+   },
+   "health": {
+    "n": 7,
+    "median": 1092.2,
+    "min": 1040.1,
+    "max": 1118.5
+   },
+   "activated": {
+    "n": 7,
+    "median": 1305.3,
+    "min": 1256,
+    "max": 1362.5
+   },
+   "ready": {
+    "n": 7,
+    "median": 1335.6,
+    "min": 1285.9,
+    "max": 1393.8
+   }
+  }
+ },
+ "samples": [
+  {
+   "kind": "opencode",
+   "load": [
+    4.23,
+    7.78,
+    12.5
+   ],
+   "listening": 1069.5,
+   "health": 1115.1,
+   "activated": 1362.5,
+   "ready": 1393.8
+  },
+  {
+   "kind": "opencode",
+   "load": [
+    4.23,
+    7.78,
+    12.5
+   ],
+   "listening": 1015.9,
+   "health": 1053.9,
+   "activated": 1259.5,
+   "ready": 1285.9
+  },
+  {
+   "kind": "opencode",
+   "load": [
+    4.23,
+    7.78,
+    12.5
+   ],
+   "listening": 1078.5,
+   "health": 1118.5,
+   "activated": 1318.5,
+   "ready": 1345.2
+  },
+  {
+   "kind": "opencode",
+   "load": [
+    4.05,
+    7.68,
+    12.45
+   ],
+   "listening": 1059,
+   "health": 1101.8,
+   "activated": 1325,
+   "ready": 1353.5
+  },
+  {
+   "kind": "opencode",
+   "load": [
+    4.05,
+    7.68,
+    12.45
+   ],
+   "listening": 1002.9,
+   "health": 1040.1,
+   "activated": 1256,
+   "ready": 1287.3
+  },
+  {
+   "kind": "opencode",
+   "load": [
+    4.05,
+    7.68,
+    12.45
+   ],
+   "listening": 1044.5,
+   "health": 1082.6,
+   "activated": 1299,
+   "ready": 1326.7
+  },
+  {
+   "kind": "opencode",
+   "load": [
+    4.05,
+    7.68,
+    12.45
+   ],
+   "listening": 1050.4,
+   "health": 1092.2,
+   "activated": 1305.3,
+   "ready": 1335.6
+  }
+ ]
+}

@@ -95,6 +95,7 @@ async function openCode(ws: string, app: string) {
   const fs = {
     mkdir: async (p: string) => void mkdirSync(join(ws, p.replace(/^\/workspace/, '')), { recursive: true }),
     writeFile: async (p: string, data: Uint8Array | string) => writeFileSync(join(ws, p.replace(/^\/workspace/, '')), data),
+    readFile: async (p: string) => new Uint8Array(readFileSync(join(ws, p.replace(/^\/workspace/, '')))),
     remove: async (p: string) => rmSync(join(ws, p.replace(/^\/workspace/, '')), { recursive: true, force: true }),
   }
   // The model proxy URL only has to be well-formed: nothing is sent to it before a chat turn.
@@ -121,7 +122,7 @@ writeFileSync(inner, await built.outputs[0].text())
 const round = (v: unknown) => (typeof v === 'number' ? Math.round(v * 10) / 10 : v)
 const samples: any[] = []
 for (let i = 0; i < n; i++) {
-  for (const [kind, run] of [['vite', vite], ['opencode', openCode]] as const) {
+  for (const [kind, run] of ([['vite', vite], ['opencode', openCode]] as const).filter(([kind]) => !arg('only') || arg('only') === kind)) {
     const before = load()
     try {
       const r = await run(join(scratch, `ws-${kind}`), app)

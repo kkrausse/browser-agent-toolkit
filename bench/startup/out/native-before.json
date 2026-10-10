@@ -1,0 +1,415 @@
+{
+ "meta": {
+  "label": "native-before",
+  "date": "2026-10-10T08:51:08.290Z",
+  "node": "v24.18.0",
+  "prepared": "/home/kkrausse/devfs/repos/kkrausse/bat-rust/target-perf/base/examples/todo-app/.editor/prepared",
+  "image": "image-346c2eba87c91dbb.batimg"
+ },
+ "summary": {
+  "vite": {
+   "load1": {
+    "n": 7,
+    "median": 4.53,
+    "min": 4.49,
+    "max": 4.8
+   },
+   "listening": {
+    "n": 7,
+    "median": 398.3,
+    "min": 391,
+    "max": 468.9
+   },
+   "document": {
+    "n": 7,
+    "median": 751.1,
+    "min": 737.4,
+    "max": 874.9
+   },
+   "page": {
+    "n": 7,
+    "median": 1132.3,
+    "min": 1109.3,
+    "max": 1252.9
+   },
+   "requests": {
+    "n": 7,
+    "median": 31,
+    "min": 31,
+    "max": 31
+   },
+   "viteReadyIn": {
+    "n": 7,
+    "median": 376,
+    "min": 368,
+    "max": 447
+   }
+  }
+ },
+ "samples": [
+  {
+   "kind": "vite",
+   "load": [
+    4.8,
+    8.13,
+    12.72
+   ],
+   "listening": 468.9,
+   "document": 874.9,
+   "page": 1252.9,
+   "requests": 31,
+   "viteReadyIn": 447,
+   "slowest": [
+    {
+     "url": "/preview/5173/",
+     "at": 469,
+     "ms": 406,
+     "bytes": 14124
+    },
+    {
+     "url": "/preview/5173/.browser-editor-cache/vite/deps/react-dom_client.js?v=835ed04b",
+     "at": 898,
+     "ms": 325,
+     "bytes": 6062584
+    },
+    {
+     "url": "/preview/5173/@id/__x00__virtual:react-router/hmr-runtime",
+     "at": 905,
+     "ms": 321,
+     "bytes": 73144
+    },
+    {
+     "url": "/preview/5173/src/editing.tsx",
+     "at": 934,
+     "ms": 292,
+     "bytes": 2088
+    },
+    {
+     "url": "/preview/5173/src/lib/trpc.ts",
+     "at": 934,
+     "ms": 279,
+     "bytes": 1813
+    },
+    {
+     "url": "/preview/5173/src/style.css?url",
+     "at": 934,
+     "ms": 279,
+     "bytes": 379
+    }
+   ],
+   "optimizerRan": false
+  },
+  {
+   "kind": "vite",
+   "load": [
+    4.8,
+    8.13,
+    12.72
+   ],
+   "listening": 391,
+   "document": 737.4,
+   "page": 1131.2,
+   "requests": 31,
+   "viteReadyIn": 368,
+   "slowest": [
+    {
+     "url": "/preview/5173/",
+     "at": 391,
+     "ms": 346,
+     "bytes": 14124
+    },
+    {
+     "url": "/preview/5173/.browser-editor-cache/vite/deps/react-dom_client.js?v=835ed04b",
+     "at": 765,
+     "ms": 332,
+     "bytes": 6062584
+    },
+    {
+     "url": "/preview/5173/@id/__x00__virtual:react-router/hmr-runtime",
+     "at": 774,
+     "ms": 327,
+     "bytes": 73144
+    },
+    {
+     "url": "/preview/5173/.browser-editor-cache/vite/deps/chunk-TRTQSARU.js?v=835ed04b",
+     "at": 775,
+     "ms": 308,
+     "bytes": 7552
+    },
+    {
+     "url": "/preview/5173/src/editing.tsx",
+     "at": 796,
+     "ms": 306,
+     "bytes": 2088
+    },
+    {
+     "url": "/preview/5173/src/style.css?url",
+     "at": 796,
+     "ms": 305,
+     "bytes": 379
+    }
+   ],
+   "optimizerRan": false
+  },
+  {
+   "kind": "vite",
+   "load": [
+    4.49,
+    8.01,
+    12.65
+   ],
+   "listening": 398.3,
+   "document": 751.1,
+   "page": 1114.7,
+   "requests": 31,
+   "viteReadyIn": 376,
+   "slowest": [
+    {
+     "url": "/preview/5173/",
+     "at": 398,
+     "ms": 353,
+     "bytes": 14124
+    },
+    {
+     "url": "/preview/5173/@id/__x00__virtual:react-router/hmr-runtime",
+     "at": 760,
+     "ms": 317,
+     "bytes": 73144
+    },
+    {
+     "url": "/preview/5173/.browser-editor-cache/vite/deps/chunk-TRTQSARU.js?v=835ed04b",
+     "at": 762,
+     "ms": 303,
+     "bytes": 7552
+    },
+    {
+     "url": "/preview/5173/src/editing.tsx",
+     "at": 788,
+     "ms": 290,
+     "bytes": 2088
+    },
+    {
+     "url": "/preview/5173/.browser-editor-cache/vite/deps/@tanstack_react-query.js?v=835ed04b",
+     "at": 788,
+     "ms": 283,
+     "bytes": 10676
+    },
+    {
+     "url": "/preview/5173/src/style.css?url",
+     "at": 788,
+     "ms": 283,
+     "bytes": 379
+    }
+   ],
+   "optimizerRan": false
+  },
+  {
+   "kind": "vite",
+   "load": [
+    4.49,
+    8.01,
+    12.65
+   ],
+   "listening": 408.8,
+   "document": 768.5,
+   "page": 1132.3,
+   "requests": 31,
+   "viteReadyIn": 385,
+   "slowest": [
+    {
+     "url": "/preview/5173/",
+     "at": 409,
+     "ms": 360,
+     "bytes": 14124
+    },
+    {
+     "url": "/preview/5173/.browser-editor-cache/vite/deps/react-dom_client.js?v=835ed04b",
+     "at": 791,
+     "ms": 309,
+     "bytes": 6062584
+    },
+    {
+     "url": "/preview/5173/@id/__x00__virtual:react-router/hmr-runtime",
+     "at": 799,
+     "ms": 305,
+     "bytes": 73144
+    },
+    {
+     "url": "/preview/5173/.browser-editor-cache/vite/deps/chunk-TRTQSARU.js?v=835ed04b",
+     "at": 800,
+     "ms": 287,
+     "bytes": 7552
+    },
+    {
+     "url": "/preview/5173/src/editing.tsx",
+     "at": 823,
+     "ms": 281,
+     "bytes": 2088
+    },
+    {
+     "url": "/preview/5173/src/style.css?url",
+     "at": 823,
+     "ms": 280,
+     "bytes": 379
+    }
+   ],
+   "optimizerRan": false
+  },
+  {
+   "kind": "vite",
+   "load": [
+    4.49,
+    8.01,
+    12.65
+   ],
+   "listening": 417.7,
+   "document": 795.6,
+   "page": 1193.6,
+   "requests": 31,
+   "viteReadyIn": 398,
+   "slowest": [
+    {
+     "url": "/preview/5173/",
+     "at": 418,
+     "ms": 378,
+     "bytes": 14124
+    },
+    {
+     "url": "/preview/5173/@id/__x00__virtual:react-router/hmr-runtime",
+     "at": 826,
+     "ms": 320,
+     "bytes": 73144
+    },
+    {
+     "url": "/preview/5173/src/editing.tsx",
+     "at": 855,
+     "ms": 291,
+     "bytes": 2088
+    },
+    {
+     "url": "/preview/5173/src/lib/trpc.ts",
+     "at": 855,
+     "ms": 290,
+     "bytes": 1813
+    },
+    {
+     "url": "/preview/5173/src/style.css?url",
+     "at": 855,
+     "ms": 290,
+     "bytes": 379
+    },
+    {
+     "url": "/preview/5173/.browser-editor-cache/vite/deps/react-router.js?v=835ed04b",
+     "at": 854,
+     "ms": 289,
+     "bytes": 25115
+    }
+   ],
+   "optimizerRan": false
+  },
+  {
+   "kind": "vite",
+   "load": [
+    4.53,
+    7.96,
+    12.61
+   ],
+   "listening": 392.8,
+   "document": 748.6,
+   "page": 1153.8,
+   "requests": 31,
+   "viteReadyIn": 370,
+   "slowest": [
+    {
+     "url": "/preview/5173/",
+     "at": 393,
+     "ms": 356,
+     "bytes": 14124
+    },
+    {
+     "url": "/preview/5173/.browser-editor-cache/vite/deps/react-dom_client.js?v=835ed04b",
+     "at": 773,
+     "ms": 350,
+     "bytes": 6062584
+    },
+    {
+     "url": "/preview/5173/@id/__x00__virtual:react-router/hmr-runtime",
+     "at": 779,
+     "ms": 333,
+     "bytes": 73144
+    },
+    {
+     "url": "/preview/5173/src/editing.tsx",
+     "at": 809,
+     "ms": 303,
+     "bytes": 2088
+    },
+    {
+     "url": "/preview/5173/.browser-editor-cache/vite/deps/react-router.js?v=835ed04b",
+     "at": 808,
+     "ms": 302,
+     "bytes": 25115
+    },
+    {
+     "url": "/preview/5173/src/lib/trpc.ts",
+     "at": 809,
+     "ms": 302,
+     "bytes": 1813
+    }
+   ],
+   "optimizerRan": false
+  },
+  {
+   "kind": "vite",
+   "load": [
+    4.53,
+    7.96,
+    12.61
+   ],
+   "listening": 394.7,
+   "document": 743.4,
+   "page": 1109.3,
+   "requests": 31,
+   "viteReadyIn": 371,
+   "slowest": [
+    {
+     "url": "/preview/5173/",
+     "at": 395,
+     "ms": 349,
+     "bytes": 14124
+    },
+    {
+     "url": "/preview/5173/.browser-editor-cache/vite/deps/react-dom_client.js?v=835ed04b",
+     "at": 766,
+     "ms": 317,
+     "bytes": 6062584
+    },
+    {
+     "url": "/preview/5173/@id/__x00__virtual:react-router/hmr-runtime",
+     "at": 772,
+     "ms": 312,
+     "bytes": 73144
+    },
+    {
+     "url": "/preview/5173/src/editing.tsx",
+     "at": 798,
+     "ms": 287,
+     "bytes": 2088
+    },
+    {
+     "url": "/preview/5173/.browser-editor-cache/vite/deps/react-router.js?v=835ed04b",
+     "at": 797,
+     "ms": 274,
+     "bytes": 25115
+    },
+    {
+     "url": "/preview/5173/src/lib/trpc.ts",
+     "at": 798,
+     "ms": 274,
+     "bytes": 1813
+    }
+   ],
+   "optimizerRan": false
+  }
+ ]
+}
