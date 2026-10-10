@@ -1,13 +1,13 @@
-// bat-rust's coverage cases for a coding agent's shell tool
-// (crates/bat-sh/tests/codex-cases.tsv) run through THIS integration: the
-// pinned bat_sh.wasm + wasm.ts + host.ts on wasm-term's vfs, under Bun (no
+// bat-sh's coverage cases for a coding agent's shell tool
+// (crates/bat-sh/tests/codex-cases.tsv of this repository) run through THIS
+// integration: bat_sh.wasm + wasm.ts + host.ts on wasm-term's vfs, under Bun (no
 // browser: nothing here needs a Worker). Each case is compared with the
 // machine's bash, and its real rg/nl/diff/..., on the same files.
 //
 //   bun host/sh/coverage.ts [filter-regex]        after host/sh/build.sh
 //
-// The cases and the fixture are the pinned commit's own (build.sh leaves its
-// sources in vendor/bat-sh-src): the fixture is whatever `setup()` in
+// The cases and the fixture are those of the crate the module was built from
+// (BAT_SH_DIR as for build.sh): the fixture is whatever `setup()` in
 // tests/codex-coverage.sh creates. Verdicts: same / differs / missing (the
 // shell said "command not found") / no-ref (the machine lacks the program too).
 
@@ -18,7 +18,7 @@ import { createShHost } from "./host";
 import { createShRunner } from "./wasm";
 
 const root = join(import.meta.dir, "../..");
-const tests = join(root, "vendor/bat-sh-src/crates/bat-sh/tests");
+const tests = join(process.env.BAT_SH_DIR ?? join(root, "../crates/bat-sh"), "tests");
 const filter = new RegExp(process.argv[2] ?? ".");
 const module = new WebAssembly.Module(readFileSync(join(import.meta.dir, "dist/bat_sh.wasm")));
 const cases = readFileSync(join(tests, "codex-cases.tsv"), "utf8").split("\n")
