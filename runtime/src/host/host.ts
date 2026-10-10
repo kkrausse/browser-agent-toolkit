@@ -294,7 +294,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
       kerneldUrl: asset('bat-kerneld.js'),
       processWorkerUrl: processWorkerUrl(asset('bat-process.js'), {
         nodelibUrl: 'bat-nodelib.js',
-        wasm: { modules: 'bat_modules.wasm', native: 'bat_node_native.wasm', sqlite: 'sqlite3.wasm', sh: 'bat_sh.wasm' },
+        wasm: { modules: 'bat_modules.wasm', native: 'bat_node_native.wasm', sqlite: 'sqlite3.wasm', sh: 'bat_sh.wasm', tls: 'bat_tls.wasm' },
         programs,
         // The routed global `fetch` exists in every process before guest code runs.
         prewarm: [...DEFAULT_CONFIG.prewarm, 'bat:net-globals'],

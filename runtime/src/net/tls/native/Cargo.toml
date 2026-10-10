@@ -1,0 +1,29 @@
+# The TLS client of the runtime's tunnel transport (../tunnel.ts), as a Wasm library.
+# Not a member of the repository's workspace: it is built only by ./build.sh, and the
+# result (../bat_tls.wasm) is committed.
+[package]
+name = "bat-tls"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+# A build for tests only: one more trust anchor, read at compile time from the file named
+# by BAT_TLS_TEST_ROOT (DER). Such a build answers 1 to `tls_test_build`.
+test-root = []
+
+[dependencies]
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[workspace]

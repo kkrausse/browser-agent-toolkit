@@ -5,7 +5,7 @@ import type { Kernel } from '../kernel/kernel'
 export interface RuntimeConfig {
   /** Vendored Node lib bundle (classic script calling `__bat_nodelib`). */
   nodelibUrl: string
-  /** Wasm helpers, fetched lazily: the module transform and the native codecs (zlib, digests). */
+  /** Wasm helpers, fetched lazily: the module transform and the native codecs (zlib, digests). `tls` (bat_tls.wasm) is fetched only by a process that tunnels a request (net/tunnel.ts). */
   wasm: { modules?: string; native?: string; [name: string]: string | undefined }
   /** Program scripts by name (manifest.programs[].name -> URL of its file). */
   programs: Record<string, string>
@@ -75,6 +75,7 @@ export interface Runtime {
     setTimeout: typeof setTimeout
     clearTimeout: typeof clearTimeout
     Worker: typeof Worker
+    WebSocket: typeof WebSocket
     location: { href: string; origin: string }
     global: any
   }

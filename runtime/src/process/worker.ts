@@ -40,6 +40,7 @@ const host = {
   queueMicrotask: g.queueMicrotask.bind(g) as typeof queueMicrotask,
   MessageChannel: g.MessageChannel as typeof MessageChannel,
   Worker: g.Worker as typeof Worker,
+  WebSocket: g.WebSocket as typeof WebSocket,
   XMLHttpRequest: g.XMLHttpRequest as typeof XMLHttpRequest,
   location: { href: String(g.location.href), origin: String(g.location.origin) },
 }
@@ -97,7 +98,8 @@ function wasmModule(name: string): WebAssembly.Module {
 }
 function prefetchWasm() {
   for (const [name, url] of Object.entries(config.wasm)) {
-    if (!url || wasmModules.has(name)) continue
+    // The TLS client is for a process that tunnels a request, which fetches it then (net/fetch.ts).
+    if (!url || name === 'tls' || wasmModules.has(name)) continue
     WebAssembly.compileStreaming(host.fetch(url)).then(
       (m) => {
         if (!wasmModules.has(name)) wasmModules.set(name, m)

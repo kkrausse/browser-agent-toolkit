@@ -6,6 +6,8 @@
 //                                                 worker, so cookies travel and nothing is
 //                                                 mixed content); the URL already carries the
 //                                                 page's scheme and port (RuntimeHost.hostOrigin)
+//   https://<host named in BAT_FETCH_TUNNEL>    → the runtime's own TLS and HTTP/1.1 client,
+//                                                 over a TCP relay (tunnel.ts)
 //   anything else                               → the browser's fetch
 //
 // A loopback port named in the process's `BAT_HOST_LOOPBACK_PORTS` (comma-separated) is the
@@ -19,15 +21,27 @@
 // from a host that sends no CORS headers, which the page serves a copy of. The guest sees the
 // answer under the URL it asked for.
 //
+// `BAT_FETCH_TUNNEL` (host names, separated by spaces or commas) with `BAT_FETCH_TUNNEL_URL`
+// (`wss://relay.example/tcp`) in the process's environment: an https request to one of those
+// hosts is not given to the browser. The runtime opens a WebSocket to the relay, which opens
+// a TCP connection to the host and carries bytes; TLS (certificate chain and name verified
+// against public roots; nothing can turn that off) and HTTP/1.1 are spoken here, in the tab.
+// For an API that answers without `Access-Control-Allow-Origin`, whose response the browser's
+// fetch would refuse to show. The request is the program's own, as Node would send it: no
+// `Origin`, no cookies, no preflight, the program's headers as written. See tunnel.ts.
+//
 // With `BAT_FETCH_DIAG=1` in the process's environment, a request handed to the browser's
 // fetch that rejects or is answered with a status of 400 or more leaves one line on the
 // process's stderr: `[bat fetch] <METHOD> <origin + path> -> <status | error>`. Never the
 // query string, headers or bodies. A cross-origin failure (CORS, mixed content, a host that
 // is down) is otherwise only the guest's "fetch failed", and the browser tells script no more
-// than "Failed to fetch": the line at least says which request it was.
+// than "Failed to fetch": the line at least says which request it was. A tunnelled request
+// leaves a line whatever its outcome, which says so: `-> HTTP 200 (tunnel via relay.example,
+// TLSv1_3 …)`, or `-> tunnel via relay.example: <what failed: the relay, TLS, HTTP>`.
 import type { Runtime } from '../process/runtime'
-import { createHttpClient, headerPairs, toResponse, type HttpClient, type WireResponse } from './client'
+import { createHttpClient, headerPairs, toResponse, wireBody, type HttpClient, type WireResponse } from './client'
 import { getNet, isLoopback } from './net'
+import { instantiateTls, tunnelRequest, type TlsEngine } from './tunnel'
 
 export const HOST_ALIAS = 'host.internal'
 
@@ -94,6 +108,106 @@ function createGuestFetch(rt: Runtime): GuestFetch {
     return response
   }
   const client = createHttpClient({ kernel: rt.kernel, io })
+
+  // ---- the tunnel (see the top of the file, and tunnel.ts) ----
+  const env = (name: string): string => String((rt as any).process?.env?.[name] ?? '')
+  /** The relay's address when `url` is to be tunnelled. */
+  const tunnelFor = (url: URL): string | undefined => {
+    const relay = env('BAT_FETCH_TUNNEL_URL')
+    if (!relay || url.protocol !== 'https:') return undefined
+    return env('BAT_FETCH_TUNNEL').toLowerCase().split(/[\s,]+/).includes(url.hostname.toLowerCase()) ? relay : undefined
+  }
+  let engine: Promise<TlsEngine> | undefined
+  /** bat_tls.wasm, fetched and instantiated at the first tunnelled request of this process. */
+  const tlsEngine = (): Promise<TlsEngine> =>
+    (engine ??= (async () => {
+      const url = rt.config.wasm.tls
+      if (!url) throw new Error('this runtime was started without its TLS module (bat_tls.wasm)')
+      const response = await browserFetch(url)
+      if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`)
+      const loaded = instantiateTls(await WebAssembly.compile(await response.arrayBuffer()))
+      if (loaded.testBuild) {
+        try { (rt as any).process?.stderr?.write('[bat fetch] bat_tls.wasm is a TEST build: it trusts a test certificate besides the public roots\n') } catch { /* no stderr */ }
+      }
+      return loaded
+    })().catch((error) => {
+      engine = undefined
+      throw error
+    }))
+  type Wire = { method: string; headers: [string, string][]; body: Uint8Array | ReadableStream<Uint8Array> | null; signal?: AbortSignal }
+  /** One request through the relay; one diagnostics line whatever happens. */
+  async function tunnelled(relay: string, url: URL, req: Wire): Promise<WireResponse & { url: string }> {
+    const via = `tunnel via ${(() => { try { return new URL(relay).host } catch { return 'an unreadable relay address' } })()}`
+    try {
+      const res = await tunnelRequest({ relayUrl: relay, WebSocket: rt.host.WebSocket, engine: tlsEngine }, { url, ...req })
+      said(url, { method: req.method }, `HTTP ${res.status} (${via}, ${res.tls})`)
+      return { status: res.status, statusText: res.statusText, headers: res.headers, body: res.body, url: url.href }
+    } catch (error) {
+      const name = (error as any)?.name
+      if (name !== 'AbortError' && name !== 'TimeoutError') said(url, { method: req.method }, `${via}: ${String((error as any)?.message ?? error).slice(0, 300)}`)
+      throw error
+    }
+  }
+  /** `fetch` for a tunnelled URL: the program's request as written, redirects followed here. */
+  async function tunnelFetch(relay: string, url: URL, input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const given = typeof input === 'object' && !(input instanceof URL) ? input : undefined
+    let method = (init?.method ?? given?.method ?? 'GET').toUpperCase()
+    const signal = init?.signal ?? given?.signal ?? undefined
+    const redirect = init?.redirect ?? given?.redirect ?? 'follow'
+    let headers = headerPairs(init?.headers ?? given?.headers)
+    const has = (name: string) => headers.some(([n]) => n.toLowerCase() === name)
+    let body: Uint8Array | ReadableStream<Uint8Array> | null = null
+    if (init?.body != null) {
+      const wire = await wireBody(init.body)
+      body = wire.body
+      if (wire.type && !has('content-type')) headers.push(['content-type', wire.type])
+    } else if (given?.body) body = new Uint8Array(await given.arrayBuffer())
+    // What Node's fetch adds when the program did not say.
+    if (!has('accept')) headers.push(['accept', '*/*'])
+    if (!has('user-agent')) headers.push(['user-agent', 'node'])
+    // Bodies are passed on as they arrive; nothing here inflates more than gzip and deflate.
+    if (!has('accept-encoding')) headers.push(['accept-encoding', 'identity'])
+    let res: WireResponse & { url: string }
+    let redirected = false
+    for (let hops = 0; ; hops++) {
+      try {
+        res = await tunnelled(relay, url, { method, headers, body, signal })
+      } catch (e) {
+        if ((e as any)?.name === 'AbortError' || (e as any)?.name === 'TimeoutError') throw e
+        throw new TypeError(`fetch failed: ${String((e as any)?.message ?? e)}`, { cause: e })
+      }
+      const location = redirect !== 'manual' && REDIRECTS.has(res.status) ? res.headers.find(([n]) => n.toLowerCase() === 'location')?.[1] : undefined
+      if (location === undefined) break
+      await res.body?.cancel().catch(() => {})
+      if (redirect === 'error') throw new TypeError('fetch failed: unexpected redirect')
+      if (hops >= 20) throw new TypeError('fetch failed: redirect count exceeded')
+      if (body instanceof ReadableStream) throw new TypeError('fetch failed: a redirect of a request with a streamed body')
+      const next = new URL(location, url)
+      if (res.status === 303 || ((res.status === 301 || res.status === 302) && method === 'POST')) {
+        method = 'GET'
+        body = null
+        headers = headers.filter(([n]) => !/^content-/i.test(n))
+      }
+      // Credentials are for the host they were given for.
+      if (next.origin !== url.origin) headers = headers.filter(([n]) => !/^(authorization|cookie|proxy-authorization)$/i.test(n))
+      const onward = tunnelFor(next)
+      if (!onward) return guestFetch(next, { method, headers: headers.filter(([n]) => !/^(accept-encoding|user-agent)$/i.test(n)), body: body as BodyInit | null, signal, redirect })
+      relay = onward
+      url = next
+      redirected = true
+    }
+    let stream = track(res.body)
+    const encoding = res.headers.find(([n]) => n.toLowerCase() === 'content-encoding')?.[1]?.trim().toLowerCase()
+    if (stream && (encoding === 'gzip' || encoding === 'deflate')) {
+      stream = stream.pipeThrough(new DecompressionStream(encoding) as unknown as TransformStream<Uint8Array, Uint8Array>)
+      res.headers = res.headers.filter(([n]) => !/^content-(encoding|length)$/i.test(n))
+    }
+    const response = toResponse({ ...res, body: stream })
+    Object.defineProperty(response, 'url', { value: res.url, configurable: true })
+    if (redirected) Object.defineProperty(response, 'redirected', { value: true, configurable: true })
+    return response
+  }
+
   const pageOrigin = new URL(rt.host.location.origin)
 
   const stripBrackets = (h: string) => (h.startsWith('[') ? h.slice(1, -1) : h)
@@ -170,6 +284,11 @@ function createGuestFetch(rt: Runtime): GuestFetch {
         const res = await local(url, req, false)
         return { ...res, body: track(res.body) }
       }
+      const relay = tunnelFor(url)
+      if (relay) {
+        const res = await tunnelled(relay, url, req)
+        return { ...res, body: track(res.body) }
+      }
       // The browser owns these headers; sending them is an error or a no-op.
       const headers = req.headers.filter(([n]) => !/^(host|connection|content-length|transfer-encoding|keep-alive|upgrade|expect)$/i.test(n))
       const out = await native(isHostAlias(url) ? toPage(url) : url, { method: req.method, headers, body: req.method === "GET" || req.method === "HEAD" ? undefined : (req.body as BodyInit | null), signal: req.signal, redirect: 'manual' })
@@ -202,6 +321,8 @@ function createGuestFetch(rt: Runtime): GuestFetch {
         Object.defineProperty(response, 'url', { value: res.url, configurable: true })
         return response
       }
+      const relay = url && tunnelFor(url)
+      if (relay) return await tunnelFetch(relay, url!, input, init)
       let response: Response
       if (url && isHostAlias(url)) {
         // Re-target the request; a Request object is rebuilt because its URL is read-only.

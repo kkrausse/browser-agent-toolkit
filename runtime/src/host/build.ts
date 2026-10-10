@@ -6,6 +6,7 @@
 //   sw.js         the preview service worker (classic script)
 //   kernel.wasm   the kernel build (newest of target-net, target-runtime, target-kernel)
 //   sqlite3.wasm  node:sqlite's engine
+//   bat_tls.wasm  TLS for requests the runtime makes itself over a TCP relay (net/tunnel.ts)
 //
 // With the process runtime's files this makes runtime/dist/ the complete,
 // self-contained asset directory: serve it as `<base>runtime/` beside the
@@ -44,3 +45,5 @@ if (kernels[0]) {
 } else console.warn('no kernel build found (crates/bat-kernel/build.sh); kernel.wasm not copied')
 const sqlite = join(here, '../sqlite/sqlite3.wasm')
 if (existsSync(sqlite)) copyFileSync(sqlite, join(dist, 'sqlite3.wasm'))
+// The TLS client of the tunnel transport (committed; net/tls/native/build.sh rebuilds it).
+copyFileSync(join(here, '../net/tls/bat_tls.wasm'), join(dist, 'bat_tls.wasm'))

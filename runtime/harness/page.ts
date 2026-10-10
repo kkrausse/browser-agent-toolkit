@@ -74,7 +74,7 @@ async function start() {
     kerneldUrl: asset('bat-kerneld.js'),
     processWorkerUrl: processWorkerUrl(new URL(asset('bat-process.js'), location.href).href, {
       nodelibUrl: 'bat-nodelib.js',
-      wasm: { modules: 'bat_modules.wasm', native: 'bat_node_native.wasm', sqlite: 'sqlite3.wasm', sh: 'bat_sh.wasm' },
+      wasm: { modules: 'bat_modules.wasm', native: 'bat_node_native.wasm', sqlite: 'sqlite3.wasm', sh: 'bat_sh.wasm', tls: 'bat_tls.wasm' },
       programs,
       // As the host SDK does: route the guest's global fetch (loopback goes to kernel sockets).
       prewarm: [...DEFAULT_CONFIG.prewarm, 'bat:net-globals'],

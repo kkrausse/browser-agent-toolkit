@@ -113,6 +113,12 @@ of each `wasm/` workspace.
 | | `brotli`, `alloc-no-stdlib`, `brotli-decompressor` | BSD-3-Clause OR MIT |
 | | RustCrypto: `digest`, `md-5`, `sha1`, `sha2`, `hmac`, `pbkdf2`, `scrypt`, `salsa20`, `aes`, `ghash` and their support crates | MIT OR Apache-2.0 |
 | `bat_sh.wasm` | `regex-lite` (above) | MIT OR Apache-2.0 |
+| `bat_tls.wasm` (`runtime/src/net/tls/`, committed; its own `Cargo.lock` in `native/`) | `rustls` 0.23.45 (TLS) | Apache-2.0 OR ISC OR MIT |
+| | `ring` 0.17.14 (cryptography; includes code from BoringSSL and OpenSSL, see its `LICENSE` files) | Apache-2.0 AND ISC |
+| | `rustls-webpki` 0.103.15 (certificate verification), `untrusted` | ISC |
+| | `webpki-roots` 1.0.9: the trust anchors, Mozilla's root certificate list as data | CDLA-Permissive-2.0 |
+| | `subtle` | BSD-3-Clause |
+| | `rustls-pki-types`, `zeroize`, `once_cell`, `getrandom`, `cfg-if`, `wasi` | MIT OR Apache-2.0 |
 | `bat-prepare` (native tool, never sent to a browser) | `zstd` / `zstd-safe` / `zstd-sys`, which compile the reference libzstd (Meta Platforms, BSD-3-Clause; the crates MIT OR Apache-2.0); `sha2`, `rayon`, `clap`, `serde`, `serde_json`, `anyhow` | as stated; the rest MIT OR Apache-2.0 |
 
 The zstd copy of an image that `bat-prepare` writes is decoded by the browser's network
