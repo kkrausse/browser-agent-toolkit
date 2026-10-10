@@ -23,11 +23,22 @@ export function trace(name: string, data?: unknown, at?: number): void {
   if (channel) channel.postMessage({ src: source, name, t: performance.timeOrigin + (at ?? performance.now()), data } satisfies TraceMark)
 }
 
+/** A thread answers a question asked on the channel (`{ cmd }`), e.g. the page asking processes what they loaded. Tracing only. */
+export function traceCommand(cmd: string, answer: () => void): void {
+  if (!channel) return
+  const listener = new BroadcastChannel(TRACE_CHANNEL)
+  listener.onmessage = (e) => {
+    if (e.data?.cmd === cmd) answer()
+  }
+}
+
 /** Page: collect every thread's marks (its own included) into `globalThis.__batTrace`. */
 export function traceCollect(src: string): () => void {
   traceEnable(src)
   const store: TraceMark[] = ((globalThis as any).__batTrace ??= [])
   const listener = new BroadcastChannel(TRACE_CHANNEL)
-  listener.onmessage = (e) => store.push(e.data)
+  listener.onmessage = (e) => {
+    if (e.data?.name) store.push(e.data)
+  }
   return () => listener.close()
 }

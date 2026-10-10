@@ -5,6 +5,7 @@
 //
 //   bench/startup/sync.sh prepare && bench/startup/serve.sh 4120
 //   bun bench/startup/run.ts --label before [--reopen 5] [--fresh 5] [--trace] [--max-load 14]
+//   bun bench/startup/run.ts --label rec --reopen 2 --trace --record-modules examples/todo-app/startup-modules.json
 //   bun bench/startup/run.ts --label ab --variants base=4121,new=4120 --reopen 8     (interleaved A/B)
 //
 // A sample is: load the page, wait until it is idle, click "Open editor", wait for the
@@ -100,6 +101,10 @@ const done = () => {
   return has('chat.ready') && has('preview.visible') ? 'ok' : false
 }
 const outcome = await (await page.waitForFunction(done, null, { timeout: 180000, polling: 50 })).jsonValue()
+if (${JSON.stringify(!!arg('record-modules'))}) {
+  await page.evaluate(() => new BroadcastChannel('bat-trace').postMessage({ cmd: 'modules' }))
+  await page.waitForTimeout(1000)
+}
 const result = await page.evaluate(() => {
   const click = window.__clickAt
   const steps = {}
@@ -113,8 +118,17 @@ const result = await page.evaluate(() => {
 await page.getByRole('button', { name: 'Exit' }).click()
 await page.getByRole('button', { name: 'Open editor' }).waitFor({ timeout: 30000 })
 await page.waitForFunction(() => !document.querySelector('.todo-editor'), null, { timeout: 30000 })
-return JSON.stringify({ outcome, before, ...result })
+// The result can be larger than one reply may be: it is left on the page and read in pieces.
+await page.evaluate((text) => { window.__batResult = text }, JSON.stringify({ outcome, before, ...result }))
+return JSON.stringify({ length: await page.evaluate(() => window.__batResult.length) })
 `
+
+async function takeSample(kind: 'fresh' | 'reopen', origin: string): Promise<any> {
+  const { length } = await execute<{ length: number }>(sampleCode(kind, origin))
+  let text = ''
+  for (let at = 0; at < length; at += 20000) text += await execute<string>(`return JSON.stringify(await page.evaluate((at) => window.__batResult.slice(at, at + 20000), ${at}))`)
+  return JSON.parse(text)
+}
 
 interface Sample {
   variant: string
@@ -162,7 +176,7 @@ const plan: ('fresh' | 'reopen')[] = [...Array(fresh).fill('fresh'), ...Array(re
 // A reopen needs something to reopen: when no fresh sample precedes, one unrecorded open first.
 const originOf = (p: string) => `http://127.0.0.1:${p}`
 if (!fresh && reopen && !flag('no-prime')) {
-  for (const [, p] of variants) await execute(sampleCode('reopen', originOf(p)))
+  for (const [, p] of variants) await takeSample('reopen', originOf(p))
   console.error('primed')
 }
 for (const [i, kind] of plan.entries()) for (const [variant, p] of variants) {
@@ -170,7 +184,7 @@ for (const [i, kind] of plan.entries()) for (const [variant, p] of variants) {
   const before = load()
   let r: any
   try {
-    r = await execute<any>(sampleCode(kind, originOf(p)))
+    r = await takeSample(kind, originOf(p))
   } catch (e) {
     console.error(`sample ${i + 1} (${kind}, ${variant}) failed: ${(e as Error).message}`)
     continue
@@ -183,6 +197,23 @@ for (const [i, kind] of plan.entries()) for (const [variant, p] of variants) {
   )
 }
 
+// --record-modules <file> (with --trace): what each launch's process had loaded once the app was
+// visible and the chat ready, as { preview: [guest paths], agent: [...] } for the toolkit's
+// prepare({ startupModules }). The union over the samples.
+const recordTo = arg('record-modules')
+if (recordTo) {
+  const sets: Record<string, Set<string>> = {}
+  for (const s of samples) for (const m of s.trace) {
+    if (m.name !== 'modules' || !m.data?.modules) continue
+    const script = String(m.data.argv?.[1] ?? '')
+    const launch = script.includes('/vite/') ? 'preview' : script === '/app/server.js' ? 'agent' : undefined
+    if (launch) for (const path of m.data.modules) (sets[launch] ??= new Set()).add(path)
+  }
+  // Workspace files are never part of an image.
+  const lists = Object.fromEntries(Object.entries(sets).map(([k, v]) => [k, [...v].filter((p) => p.includes('/node_modules/') || p.startsWith('/app/')).sort()]))
+  await Bun.write(recordTo, JSON.stringify(lists, null, 1) + '\n')
+  console.error(`recorded ${Object.entries(lists).map(([k, v]) => `${k}: ${v.length}`).join(', ')} → ${recordTo}`)
+}
 const commit = (await $`git -C ${join(import.meta.dir, '../..')} rev-parse --short HEAD`.quiet().nothrow().text()).trim()
 const summary: Record<string, any> = {}
 for (const [variant] of variants) for (const kind of ['fresh', 'reopen'] as const) {

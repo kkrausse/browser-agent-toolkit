@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -33,6 +33,13 @@ export interface PrepareOptions {
    * start while the rest of the image is still downloading. Paths the tree no longer has
    * are ignored. Changing it gives the image a new identity. */
   startupOrder?: string;
+  /** A recorded start-up module list: JSON `{ preview?: string[], agent?: string[] }` of guest
+   * paths each program had loaded once it was up (the example's is recorded by
+   * `bench/startup/run.ts --record-modules`). Those modules are also emitted as one module
+   * script per launch, which the browser keeps compiled between visits (V8 code cache), instead
+   * of compiling each again in every process. Paths the tree no longer has are ignored; a
+   * missing or stale file only loses the speed-up. */
+  startupModules?: string;
   /** zstd level (1–19) of the copy of the image browsers download. Default 9; 19 is about
    * 14% smaller and takes tens of seconds when the dependency tree changes. */
   compressionLevel?: number;
@@ -149,5 +156,52 @@ export async function prepare(options: PrepareOptions): Promise<EditorManifest> 
     ...(options.compressionLevel ? ['--zstd-level', String(options.compressionLevel)] : []),
   ]);
   await installRuntime(outDir, findRuntime(options.runtimeDir));
+  if (options.startupModules) await addStartupPrograms(findBin(options.bin), outDir, manifestPath, resolve(appRoot, options.startupModules));
   return JSON.parse(await readFile(manifestPath, 'utf8'));
+}
+
+function capture(command: string, args: string[]): Promise<{ code: number | null; stdout: string }> {
+  return new Promise((done, fail) => {
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'inherit'] });
+    let stdout = '';
+    child.stdout!.on('data', chunk => { stdout += chunk; });
+    child.on('error', fail);
+    child.on('exit', code => done({ code, stdout }));
+  });
+}
+
+/** One start-up program per launch that has a recorded module list (see `PrepareOptions.startupModules`). */
+async function addStartupPrograms(bin: string, outDir: string, manifestPath: string, listPath: string): Promise<void> {
+  if (!existsSync(listPath)) return;
+  const lists = JSON.parse(await readFile(listPath, 'utf8')) as Record<string, string[]>;
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as EditorManifest;
+  if (!manifest.image) return;
+  const images = [manifest.image as { file: string; mount?: string }, ...(manifest.layers ?? [])].flatMap(image => ['--image', `${join(outDir, image.file)}=${image.mount ?? '/'}`]);
+  let changed = false;
+  for (const [launch, modules] of Object.entries(lists)) {
+    const description = (manifest.launch as Record<string, LaunchDescription | undefined>)[launch];
+    if (!description || !Array.isArray(modules) || modules.length === 0) continue;
+    const name = `start-${launch}`, list = join(outDir, `.${name}.modules.json`);
+    await writeFile(list, JSON.stringify(modules));
+    const built = await capture(bin, ['startup-program', ...images, '--name', name, '--modules', list, '-o', outDir]);
+    await rm(list, { force: true });
+    if (built.code !== 0) { console.warn(`[prepare] no start-up program for ${launch}: bat-prepare exited with code ${built.code}`); continue; }
+    const record = JSON.parse(built.stdout) as { name: string; file: string; bytes: number; sha256: string; modules: string[]; sloppy: number; absent: number };
+    // The script is loaded as a module: it has to parse as one (`await` as an identifier and
+    // HTML-like comments are errors there, which no per-module rule above catches).
+    const check = join(outDir, `.${name}.check.mjs`);
+    await copyFile(join(outDir, record.file), check);
+    const parsed = await capture('node', ['--check', check]).catch(() => ({ code: 127, stdout: '' }));
+    await rm(check, { force: true });
+    if (parsed.code !== 0) {
+      await rm(join(outDir, record.file), { force: true });
+      console.warn(`[prepare] start-up program for ${launch} dropped: it does not parse as a module`);
+      continue;
+    }
+    manifest.programs = [...(manifest.programs ?? []).filter(program => program.name !== name), { name, file: record.file, bytes: record.bytes, sha256: record.sha256, modules: [], moduleCount: record.modules.length } as never];
+    description.programs = [...(description.programs ?? []).filter(other => other !== name), name];
+    changed = true;
+    console.log(`[prepare] start-up program ${record.file}: ${record.modules.length} of ${modules.length} modules, ${(record.bytes / 1e6).toFixed(1)} MB (${record.sloppy} sloppy CommonJS and ${record.absent} files outside the images stay with the loader)`);
+  }
+  if (changed) await writeFile(manifestPath, JSON.stringify(manifest));
 }

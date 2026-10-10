@@ -21,6 +21,9 @@ interface InitArgs {
   warmSpare: boolean
   /** Warm process workers made at boot (default 1); afterwards one is kept. */
   spares?: number
+  /** Program scripts each boot-time spare starts loading at once (names per spare); a spawn that
+   * asks for exactly those (BAT_PROGRAMS) gets that worker. */
+  spareHints?: string[][]
   /** Names of images that will be mounted: handles are opened ahead of the mount. */
   images?: string[]
   trace?: boolean
@@ -36,22 +39,29 @@ const FRAME_HEADER = 24
 const SNAP_HEADER = 32
 const SNAP_MAGIC = [0x42, 0x41, 0x54, 0x53, 0x4e, 0x41, 0x50, 0x31] // "BATSNAP1"
 const SNAPSHOT_AT = 16 << 20
+// A journal is replayed record by record at the next open; a snapshot is read in one piece.
+// Once the overlay has been quiet for a while, a journal of this size is folded into a snapshot,
+// so an open normally restores from a snapshot and a short journal.
+const SNAPSHOT_IDLE_AT = 1 << 20
+const SNAPSHOT_IDLE_MS = 5000
 
 let inst: KernelInstance
 let k: Kernel
 let cfg: InitArgs
 const handles: (SyncHandle | undefined)[] = []
 const procs = new Map<number, Proc>()
-const spares: Promise<Proc>[] = []
+/** Warm workers. `hint`: the program scripts it is loading ('' = none, usable by any spawn). */
+const spares: { hint: string; ready: Promise<Proc> }[] = []
 let journal: SyncHandle | undefined
 let journalSize = 0
+let journalWrittenAt = 0
 let nextSlot: 'snap-a' | 'snap-b' = 'snap-a'
 let outP = 0
 const stats = { spawns: 0, kills: 0, faults: 0, journalFrames: 0, journalBytes: 0, snapshots: 0 }
 
 // ---- process workers ----
 
-function createProcessWorker(): Promise<Proc> {
+function createProcessWorker(programs: string[] = []): Promise<Proc> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(cfg.processWorkerUrl, { type: cfg.processWorkerType ?? 'module', name: 'bat-process' })
     const proc: Proc = { worker, thread: 0, pid: 0 }
@@ -76,25 +86,39 @@ function createProcessWorker(): Promise<Proc> {
         retire(proc, 0)
       } else reject(new Error(e.message))
     }
-    worker.postMessage({ type: 'attach', module: cfg.module, memory: cfg.memory, namespace: cfg.namespace, images: cfg.images })
+    worker.postMessage({ type: 'attach', module: cfg.module, memory: cfg.memory, namespace: cfg.namespace, images: cfg.images, programs })
   })
 }
+function addSpare(programs: string[] = []) {
+  const spare = { hint: programs.join(','), ready: createProcessWorker(programs) }
+  // A worker that failed to start must not be handed to a spawn later.
+  spare.ready.catch(() => {
+    const i = spares.indexOf(spare)
+    if (i >= 0) spares.splice(i, 1)
+  })
+  spares.push(spare)
+}
+/** Keep `count` warm workers that any spawn can use. */
 function ensureSpare(count = 1) {
   if (!cfg.warmSpare) return
-  while (spares.length < count) {
-    const made = createProcessWorker()
-    // A worker that failed to start must not be handed to a spawn later.
-    made.catch(() => {
-      const i = spares.indexOf(made)
-      if (i >= 0) spares.splice(i, 1)
-    })
-    spares.push(made)
+  for (let have = spares.filter((s) => s.hint === '').length; have < count; have++) addSpare()
+}
+/** The warm worker for a spawn: one already loading the programs it asks for, else an uncommitted one. */
+function takeSpare(pid: number): Promise<Proc> | undefined {
+  let want = ''
+  try {
+    want = k.procInfo(pid).env.BAT_PROGRAMS ?? ''
+  } catch {
+    // the process is already gone; any worker will find that out
   }
+  let i = want ? spares.findIndex((s) => s.hint === want) : -1
+  if (i < 0) i = spares.findIndex((s) => s.hint === '')
+  return i < 0 ? undefined : spares.splice(i, 1)[0].ready
 }
 async function spawn(pid: number) {
   stats.spawns++
   trace('spawn.request', { pid, spares: spares.length })
-  const taken = spares.shift() ?? createProcessWorker()
+  const taken = takeSpare(pid) ?? createProcessWorker()
   let proc: Proc
   try {
     proc = await taken
@@ -164,7 +188,7 @@ async function mount(name: string, path: string, arriving = false) {
   k.x.bat_free(p, nb.length + pb.length + 8)
   if (rc < 0) throw new Error(`mount ${name} at ${path} failed: errno ${-rc}`)
   const t1 = performance.now()
-  for (const spare of spares) void spare.then((s) => s.worker.postMessage({ type: 'images' })).catch(() => {})
+  for (const spare of spares) void spare.ready.then((s) => s.worker.postMessage({ type: 'images' })).catch(() => {})
   for (const proc of procs.values()) proc.worker.postMessage({ type: 'images' })
   return { id, entries: rc, ms: t1 - t0, openHandleMs: tOpen - t0, indexMs: t1 - tOpen }
 }
@@ -261,11 +285,12 @@ async function restore() {
     }
   }
   journalSize = off
+  journalWrittenAt = performance.now()
   // Enable first: the directories leading to a non-persistent root are
   // ordinary journaled directories (later records name them as parents).
   k.x.bat_persist_enable(seq)
   for (const path of cfg.noPersist) excludePath(path)
-  return { snapshotSeq: snapSeq, seq, journalFrames: frames, journalBytes: off, ms: performance.now() - t0 }
+  return { snapshotSeq: snapSeq, seq, snapshotBytes: best?.len ?? 0, journalFrames: frames, journalBytes: off, ms: performance.now() - t0 }
 }
 function excludePath(path: string) {
   const b = new TextEncoder().encode(path)
@@ -294,6 +319,7 @@ function drainJournal() {
     writeFrom(journal, ptr, len, journalSize + FRAME_HEADER)
     journal.flush()
     journalSize += FRAME_HEADER + len
+    journalWrittenAt = performance.now()
     x.bat_blob_free(ptr, len)
     stats.journalFrames++
     stats.journalBytes += len
@@ -385,6 +411,8 @@ async function supervise() {
       } catch (e) {
         console.error('kerneld journal:', e)
       }
+    } else if (journal && journalSize > SNAPSHOT_IDLE_AT && performance.now() - journalWrittenAt > SNAPSHOT_IDLE_MS) {
+      void snapshot().catch((e) => console.error('kerneld snapshot:', e))
     }
   }
 }
@@ -396,7 +424,8 @@ async function init(args: InitArgs) {
   // Before the lock and the overlay restore, so the workers boot while those run: a process
   // worker only needs the shared memory, which the page has already initialised. (When the
   // lock is refused they die with this worker.)
-  ensureSpare(args.spares ?? 1)
+  if (args.warmSpare) for (const programs of args.spareHints ?? []) addSpare(programs)
+  ensureSpare((args.spares ?? 1) - (args.spareHints?.length ?? 0))
   for (const name of args.images ?? []) preopenImage(args.namespace, name)
   if (args.persist) {
     // One writer per origin and namespace.
@@ -457,7 +486,7 @@ const ops: Record<string, (a: any) => unknown> = {
   flush: () => drainJournal(),
   spareReady: async () => {
     ensureSpare()
-    await Promise.all(spares)
+    await Promise.all(spares.map((s) => s.ready))
     return true
   },
   stats: () => ({ ...stats, journalSize, procs: [...procs.keys()] }),

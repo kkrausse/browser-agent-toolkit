@@ -25,7 +25,7 @@ import { installGlobals } from './globals'
 import { createLoop, type LoopInternals } from './loop'
 import type { Runtime } from './runtime'
 import { createShell, SHELL_EXEC } from './sh'
-import { trace, traceEnable } from '../trace'
+import { trace, traceCommand, traceEnable } from '../trace'
 
 const g: any = globalThis
 // Everything the runtime needs from the worker scope, taken before the guest can see or change it.
@@ -45,6 +45,10 @@ const host = {
 }
 const config = parseConfig(host.location.href)
 if (config.trace) traceEnable('process')
+// What this process loaded so far, on request (bench/startup records start-up module sets from it).
+traceCommand('modules', () => {
+  if (pid && loader) trace('modules', { pid, argv: rt.process?.argv, modules: [...loader.records.values()].filter((r) => r.kind === 'cjs' || r.kind === 'esm').map((r) => r.path) })
+})
 
 let inst: KernelInstance
 let kernel: Kernel
@@ -242,6 +246,9 @@ function runShell(info: ProcInfo): never {
 
 function run(info: ProcInfo) {
   if (info.exec === SHELL_EXEC) runShell(info)
+  // Not inherited: a child is another program.
+  const startupPrograms = (info.env.BAT_PROGRAMS ?? '').split(',').filter(Boolean)
+  delete info.env.BAT_PROGRAMS
   const launch = parseLaunch(info)
   let script = launch.script
   if (script !== undefined && script !== '-' && !script.startsWith('/')) {
@@ -259,18 +266,32 @@ function run(info: ProcInfo) {
   })
   // Held until the entry's synchronous part has run, so an early empty turn is not mistaken for the end.
   loop.ref()
-  // The entry's program script is fetched with import() (as a module), not importScripts(): measured
-  // in Chrome 154, only that path gets a V8 code cache (docs/experiments/2026-10-09-node-runtime.md).
-  // Programs met later, during synchronous loading, still use importScripts.
+  // Program scripts are fetched with import() (as modules), not importScripts(): measured in Chrome 154,
+  // only that path gets a V8 code cache (docs/experiments/2026-10-09-node-runtime.md). They are loaded
+  // before the entry runs: the one that holds the entry itself, and the start-up module sets the launch
+  // names (BAT_PROGRAMS, set by the host from `launch.programs`). Programs met later, during synchronous
+  // loading, still use importScripts.
   if (config.programLoad !== 'importScripts' && script !== undefined && script !== '-') {
-    const url = loader.programUrl(script)
-    if (url) {
+    const own = loader.programUrl(script)
+    const urls = [...(own ? [own] : []), ...loader.programUrls(startupPrograms)]
+    if (urls.length || preloading) {
       rt.mark('entry')
-      ;(importModule(url) as Promise<unknown>).then(
-        () => {
-          rt.mark(`program ${url.slice(url.lastIndexOf('/') + 1, url.lastIndexOf('-'))}`.replace('program program-', 'program '))
-          startEntry(launch, script, true)
-        },
+      const label = (url: string) => `program ${url.slice(url.lastIndexOf('/') + 1, url.lastIndexOf('-'))}`.replace('program program-', 'program ')
+      void Promise.all([
+        // What this worker began loading while it was a spare.
+        preloading,
+        ...urls.map((url) =>
+          (importModule(url) as Promise<unknown>).then(
+            () => rt.mark(label(url)),
+            (e) => {
+              // The entry's own program is required; a start-up set is only a faster way to the same modules.
+              if (url === own) throw e
+              ctl.process.emitWarning?.(`start-up program ${label(url)} failed to load (${(e as Error)?.message}); loading from the image`)
+            },
+          ),
+        ),
+      ]).then(
+        () => startEntry(launch, script, true),
         (e) => {
           ctl.mainSettled()
           ctl.uncaught(e)
@@ -281,6 +302,16 @@ function run(info: ProcInfo) {
     }
   }
   startEntry(launch, script, false)
+}
+
+/** Spare: start loading the program scripts the next process of this worker is expected to name. */
+let preloading: Promise<unknown> | undefined
+function preloadPrograms(names: string[]) {
+  if (config.programLoad === 'importScripts') return
+  const urls = loader.programUrls(names)
+  if (!urls.length) return
+  const t0 = performance.now()
+  preloading = Promise.all(urls.map((url) => (importModule(url) as Promise<unknown>).catch((e) => console.warn(`program script ${url} failed to load: ${e}`)))).then(() => trace('worker.programs', { names, ms: performance.now() - t0 }))
 }
 
 // `import()` must not be seen by the bundler, and a classic worker script may use it.
@@ -368,6 +399,7 @@ host.addEventListener('message', (async (e: MessageEvent) => {
       } catch (err) {
         console.error('process worker warm-up failed (will retry at spawn):', err)
       }
+      if (warm && m.programs?.length) preloadPrograms(m.programs)
       trace('worker.warm')
     } else if (m.type === 'images') {
       e.stopImmediatePropagation()

@@ -102,6 +102,8 @@ interface Manifest {
   /** Images mounted after `image`, in order (packages that are not from the lockfile). */
   layers?: ManifestImage[]
   programs?: { name: string; file: string }[]
+  /** The prepared launch descriptions (the toolkit starts them): only their program scripts matter here. */
+  launch?: Record<string, { programs?: string[] } | undefined>
 }
 
 /** How a guest names the page's own server (see net/fetch.ts). */
@@ -276,6 +278,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
 
   const programs: Record<string, string> = {}
   for (const p of manifest.programs ?? []) programs[p.name] = prepared(p.file)
+  const spareHints = Object.values(manifest.launch ?? {}).map((launch) => (launch?.programs ?? []).filter((name) => programs[name]))
   let booted: BootedKernel
   try {
     booted = await bootKernel({
@@ -295,8 +298,10 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
       persist: options.persist ?? true,
       noPersist: ['/.bat', '/tmp'],
       warmSpare: true,
-      // The preview and the agent start together: one warm worker each.
-      spares: 2,
+      // The prepared launches start together: one warm worker each, already loading that
+      // launch's program scripts while the kernel finishes booting.
+      spares: Math.max(2, spareHints.length),
+      spareHints,
       images: images.map((i) => i.file),
       trace: tracing,
     } as Parameters<typeof bootKernel>[0])
@@ -307,7 +312,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
     throw new Error(`kernel boot failed: ${(e as Error).message}`, { cause: e })
   }
   timings.kernel = performance.now() - t0
-  Object.assign(timings, { kernelCompile: booted.timings.compileMs, kernelAttach: booted.timings.attachMs, kerneldInit: booted.timings.kerneldMs, restore: booted.restored?.ms ?? 0, journalBytes: booted.restored?.journalBytes ?? 0 })
+  Object.assign(timings, { kernelCompile: booted.timings.compileMs, kernelAttach: booted.timings.attachMs, kerneldInit: booted.timings.kerneldMs, restore: booted.restored?.ms ?? 0, journalBytes: booted.restored?.journalBytes ?? 0, snapshotBytes: booted.restored?.snapshotBytes ?? 0 })
   trace('boot.kernel')
   timed('kernel')
   progress({ phase: 'kernel' })
@@ -580,7 +585,9 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
   async function spawn(launch: Launch): Promise<RuntimeProcess> {
     live()
     if (!launch.argv?.length) throw new Error('spawn: empty argv')
-    const child = kernel.spawn({ exec: launch.argv[0], argv: launch.argv, env: launch.env ?? {}, cwd: launch.cwd ?? '/', stdio: ['pipe', 'pipe', 'pipe'] })
+    // Start-up program scripts the process loads before its entry (process/worker.ts).
+    const env = launch.programs?.length ? { ...launch.env, BAT_PROGRAMS: launch.programs.join(',') } : (launch.env ?? {})
+    const child = kernel.spawn({ exec: launch.argv[0], argv: launch.argv, env, cwd: launch.cwd ?? '/', stdio: ['pipe', 'pipe', 'pipe'] })
     const [stdinFd, stdoutFd, stderrFd] = child.stdio
     kernel.setNonblock(stdinFd, true)
     let stdinOpen = true

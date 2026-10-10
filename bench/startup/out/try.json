@@ -1,269 +1,275 @@
 {
  "meta": {
   "label": "try",
-  "date": "2026-10-10T07:44:04.895Z",
-  "commit": "df1de5a",
+  "date": "2026-10-10T08:04:11.620Z",
+  "commit": "4679a38",
   "variants": {
    "try": "http://127.0.0.1:4120"
   },
-  "trace": true,
-  "settleMs": 6000,
+  "trace": false,
+  "settleMs": 6500,
   "chrome": "headed on Xvfb, driven by browser-control"
  },
  "summary": {
   "try": {
    "reopen": {
-    "n": 3,
+    "n": 4,
     "load1": {
-     "n": 3,
-     "median": 40,
-     "min": 37.4,
-     "max": 42.18
+     "n": 4,
+     "median": 24.6,
+     "min": 21.39,
+     "max": 26.54
     },
     "stages": {
      "click → booted (manifest, runtime import, boot, mount)": {
-      "n": 3,
-      "median": 318.1,
-      "min": 237.9,
-      "max": 13589.3
+      "n": 4,
+      "median": 267,
+      "min": 110,
+      "max": 842.4
      },
      "boot + mount (bootRuntime alone)": {
-      "n": 3,
-      "median": 304.6,
-      "min": 210.6,
-      "max": 13540.1
+      "n": 4,
+      "median": 255.9,
+      "min": 100.5,
+      "max": 829.8
      },
      "vite spawn → listening": {
-      "n": 3,
-      "median": 1004,
-      "min": 1002.5,
-      "max": 1030
+      "n": 4,
+      "median": 893.7,
+      "min": 524.9,
+      "max": 1600.8
      },
      "vite spawn → app visible": {
-      "n": 3,
-      "median": 3923.7,
-      "min": 3891,
-      "max": 4029.2
+      "n": 4,
+      "median": 4919.9,
+      "min": 2129.4,
+      "max": 7190.6
      },
      "opencode spawn → attached": {
-      "n": 3,
-      "median": 3099.3,
-      "min": 2723.5,
-      "max": 3232.8
+      "n": 4,
+      "median": 3671.7,
+      "min": 1869.2,
+      "max": 5956.1
      },
      "opencode spawn → chat ready": {
-      "n": 3,
-      "median": 3321.1,
-      "min": 2871.2,
-      "max": 3437.7
+      "n": 4,
+      "median": 3782.1,
+      "min": 1907.2,
+      "max": 6264.8
      },
      "whole open (click → app visible and chat ready)": {
-      "n": 3,
-      "median": 4355,
-      "min": 4193.1,
-      "max": 17815.5
+      "n": 4,
+      "median": 5251,
+      "min": 2241.4,
+      "max": 7922.2
      }
     },
     "steps": {
      "open": {
-      "n": 3,
-      "median": 3.9,
-      "min": 2.9,
-      "max": 4.2
+      "n": 4,
+      "median": 1.3,
+      "min": 1.2,
+      "max": 1.6
      },
      "manifest": {
-      "n": 3,
-      "median": 27.3,
-      "min": 13.5,
-      "max": 49.2
+      "n": 4,
+      "median": 11.1,
+      "min": 8.9,
+      "max": 13.4
      },
      "boot.kernel": {
-      "n": 3,
-      "median": 307.8,
-      "min": 193.2,
-      "max": 500.9
+      "n": 4,
+      "median": 256,
+      "min": 103.1,
+      "max": 793
      },
      "boot.image": {
-      "n": 3,
-      "median": 307.9,
-      "min": 193.3,
-      "max": 13543
+      "n": 4,
+      "median": 256.1,
+      "min": 103.2,
+      "max": 793.1
      },
      "boot.mounted": {
-      "n": 3,
-      "median": 315.3,
-      "min": 200.1,
-      "max": 13558.9
+      "n": 4,
+      "median": 264.3,
+      "min": 108,
+      "max": 838.6
      },
      "boot.done": {
-      "n": 3,
-      "median": 318.1,
-      "min": 237.9,
-      "max": 13589.3
+      "n": 4,
+      "median": 267,
+      "min": 109.9,
+      "max": 842.4
      },
      "boot": {
-      "n": 3,
-      "median": 318.1,
-      "min": 237.9,
-      "max": 13589.3
+      "n": 4,
+      "median": 267,
+      "min": 110,
+      "max": 842.4
      },
      "source.project": {
-      "n": 3,
-      "median": 318.4,
-      "min": 238.1,
-      "max": 13589.7
+      "n": 4,
+      "median": 267.4,
+      "min": 110.2,
+      "max": 842.7
      },
      "source.derived": {
-      "n": 3,
-      "median": 318.6,
-      "min": 238.3,
-      "max": 13881.4
+      "n": 4,
+      "median": 271.2,
+      "min": 110.3,
+      "max": 843.7
      },
      "source": {
-      "n": 3,
-      "median": 319.4,
-      "min": 289.3,
-      "max": 13887
+      "n": 4,
+      "median": 272,
+      "min": 111,
+      "max": 844.5
      },
      "preview.spawn": {
-      "n": 3,
-      "median": 325.8,
-      "min": 302.1,
-      "max": 13891.8
+      "n": 4,
+      "median": 273.1,
+      "min": 112,
+      "max": 847.5
      },
      "agent.spawn": {
-      "n": 3,
-      "median": 325.9,
-      "min": 302.2,
-      "max": 13892
-     },
-     "agent.listening": {
-      "n": 3,
-      "median": 1500.6,
-      "min": 1414.6,
-      "max": 14742.1
+      "n": 4,
+      "median": 273.2,
+      "min": 112.3,
+      "max": 847.5
      },
      "preview.listening": {
-      "n": 3,
-      "median": 1355.8,
-      "min": 1304.6,
-      "max": 14895.8
+      "n": 4,
+      "median": 1391.3,
+      "min": 636.9,
+      "max": 1999.2
+     },
+     "agent.listening": {
+      "n": 4,
+      "median": 1695.1,
+      "min": 819.4,
+      "max": 2985.1
      },
      "agent.health": {
-      "n": 3,
-      "median": 1608.9,
-      "min": 1608.1,
-      "max": 14996.5
+      "n": 4,
+      "median": 1878.6,
+      "min": 908.7,
+      "max": 3395.7
      },
      "preview.ready": {
-      "n": 3,
-      "median": 2571,
-      "min": 2384.6,
-      "max": 16080.9
+      "n": 4,
+      "median": 2581.8,
+      "min": 1158.6,
+      "max": 3544.4
      },
      "agent.activated": {
-      "n": 3,
-      "median": 3370.8,
-      "min": 3151.1,
-      "max": 16367.9
+      "n": 4,
+      "median": 3764.4,
+      "min": 1825.2,
+      "max": 6551.2
      },
      "agent.plugins": {
-      "n": 3,
-      "median": 3392.1,
-      "min": 3391,
-      "max": 16403.2
+      "n": 4,
+      "median": 3923.1,
+      "min": 1883.9,
+      "max": 6588.1
      },
      "agent.config": {
-      "n": 3,
-      "median": 3519.7,
-      "min": 3407,
-      "max": 16494.3
+      "n": 4,
+      "median": 3931,
+      "min": 1970.1,
+      "max": 6652.4
      },
      "agent.ready": {
-      "n": 3,
-      "median": 3535,
-      "min": 3425.2,
-      "max": 16615.5
+      "n": 4,
+      "median": 3944.9,
+      "min": 1981.5,
+      "max": 6803.6
      },
      "chat.ready": {
-      "n": 3,
-      "median": 3763.6,
-      "min": 3623.3,
-      "max": 16763.2
+      "n": 4,
+      "median": 4055.3,
+      "min": 2019.5,
+      "max": 7112.3
      },
      "preview.visible": {
-      "n": 3,
-      "median": 4355,
-      "min": 4193.1,
-      "max": 17815.5
+      "n": 4,
+      "median": 5251,
+      "min": 2241.4,
+      "max": 7922.2
      }
     },
     "boot": {
      "kernel": {
-      "n": 3,
-      "median": 293.5,
-      "min": 165.3,
-      "max": 450.9
+      "n": 4,
+      "median": 244.5,
+      "min": 93.3,
+      "max": 779.6
      },
      "kernelCompile": {
-      "n": 3,
+      "n": 4,
       "median": 0,
       "min": 0,
       "max": 0
      },
      "kernelAttach": {
-      "n": 3,
+      "n": 4,
       "median": 0.6,
-      "min": 0.6,
-      "max": 1.3
+      "min": 0.5,
+      "max": 6.1
      },
      "kerneldInit": {
-      "n": 3,
-      "median": 291.9,
-      "min": 164.1,
-      "max": 448.8
+      "n": 4,
+      "median": 239.2,
+      "min": 92.3,
+      "max": 778.4
      },
      "restore": {
-      "n": 3,
-      "median": 184.7,
-      "min": 88.4,
-      "max": 330
+      "n": 4,
+      "median": 171,
+      "min": 41,
+      "max": 718.8
      },
      "journalBytes": {
-      "n": 3,
-      "median": 4172819,
-      "min": 2098307,
-      "max": 4184718
+      "n": 4,
+      "median": 18042,
+      "min": 56,
+      "max": 12693579
      },
-     "image": {
-      "n": 3,
-      "median": 293.7,
-      "min": 165.4,
-      "max": 13493.1
+     "snapshotBytes": {
+      "n": 4,
+      "median": 14570465,
+      "min": 14570465,
+      "max": 20687271
      },
      "mount": {
-      "n": 3,
-      "median": 3.4,
-      "min": 2.6,
-      "max": 11.9
+      "n": 4,
+      "median": 2.4,
+      "min": 1.9,
+      "max": 30
+     },
+     "image": {
+      "n": 4,
+      "median": 244.6,
+      "min": 93.4,
+      "max": 779.8
      },
      "mounted": {
-      "n": 3,
-      "median": 300.9,
-      "min": 172.2,
-      "max": 13509
+      "n": 4,
+      "median": 252.9,
+      "min": 98.2,
+      "max": 825.3
      },
      "serviceWorker": {
-      "n": 3,
-      "median": 303.7,
-      "min": 210,
-      "max": 13539.3
+      "n": 4,
+      "median": 255.5,
+      "min": 100,
+      "max": 829
      },
      "total": {
-      "n": 3,
-      "median": 303.8,
-      "min": 210,
-      "max": 13539.4
+      "n": 4,
+      "median": 255.5,
+      "min": 100,
+      "max": 829
      }
     }
    }
@@ -274,9 +280,9 @@
    "variant": "try",
    "kind": "reopen",
    "load": [
-    37.4,
-    27.04,
-    22.01
+    21.39,
+    24.34,
+    25.75
    ],
    "outcome": "ok",
    "before": {
@@ -285,1310 +291,82 @@
     "isolated": true
    },
    "steps": {
-    "open": 4.2,
-    "manifest": 49.2,
-    "boot.kernel": 500.9,
-    "boot.image": 13543,
-    "boot.mounted": 13558.9,
-    "boot.done": 13589.3,
-    "boot": 13589.3,
-    "source.project": 13589.7,
-    "source.derived": 13881.4,
-    "source": 13887,
-    "preview.spawn": 13891.8,
-    "agent.spawn": 13892,
-    "agent.listening": 14742.1,
-    "preview.listening": 14895.8,
-    "agent.health": 14996.5,
-    "preview.ready": 16080.9,
-    "agent.activated": 16367.9,
-    "agent.plugins": 16403.2,
-    "agent.config": 16494.3,
-    "agent.ready": 16615.5,
-    "chat.ready": 16763.2,
-    "preview.visible": 17815.5
+    "open": 1.4,
+    "manifest": 12.6,
+    "boot.kernel": 793,
+    "boot.image": 793.1,
+    "boot.mounted": 838.6,
+    "boot.done": 842.4,
+    "boot": 842.4,
+    "source.project": 842.7,
+    "source.derived": 843.7,
+    "source": 844.5,
+    "preview.spawn": 847.5,
+    "agent.spawn": 847.5,
+    "preview.listening": 1999.2,
+    "agent.listening": 2985.1,
+    "agent.health": 3395.7,
+    "preview.ready": 3544.4,
+    "agent.activated": 6551.2,
+    "agent.plugins": 6588.1,
+    "agent.config": 6652.4,
+    "agent.ready": 6803.6,
+    "chat.ready": 7112.3,
+    "preview.visible": 7922.2
    },
-   "trace": [
-    {
-     "src": "page",
-     "name": "boot.start",
-     "ms": 49.8
-    },
-    {
-     "src": "kerneld",
-     "name": "kerneld.init",
-     "ms": 156.2
-    },
-    {
-     "src": "kerneld",
-     "name": "kerneld.locked",
-     "ms": 168.2
-    },
-    {
-     "src": "kerneld",
-     "name": "kerneld.attached",
-     "ms": 169.8
-    },
-    {
-     "src": "process",
-     "name": "worker.attached",
-     "ms": 397.6
-    },
-    {
-     "src": "kerneld",
-     "name": "worker.ready",
-     "ms": 399.8,
-     "data": {
-      "thread": 7866208
-     }
-    },
-    {
-     "src": "process",
-     "name": "worker.attached",
-     "ms": 400.7
-    },
-    {
-     "src": "kerneld",
-     "name": "worker.ready",
-     "ms": 403.7,
-     "data": {
-      "thread": 9177232
-     }
-    },
-    {
-     "src": "kerneld",
-     "name": "kerneld.restored",
-     "ms": 500,
-     "data": {
-      "snapshotSeq": 41312078,
-      "seq": 43410097,
-      "journalFrames": 12,
-      "journalBytes": 2098307,
-      "ms": 329.9950000047684
-     }
-    },
-    {
-     "src": "page",
-     "name": "boot.kernel",
-     "ms": 500.7
-    },
-    {
-     "src": "process",
-     "name": "worker.warm",
-     "ms": 677.7
-    },
-    {
-     "src": "process",
-     "name": "worker.warm",
-     "ms": 678.9
-    },
-    {
-     "src": "page",
-     "name": "boot.image",
-     "ms": 13542.9
-    },
-    {
-     "src": "page",
-     "name": "boot.mounted",
-     "ms": 13558.8
-    },
-    {
-     "src": "page",
-     "name": "boot.service-worker",
-     "ms": 13589.2
-    },
-    {
-     "src": "page",
-     "name": "boot.done",
-     "ms": 13589.2
-    },
-    {
-     "src": "kerneld",
-     "name": "spawn.request",
-     "ms": 13932.8,
-     "data": {
-      "pid": 4,
-      "spares": 2
-     }
-    },
-    {
-     "src": "kerneld",
-     "name": "spawn.request",
-     "ms": 13934,
-     "data": {
-      "pid": 5,
-      "spares": 1
-     }
-    },
-    {
-     "src": "kerneld",
-     "name": "spawn.run",
-     "ms": 13934.1,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "kerneld",
-     "name": "spawn.run",
-     "ms": 13934.3,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "runtime",
-     "ms": 13934.5,
-     "data": {
-      "pid": 4,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "adopted",
-     "ms": 13936.1,
-     "data": {
-      "pid": 4,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "entry",
-     "ms": 13936.6,
-     "data": {
-      "pid": 4,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "runtime",
-     "ms": 13936.8,
-     "data": {
-      "pid": 5,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "adopted",
-     "ms": 13937.5,
-     "data": {
-      "pid": 5,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "entry",
-     "ms": 13937.8,
-     "data": {
-      "pid": 5,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 1,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "entry-returned",
-     "ms": 13944.9,
-     "data": {
-      "pid": 4,
-      "loader": {
-       "modules": 3,
-       "cjs": 0,
-       "esm": 1,
-       "json": 0,
-       "builtin": 2,
-       "compiled": 1,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 3.2249999046325684,
-       "compileMs": 0.24000000953674316,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 2656
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "worker.attached",
-     "ms": 14054.5
-    },
-    {
-     "src": "process",
-     "name": "program opencode-server",
-     "ms": 14336.1,
-     "data": {
-      "pid": 5,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 1,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "entry-returned",
-     "ms": 14349,
-     "data": {
-      "pid": 5,
-      "loader": {
-       "modules": 25,
-       "cjs": 1,
-       "esm": 1,
-       "json": 0,
-       "builtin": 23,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 1,
-       "fromProgram": 1,
-       "readMs": 3.325000047683716,
-       "compileMs": 0.1700000762939453,
-       "programMs": 0,
-       "programs": 1,
-       "bytes": 949
-      }
-     }
-    },
-    {
-     "src": "kerneld",
-     "name": "worker.ready",
-     "ms": 14723.7,
-     "data": {
-      "thread": 15127432
-     }
-    },
-    {
-     "src": "process",
-     "name": "listen 4096",
-     "ms": 14741.9,
-     "data": {
-      "pid": 5,
-      "loader": {
-       "modules": 29,
-       "cjs": 1,
-       "esm": 1,
-       "json": 0,
-       "builtin": 27,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 1,
-       "fromProgram": 1,
-       "readMs": 3.325000047683716,
-       "compileMs": 0.1700000762939453,
-       "programMs": 0,
-       "programs": 1,
-       "bytes": 949
-      },
-      "resolveMs": 0.43500006198883057
-     }
-    },
-    {
-     "src": "process",
-     "name": "worker.warm",
-     "ms": 14776.3
-    },
-    {
-     "src": "process",
-     "name": "listen 5173",
-     "ms": 14895.3,
-     "data": {
-      "pid": 4,
-      "loader": {
-       "modules": 576,
-       "cjs": 492,
-       "esm": 54,
-       "json": 2,
-       "builtin": 28,
-       "compiled": 61,
-       "sourceAsCode": 483,
-       "transformed": 2,
-       "fromProgram": 0,
-       "readMs": 74.64999914169312,
-       "compileMs": 204.3750010728836,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 6018894
-      },
-      "resolveMs": 21.14499866962433
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/",
-     "ms": 14922.4,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/",
-     "ms": 14931.4,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/health",
-     "ms": 14987.3,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/health",
-     "ms": 14993.3,
-     "data": {
-      "pid": 5,
-      "loader": 29,
-      "compileMs": 0.1700000762939453
-     }
-    },
-    {
-     "src": "process",
-     "name": "req POST /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 15005.3,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /preview/5173/",
-     "ms": 16070.7,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /preview/5173/",
-     "ms": 16073.8,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/style.css",
-     "ms": 16136,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/browser-manifest",
-     "ms": 16139.3,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/node_modules/.bun/@react-router+dev@7.18.3+837444ebebad7315/node_m",
-     "ms": 16140.7,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/root.tsx",
-     "ms": 16141.1,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/home.tsx",
-     "ms": 16142.3,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /node_modules/.bun/@react-router+dev@7.18.3+837444ebebad7315/node_modules/@react",
-     "ms": 16143.1,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/style.css",
-     "ms": 16291.3,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /@id/__x00__virtual:react-router/browser-manifest",
-     "ms": 16321.4,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/root.tsx",
-     "ms": 16331.2,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/home.tsx",
-     "ms": 16332.4,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/inject-hmr-runtime",
-     "ms": 16355.7,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/@vite/client",
-     "ms": 16360.9,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/hmr-runtime",
-     "ms": 16362.9,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/react-router.js?v=835ed04b",
-     "ms": 16363.2,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/@tanstack_react-query.js?v=835ed04",
-     "ms": 16365.8,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/lib/trpc.ts",
-     "ms": 16366.3,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/style.css",
-     "ms": 16366.5,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/style.css?url",
-     "ms": 16366.7,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 204 /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 16366.8,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 18.665000081062317
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/editing.tsx",
-     "ms": 16366.9,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/react_jsx-dev-runtime.js?v=835ed04",
-     "ms": 16368.7,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/react.js?v=835ed04b",
-     "ms": 16368.9,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /@id/__x00__virtual:react-router/hmr-runtime",
-     "ms": 16370.8,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/react-router.js?v=835ed04b",
-     "ms": 16372.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/@tanstack_react-query.js?v=835ed04b",
-     "ms": 16374.2,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/lib/trpc.ts",
-     "ms": 16374.4,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/style.css",
-     "ms": 16374.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/style.css?url",
-     "ms": 16375.4,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/editing.tsx",
-     "ms": 16375.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/react_jsx-dev-runtime.js?v=835ed04b",
-     "ms": 16376.7,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/react.js?v=835ed04b",
-     "ms": 16377,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /@id/__x00__virtual:react-router/inject-hmr-runtime",
-     "ms": 16386.4,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/plugin?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 16389.4,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/plugin?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 16400.2,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 18.665000081062317
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /@vite/client",
-     "ms": 16413.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-A4TR75WA.js?v=835ed04b",
-     "ms": 16425.3,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/config?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 16487.3,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/config?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 16492.9,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 18.665000081062317
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/model?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 16603.4,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/model?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 16613.4,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 18.665000081062317
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/event",
-     "ms": 16618.1,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/session?directory=%2Fworkspace&order=desc",
-     "ms": 16632.8,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/session?directory=%2Fworkspace&order=desc",
-     "ms": 16638.3,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 18.665000081062317
-     }
-    },
-    {
-     "src": "process",
-     "name": "req POST /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 16639.9,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 204 /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 16645,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 18.665000081062317
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/session?directory=%2Fworkspace&cursor=eyJvcmRlciI6ImRlc2MiLCJkaXJlY3RvcnkiO",
-     "ms": 16646.2,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-A4TR75WA.js?v=835ed04b",
-     "ms": 16659.7,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/session?directory=%2Fworkspace&cursor=eyJvcmRlciI6ImRlc2MiLCJkaXJlY3RvcnkiO",
-     "ms": 16659.8,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 18.665000081062317
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/model?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 16662.1,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-37VXT6SO.js?v=835ed04b",
-     "ms": 16662.5,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-TRTQSARU.js?v=835ed04b",
-     "ms": 16663,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-J4CND2ZZ.js?v=835ed04b",
-     "ms": 16663.4,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-33RO6XXP.js?v=835ed04b",
-     "ms": 16664,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/@trpc_react-query.js?v=835ed04b",
-     "ms": 16664.4,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/@trpc_tanstack-react-query.js?v=83",
-     "ms": 16664.8,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/@trpc_client.js?v=835ed04b",
-     "ms": 16665.3,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/di",
-     "ms": 16665.8,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/model?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 16690.9,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 18.665000081062317
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/model/default?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 16694.8,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/model/default?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 16705,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 18.665000081062317
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-37VXT6SO.js?v=835ed04b",
-     "ms": 16712.6,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-TRTQSARU.js?v=835ed04b",
-     "ms": 16716,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/session/active",
-     "ms": 16722.5,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/session/active",
-     "ms": 16724.6,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 18.665000081062317
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/session/ses_edb54b0fcffemI4Nn6GA1MdYIS/message?order=desc&limit=50",
-     "ms": 16729.6,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/session/ses_edb54b0fcffemI4Nn6GA1MdYIS/message?order=desc&limit=50",
-     "ms": 16741.7,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 18.665000081062317
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/session/ses_edb54b0fcffemI4Nn6GA1MdYIS/permission",
-     "ms": 16743.9,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/session/ses_edb54b0fcffemI4Nn6GA1MdYIS/permission",
-     "ms": 16747.4,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 18.665000081062317
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/session/ses_edb54b0fcffemI4Nn6GA1MdYIS/form",
-     "ms": 16748.9,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/session/ses_edb54b0fcffemI4Nn6GA1MdYIS/form",
-     "ms": 16753.5,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 18.665000081062317
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-J4CND2ZZ.js?v=835ed04b",
-     "ms": 16762.1,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-33RO6XXP.js?v=835ed04b",
-     "ms": 16768.3,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/@trpc_react-query.js?v=835ed04b",
-     "ms": 16782.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/@trpc_tanstack-react-query.js?v=835ed04b",
-     "ms": 16786.8,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/@trpc_client.js?v=835ed04b",
-     "ms": 16787.4,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/dist/client/env",
-     "ms": 16787.7,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-IYQIL2JW.js?v=835ed04b",
-     "ms": 16830,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-IYQIL2JW.js?v=835ed04b",
-     "ms": 16885.8,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/react-dom_client.js?v=835ed04b",
-     "ms": 16932.1,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/react-dom_client.js?v=835ed04b",
-     "ms": 17486.7,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/react-router_dom.js?v=835ed04b",
-     "ms": 17487.9,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/react-router_dom.js?v=835ed04b",
-     "ms": 17497,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-USAEKVIP.js?v=835ed04b",
-     "ms": 17552.2,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-USAEKVIP.js?v=835ed04b",
-     "ms": 17556,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 250.30500185489655
-     }
-    }
-   ],
+   "trace": [],
    "boot": {
-    "kernel": 450.9,
+    "kernel": 779.6,
     "kernelCompile": 0,
-    "kernelAttach": 1.3,
-    "kerneldInit": 448.8,
-    "restore": 330,
-    "journalBytes": 2098307,
-    "image": 13493.1,
-    "imageCached": false,
-    "mount": 11.9,
-    "mounted": 13509,
-    "serviceWorker": 13539.3,
-    "total": 13539.4
+    "kernelAttach": 0.6,
+    "kerneldInit": 778.4,
+    "restore": 718.8,
+    "journalBytes": 12693579,
+    "snapshotBytes": 20687271,
+    "mount": 30,
+    "image": 779.8,
+    "imageCached": true,
+    "imageArriving": false,
+    "mounted": 825.3,
+    "serviceWorker": 829,
+    "total": 829
    },
    "log": [
     "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
     "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
     "[agent] }",
-    "[agent] [00:43:35.797] INFO (#449) http.span=425ms: {",
+    "[agent] [01:03:20.000] INFO (#449) http.span=1774ms: {",
     "[agent]   msg: 'loading plugin',",
     "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
     "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
     "[agent] }",
-    "[agent] [00:43:35.804] INFO (#449) http.span=432ms: {",
+    "[agent] [01:03:20.005] INFO (#449) http.span=1779ms: {",
     "[agent]   msg: 'loading plugin',",
     "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
     "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
     "[agent] }",
-    "[agent] [00:43:36.651] INFO (#449) http.span=1279ms: event {",
+    "[agent] [01:03:21.173] INFO (#449) http.span=2947ms: event {",
     "[agent]   event: {",
-    "[agent]     id: 'evt_124c472cb001pw5fp99t8bxvba',",
-    "[agent]     created: 1791618216651,",
+    "[agent]     id: 'evt_124d685d5001jcXzxDUInaVbyb',",
+    "[agent]     created: 1791619401173,",
     "[agent]     type: 'agent.updated',",
     "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
     "[agent]     data: {}",
     "[agent]   }",
     "[agent] }",
-    "[agent] [00:43:36.653] INFO (#449) http.span=1281ms: event {",
+    "[agent] [01:03:21.179] INFO (#449) http.span=2953ms: event {",
     "[agent]   event: {",
-    "[agent]     id: 'evt_124c472cd001P2h0hwtfU3X63h',",
-    "[agent]     created: 1791618216653,",
+    "[agent]     id: 'evt_124d685da001uwpImaBYS3nCwX',",
+    "[agent]     created: 1791619401179,",
     "[agent]     type: 'command.updated',",
     "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
     "[agent]     data: {}",
     "[agent]   }",
     "[agent] }",
-    "[agent] [00:43:36.724] INFO (#449) http.span=1352ms: event {",
+    "[agent] [01:03:21.342] INFO (#449) http.span=3116ms: event {",
     "[agent]   event: {",
-    "[agent]     id: 'evt_124c47314001RG2u5YyDbBbJMB',",
-    "[agent]     created: 1791618216724,",
+    "[agent]     id: 'evt_124d6867e001YTSVKY9IK14aT3',",
+    "[agent]     created: 1791619401342,",
     "[agent]     type: 'catalog.updated',",
     "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
     "[agent]     data: {}",
@@ -1596,22 +374,22 @@
     "[agent] }"
    ],
    "stages": {
-    "click → booted (manifest, runtime import, boot, mount)": 13589.3,
-    "boot + mount (bootRuntime alone)": 13540.1,
-    "vite spawn → listening": 1004,
-    "vite spawn → app visible": 3923.7,
-    "opencode spawn → attached": 2723.5,
-    "opencode spawn → chat ready": 2871.2,
-    "whole open (click → app visible and chat ready)": 17815.5
+    "click → booted (manifest, runtime import, boot, mount)": 842.4,
+    "boot + mount (bootRuntime alone)": 829.8,
+    "vite spawn → listening": 1151.7,
+    "vite spawn → app visible": 7074.7,
+    "opencode spawn → attached": 5956.1,
+    "opencode spawn → chat ready": 6264.8,
+    "whole open (click → app visible and chat ready)": 7922.2
    }
   },
   {
    "variant": "try",
    "kind": "reopen",
    "load": [
-    40.02,
-    28.65,
-    22.7
+    24.12,
+    24.77,
+    25.86
    ],
    "outcome": "ok",
    "before": {
@@ -1620,1310 +398,82 @@
     "isolated": true
    },
    "steps": {
-    "open": 3.9,
-    "manifest": 27.3,
-    "boot.kernel": 193.2,
-    "boot.image": 193.3,
-    "boot.mounted": 200.1,
-    "boot.done": 237.9,
-    "boot": 237.9,
-    "source.project": 238.1,
-    "source.derived": 238.3,
-    "source": 289.3,
-    "preview.spawn": 302.1,
-    "agent.spawn": 302.2,
-    "preview.listening": 1304.6,
-    "agent.listening": 1500.6,
-    "agent.health": 1608.1,
-    "preview.ready": 2384.6,
-    "agent.activated": 3151.1,
-    "agent.plugins": 3392.1,
-    "agent.config": 3519.7,
-    "agent.ready": 3535,
-    "chat.ready": 3623.3,
-    "preview.visible": 4193.1
+    "open": 1.6,
+    "manifest": 13.4,
+    "boot.kernel": 363.6,
+    "boot.image": 363.7,
+    "boot.mounted": 375.4,
+    "boot.done": 377.3,
+    "boot": 377.4,
+    "source.project": 377.6,
+    "source.derived": 385.2,
+    "source": 385.9,
+    "preview.spawn": 387.1,
+    "agent.spawn": 387.2,
+    "preview.listening": 1987.9,
+    "agent.listening": 2306.5,
+    "agent.health": 2523.4,
+    "preview.ready": 3528.8,
+    "agent.activated": 5137.5,
+    "agent.plugins": 5348.4,
+    "agent.config": 5356.3,
+    "agent.ready": 5372.1,
+    "chat.ready": 5536.8,
+    "preview.visible": 7577.7
    },
-   "trace": [
-    {
-     "src": "page",
-     "name": "boot.start",
-     "ms": 27.8
-    },
-    {
-     "src": "kerneld",
-     "name": "kerneld.init",
-     "ms": 90.2
-    },
-    {
-     "src": "kerneld",
-     "name": "kerneld.locked",
-     "ms": 102.9
-    },
-    {
-     "src": "kerneld",
-     "name": "kerneld.attached",
-     "ms": 104.1
-    },
-    {
-     "src": "process",
-     "name": "worker.attached",
-     "ms": 172.6
-    },
-    {
-     "src": "kerneld",
-     "name": "worker.ready",
-     "ms": 173.5,
-     "data": {
-      "thread": 7866208
-     }
-    },
-    {
-     "src": "process",
-     "name": "worker.attached",
-     "ms": 176.1
-    },
-    {
-     "src": "kerneld",
-     "name": "kerneld.restored",
-     "ms": 192.7,
-     "data": {
-      "snapshotSeq": 41312078,
-      "seq": 45484513,
-      "journalFrames": 16,
-      "journalBytes": 4172819,
-      "ms": 88.375
-     }
-    },
-    {
-     "src": "page",
-     "name": "boot.kernel",
-     "ms": 193.1
-    },
-    {
-     "src": "page",
-     "name": "boot.image",
-     "ms": 193.3
-    },
-    {
-     "src": "kerneld",
-     "name": "worker.ready",
-     "ms": 193.4,
-     "data": {
-      "thread": 9177232
-     }
-    },
-    {
-     "src": "page",
-     "name": "boot.mounted",
-     "ms": 200
-    },
-    {
-     "src": "process",
-     "name": "worker.warm",
-     "ms": 222.3
-    },
-    {
-     "src": "process",
-     "name": "worker.warm",
-     "ms": 226
-    },
-    {
-     "src": "page",
-     "name": "boot.service-worker",
-     "ms": 237.8
-    },
-    {
-     "src": "page",
-     "name": "boot.done",
-     "ms": 237.9
-    },
-    {
-     "src": "kerneld",
-     "name": "spawn.request",
-     "ms": 302.7,
-     "data": {
-      "pid": 4,
-      "spares": 2
-     }
-    },
-    {
-     "src": "kerneld",
-     "name": "spawn.request",
-     "ms": 302.8,
-     "data": {
-      "pid": 5,
-      "spares": 1
-     }
-    },
-    {
-     "src": "kerneld",
-     "name": "spawn.run",
-     "ms": 302.8,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "kerneld",
-     "name": "spawn.run",
-     "ms": 303.1,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "runtime",
-     "ms": 461.8,
-     "data": {
-      "pid": 5,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "adopted",
-     "ms": 462.6,
-     "data": {
-      "pid": 5,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "entry",
-     "ms": 462.9,
-     "data": {
-      "pid": 5,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 1,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "runtime",
-     "ms": 473.9,
-     "data": {
-      "pid": 4,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "adopted",
-     "ms": 474.8,
-     "data": {
-      "pid": 4,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "entry",
-     "ms": 475.2,
-     "data": {
-      "pid": 4,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "worker.attached",
-     "ms": 478.7
-    },
-    {
-     "src": "process",
-     "name": "entry-returned",
-     "ms": 480.4,
-     "data": {
-      "pid": 4,
-      "loader": {
-       "modules": 3,
-       "cjs": 0,
-       "esm": 1,
-       "json": 0,
-       "builtin": 2,
-       "compiled": 1,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 1.1949999332427979,
-       "compileMs": 0.9299999475479126,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 2656
-      }
-     }
-    },
-    {
-     "src": "kerneld",
-     "name": "worker.ready",
-     "ms": 541.2,
-     "data": {
-      "thread": 9451120
-     }
-    },
-    {
-     "src": "process",
-     "name": "worker.warm",
-     "ms": 596.8
-    },
-    {
-     "src": "process",
-     "name": "program opencode-server",
-     "ms": 1109,
-     "data": {
-      "pid": 5,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 1,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "entry-returned",
-     "ms": 1125.1,
-     "data": {
-      "pid": 5,
-      "loader": {
-       "modules": 25,
-       "cjs": 1,
-       "esm": 1,
-       "json": 0,
-       "builtin": 23,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 1,
-       "fromProgram": 1,
-       "readMs": 4.934999942779541,
-       "compileMs": 0.15999996662139893,
-       "programMs": 0,
-       "programs": 1,
-       "bytes": 949
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "listen 5173",
-     "ms": 1303,
-     "data": {
-      "pid": 4,
-      "loader": {
-       "modules": 576,
-       "cjs": 492,
-       "esm": 54,
-       "json": 2,
-       "builtin": 28,
-       "compiled": 61,
-       "sourceAsCode": 483,
-       "transformed": 2,
-       "fromProgram": 0,
-       "readMs": 100.36999988555908,
-       "compileMs": 206.26999950408936,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 6018894
-      },
-      "resolveMs": 26.43500065803528
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/",
-     "ms": 1319.7,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/",
-     "ms": 1330.2,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "listen 4096",
-     "ms": 1499.7,
-     "data": {
-      "pid": 5,
-      "loader": {
-       "modules": 29,
-       "cjs": 1,
-       "esm": 1,
-       "json": 0,
-       "builtin": 27,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 1,
-       "fromProgram": 1,
-       "readMs": 4.934999942779541,
-       "compileMs": 0.15999996662139893,
-       "programMs": 0,
-       "programs": 1,
-       "bytes": 949
-      },
-      "resolveMs": 0.5
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/health",
-     "ms": 1588.1,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/health",
-     "ms": 1600.3,
-     "data": {
-      "pid": 5,
-      "loader": 29,
-      "compileMs": 0.15999996662139893
-     }
-    },
-    {
-     "src": "process",
-     "name": "req POST /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 1618,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /preview/5173/",
-     "ms": 2383.4,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /preview/5173/",
-     "ms": 2384.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/style.css",
-     "ms": 2416.9,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/style.css",
-     "ms": 2479.7,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/browser-manifest",
-     "ms": 2482.3,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/node_modules/.bun/@react-router+dev@7.18.3+837444ebebad7315/node_m",
-     "ms": 2483.2,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/root.tsx",
-     "ms": 2483.8,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/home.tsx",
-     "ms": 2484.2,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/inject-hmr-runtime",
-     "ms": 2484.7,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /node_modules/.bun/@react-router+dev@7.18.3+837444ebebad7315/node_modules/@react",
-     "ms": 2485.6,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /@id/__x00__virtual:react-router/inject-hmr-runtime",
-     "ms": 2623.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /@id/__x00__virtual:react-router/browser-manifest",
-     "ms": 2655.9,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/root.tsx",
-     "ms": 2669.1,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/home.tsx",
-     "ms": 2670.9,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/hmr-runtime",
-     "ms": 2704,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/@vite/client",
-     "ms": 2705.5,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/react-router.js?v=835ed04b",
-     "ms": 2706.2,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/@tanstack_react-query.js?v=835ed04",
-     "ms": 2711.8,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/lib/trpc.ts",
-     "ms": 2712.8,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/style.css",
-     "ms": 2713.5,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/style.css?url",
-     "ms": 2714,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/editing.tsx",
-     "ms": 2714.8,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/react_jsx-dev-runtime.js?v=835ed04",
-     "ms": 2715.2,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/react.js?v=835ed04b",
-     "ms": 2715.9,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /@id/__x00__virtual:react-router/hmr-runtime",
-     "ms": 2718.4,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/react-router.js?v=835ed04b",
-     "ms": 2721.8,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/@tanstack_react-query.js?v=835ed04b",
-     "ms": 2722.9,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/lib/trpc.ts",
-     "ms": 2724.4,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/style.css",
-     "ms": 2725.2,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/style.css?url",
-     "ms": 2725.4,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/editing.tsx",
-     "ms": 2725.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/react_jsx-dev-runtime.js?v=835ed04b",
-     "ms": 2728.2,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/react.js?v=835ed04b",
-     "ms": 2728.6,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /@vite/client",
-     "ms": 2748.8,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-A4TR75WA.js?v=835ed04b",
-     "ms": 2772.9,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-A4TR75WA.js?v=835ed04b",
-     "ms": 2969.4,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-37VXT6SO.js?v=835ed04b",
-     "ms": 2973.4,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-TRTQSARU.js?v=835ed04b",
-     "ms": 2973.6,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-J4CND2ZZ.js?v=835ed04b",
-     "ms": 2973.8,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-33RO6XXP.js?v=835ed04b",
-     "ms": 2973.9,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/@trpc_react-query.js?v=835ed04b",
-     "ms": 2974.1,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/@trpc_tanstack-react-query.js?v=83",
-     "ms": 2974.2,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/@trpc_client.js?v=835ed04b",
-     "ms": 2974.3,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/di",
-     "ms": 2974.5,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-37VXT6SO.js?v=835ed04b",
-     "ms": 3001.1,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-TRTQSARU.js?v=835ed04b",
-     "ms": 3034.1,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-J4CND2ZZ.js?v=835ed04b",
-     "ms": 3085.4,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-33RO6XXP.js?v=835ed04b",
-     "ms": 3088.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/@trpc_react-query.js?v=835ed04b",
-     "ms": 3096.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/@trpc_tanstack-react-query.js?v=835ed04b",
-     "ms": 3100.6,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/@trpc_client.js?v=835ed04b",
-     "ms": 3101.1,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/dist/client/env",
-     "ms": 3101.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 204 /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3150.2,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 11.245000004768372
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-IYQIL2JW.js?v=835ed04b",
-     "ms": 3161.8,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-IYQIL2JW.js?v=835ed04b",
-     "ms": 3204.9,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/plugin?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3320.9,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/plugin?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3349.3,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 11.245000004768372
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/react-dom_client.js?v=835ed04b",
-     "ms": 3395.9,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/react-router_dom.js?v=835ed04b",
-     "ms": 3397.3,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/config?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3507.3,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/config?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3515.7,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 11.245000004768372
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/model?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3520.8,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/model?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3533,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 11.245000004768372
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/event",
-     "ms": 3536.5,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/session?directory=%2Fworkspace&order=desc",
-     "ms": 3544.3,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/session?directory=%2Fworkspace&order=desc",
-     "ms": 3550.7,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 11.245000004768372
-     }
-    },
-    {
-     "src": "process",
-     "name": "req POST /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3551.4,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 204 /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3553.4,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 11.245000004768372
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/session?directory=%2Fworkspace&cursor=eyJvcmRlciI6ImRlc2MiLCJkaXJlY3RvcnkiO",
-     "ms": 3554.7,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/session?directory=%2Fworkspace&cursor=eyJvcmRlciI6ImRlc2MiLCJkaXJlY3RvcnkiO",
-     "ms": 3558.2,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 11.245000004768372
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/model?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3560,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/model?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3575,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 11.245000004768372
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/model/default?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3578.6,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/model/default?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3585.9,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 11.245000004768372
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/session/ses_edb54b0fcffemI4Nn6GA1MdYIS/message?order=desc&limit=50",
-     "ms": 3592.8,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/session/ses_edb54b0fcffemI4Nn6GA1MdYIS/message?order=desc&limit=50",
-     "ms": 3601.1,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 11.245000004768372
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/session/ses_edb54b0fcffemI4Nn6GA1MdYIS/permission",
-     "ms": 3602.9,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/session/ses_edb54b0fcffemI4Nn6GA1MdYIS/permission",
-     "ms": 3607,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 11.245000004768372
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/session/ses_edb54b0fcffemI4Nn6GA1MdYIS/form",
-     "ms": 3608.7,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/session/ses_edb54b0fcffemI4Nn6GA1MdYIS/form",
-     "ms": 3612.8,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 11.245000004768372
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/session/active",
-     "ms": 3614.7,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/session/active",
-     "ms": 3616.1,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 11.245000004768372
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/react-dom_client.js?v=835ed04b",
-     "ms": 3883.1,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/react-router_dom.js?v=835ed04b",
-     "ms": 3891.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-USAEKVIP.js?v=835ed04b",
-     "ms": 3922.3,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-USAEKVIP.js?v=835ed04b",
-     "ms": 3929.4,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 274.7249994277954
-     }
-    }
-   ],
+   "trace": [],
    "boot": {
-    "kernel": 165.3,
+    "kernel": 349.8,
     "kernelCompile": 0,
-    "kernelAttach": 0.6,
-    "kerneldInit": 164.1,
-    "restore": 88.4,
-    "journalBytes": 4172819,
-    "image": 165.4,
+    "kernelAttach": 6.1,
+    "kerneldInit": 343.2,
+    "restore": 277.5,
+    "journalBytes": 56,
+    "snapshotBytes": 14570465,
+    "mount": 2.2,
+    "image": 350,
     "imageCached": true,
-    "mount": 3.4,
-    "mounted": 172.2,
-    "serviceWorker": 210,
-    "total": 210
+    "imageArriving": false,
+    "mounted": 361.7,
+    "serviceWorker": 363.5,
+    "total": 363.6
    },
    "log": [
     "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
     "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
     "[agent] }",
-    "[agent] [00:43:49.099] INFO (#449) http.span=604ms: {",
+    "[agent] [01:03:37.088] INFO (#449) http.span=1210ms: {",
     "[agent]   msg: 'loading plugin',",
     "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
     "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
     "[agent] }",
-    "[agent] [00:43:49.101] INFO (#449) http.span=606ms: {",
+    "[agent] [01:03:37.092] INFO (#449) http.span=1214ms: {",
     "[agent]   msg: 'loading plugin',",
     "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
     "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
     "[agent] }",
-    "[agent] [00:43:49.848] INFO (#449) http.span=1353ms: event {",
+    "[agent] [01:03:38.020] INFO (#449) http.span=2142ms: event {",
     "[agent]   event: {",
-    "[agent]     id: 'evt_124c4a658001pF6HGDCXt5sD0G',",
-    "[agent]     created: 1791618229848,",
+    "[agent]     id: 'evt_124d6c7a400121hAR8TXqPZ4BO',",
+    "[agent]     created: 1791619418020,",
     "[agent]     type: 'agent.updated',",
     "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
     "[agent]     data: {}",
     "[agent]   }",
     "[agent] }",
-    "[agent] [00:43:49.859] INFO (#449) http.span=1364ms: event {",
+    "[agent] [01:03:38.021] INFO (#449) http.span=2143ms: event {",
     "[agent]   event: {",
-    "[agent]     id: 'evt_124c4a663001t6daRKtyuVmvQX',",
-    "[agent]     created: 1791618229859,",
+    "[agent]     id: 'evt_124d6c7a5001WXMkQSQBWTuaem',",
+    "[agent]     created: 1791619418021,",
     "[agent]     type: 'command.updated',",
     "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
     "[agent]     data: {}",
     "[agent]   }",
     "[agent] }",
-    "[agent] [00:43:50.002] INFO (#449) http.span=1507ms: event {",
+    "[agent] [01:03:38.284] INFO (#449) http.span=2406ms: event {",
     "[agent]   event: {",
-    "[agent]     id: 'evt_124c4a6f2001P5ssdO66p4NTBx',",
-    "[agent]     created: 1791618230002,",
+    "[agent]     id: 'evt_124d6c8ac001IzvLLfdCtV0v1I',",
+    "[agent]     created: 1791619418284,",
     "[agent]     type: 'catalog.updated',",
     "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
     "[agent]     data: {}",
@@ -2931,22 +481,22 @@
     "[agent] }"
    ],
    "stages": {
-    "click → booted (manifest, runtime import, boot, mount)": 237.9,
-    "boot + mount (bootRuntime alone)": 210.6,
-    "vite spawn → listening": 1002.5,
-    "vite spawn → app visible": 3891,
-    "opencode spawn → attached": 3232.8,
-    "opencode spawn → chat ready": 3321.1,
-    "whole open (click → app visible and chat ready)": 4193.1
+    "click → booted (manifest, runtime import, boot, mount)": 377.4,
+    "boot + mount (bootRuntime alone)": 364,
+    "vite spawn → listening": 1600.8,
+    "vite spawn → app visible": 7190.6,
+    "opencode spawn → attached": 4984.9,
+    "opencode spawn → chat ready": 5149.6,
+    "whole open (click → app visible and chat ready)": 7577.7
    }
   },
   {
    "variant": "try",
    "kind": "reopen",
    "load": [
-    42.18,
-    29.48,
-    23.04
+    26.54,
+    25.26,
+    25.99
    ],
    "outcome": "ok",
    "before": {
@@ -2955,1310 +505,82 @@
     "isolated": true
    },
    "steps": {
-    "open": 2.9,
-    "manifest": 13.5,
-    "boot.kernel": 307.8,
-    "boot.image": 307.9,
-    "boot.mounted": 315.3,
-    "boot.done": 318.1,
-    "boot": 318.1,
-    "source.project": 318.4,
-    "source.derived": 318.6,
-    "source": 319.4,
-    "preview.spawn": 325.8,
-    "agent.spawn": 325.9,
-    "preview.listening": 1355.8,
-    "agent.listening": 1414.6,
-    "agent.health": 1608.9,
-    "preview.ready": 2571,
-    "agent.activated": 3370.8,
-    "agent.plugins": 3391,
-    "agent.config": 3407,
-    "agent.ready": 3425.2,
-    "chat.ready": 3763.6,
-    "preview.visible": 4355
+    "open": 1.2,
+    "manifest": 8.9,
+    "boot.kernel": 148.3,
+    "boot.image": 148.4,
+    "boot.mounted": 153.2,
+    "boot.done": 156.6,
+    "boot": 156.7,
+    "source.project": 157.1,
+    "source.derived": 157.2,
+    "source": 158.1,
+    "preview.spawn": 159.1,
+    "agent.spawn": 159.2,
+    "preview.listening": 794.7,
+    "agent.listening": 1083.6,
+    "agent.health": 1233.7,
+    "preview.ready": 1634.7,
+    "agent.activated": 2391.2,
+    "agent.plugins": 2497.7,
+    "agent.config": 2505.7,
+    "agent.ready": 2517.7,
+    "chat.ready": 2573.7,
+    "preview.visible": 2924.2
    },
-   "trace": [
-    {
-     "src": "page",
-     "name": "boot.start",
-     "ms": 14.2
-    },
-    {
-     "src": "kerneld",
-     "name": "kerneld.init",
-     "ms": 109.8
-    },
-    {
-     "src": "kerneld",
-     "name": "kerneld.locked",
-     "ms": 117.4
-    },
-    {
-     "src": "kerneld",
-     "name": "kerneld.attached",
-     "ms": 122.1
-    },
-    {
-     "src": "process",
-     "name": "worker.attached",
-     "ms": 158.9
-    },
-    {
-     "src": "kerneld",
-     "name": "worker.ready",
-     "ms": 160.6,
-     "data": {
-      "thread": 7866208
-     }
-    },
-    {
-     "src": "process",
-     "name": "worker.attached",
-     "ms": 181.5
-    },
-    {
-     "src": "kerneld",
-     "name": "worker.ready",
-     "ms": 181.8,
-     "data": {
-      "thread": 9177232
-     }
-    },
-    {
-     "src": "process",
-     "name": "worker.warm",
-     "ms": 197.2
-    },
-    {
-     "src": "process",
-     "name": "worker.warm",
-     "ms": 215.2
-    },
-    {
-     "src": "kerneld",
-     "name": "kerneld.restored",
-     "ms": 307.2,
-     "data": {
-      "snapshotSeq": 41312078,
-      "seq": 45496340,
-      "journalFrames": 19,
-      "journalBytes": 4184718,
-      "ms": 184.68499994277954
-     }
-    },
-    {
-     "src": "page",
-     "name": "boot.kernel",
-     "ms": 307.8
-    },
-    {
-     "src": "page",
-     "name": "boot.image",
-     "ms": 307.9
-    },
-    {
-     "src": "page",
-     "name": "boot.mounted",
-     "ms": 315.2
-    },
-    {
-     "src": "page",
-     "name": "boot.service-worker",
-     "ms": 318
-    },
-    {
-     "src": "page",
-     "name": "boot.done",
-     "ms": 318.1
-    },
-    {
-     "src": "kerneld",
-     "name": "spawn.request",
-     "ms": 324.7,
-     "data": {
-      "pid": 4,
-      "spares": 2
-     }
-    },
-    {
-     "src": "kerneld",
-     "name": "spawn.run",
-     "ms": 324.8,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "runtime",
-     "ms": 325,
-     "data": {
-      "pid": 4,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "adopted",
-     "ms": 325.7,
-     "data": {
-      "pid": 4,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "entry",
-     "ms": 326.1,
-     "data": {
-      "pid": 4,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "entry-returned",
-     "ms": 329.3,
-     "data": {
-      "pid": 4,
-      "loader": {
-       "modules": 3,
-       "cjs": 0,
-       "esm": 1,
-       "json": 0,
-       "builtin": 2,
-       "compiled": 1,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0.41999995708465576,
-       "compileMs": 0.3049999475479126,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 2656
-      }
-     }
-    },
-    {
-     "src": "kerneld",
-     "name": "spawn.request",
-     "ms": 330.6,
-     "data": {
-      "pid": 5,
-      "spares": 1
-     }
-    },
-    {
-     "src": "kerneld",
-     "name": "spawn.run",
-     "ms": 330.6,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "runtime",
-     "ms": 330.8,
-     "data": {
-      "pid": 5,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "adopted",
-     "ms": 331.4,
-     "data": {
-      "pid": 5,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "entry",
-     "ms": 335.9,
-     "data": {
-      "pid": 5,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 1,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "worker.attached",
-     "ms": 463.5
-    },
-    {
-     "src": "kerneld",
-     "name": "worker.ready",
-     "ms": 654.6,
-     "data": {
-      "thread": 13799448
-     }
-    },
-    {
-     "src": "process",
-     "name": "worker.warm",
-     "ms": 747.9
-    },
-    {
-     "src": "process",
-     "name": "program opencode-server",
-     "ms": 977.6,
-     "data": {
-      "pid": 5,
-      "loader": {
-       "modules": 0,
-       "cjs": 0,
-       "esm": 0,
-       "json": 0,
-       "builtin": 0,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 0,
-       "fromProgram": 0,
-       "readMs": 0,
-       "compileMs": 0,
-       "programMs": 0,
-       "programs": 1,
-       "bytes": 0
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "entry-returned",
-     "ms": 987.8,
-     "data": {
-      "pid": 5,
-      "loader": {
-       "modules": 25,
-       "cjs": 1,
-       "esm": 1,
-       "json": 0,
-       "builtin": 23,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 1,
-       "fromProgram": 1,
-       "readMs": 2.8550000190734863,
-       "compileMs": 0.16000008583068848,
-       "programMs": 0,
-       "programs": 1,
-       "bytes": 949
-      }
-     }
-    },
-    {
-     "src": "process",
-     "name": "listen 5173",
-     "ms": 1355.1,
-     "data": {
-      "pid": 4,
-      "loader": {
-       "modules": 576,
-       "cjs": 492,
-       "esm": 54,
-       "json": 2,
-       "builtin": 28,
-       "compiled": 61,
-       "sourceAsCode": 483,
-       "transformed": 2,
-       "fromProgram": 0,
-       "readMs": 88.9699991941452,
-       "compileMs": 313.5649993419647,
-       "programMs": 0,
-       "programs": 0,
-       "bytes": 6018894
-      },
-      "resolveMs": 32.27500057220459
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/",
-     "ms": 1363.8,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "listen 4096",
-     "ms": 1413.8,
-     "data": {
-      "pid": 5,
-      "loader": {
-       "modules": 29,
-       "cjs": 1,
-       "esm": 1,
-       "json": 0,
-       "builtin": 27,
-       "compiled": 0,
-       "sourceAsCode": 0,
-       "transformed": 1,
-       "fromProgram": 1,
-       "readMs": 2.8550000190734863,
-       "compileMs": 0.16000008583068848,
-       "programMs": 0,
-       "programs": 1,
-       "bytes": 949
-      },
-      "resolveMs": 0.34500014781951904
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/health",
-     "ms": 1596.1,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/health",
-     "ms": 1605.8,
-     "data": {
-      "pid": 5,
-      "loader": 29,
-      "compileMs": 0.16000008583068848
-     }
-    },
-    {
-     "src": "process",
-     "name": "req POST /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 1613.8,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /preview/5173/",
-     "ms": 2569.4,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/",
-     "ms": 2570.9,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /preview/5173/",
-     "ms": 2632.8,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/style.css",
-     "ms": 2678,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/browser-manifest",
-     "ms": 2682.4,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/node_modules/.bun/@react-router+dev@7.18.3+837444ebebad7315/node_m",
-     "ms": 2692.4,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/root.tsx",
-     "ms": 2694.5,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/home.tsx",
-     "ms": 2695.2,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/inject-hmr-runtime",
-     "ms": 2697.5,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /node_modules/.bun/@react-router+dev@7.18.3+837444ebebad7315/node_modules/@react",
-     "ms": 2701.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /@id/__x00__virtual:react-router/inject-hmr-runtime",
-     "ms": 2863.3,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/style.css",
-     "ms": 2869.1,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /@id/__x00__virtual:react-router/browser-manifest",
-     "ms": 2896.7,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/root.tsx",
-     "ms": 2908.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/home.tsx",
-     "ms": 2909.1,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/hmr-runtime",
-     "ms": 2935.1,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/@vite/client",
-     "ms": 2936,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/react-router.js?v=835ed04b",
-     "ms": 2936.8,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/@tanstack_react-query.js?v=835ed04",
-     "ms": 2937.3,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/lib/trpc.ts",
-     "ms": 2937.7,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/style.css",
-     "ms": 2938.1,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/style.css?url",
-     "ms": 2938.4,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/src/editing.tsx",
-     "ms": 2938.8,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/react_jsx-dev-runtime.js?v=835ed04",
-     "ms": 2939.3,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/react.js?v=835ed04b",
-     "ms": 2939.6,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /@id/__x00__virtual:react-router/hmr-runtime",
-     "ms": 2941.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/react-router.js?v=835ed04b",
-     "ms": 2946.4,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/@tanstack_react-query.js?v=835ed04b",
-     "ms": 2947.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/lib/trpc.ts",
-     "ms": 2948.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/style.css",
-     "ms": 2949.2,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/style.css?url",
-     "ms": 2949.8,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /src/editing.tsx",
-     "ms": 2949.9,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/react_jsx-dev-runtime.js?v=835ed04b",
-     "ms": 2952.4,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/react.js?v=835ed04b",
-     "ms": 2953,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /@vite/client",
-     "ms": 2968.6,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-A4TR75WA.js?v=835ed04b",
-     "ms": 2990.1,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-A4TR75WA.js?v=835ed04b",
-     "ms": 3242.8,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-37VXT6SO.js?v=835ed04b",
-     "ms": 3262.8,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-TRTQSARU.js?v=835ed04b",
-     "ms": 3263.1,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-J4CND2ZZ.js?v=835ed04b",
-     "ms": 3263.3,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-33RO6XXP.js?v=835ed04b",
-     "ms": 3263.4,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/@trpc_react-query.js?v=835ed04b",
-     "ms": 3263.6,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/@trpc_tanstack-react-query.js?v=83",
-     "ms": 3263.8,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/@trpc_client.js?v=835ed04b",
-     "ms": 3263.9,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/di",
-     "ms": 3264.1,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-37VXT6SO.js?v=835ed04b",
-     "ms": 3351.8,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-TRTQSARU.js?v=835ed04b",
-     "ms": 3354.7,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 204 /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3369.4,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 15.77999997138977
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/plugin?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3384.4,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/plugin?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3388.8,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 15.77999997138977
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/config?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3393.9,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/config?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3401.7,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 15.77999997138977
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/model?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3407.7,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/model?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3423.1,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 15.77999997138977
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/event",
-     "ms": 3426,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-J4CND2ZZ.js?v=835ed04b",
-     "ms": 3433,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/session?directory=%2Fworkspace&order=desc",
-     "ms": 3436,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-33RO6XXP.js?v=835ed04b",
-     "ms": 3443.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/session?directory=%2Fworkspace&order=desc",
-     "ms": 3447.7,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 15.77999997138977
-     }
-    },
-    {
-     "src": "process",
-     "name": "req POST /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3448.8,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 204 /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3451.1,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 15.77999997138977
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/session?directory=%2Fworkspace&cursor=eyJvcmRlciI6ImRlc2MiLCJkaXJlY3RvcnkiO",
-     "ms": 3454.5,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/@trpc_react-query.js?v=835ed04b",
-     "ms": 3457.2,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/session?directory=%2Fworkspace&cursor=eyJvcmRlciI6ImRlc2MiLCJkaXJlY3RvcnkiO",
-     "ms": 3459.2,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 15.77999997138977
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/model?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3460.8,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/@trpc_tanstack-react-query.js?v=835ed04b",
-     "ms": 3463,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/@trpc_client.js?v=835ed04b",
-     "ms": 3464.2,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/dist/client/env",
-     "ms": 3464.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/model?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3490.3,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 15.77999997138977
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-IYQIL2JW.js?v=835ed04b",
-     "ms": 3496.9,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/model/default?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3540.2,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-IYQIL2JW.js?v=835ed04b",
-     "ms": 3541.4,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/model/default?location%5Bdirectory%5D=%2Fworkspace",
-     "ms": 3546.3,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 15.77999997138977
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/react-dom_client.js?v=835ed04b",
-     "ms": 3643.1,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/session/ses_edb54b0fcffemI4Nn6GA1MdYIS/message?order=desc&limit=50",
-     "ms": 3729.6,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/session/ses_edb54b0fcffemI4Nn6GA1MdYIS/message?order=desc&limit=50",
-     "ms": 3737.6,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 15.77999997138977
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/session/ses_edb54b0fcffemI4Nn6GA1MdYIS/permission",
-     "ms": 3738,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/session/ses_edb54b0fcffemI4Nn6GA1MdYIS/permission",
-     "ms": 3742.8,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 15.77999997138977
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/session/ses_edb54b0fcffemI4Nn6GA1MdYIS/form",
-     "ms": 3743.1,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/session/ses_edb54b0fcffemI4Nn6GA1MdYIS/form",
-     "ms": 3746.6,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 15.77999997138977
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /api/session/active",
-     "ms": 3746.9,
-     "data": {
-      "pid": 5
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /api/session/active",
-     "ms": 3747.5,
-     "data": {
-      "pid": 5,
-      "loader": 32,
-      "compileMs": 15.77999997138977
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/react-dom_client.js?v=835ed04b",
-     "ms": 4112.5,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/react-router_dom.js?v=835ed04b",
-     "ms": 4113.4,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/react-router_dom.js?v=835ed04b",
-     "ms": 4126.4,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    },
-    {
-     "src": "process",
-     "name": "req GET /preview/5173/.browser-editor-cache/vite/deps/chunk-USAEKVIP.js?v=835ed04b",
-     "ms": 4164,
-     "data": {
-      "pid": 4
-     }
-    },
-    {
-     "src": "process",
-     "name": "res 200 /.browser-editor-cache/vite/deps/chunk-USAEKVIP.js?v=835ed04b",
-     "ms": 4170.9,
-     "data": {
-      "pid": 4,
-      "loader": 704,
-      "compileMs": 394.03499960899353
-     }
-    }
-   ],
+   "trace": [],
    "boot": {
-    "kernel": 293.5,
+    "kernel": 139.1,
     "kernelCompile": 0,
-    "kernelAttach": 0.6,
-    "kerneldInit": 291.9,
-    "restore": 184.7,
-    "journalBytes": 4184718,
-    "image": 293.7,
+    "kernelAttach": 0.7,
+    "kerneldInit": 135.2,
+    "restore": 64.5,
+    "journalBytes": 12091,
+    "snapshotBytes": 14570465,
+    "mount": 2.5,
+    "image": 139.2,
     "imageCached": true,
-    "mount": 2.6,
-    "mounted": 300.9,
-    "serviceWorker": 303.7,
-    "total": 303.8
+    "imageArriving": false,
+    "mounted": 144,
+    "serviceWorker": 147.4,
+    "total": 147.4
    },
    "log": [
     "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
     "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
     "[agent] }",
-    "[agent] [00:44:02.337] INFO (#449) http.span=643ms: {",
+    "[agent] [01:03:56.916] INFO (#449) http.span=419ms: {",
     "[agent]   msg: 'loading plugin',",
     "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
     "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
     "[agent] }",
-    "[agent] [00:44:02.339] INFO (#449) http.span=645ms: {",
+    "[agent] [01:03:56.919] INFO (#449) http.span=422ms: {",
     "[agent]   msg: 'loading plugin',",
     "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
     "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
     "[agent] }",
-    "[agent] [00:44:03.235] INFO (#449) http.span=1541ms: event {",
+    "[agent] [01:03:57.556] INFO (#449) http.span=1059ms: event {",
     "[agent]   event: {",
-    "[agent]     id: 'evt_124c4daa3001p020ZyP4rH3fCK',",
-    "[agent]     created: 1791618243235,",
+    "[agent]     id: 'evt_124d713f4001ahEtajh1zMK2PY',",
+    "[agent]     created: 1791619437556,",
     "[agent]     type: 'agent.updated',",
     "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
     "[agent]     data: {}",
     "[agent]   }",
     "[agent] }",
-    "[agent] [00:44:03.237] INFO (#449) http.span=1543ms: event {",
+    "[agent] [01:03:57.557] INFO (#449) http.span=1060ms: event {",
     "[agent]   event: {",
-    "[agent]     id: 'evt_124c4daa40015XTlfthHCiRlG0',",
-    "[agent]     created: 1791618243236,",
+    "[agent]     id: 'evt_124d713f5001VNv0g8CrxJfqlP',",
+    "[agent]     created: 1791619437557,",
     "[agent]     type: 'command.updated',",
     "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
     "[agent]     data: {}",
     "[agent]   }",
     "[agent] }",
-    "[agent] [00:44:03.435] INFO (#449) http.span=1741ms: event {",
+    "[agent] [01:03:57.618] INFO (#449) http.span=1121ms: event {",
     "[agent]   event: {",
-    "[agent]     id: 'evt_124c4db6b001F5FlLzbNyhZ3lr',",
-    "[agent]     created: 1791618243435,",
+    "[agent]     id: 'evt_124d71432001IQHtBbOKzwQ5Us',",
+    "[agent]     created: 1791619437618,",
     "[agent]     type: 'catalog.updated',",
     "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
     "[agent]     data: {}",
@@ -4266,13 +588,120 @@
     "[agent] }"
    ],
    "stages": {
-    "click → booted (manifest, runtime import, boot, mount)": 318.1,
-    "boot + mount (bootRuntime alone)": 304.6,
-    "vite spawn → listening": 1030,
-    "vite spawn → app visible": 4029.2,
-    "opencode spawn → attached": 3099.3,
-    "opencode spawn → chat ready": 3437.7,
-    "whole open (click → app visible and chat ready)": 4355
+    "click → booted (manifest, runtime import, boot, mount)": 156.7,
+    "boot + mount (bootRuntime alone)": 147.8,
+    "vite spawn → listening": 635.6,
+    "vite spawn → app visible": 2765.1,
+    "opencode spawn → attached": 2358.5,
+    "opencode spawn → chat ready": 2414.5,
+    "whole open (click → app visible and chat ready)": 2924.2
+   }
+  },
+  {
+   "variant": "try",
+   "kind": "reopen",
+   "load": [
+    25.06,
+    25.01,
+    25.9
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.2,
+    "manifest": 9.5,
+    "boot.kernel": 103.1,
+    "boot.image": 103.2,
+    "boot.mounted": 108,
+    "boot.done": 109.9,
+    "boot": 110,
+    "source.project": 110.2,
+    "source.derived": 110.3,
+    "source": 111,
+    "preview.spawn": 112,
+    "agent.spawn": 112.3,
+    "preview.listening": 636.9,
+    "agent.listening": 819.4,
+    "agent.health": 908.7,
+    "preview.ready": 1158.6,
+    "agent.activated": 1825.2,
+    "agent.plugins": 1883.9,
+    "agent.config": 1970.1,
+    "agent.ready": 1981.5,
+    "chat.ready": 2019.5,
+    "preview.visible": 2241.4
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 93.3,
+    "kernelCompile": 0,
+    "kernelAttach": 0.5,
+    "kerneldInit": 92.3,
+    "restore": 41,
+    "journalBytes": 23993,
+    "snapshotBytes": 14570465,
+    "mount": 1.9,
+    "image": 93.4,
+    "imageCached": true,
+    "imageArriving": false,
+    "mounted": 98.2,
+    "serviceWorker": 100,
+    "total": 100
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [01:04:09.224] INFO (#449) http.span=298ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [01:04:09.229] INFO (#449) http.span=303ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [01:04:09.766] INFO (#449) http.span=840ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124d743a50015pulDfHbNbs32B',",
+    "[agent]     created: 1791619449765,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [01:04:09.768] INFO (#449) http.span=842ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124d743a8001JIXmZYqIz0osii',",
+    "[agent]     created: 1791619449768,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [01:04:09.834] INFO (#449) http.span=908ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_124d743e90014dkJ4w4hzoubUK',",
+    "[agent]     created: 1791619449833,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 110,
+    "boot + mount (bootRuntime alone)": 100.5,
+    "vite spawn → listening": 524.9,
+    "vite spawn → app visible": 2129.4,
+    "opencode spawn → attached": 1869.2,
+    "opencode spawn → chat ready": 1907.2,
+    "whole open (click → app visible and chat ready)": 2241.4
    }
   }
  ]

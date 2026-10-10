@@ -15,6 +15,8 @@ const manifest = await prepare({
   outDir: '.editor/prepared',
   source,
   openCodeDir,
+  // What Vite had loaded when the app first showed, recorded from a run (bench/startup).
+  startupModules: 'startup-modules.json',
   // What a start-up reads from the dependency image, recorded from a real first open
   // (`bun bench/first-open/trace.ts`, see docs/experiments/2026-10-10-first-open-and-shell.md):
   // those 11 MB are laid out first, so a visitor's first open starts while the other

@@ -24,6 +24,8 @@ export interface BootOptions {
   warmSpare?: boolean
   /** Warm process workers made at boot (default 1). */
   spares?: number
+  /** Program scripts each of the first spares starts loading at once (see kerneld). */
+  spareHints?: string[][]
   /** Names of the images that will be mounted, so workers open their handles ahead of the mount. */
   images?: string[]
   /** The kernel module, when the caller already started compiling it (preload). */
@@ -43,7 +45,7 @@ export interface BootedKernel {
   /** Mount a stored image at `path`. `arriving`: its file is still being written front to
    * back; reads wait for what is not there yet until `bat_image_arriving(id, 0 | 2)`. */
   mountImage(name: string, path: string, arriving?: boolean): Promise<{ id: number; entries: number; ms: number; openHandleMs: number; indexMs: number }>
-  restored?: { snapshotSeq: number; seq: number; journalFrames: number; journalBytes: number; ms: number }
+  restored?: { snapshotSeq: number; seq: number; snapshotBytes?: number; journalFrames: number; journalBytes: number; ms: number }
   timings: { compileMs: number; attachMs: number; kerneldMs: number }
   close(): void
 }
@@ -90,6 +92,7 @@ export async function bootKernel(opts: BootOptions): Promise<BootedKernel> {
     runnerUrl: opts.runnerUrl ? new URL(opts.runnerUrl, location.href).href : '',
     warmSpare: opts.warmSpare ?? true,
     spares: opts.spares ?? 1,
+    spareHints: opts.spareHints ?? [],
     images: opts.images ?? [],
     trace: opts.trace ?? false,
   })

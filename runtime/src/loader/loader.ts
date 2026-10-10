@@ -70,6 +70,8 @@ export interface Loader {
   main(): any
   /** URL of the program script that contains `path`, if it is not loaded yet. */
   programUrl(path: string): string | undefined
+  /** URLs of the named program scripts that are configured and not loaded yet; they count as loaded from here on. */
+  programUrls(names: string[]): string[]
   stats: Record<string, number>
 }
 
@@ -272,6 +274,15 @@ export function createLoader(rt: Runtime, builtins: Builtins): Loader {
     let code: string | undefined
     let facts: Facts | undefined
     if (!overlay && word !== 0 && !(word & FACT_FAILED)) {
+      // A start-up program (loaded before the entry) already holds this image module's function.
+      const ready = defined.get(path)
+      if (ready && !(word & FACT_IN_PROGRAM)) {
+        record.facts = factsOf(path, word)
+        record.kind = record.facts.kind === 'esm' ? 'esm' : 'cjs'
+        record.fn = ready
+        stats.fromProgram++
+        return
+      }
       if (word & FACT_IN_PROGRAM) {
         const fn = programFunction(path)
         if (fn) {
@@ -730,6 +741,17 @@ export function createLoader(rt: Runtime, builtins: Builtins): Loader {
     resolve,
     compileCjs,
     main: () => main?.module,
+    programUrls(names) {
+      const urls: string[] = []
+      for (const name of names) {
+        const url = rt.config.programs[name]
+        if (!url || programLoaded.has(name)) continue
+        programLoaded.add(name)
+        stats.programs++
+        urls.push(url)
+      }
+      return urls
+    },
     programUrl(path) {
       let real = path
       try {
