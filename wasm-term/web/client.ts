@@ -22,7 +22,7 @@
 import { init, Terminal } from "@random/ghostty-web";
 import { type ClipboardBridge, type ExitStatus, type HttpSeen, type Program, startProgram } from "../host/index";
 import { openPersistStore } from "../host/persist-store";
-import { explainBlocked, originNote, requestLog } from "./direct";
+import { chatgptAllows, explainBlocked, localhostNote, originNote, requestLog } from "./direct";
 import type { GuestCondition, GuestInfo } from "./guests";
 import { isolate } from "./isolate";
 import { showLauncher } from "./launcher";
@@ -75,7 +75,7 @@ const guests = (await (await fetch("guests.json", { cache: "no-store" })).json()
 // A static build is for one program: its launcher is the page itself.
 const guest = params.get("guest");
 if (guest === null) {
-  showLauncher(guests, STATIC ? { title: "codex in this tab", intro: "codex-cli 0.162.0 running entirely in this browser tab: the TUI, the agent and its tools. This page is a directory of static files; nothing of ours is behind it, and the program's requests go from this tab straight to OpenAI.", notes: [originNote(location.origin)] } : undefined);
+  showLauncher(guests, STATIC ? { title: "codex in this tab", intro: "codex-cli 0.162.0 running entirely in this browser tab: the TUI, the agent and its tools. This page is a directory of static files; nothing of ours is behind it, and the program's requests go from this tab straight to OpenAI.", notes: [originNote(location.origin), ...(chatgptAllows(location.origin) ? [] : [await localhostNote()])] } : undefined);
   // Nothing below applies without a program; a module cannot return, so wait forever.
   await new Promise(() => {});
   throw new Error("unreachable");

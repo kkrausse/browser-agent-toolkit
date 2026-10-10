@@ -13,6 +13,8 @@ const STYLE = `
   #launcher h1 { font-size: 20px; margin: 0 0 4px; }
   #launcher p { margin: 0 0 16px; color: #a6a69c; }
   #launcher p.note { padding: 10px 12px; border: 1px solid #363646; border-radius: 8px; color: #dcd7ba; font-size: 14px; }
+  #launcher p.note pre { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12.5px/1.5 ui-monospace, monospace; color: #98bb6c; user-select: all; }
+  #launcher p.note a { color: #7e9cd8; }
   #launcher section { border: 1px solid #2a2a37; border-radius: 8px; padding: 14px 16px; margin: 0 0 12px; background: #1f1f28; }
   #launcher h2 { font: 600 15px/1.4 ui-monospace, monospace; margin: 0; }
   #launcher label { display: block; margin: 10px 0 0; font-size: 13px; color: #a6a69c; }
@@ -70,7 +72,7 @@ function importControls(namespace: string, directory: string): HTMLElement {
 export interface LauncherText {
   title: string;
   intro: string;
-  notes?: string[];
+  notes?: (string | Node)[];
 }
 
 export function showLauncher(guests: GuestInfo[], text: LauncherText = { title: "wasm-term", intro: "Terminal programs running in this browser tab, on an emulated machine. Pick one." }): void {
@@ -79,7 +81,7 @@ export function showLauncher(guests: GuestInfo[], text: LauncherText = { title: 
   const main = element("main", {}, [
     element("h1", { textContent: text.title }),
     element("p", { textContent: text.intro }),
-    ...(text.notes ?? []).map(note => element("p", { className: "note", textContent: note })),
+    ...(text.notes ?? []).map(note => element("p", { className: "note" }, [note])),
   ]);
 
   // Programs with settings first: they are the ones a person comes here for.

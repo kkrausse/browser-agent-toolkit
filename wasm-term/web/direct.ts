@@ -42,6 +42,19 @@ export function originNote(origin: string): string {
       `but then fails, because everything after it goes to chatgpt.com. For a ChatGPT subscription open this directory at http://localhost:3000 (also :5173 or :8000; not 127.0.0.1).`;
 }
 
+/** For the static build's launcher: how to get this same directory onto an origin chatgpt.com accepts. The archive
+ * is offered when the directory was published with one beside the page (`wasm-term-codex-static.tgz`). */
+export async function localhostNote(): Promise<Node> {
+  const archive = new URL("wasm-term-codex-static.tgz", location.href).href;
+  const has = await fetch(archive, { method: "HEAD", cache: "no-store" }).then(response => response.ok, () => false);
+  const note = document.createElement("span");
+  const commands = document.createElement("pre");
+  commands.textContent = (has ? `curl -LO ${archive}\ntar xzf wasm-term-codex-static.tgz\n` : "") +
+    `python3 -m http.server 3000 --bind 127.0.0.1 --directory ${has ? "wasm-term-codex-static" : "<this directory>"}\n# then open http://localhost:3000/  (localhost, not 127.0.0.1)`;
+  note.append("To use a ChatGPT subscription, serve this directory on your own machine at http://localhost:3000 with any file server", has ? " (" : "", ...(has ? [Object.assign(document.createElement("a"), { href: archive, textContent: "the directory as an archive, 27 MB" }), ")"] : []), ":", commands);
+  return note;
+}
+
 let notice: HTMLElement | undefined;
 /** A bar across the top of the page, over the terminal; a click dismisses it. */
 export function showNotice(text: string): void {

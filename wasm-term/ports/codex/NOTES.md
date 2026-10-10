@@ -1678,3 +1678,231 @@ serve entry was not changed. Private dev servers ran on loopback ports 4788 and 
 work and were stopped. Toolchains: nothing new. All 18 patch series (codex with 0012, tokio
 with 0005, 16 forks including the new hyper-util) were re-applied to fresh bases and compared
 equal to the port branches.
+
+## 12. No server at all: `net=direct` and the static build (seventh session)
+
+`?guest=codex-local&net=direct`: the module's requests are `fetch` calls from the tab to the
+real URL. No relay, no header envelope, no server of ours. With it codex-local can be a
+directory of static files (`scripts/static.sh`), and that is what this section is about: what
+OpenAI's hosts allow a page to do, what a browser takes away, and what was run. **[ran]** means
+run here on 2026-10-10 in Chrome 154 through `web/verify/run.sh codex-static` (37 checks, 44 with `CODEX_STATIC_REAL=1`) or
+the command given; **[read]** from codex's source; **[inferred]** otherwise.
+
+### Short answer
+
+| | From any origin (a file shelf, the tailnet, `127.0.0.1`) | From `http://localhost:3000` and the other listed origins |
+| --- | --- | --- |
+| API key (`api.openai.com`) | should work: CORS `*` on preflight and response **[ran, unauthenticated: 401 read by the tab from two origins]**; a real key and turn not run | the same |
+| ChatGPT sign-in itself (`auth.openai.com`: device code, polling, token exchange, refresh, revoke) | works as far as it can be taken without an account: CORS `*` on all four paths **[ran: preflights]**, a real device code shown in the TUI from the tab and its pending poll answered **[ran]**; approval and exchange not run | the same |
+| Everything after the sign-in (`chatgpt.com/backend-api`: account check, models, model calls, usage) | **refused by the browser**: the preflight gets 400 with no allow-origin **[ran: real host, from the tab]**. codex reports the sign-in as failed (the account check is part of it), though the tokens are already stored | the preflight passes and the tab reads the answer (401 without a token) **[ran: real host, from `http://localhost:8002`]**. With a token: not run, see "What is not known" |
+
+So a serverless codex with a ChatGPT subscription is possible only on a page whose origin is on
+chatgpt.com's list, which in practice means `http://localhost:3000` (or one of seven other
+ports) on the user's own machine. With an API key it is possible from anywhere.
+
+### What the hosts answered (2026-10-10, 20:30 to 20:40 UTC)
+
+Unauthenticated `OPTIONS` preflights from curl with an `Origin`, `Access-Control-Request-Method`
+and `Access-Control-Request-Headers: authorization,content-type,originator,chatgpt-account-id`
+(first batch also `openai-beta,session_id`), about 85 requests in all, and four unauthenticated
+GETs/POSTs to see real responses. Someone else's servers: this is an observation, not a contract.
+
+**`chatgpt.com/backend-api/codex/responses`**: `200` with `access-control-allow-origin: <the
+origin>`, `access-control-allow-credentials: true`, `vary: Origin`, `access-control-max-age: 600`,
+`access-control-allow-methods: DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT` and the requested
+headers echoed back, whatever they were (`user-agent`, `version`, `x-codex-turn-state`,
+`content-encoding`, a made-up `x-custom-foo`: all echoed), or `400` with the same headers
+except allow-origin:
+
+| Origin | |
+| --- | --- |
+| `http://localhost:` 3000, 3002, 3005, 5000, 5001, 5173, 8000, 8002 | accepted |
+| `http://localhost:` 1420, 1455, 3001, 3003, 3004, 3333, 4000, 4173, 4200, 5174, 6006, 7000, 8001, 8080, 8081, 8888, 9000; `http://localhost` and `http://localhost:80` | refused |
+| `https://localhost`, `https://localhost:` 3000, 5173, 8000 | refused |
+| `http://127.0.0.1:` 3000, 5173, 8000; `http://[::1]:3000`; `http://app.localhost:3000` | refused |
+| `https://chatgpt.com`, `https://chat.openai.com`, `https://platform.openai.com`, `https://auth.openai.com`, `https://sora.com`, `https://sora.chatgpt.com`, `https://chatgpt-staging.com` | accepted |
+| `https://openai.com`, `https://codex.openai.com`, `https://foo.chatgpt.com` | refused |
+| `null`, `file://`, `vscode-webview://abc`, `tauri://localhost`, `http://tauri.localhost`, `https://tauri.localhost`, `app://localhost`, `capacitor://localhost`, `chrome-extension://<id>` | refused |
+| an arbitrary https origin (this machine's tailnet name) | refused |
+
+The list is exact strings, not a pattern: neighbouring ports differ, and only the name
+`localhost` over plain http counts. Ports not listed above were not tried.
+
+**Every path codex uses behaves the same**, each tried from `http://localhost:3000` (200,
+origin echoed) and from the tailnet origin (400): `codex/responses`, `codex/responses/compact`,
+`codex/models?client_version=0.162.0`, `wham/accounts/check`, `wham/usage`,
+`wham/rate-limit-reset-credits`, `wham/security-setup`, `wham/settings/user`,
+`wham/config/bundle`. (`responses/compact` was in section 8's list; 0.162.0 has no such request
+**[read]**: remote compaction is an ordinary `/responses` call with `x-openai-subagent: compact`.)
+
+A real `GET codex/models` without a token: `401 {"detail":"Unauthorized"}` from both origins,
+with allow-origin only for the listed one, `set-cookie: __cf_bm`, `__cflb`, `x-oai-request-id`,
+`cf-ray`, and **no `access-control-expose-headers`**. Whether a 200 exposes anything is not known.
+
+**`auth.openai.com`**: `access-control-allow-origin: *` on the preflight of
+`/api/accounts/deviceauth/usercode`, `/api/accounts/deviceauth/token`, `/oauth/token` and
+`/oauth/revoke`, and on a real `POST /oauth/revoke` with an empty JSON body (400 "Missing
+required parameter: 'token'").
+
+**`api.openai.com`**: `access-control-allow-origin: *` and `access-control-expose-headers:
+X-Request-ID, CF-Ray` on the preflight of `/v1/responses` and `/v1/models` and on a real
+`GET /v1/models` (401), requested headers echoed.
+
+From the browser **[ran]**, `CODEX_STATIC_REAL=1`: `fetch` with `credentials: "omit"` and an
+`originator` header (so that it preflights) to `chatgpt.com/backend-api/codex/models`: 401 read
+from `http://localhost:8002`, `TypeError: Failed to fetch` from `http://127.0.0.1:8002`; to
+`api.openai.com/v1/models`: 401 read from both. The same GET through the module (its probe)
+from the listed origin: 401, readable headers `content-length`, `content-type` and nothing else.
+That also settles the credentials question: a request with `credentials: "omit"` is accepted by
+a server that answers `allow-credentials: true` with the origin echoed.
+
+### What a browser takes away
+
+Request headers, **[ran]** at the mock (it records every header name that arrived):
+
+| codex sets | Direct |
+| --- | --- |
+| `User-Agent: codex-tui/0.162.0 (...)` | **lost**: the browser's own goes (`Mozilla/5.0 ... Chrome/154`). The reqwest fork drops it; Chrome would ignore it anyway |
+| `Cookie` (codex replays Cloudflare's `__cf_bm` and the like for `chatgpt.com`, and `oai-chat-psp`) | **lost**, and `Set-Cookie` is neither readable nor stored (`credentials: "omit"`): every request arrives without the cookies Cloudflare set |
+| `Accept-Encoding` (codex sets none) | the browser's `gzip, deflate, br, zstd`; it decodes |
+| `Host`, `Content-Length`, `Connection` | the browser's |
+| `originator`, `version`, `session-id`, `thread-id`, `x-client-request-id`, `x-codex-window-id`, `x-codex-turn-metadata`, `x-codex-beta-features`, `x-codex-routing-hint`, `Authorization`, `ChatGPT-Account-ID`, `Content-Encoding: zstd`, `Content-Type`, `Accept` | arrive under their own names. All but the last two need the preflight to allow them; all three hosts echo what is asked |
+| added by the browser | `Origin`, `Sec-Fetch-*`, `Sec-CH-UA*`, `Accept-Language`, `Cache-Control`/`Pragma: no-cache` (from `cache: "no-store"`); no `Referer` |
+
+Does anything depend on what is lost? In codex, no **[read]**: nothing fails without cookies.
+At the server, unknown: the backend may key on the `User-Agent` (the `originator` and `version`
+headers still say codex), and Cloudflare in front of `chatgpt.com` sees a browser's TLS and
+headers from a `localhost` origin with a bearer token and no cookie, which is what its own
+allow-listed web clients look like, or is not. Only a real session can tell.
+
+Response headers codex reads **[read]**, and what a page can see of them. `api.openai.com`
+exposes `X-Request-ID` and `CF-Ray`; `chatgpt.com` exposed nothing on the 401:
+
+| Header | For | Hidden means |
+| --- | --- | --- |
+| `x-codex-primary-*`, `x-codex-secondary-*`, `x-codex-credits-*` | the rate-limit snapshot after each turn | the snapshot has no windows; `/status` is fed by `GET wham/usage` instead (JSON, readable). **[ran]** at the mock, which sends them unexposed on the backend path: the turn completes and `/status` renders |
+| `x-models-etag` on responses, `etag` on `/models` | refreshing the model list when it changed | TTL-only refresh. Both hidden is benign; only the first visible would refetch `/models` on every turn |
+| `x-codex-turn-state` | sticky routing within a turn | not echoed back; the HTTP stream also carries it in `response.metadata` |
+| `openai-model`, `x-reasoning-included` | reroute notice; token estimate | no notice from the header (the stream has it too); a slightly different estimate |
+| `x-request-id`, `x-oai-request-id`, `cf-ray`, `x-openai-authorization-error`, `x-error-json` | appended to error messages | shorter error messages |
+| `retry-after` | backoff | codex's own backoff |
+| `set-cookie` | the Cloudflare cookie jar | empty jar |
+| `content-type` | nothing (no check before reading the stream as SSE) | always readable anyway |
+
+No missing header is an error anywhere **[read]**.
+
+Other differences from the tunnel, all as in `net=fetch`: request bodies whole (zstd bodies are
+bytes like any other **[ran]**: the mock decodes one from the tab), no Responses WebSocket
+(`responses_websocket_enabled` is false on WASI without a TCP connector **[ran]**: the mock saw
+no upgrade), HTTP version, connection reuse, redirects and TLS are the browser's. And one
+addition: with no relay to refuse it, codex's start-up request for its announcement tip
+(`raw.githubusercontent.com`, CORS `*`) now succeeds, as it does natively.
+
+### What was built
+
+- **Port `main`** (`local.rs`): `WASM_TERM_NET=direct` removes `WASM_TERM_HTTP_RELAY` from the
+  environment; the reqwest fork's existing no-relay branch (patch 0002, unchanged) then fetches
+  the real URL and leaves out what a browser forbids. No new patch to codex or a fork.
+- **Host** (`host/net.ts`): a cross-origin `http_open` is `mode: "cors"`, `credentials: "omit"`,
+  no referrer, no cache (`docs/abi.md`, "Direct requests"). `ProgramOptions.http`: `seen` (the
+  page keeps method, origin and path, status and readable header names as `wasmTerm.requests`:
+  no values, no queries), `blocked`, `rewrite`.
+- **Refusals** (`web/direct.ts`). A browser gives script the same `TypeError` for "CORS said no"
+  and "host unreachable", and under COEP `require-corp` a `no-cors` probe cannot tell them apart
+  either. So the page goes by what it knows: a rejected request to a `/backend-api/` path from an
+  origin outside the observed list is answered to the program as **`400` with the reason as its
+  body**. codex prints a 400's body as it is and does not retry it; a transport error it retries
+  five times and then reports as "stream disconnected before completion: error sending request",
+  and a 403 it retries too **[read]**. The same text goes into a bar across the top of the page.
+  **[ran]**: at a refused origin a model call shows, at once, in the TUI: "chatgpt.com does not
+  accept requests from this page's origin (http://127.0.0.1:8002). A ChatGPT subscription can
+  only be used from a page at http://localhost:3000 (also :5173 or :8000): serve this directory
+  there ... Or sign in with an API key ... or use the build with the tunnel". During sign-in the
+  refused request is the account check, whose failure codex collapses to "workspace routing
+  discovery failed" whatever the cause **[read]**; there the bar on the page carries the reason
+  **[ran]**. A rejected request from a listed origin, or to another host, stays a transport
+  error, with a bar that says the network or CORS and that the list may have changed. Offline
+  (`navigator.onLine`) is left alone.
+- **The mock** imitates the three hosts' CORS (`mock-llm/README.md`, "CORS"), and serves the
+  model endpoints on `/backend-api/codex/` too. `mock-auth` uses the name `https://mock-llm.test`
+  (codex wants https for a ChatGPT backend), which no browser can reach; with a mock backend the
+  page sends that one origin to `http://127.0.0.1:4791` instead (`GuestInfo.direct.rewrite`).
+  It cannot be applied to another name or with `backend=openai`.
+- **The static build** (`scripts/static.sh` -> `dist/static/` and
+  `dist/wasm-term-codex-static.tgz`; `web/static.ts`): `index.html`, `client.js`, `sw.js`,
+  `worker.js`, `shell-worker.js`, `guests.json`, and as `.gz` the kernel, ghostty, the shell and
+  the shipped module. 11 files. Only codex-local, `net=direct` and nothing else (`net=tunnel` is
+  refused with a reason), backend `openai`, persistence on. The sample project is inside the
+  module. The launcher asks for the project directory and has "Run", "Forget saved state",
+  "Clear stored credentials" and the two imports; it says whether its own origin is on the list.
+  Every URL is relative, so it works below a path **[ran]**.
+- **Isolation without a server**, as `examples/terminal-app` does it: the page registers its
+  service worker (`web/static-sw.ts`), reloads once, and from then on the worker adds
+  COOP/COEP/CORP to the page's own files (`web/isolate.ts`). **[ran]** behind
+  `python3 -m http.server` in Chrome and in Playwright's WebKit (desktop and iPhone profiles).
+  A service worker needs a secure context: `http://localhost:<port>` or https.
+- **`web/static-serve.sh up|down`**: the directory behind `python3 -m http.server` on
+  `127.0.0.1:8002` as the systemd user unit `wasm-term-codex-static.service`. 8002 is on the
+  list, so `http://localhost:8002/` on this machine is an accepted origin as it stands.
+
+### Size and load
+
+| | Bytes |
+| --- | --- |
+| the directory | 27.5 MB, of which the module's `.gz` is 26.6 MB (70.4 MB to compile); the tarball 27.4 MB |
+| the same with `PLAIN=1` (no `.gz`, nothing to inflate) | 72.6 MB |
+| the module behind a server that negotiates brotli (the dev server) | 20.2 MB |
+
+A plain file server sends no `Content-Encoding`, so precompressed files have to be inflated by
+the page, and `DecompressionStream` has gzip but not brotli: the price of having no server is
+6.4 MB over the wire against the dev server. Against shipping the module plain it saves 44 MB,
+and inflating costs less than reading the extra bytes even from loopback **[ran]**, Chrome 154,
+`python3 -m http.server`, navigation to the start screen:
+
+| | First load of a new origin | Reloads |
+| --- | --- | --- |
+| `.gz`, inflated by the service worker | 0.9 s | 1.0, 1.1 s |
+| plain | 2.8 s | 0.9, 1.2 s |
+
+WebKit (headless, a new profile each time): 1.1 s. Over a real network the 26.6 MB decide; the
+file's name is its hash, so the browser's cache keeps it across reloads and across builds that
+did not change the module.
+
+### What is not known, in the order it will be met
+
+1. Whether `chatgpt.com` answers a **token-bearing** request from a `localhost` origin the way it
+   answers its preflight. The preflight says the origin may ask; Cloudflare or the backend may
+   still judge the request itself (a browser's TLS and `User-Agent`, no cookies).
+2. Which response headers a 200 from `chatgpt.com` exposes. `wasmTerm.requests` in the console
+   lists the readable names per request, without values.
+3. The default model for a ChatGPT plan, its tools, a real stream: section 8's unknowns stand.
+4. An account whose workspace backend is not `chatgpt.com` (data residency): its host has its
+   own CORS answers, not looked at.
+5. Token refresh from the tab against the real `auth.openai.com` (CORS says yes).
+
+### Storage, and who else can read it
+
+`auth.json` is in IndexedDB of the page's **origin**, readable by every script that origin ever
+serves. On `http://localhost:3000` that is whatever else runs on that port later; on a file
+shelf it is every other page of the shelf. "Clear stored credentials" (or `/logout`, which also
+revokes) when done. A link can also carry `?arg=-c&arg=openai_base_url=...` or `?env=`, which
+send the stored token where the link's author likes; that was true of every codex-local page
+before this one and is still not fixed.
+
+### Rules followed (seventh session)
+
+`~/.codex` was not touched; no real credential was read, typed or used; no model was called.
+Real hosts received only unauthenticated requests: the preflights and probes above from curl,
+and from the browser one device-code request with its pending poll (nobody approved it; Esc),
+four preflighted GETs and two GETs through the module. No upstream source changed: the vendor
+checkouts are clean and `scripts/export-patches.sh` reproduces the 18 series byte for byte (they
+were not re-applied to fresh bases this time); the module was rebuilt (`BIN=local scripts/ship.sh`, 8 jobs)
+because `main` changed. The mock image was rebuilt and the backend restarted once; the dev
+server unit was restarted; no tailscale serve entry was added or changed. One new user unit,
+`wasm-term-codex-static.service`, is left running on loopback 8002 (`web/static-serve.sh down`
+removes it). The directory and its tarball were published to the private tailnet shelf
+(`deploy-artifact.sh`, slug `wasm-term-codex-static`), where the page isolates itself below
+`/artifacts/wasm-term-codex-static/` over https and starts the program **[ran]**. At the end
+`run.sh terminal-functions` (104), `opencode` (26), `codex` (35) and `codex-local` (tunnel 64,
+fetch 55) pass on the rebuilt shipped module, and the WebKit smoke passes against the static
+directory in both profiles.

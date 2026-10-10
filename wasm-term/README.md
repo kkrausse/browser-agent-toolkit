@@ -68,7 +68,7 @@ notes call this repository's Rust runtime "bat-rust", the name of its checkout.
 | --- | --- |
 | `kernel/` | Rust crate(s): pty + line discipline, compiled to wasm |
 | `host/` | TypeScript: worker runtime, WASI + custom imports, vfs, net bridge, persistence; `host/node/` runs JavaScript programs on the same machine (node-style `process`, `fs`, ...); `host/proc.ts`, `host/sh/`, `host/shell-worker.ts` are child processes: the shell (`host/sh/build.sh` builds it from `../crates/bat-sh`) |
-| `web/` | Bun dev server (COOP/COEP), the launcher and the page wiring ghostty-web to a program; `web/verify/` browser checks |
+| `web/` | Bun dev server (COOP/COEP), the launcher and the page wiring ghostty-web to a program; `web/static.ts` builds codex-local as static files with no server behind them; `web/verify/` browser checks |
 | `guests/` | Test programs built for the guest ABI |
 | `mock-llm/` | Scripted model server + isolated opencode/codex server configs |
 | `ports/opencode/`, `ports/codex/` | Per-client port work and notes |
@@ -115,7 +115,7 @@ runs one directly.
 | `js-demo` | a JavaScript program on the node-style shim (`host/node/demo-guest.ts`) |
 | `opencode` | the real opencode 2.0.26 TUI, attached to a remote `opencode serve` |
 | `codex` | the real codex-cli 0.162.0 TUI (Rust, `wasm32-wasip1`), attached to a remote `codex app-server` |
-| `codex-local` | codex-cli 0.162.0 entirely in the tab: TUI, app-server and agent core in one module; model and sign-in requests go out through the page server: as TLS the module does itself over a TCP relay (`net=tunnel`), or as `fetch` through an HTTP relay (`net=fetch`) |
+| `codex-local` | codex-cli 0.162.0 entirely in the tab: TUI, app-server and agent core in one module; model and sign-in requests go out through the page server: as TLS the module does itself over a TCP relay (`net=tunnel`), or as `fetch` through an HTTP relay (`net=fetch`); or with no server at all, as `fetch` straight to the real hosts (`net=direct`, and the static build below) |
 
 Page parameters: `&arg=...`, `&env=K=V` (`&env=WASM_TERM_TRACE=1` logs
 syscall rates, and stretches in which the program computed without reading
@@ -218,7 +218,7 @@ Open <http://127.0.0.1:4790/?guest=codex-local>, or the launcher.
 | Parameter | Default | |
 | --- | --- | --- |
 | `backend` | `mock` | `mock`: the scripted model server, no sign-in, no tokens. `openai`: the real service; the TUI asks you to sign in. `mock-auth`: codex's real sign-in flow and ChatGPT-style requests against mock-llm's fake auth server (what `web/verify/codex-local.js` uses) |
-| `net` | `tunnel` | how requests leave the tab. `tunnel`: codex's own HTTP stack (reqwest, hyper, rustls) and WebSocket dialer, over a TCP stream that this page's server only carries (`/proxy/tcp`); TLS ends in the module, so the server sees ciphertext. `fetch`: the browser's `fetch` through the HTTP relay below, which terminates TLS and can read everything |
+| `net` | `tunnel` | how requests leave the tab. `tunnel`: codex's own HTTP stack (reqwest, hyper, rustls) and WebSocket dialer, over a TCP stream that this page's server only carries (`/proxy/tcp`); TLS ends in the module, so the server sees ciphertext. `fetch`: the browser's `fetch` through the HTTP relay below, which terminates TLS and can read everything. `direct`: the browser's `fetch` straight to the real URL, no relay ("Static build", below) |
 | `relay` | `/proxy/http` | with `net=fetch`: where the program's HTTP requests go: this page's server, which forwards them to an allowlist of hosts. Empty = the browser fetches directly (only servers that allow this origin by CORS) |
 | `dir` | `/home/user/project` | the project directory, in the tab's own filesystem |
 | `seed` | `1` | write the sample project (`ports/codex/main/sample/`: a README, three Python files in `src/`, a test, a CSV, notes) into the project directory if it is empty |
@@ -309,6 +309,45 @@ dropped), streams the response back, and logs method, host, path and status
 (`journalctl --user -u wasm-term-web | grep relay`), never header values or bodies. Anyone who
 can open the page can use it to reach those hosts with their own credentials.
 
+### Static build: codex with no server at all
+
+```sh
+cd wasm-term/ports/codex
+scripts/static.sh                           # dist/static/ (27.5 MB) and dist/wasm-term-codex-static.tgz, from the builds above
+python3 -m http.server 3000 --directory dist/static     # any file server; then http://localhost:3000/
+```
+
+A directory of plain files: the page, its bundles, the kernel, ghostty, the shell and the shipped
+codex-local module. No relay, no server code, no headers needed: the page's service worker
+supplies cross-origin isolation (one reload on the first visit) and inflates the `.gz` files, as
+`examples/terminal-app` does. It works at any path, on `http://localhost:<port>` or https (a
+service worker needs one of the two). It runs codex-local with `net=direct`: every request the
+program makes is a `fetch` from the tab to the real host, so what works is what each host
+allows the page's **origin** to do, as observed on 2026-10-10 (`ports/codex/NOTES.md`, section 12):
+
+| | Where it works |
+| --- | --- |
+| an API key (`api.openai.com`) | any origin |
+| the ChatGPT sign-in itself (`auth.openai.com`) | any origin |
+| everything a ChatGPT sign-in does afterwards: the account check that completes it, models, model calls (`chatgpt.com/backend-api`) | only a fixed list of origins: `http://localhost:` 3000, 3002, 3005, 5000, 5001, 5173, 8000, 8002 (not `127.0.0.1`, not https) and a few of OpenAI's own sites |
+
+So for a ChatGPT subscription serve it on `http://localhost:3000` and open exactly that. From
+any other origin the launcher says so, and a refused request is answered in the TUI and in a bar
+on the page with the reason and what to do, not with a network error. Sign-in is in the TUI as
+below. The launcher has "Forget saved state", "Clear stored credentials" and the two imports;
+`&backend=mock` runs it against mock-llm (which imitates the three hosts' CORS).
+
+Different from the tunnel: the browser sends its own `User-Agent` and no cookies, the page can
+read only the response headers a host exposes (codex's rate-limit display then comes from its
+usage request alone), request bodies go whole, and there is no Responses WebSocket.
+`wasmTerm.requests` in the console lists the program's requests: method, host and path, status,
+readable header names. Credentials are in IndexedDB of the page's origin, readable by any
+other page that origin serves: "Clear stored credentials" or `/logout` when done.
+
+`web/static-serve.sh up` serves `dist/static` with `python3 -m http.server` on `127.0.0.1:8002`
+as the user unit `wasm-term-codex-static.service` (`down` removes it). From another machine:
+`ssh -L 3000:127.0.0.1:8002 <this machine>`, then `http://localhost:3000/` there.
+
 **Signing in with ChatGPT** (`&backend=openai`):
 
 1. Open `/?guest=codex-local&backend=openai`. The TUI shows "Sign in with ChatGPT", "Sign in
@@ -382,7 +421,7 @@ code (`web/mobile.ts`; the three files are in `third_party/bun-web-terminal/`):
 
 ### Checks
 
-`web/verify/run.sh [terminal-functions|opencode|opencode-perf|codex|codex-local]` drives the
+`web/verify/run.sh [terminal-functions|opencode|opencode-perf|codex|codex-local|codex-static]` drives the
 page in Chrome through `browser-control` (dev server up; the opencode and
 codex ones also need `mock-llm/up.sh`). `terminal-functions` checks each terminal
 function with the Rust guests (the `tcp` guest's checks of TCP streams through the relay among them) and the JavaScript shim with `js-demo`;
@@ -414,6 +453,7 @@ relay carried (for that it starts a second dev server on loopback :4789 with
 Nothing in it reaches a real host unless `CODEX_LOCAL_REAL_AUTH=1` is set, which adds, in the
 fetch pass, one unauthenticated request for a device code to the real `auth.openai.com` and its
 pending polls, and in the tunnel pass one unauthenticated GET to the real `api.openai.com`.
+`codex-static` runs the static build behind `web/static-serve.sh`'s plain file server, in direct mode against the mock: that the server sends no isolation headers and the page isolates itself, the launcher, turns and the shell, persistence, the zip import, the whole sign-in at an origin the mock's imitation of chatgpt.com accepts (`http://localhost:8002`: model calls on the ChatGPT backend's path, zstd bodies, no WebSocket, the unexposed rate-limit headers not readable and not missed) and at one it refuses (`http://127.0.0.1:8002`: the reason on the page and in the TUI, an API key still working), `/logout`, "Clear stored credentials", and the directory below a path. `CODEX_STATIC_REAL=1` adds unauthenticated requests to the real hosts: one GET each to `chatgpt.com` and `api.openai.com` from both origins, and a device code from `auth.openai.com` that nobody approves.
 `codex-local-perf` prints connection and first-byte times for both transports. `WASM_TERM_BUILD=names` runs the codex guests' build
 with wasm names. `terminal-functions` also runs the `proc` guest in both shell modes. Screenshots land in
 `docs/screenshots/`.
@@ -429,7 +469,7 @@ Both run against another base URL with `WASM_TERM_URL`, e.g. the tailnet one:
 `web/webkit/smoke.sh [base URL]` runs the page headless in Playwright's WebKit
 build, at a desktop viewport and with an iPhone device profile (`PROFILE=desktop`
 or `iphone` for one; `GUESTS=opencode,codex,proc,codex-local` to choose guests;
-`NET=tunnel|fetch` for codex-local's transport): isolation,
+`NET=tunnel|fetch` for codex-local's transport; `GUESTS=codex-local STATIC=1 web/webkit/smoke.sh http://localhost:8002` for the static build): isolation,
 the Worker, the opencode home screen, a prompt and its reply; in the iPhone
 profile also the keys row, focus, swipe scrolling and refitting to a
 keyboard-sized viewport. Then the codex guest: that the module downloads,

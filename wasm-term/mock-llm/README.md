@@ -267,6 +267,31 @@ https `chatgpt_base_url`; the dev server's HTTP relay offers this server under t
 `https://mock-llm.test` for that, and its TCP relay offers the TLS front (next section) under the
 same name.
 
+## CORS
+
+For a browser that calls this server itself (codex-local with `net=direct`, the static build),
+`server.ts` answers the way OpenAI's three hosts answered unauthenticated preflights on
+2026-10-10 (`ports/codex/NOTES.md`, section 12, has the evidence), by path:
+
+| Path | Imitates | Preflight and response |
+| --- | --- | --- |
+| `/backend-api/*` | `chatgpt.com` | a list of origins. A listed one: `200`, `access-control-allow-origin: <origin>`, `allow-credentials: true`, `vary: Origin`, the requested headers echoed. Any other: the preflight is `400` with no allow-origin, and a real request is answered normally but without it, so a browser rejects both. Nothing is exposed |
+| `/auth/*` | `auth.openai.com` | `access-control-allow-origin: *` |
+| everything else (`/v1/*`, `/health`) | `api.openai.com` | `access-control-allow-origin: *`, `access-control-expose-headers: X-Request-ID, CF-Ray` |
+
+The list is the one observed: `http://localhost:` 3000, 3002, 3005, 5000, 5001, 5173, 8000, 8002
+and the `https://` origins `chatgpt.com`, `chat.openai.com`, `platform.openai.com`,
+`auth.openai.com`, `sora.com`, `sora.chatgpt.com`, `chatgpt-staging.com`.
+`MOCK_CHATGPT_ORIGINS="origin ..."` replaces it (`*` = everyone). A request without an `Origin`
+(the relays, the tunnel, the native clients, the containers) is never refused.
+
+Also for that client: `POST /backend-api/codex/responses` and `GET /backend-api/codex/models`
+are the model endpoints again, on the path a ChatGPT sign-in uses natively; responses there carry
+`x-codex-primary-used-percent`, `-window-minutes`, `-reset-at` and `x-models-etag`, which the
+real backend sends and does not expose, so a page cannot read them. Every response has an
+`x-request-id`. `GET /auth/state` lists, under `cors`, the preflights and refusals it saw, and each
+entry of `modelRequests` has the request's `origin` and the names of all its headers.
+
 ## TLS
 
 For a client that does its own TLS and verifies certificates: the `codex-local` guest with
