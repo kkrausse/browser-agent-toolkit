@@ -39,47 +39,97 @@ export async function imageExists(namespace: string, name: string): Promise<numb
   }
 }
 
-async function openImage(namespace: string, name: string): Promise<SyncHandle> {
-  const dir = await opfsDir(namespace, 'images')
-  const h = await dir.getFileHandle(name)
+/**
+ * Whether a file can have several sync access handles here (the `mode` option of
+ * `createSyncAccessHandle`): undefined until this thread has asked for one. Chrome has the
+ * option; WebKit ignores it and a second handle on a file throws.
+ *
+ * Found out for free: the options bag carries a getter for `mode`, which an engine that
+ * knows the option calls and one that does not never touches.
+ */
+let sharedHandles: boolean | undefined
+export const handlesAreShared = (): boolean | undefined => sharedHandles
+
+/** `createSyncAccessHandle` in `mode`, recording whether the engine has modes at all. */
+export async function openSyncHandle(file: FileSystemFileHandle, mode: 'read-only' | 'readwrite-unsafe'): Promise<SyncHandle> {
+  let read = false
+  const options = {
+    get mode() {
+      read = true
+      return mode
+    },
+  }
   try {
-    return (await (h as any).createSyncAccessHandle({ mode: 'read-only' })) as SyncHandle
-  } catch (e) {
-    // An image that is still being downloaded (`<name>.partial`) is held by its writer
-    // in the shared read-write mode, which excludes read-only handles: join that mode.
-    if ((e as DOMException)?.name !== 'NoModificationAllowedError') throw e
-    return (await (h as any).createSyncAccessHandle({ mode: 'readwrite-unsafe' })) as SyncHandle
+    return (await (file as any).createSyncAccessHandle(options)) as SyncHandle
+  } finally {
+    sharedHandles = read
   }
 }
-const early = new Map<string, Promise<SyncHandle>>()
+
+/**
+ * A handle for reading image `name`. `keeper` is the one thread (kerneld) that holds the
+ * handle where a file can only have one; any other thread gets undefined there and its
+ * reads go through the keeper (the kernel's fault path).
+ */
+async function openImage(namespace: string, name: string, keeper: boolean): Promise<SyncHandle | undefined> {
+  if (!keeper && sharedHandles === false) return undefined
+  const dir = await opfsDir(namespace, 'images')
+  const h = await dir.getFileHandle(name)
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const handle = await openSyncHandle(h, 'read-only')
+      if (sharedHandles || keeper) return handle
+      // The only handle this file can have, and it is not ours to keep.
+      handle.close()
+      return undefined
+    } catch (e) {
+      if (sharedHandles) {
+        // An image that is still being downloaded (`<name>.partial`) is held by its writer
+        // in the shared read-write mode, which excludes read-only handles: join that mode.
+        if ((e as DOMException)?.name !== 'NoModificationAllowedError') throw e
+        return openSyncHandle(h, 'readwrite-unsafe')
+      }
+      if (!keeper) return undefined
+      // Held for a moment by a worker that opened it ahead of the mount and is closing it.
+      if (attempt >= 40) throw e
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    }
+  }
+}
+const early = new Map<string, Promise<SyncHandle | undefined>>()
 /**
  * Start opening an image this worker will be asked to open once it is mounted (the host
  * knows the name from the manifest before the kernel exists). An image file carries its
  * name only when complete, so a file that is there can be opened; one that is not yet
  * (first download) is simply opened later.
  */
-export function preopenImage(namespace: string, name: string): void {
+export function preopenImage(namespace: string, name: string, keeper = false): void {
   const key = `${namespace}/${name}`
   if (early.has(key)) return
-  const opening = openImage(namespace, name)
+  const opening = openImage(namespace, name, keeper)
   opening.catch(() => {
     if (early.get(key) === opening) early.delete(key)
   })
   early.set(key, opening)
 }
-/** Read-only sync handle; many workers may hold one on the same file. Workers only. */
-export async function openImageHandle(namespace: string, name: string): Promise<SyncHandle> {
+/**
+ * Read-only sync handle on an image. Where the engine allows it, many workers hold one on
+ * the same file; where it does not, only the `keeper` gets one and the others get
+ * undefined. Workers only.
+ */
+export async function openImageHandle(namespace: string, name: string, keeper = false): Promise<SyncHandle | undefined> {
   const key = `${namespace}/${name}`
   const opening = early.get(key)
   if (opening) {
     early.delete(key)
     try {
-      return await opening
+      const handle = await opening
+      if (handle || !keeper) return handle
     } catch {
       // not there when asked early
     }
   }
-  return openImage(namespace, name)
+  return openImage(namespace, name, keeper)
 }
 
 /**

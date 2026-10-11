@@ -1202,3 +1202,54 @@ machine. `examples/terminal-app/build.ts` takes `PUBLIC=1`; the development buil
   commit is built in a scratch repository from the built directory and pushed with force as
   `gh-pages`, so this checkout's branches and index are never involved and 55 MB builds do
   not accumulate. It does nothing without `--yes`.
+
+## 2026-10-11: where sync access handles are exclusive, only kerneld holds the image
+
+The design gives every worker its own read-only `FileSystemSyncAccessHandle` on the image,
+and lets the first download be read while it is written (`readwrite-unsafe` in the writer
+and the readers). Both need the `mode` option. WebKit does not have it: the option is
+ignored and a second handle on a file throws `InvalidStateError`, whichever worker asks
+(`runtime/harness/webkit/probe.ts`, Playwright's Linux WebKit 2370). Firefox is expected to
+be the same; not run.
+
+What the harness showed first: the kernel already copes. A thread whose host has no handle
+gets `EAGAIN` from `host_image_read` and asks kerneld for the chunk (the path the page
+always used). In WebKit kerneld mounts first and gets the handle, every process worker
+fails to open one and falls back. The only failures that came from this were two guest
+scripts comparing a child's stderr, where the "no handle" warning had been printed.
+
+Options for making that deliberate:
+
+1. **Only kerneld holds the handle; everyone else faults through it.** No new mechanism.
+   Cost measured in the harness, 164 files / 25.8 MB / 202 cold chunks read by one process:
+   52.9 ms in WebKit through kerneld, against 42.8 ms in Chrome with the process's own
+   handle; about 0.05 ms per 128 KiB chunk, once per chunk for all processes. A chunk read
+   depends on kerneld's event loop being free.
+2. **`getFile()` and `FileReaderSync` in each worker.** Needs no handle at all and works
+   while another worker holds one (probed: a fresh `getFile()` also sees bytes appended
+   since). 0.6 ms per 64 KiB read, an allocation and a copy per read: ten times option 1,
+   and a second read path through the kernel's host import for every thread.
+3. **One handle, passed around or re-opened per read.** A handle cannot be transferred, and
+   open/close per read is two round trips to the storage process per chunk.
+4. **Bodies in shared memory up front.** The image is 239 MB.
+
+Picked: 1, by feature detection and without touching Chrome's path.
+
+- Detection costs nothing: the options bag is given a getter for `mode`. An engine that
+  knows the option reads it (Chrome: read, second handle allowed); one that does not never
+  calls the getter (WebKit: not read, second handle refused). Checked in both.
+- kerneld keeps its handle either way. Any other worker that finds the option unread closes
+  what it got at once and does not try again; its reads go to kerneld. Because a process
+  worker may open the file ahead of the mount (the `images` hint), kerneld retries for up
+  to a second when the file is held; that transient open is the one race left.
+- **The first download is not mounted while it arrives where handles are exclusive.** The
+  writer holds the only handle, so `usable` is announced once the file is complete, closed
+  and renamed. The first-ever open there waits for the whole image (32 MB compressed for
+  the example) before anything starts. Option 2 would lift this for the arriving file
+  alone (kerneld reading through `getFile()` until the download ends); not built, because
+  it has to be driven by measurements on a real Safari, not on this port.
+- Not addressed: a second tab. It cannot get a handle while the first tab's kerneld holds
+  the image, so its mount fails with the handle error after the one-second retry instead
+  of reaching the "already open in another tab" message (the Web Lock is only taken when
+  the overlay persists, and it is asked for before the mount, so the persisted case still
+  reports correctly; the harness page, which does not persist, does not).

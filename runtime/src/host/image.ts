@@ -19,7 +19,7 @@
 // workers hold it open (which they do when it was mounted early), so a
 // finished download is marked by `<name>.partial.ok` and renamed by the next
 // open, before anyone holds it.
-import { opfsDir, renameIn, type SyncHandle } from '../kernel/opfs'
+import { handlesAreShared, openSyncHandle, opfsDir, renameIn, type SyncHandle } from '../kernel/opfs'
 
 export interface StoreImageArgs {
   namespace: string
@@ -145,8 +145,11 @@ export async function storeImage(a: StoreImageArgs, onProgress: (p: StoreImagePr
 async function download(a: StoreImageArgs, dir: FileSystemDirectoryHandle, onProgress: (p: StoreImageProgress) => void, signal: AbortSignal | undefined, t0: number, resume?: Promise<void>): Promise<StoreImageResult> {
   const tmpName = partialOf(a.name)
   const tmp = await dir.getFileHandle(tmpName, { create: true })
-  // Shared with the workers that read the image while it arrives.
-  const handle = (await (tmp as any).createSyncAccessHandle({ mode: 'readwrite-unsafe' })) as SyncHandle
+  // Shared with the workers that read the image while it arrives, where the engine has
+  // shared handles. Where it has not (WebKit), this is the file's only handle: nobody can
+  // read the image until it is complete and closed, so it is not announced before that.
+  const handle = await openSyncHandle(tmp, 'readwrite-unsafe')
+  const readableWhileArriving = handlesAreShared() === true
   const blockBytes = a.sums?.blockBytes ?? 1 << 20
   const streaming = !!a.sums && a.bytes !== undefined
   let written = 0
@@ -182,7 +185,7 @@ async function download(a: StoreImageArgs, dir: FileSystemDirectoryHandle, onPro
           while (off < block.length) off += handle.write(block.subarray(off), { at: at + off })
           written = at + block.length
           onProgress({ loaded: written, total })
-          if (streaming && !announced && written >= Math.min(a.headBytes ?? 0, a.bytes!)) {
+          if (streaming && readableWhileArriving && !announced && written >= Math.min(a.headBytes ?? 0, a.bytes!)) {
             announced = true
             onProgress({ usable: { file: tmpName, arriving: true } })
           }

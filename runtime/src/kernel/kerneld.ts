@@ -184,7 +184,8 @@ async function mount(name: string, path: string, arriving = false) {
   const id: number = k.x.bat_image_reserve()
   // Before the mount: from its first read on, a range that is not in the file yet is waited for.
   if (arriving) k.x.bat_image_arriving(id, 1)
-  handles[id] = await openImageHandle(cfg.namespace, name)
+  // kerneld is the keeper: where a file can have one handle only, this is it (opfs.ts).
+  handles[id] = await openImageHandle(cfg.namespace, name, true)
   const tOpen = performance.now()
   const u8 = inst.u8()
   const enc = new TextEncoder()
@@ -435,7 +436,7 @@ async function init(args: InitArgs) {
   // lock is refused they die with this worker.)
   if (args.warmSpare) for (const programs of args.spareHints ?? []) addSpare(programs)
   ensureSpare((args.spares ?? 1) - (args.spareHints?.length ?? 0))
-  for (const name of args.images ?? []) preopenImage(args.namespace, name)
+  for (const name of args.images ?? []) preopenImage(args.namespace, name, true)
   if (args.persist) {
     // One writer per origin and namespace.
     const tryLock = () =>
