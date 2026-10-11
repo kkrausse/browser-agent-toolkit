@@ -55,13 +55,37 @@ export function createEngine(backend: FsBackend, source: WasmSource): { get(): E
 
 function instantiate(backend: FsBackend, module: WebAssembly.Module) {
   let memory: WebAssembly.Memory
+  let x: Record<string, (...args: any[]) => any>
   let u8 = new Uint8Array(0)
   let u32 = new Uint32Array(0)
   let f64 = new Float64Array(0)
   let dv = new DataView(u8.buffer)
+  // The C allocator asks for memory 64 KiB at a time (`sbrk` is `memory.grow`). Where a grow
+  // moves the memory, each one costs time in proportion to its size: JavaScriptCore gives only
+  // the first few memories of a process the kind that grows in place, and for any other a grow
+  // allocates anew and copies (about 0.5 ms per MiB in Playwright's Linux WebKit). OpenCode's
+  // start takes this heap from 4 to 14 MiB, which was 146 grows and about a second there.
+  // So the heap is grown in large steps instead: a block is allocated and freed, which leaves
+  // it with the allocator (it cannot give memory back). Once at the start, and again, by half
+  // the memory's size, whenever the allocator has had to grow by itself. The pages are not
+  // touched, so they cost address space only.
+  const RESERVE_FIRST = 16 << 20
+  const RESERVE_MIN = 8 << 20
+  const RESERVE_MAX = 256 << 20
+  let reserving = true // until the instance exists
+  const reserve = (bytes: number) => {
+    reserving = true
+    try {
+      const p: number = x.sqlite3_malloc(bytes)
+      if (p) x.sqlite3_free(p)
+    } finally {
+      reserving = false
+    }
+  }
   /** Views die when the memory grows; any call into Wasm may grow it. */
   const refresh = () => {
     if (u8.byteLength !== 0) return
+    if (!reserving) reserve(Math.min(RESERVE_MAX, Math.max(RESERVE_MIN, memory.buffer.byteLength >>> 1)))
     u8 = new Uint8Array(memory.buffer)
     u32 = new Uint32Array(memory.buffer)
     f64 = new Float64Array(memory.buffer)
@@ -232,9 +256,10 @@ function instantiate(backend: FsBackend, module: WebAssembly.Module) {
   }
 
   const instance = new WebAssembly.Instance(module, imports)
-  const x = instance.exports as Record<string, (...args: any[]) => any>
+  x = instance.exports as Record<string, (...args: any[]) => any>
   memory = instance.exports.memory as WebAssembly.Memory
   x._initialize()
+  reserve(RESERVE_FIRST)
   refresh()
 
   /** 16 bytes for out-pointers, and a NUL byte that serves as the empty C string. */
