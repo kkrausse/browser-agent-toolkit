@@ -18,12 +18,14 @@
 //     pageFetch: { prefixes: ["http://opencode.in-tab"], fetch: (url, init) => inTabServer(url, init) },
 //   });
 
-import { init, Terminal } from "@random/ghostty-web";
+import type { Terminal } from "@random/ghostty-web";
+import { mountDisplay } from "./display";
 import { type ExitStatus, type PersistOptions, type Program, startProgram } from "../host/index";
 import type { PageFetchOptions } from "../host/page-fetch";
 
 export type { PageFetchOptions } from "../host/page-fetch";
 export type { ExitStatus, Program } from "../host/index";
+export { rendererChoice } from "./display";
 
 export interface MountOptions {
   container: HTMLElement;
@@ -53,52 +55,25 @@ export interface Mounted {
   dispose(): void;
 }
 
-/** See client.ts: software WebGL is slow enough to starve the thread that carries the program's input. */
-export function rendererChoice(): "webgl" | "canvas" {
-  try {
-    const gl = document.createElement("canvas").getContext("webgl2");
-    const info = gl?.getExtension("WEBGL_debug_renderer_info");
-    const name = String((info && gl?.getParameter(info.UNMASKED_RENDERER_WEBGL)) ?? "");
-    gl?.getExtension("WEBGL_lose_context")?.loseContext();
-    if (/swiftshader|llvmpipe|softpipe|software/i.test(name)) return "canvas";
-  } catch {
-    // no WebGL at all: the terminal falls back by itself
-  }
-  return "webgl";
-}
-
 export async function mountTerminal(options: MountOptions): Promise<Mounted> {
   if (!crossOriginIsolated) throw new Error("wasm-term needs a cross-origin isolated page (COOP: same-origin, COEP: require-corp)");
   const { container } = options;
   const assets = new URL(options.assets, location.href).href;
-  await init({ wasmUrl: `${assets}ghostty-vt.wasm` });
-  const terminal = new Terminal({
-    rendererType: options.renderer ?? rendererChoice(),
-    ctrlVPaste: false,
-    cursorBlink: true,
-    copyOnSelect: false,
-    scrollback: 5_000,
-    smoothScrollDuration: 0,
-    fontSize: options.fontSize ?? 14,
-    theme: options.theme ?? { background: "#16161d", foreground: "#dcd7ba" },
+  // The display is its own component (display.ts); this file only joins it to the machine.
+  let program: Program | undefined;
+  const display = await mountDisplay({
+    container,
+    wasmUrl: `${assets}ghostty-vt.wasm`,
+    renderer: options.renderer,
+    fontSize: options.fontSize,
+    theme: options.theme,
+    onInput: data => program?.write(data),
+    onResize: size => program?.resize(size.cols, size.rows, size.xpixel, size.ypixel),
   });
-  await terminal.open(container);
+  const { terminal } = display;
+  const pixels = display.size();
 
-  const cell = () => {
-    const metrics = terminal.renderer?.getMetrics();
-    return { width: metrics?.width ?? 0, height: metrics?.height ?? 0 };
-  };
-  function fit(): void {
-    const { width, height } = cell();
-    if (!width || !height || !container.clientWidth || !container.clientHeight) return;
-    const cols = Math.max(2, Math.min(500, Math.floor((container.clientWidth + 1) / width)));
-    const rows = Math.max(1, Math.min(300, Math.floor(container.clientHeight / height)));
-    if (cols !== terminal.cols || rows !== terminal.rows) terminal.resize(cols, rows);
-  }
-  fit();
-
-  const pixels = cell();
-  const program = startProgram({
+  program = startProgram({
     guestUrl: `${assets}${options.guest}/guest.js`,
     kernelUrl: `${assets}kernel.wasm`,
     workerUrl: `${assets}js-worker.js`,
@@ -106,8 +81,8 @@ export async function mountTerminal(options: MountOptions): Promise<Mounted> {
     env: { ...options.env, WASM_TERM_ORIGIN: location.origin },
     cols: terminal.cols,
     rows: terminal.rows,
-    xpixel: Math.round(pixels.width * terminal.cols),
-    ypixel: Math.round(pixels.height * terminal.rows),
+    xpixel: pixels.xpixel,
+    ypixel: pixels.ypixel,
     persist: options.persist,
     pageFetch: options.pageFetch,
     onOutput: data => terminal.write(data),
@@ -118,33 +93,13 @@ export async function mountTerminal(options: MountOptions): Promise<Mounted> {
       options.onExit?.(status);
     },
   });
-  terminal.onData(data => program.write(data));
-  terminal.onResize(({ cols, rows }) => {
-    const { width, height } = cell();
-    program.resize(cols, rows, Math.round(width * cols), Math.round(height * rows));
-  });
-  let layoutTimer: ReturnType<typeof setTimeout> | undefined;
-  const observer = new ResizeObserver(() => {
-    clearTimeout(layoutTimer);
-    layoutTimer = setTimeout(fit, 50);
-  });
-  observer.observe(container);
-  terminal.focus();
-
   return {
     terminal,
     program,
-    screen() {
-      const buffer = terminal.buffer.active;
-      const lines: string[] = [];
-      for (let row = 0; row < terminal.rows; row++) lines.push(buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? "");
-      return lines;
-    },
+    screen: display.screen,
     dispose() {
-      observer.disconnect();
-      clearTimeout(layoutTimer);
-      program.kill();
-      terminal.dispose();
+      program?.kill();
+      display.dispose();
     },
   };
 }
