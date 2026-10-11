@@ -184,7 +184,19 @@ async function main() {
   const manifest = await response.json() as EditorManifest
   if (!manifest.launch.agent) throw Error('The prepared directory has no OpenCode server')
   const runtimeModule = await import(new URL(manifest.runtime?.entry ?? 'runtime/host.js', manifestUrl).href) as { bootRuntime: BootRuntime; resetWorkspace(options: { manifestUrl: string }): Promise<void> }
-  if (sessionStorage.getItem(resetKey)) {
+  // A workspace owns its source once installed, so one kept from a build of this page with
+  // other dependencies cannot start on this build's image (the app that had React Router and
+  // tRPC, against an image without them: Vite exits). The prepared package.json stands for the
+  // dependencies; a browser that last opened another one starts over.
+  const packageKey = `terminal-app-package:${new URL(here).pathname}`
+  const packageNow = JSON.stringify(manifest.project['/package.json'] ?? '')
+  let outdated = false
+  try {
+    outdated = localStorage.getItem(packageKey) !== packageNow
+    localStorage.setItem(packageKey, packageNow)
+  } catch { /* no storage: nothing to compare with */ }
+  if (outdated) log('[page] this browser last opened a build with other dependencies (or none): starting from a fresh workspace')
+  if (sessionStorage.getItem(resetKey) || outdated) {
     sessionStorage.removeItem(resetKey)
     await runtimeModule.resetWorkspace({ manifestUrl })
     // The TODO app keeps its list in this origin's localStorage (../todo-app/src/App.tsx), not in the workspace.
