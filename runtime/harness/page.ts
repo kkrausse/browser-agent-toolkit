@@ -247,7 +247,8 @@ function stopBackground(pid: number, signal = 9) {
 }
 
 const ready = start()
-ready.catch((e) => log(String(e?.stack ?? e), 'err'))
+// WebKit's `stack` does not start with the message.
+ready.catch((e) => log(String(e?.stack ?? '').includes(String(e?.message)) ? String(e.stack) : `${e}\n${e?.stack ?? ''}`, 'err'))
 ;(window as any).batHarness = {
   ready,
   run,

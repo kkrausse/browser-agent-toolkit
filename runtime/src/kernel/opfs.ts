@@ -91,7 +91,14 @@ async function openImage(namespace: string, name: string, keeper: boolean): Prom
       }
       if (!keeper) return undefined
       // Held for a moment by a worker that opened it ahead of the mount and is closing it.
-      if (attempt >= 40) throw e
+      if (attempt >= 40) {
+        // Still held after a second: by another tab's kernel. With persistence that tab also
+        // holds the workspace lock and this point is never reached; without it (the harness,
+        // a host that passes `persist: false`) this is the first thing to notice.
+        const name = (e as DOMException)?.name
+        if (name !== 'InvalidStateError' && name !== 'NoModificationAllowedError') throw e
+        throw Object.assign(new Error('This workspace is already open in another tab or window, and this browser lets only one of them read its files. Close it there, then reload.', { cause: e }), { code: 'EBUSY' })
+      }
       await new Promise((resolve) => setTimeout(resolve, 25))
     }
   }
