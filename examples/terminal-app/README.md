@@ -31,8 +31,8 @@ permission dialog: this page's configuration allows every tool (the agent's reac
 `?clientLog=debug` (the client logs every level to `/tmp/opencode-client/tui.log` in the guest),
 `?tunnel=<wss URL>` (a TCP relay for [the hosts a tab cannot read](#the-tunnel); `0` for none),
 `?wisp=<wss URL>` ([a Wisp server](#a-wisp-server-instead) in that relay's place; `0` for none).
-The cog in the panel's header is a form for `?wisp=`, `?modelId=` and `?model=` (applying it reloads
-the page at the address that says the same) with a button for `?reset=1`; beside it, a link to the source.
+The cog in the panel's header is a form for `?wisp=` (applying it reloads the page at the address
+that says the same) with a button for `?reset=1`; beside it, a link to the source.
 
 After a setup, `bun run editor` in this directory repeats only the example's own steps
 (`display`, `prepare:editor`, `build` into `dist/`, `start`); set `BAT_PREPARE` when `bat-prepare` is not

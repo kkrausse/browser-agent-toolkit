@@ -127,12 +127,13 @@ const diag = installDiag(params, isPublic ? null : builtModel && new URL('/diag'
 const say = (text: string, error = false) => { status.textContent = text; status.classList.toggle('error', error); diag.event(error ? 'failed' : 'stage', text) }
 window.batTerminal = { log: [], model }
 document.querySelector('#title')!.textContent = `OpenCode · ${model ? `model ${model.id} at ${new URL(model.baseURL).host}` : 'free model from OpenCode Zen'}${tunnel ? ` · ${isPublic ? 'relay' : 'tunnel'} ${new URL(tunnel.url).host}` : ''}`
-// The cog: the page's parameters as a form. Applying it is a reload at the address that says
+// The cog: the page's relay as a form. Applying it is a reload at the address that says
 // the same, so a setting is in the address and nowhere else.
 {
   const cog = document.querySelector<HTMLButtonElement>('#cog')!, form = document.querySelector<HTMLFormElement>('#settings')!
-  const fields = ['wisp', 'modelId', 'model'] as const
-  const defaults: Record<(typeof fields)[number], string> = { wisp: relayAddress(process.env.WISP_URL) ?? '', modelId: model ? 'scripted' : process.env.PUBLIC_MODEL ?? '', model: builtModel ?? '' }
+  // Which model is OpenCode's own business (its model picker); the relay is this page's.
+  const fields = ['wisp'] as const
+  const defaults: Record<(typeof fields)[number], string> = { wisp: relayAddress(process.env.WISP_URL) ?? '' }
   const input = (name: string) => form.elements.namedItem(name) as HTMLInputElement
   for (const name of fields) {
     input(name).value = params.get(name) ?? ''
