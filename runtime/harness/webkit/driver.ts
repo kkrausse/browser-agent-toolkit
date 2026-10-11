@@ -11,7 +11,9 @@
 //   POST /stop      close the browser and exit
 //
 // Environment: BAT_WEBKIT_PROFILE (profile directory; default a directory in the system
-// temp directory per port), BAT_WEBKIT_HEADED=1 (a window on $DISPLAY instead of headless).
+// temp directory per port), BAT_WEBKIT_HEADED=1 (a window on $DISPLAY instead of headless),
+// BAT_WEBKIT_EXECUTABLE (a launcher to use instead of Playwright's pw_run.sh, e.g. one that
+// wraps it in strace; run with DEBUG=pw:browser* to see the browser's own output).
 //
 // The profile must be persistent: in Playwright's default (ephemeral) context WebKit
 // refuses OPFS sync access handles ("UnknownError … transient reason").
@@ -21,7 +23,7 @@ import { join } from 'node:path'
 
 const port = Number(process.argv[2] ?? process.env.BAT_HARNESS_WEBKIT_PORT ?? 4103)
 const profile = process.env.BAT_WEBKIT_PROFILE ?? join(tmpdir(), `bat-harness-webkit-${port}`)
-const context = await webkit.launchPersistentContext(profile, { headless: process.env.BAT_WEBKIT_HEADED !== '1', viewport: { width: 1280, height: 800 } })
+const context = await webkit.launchPersistentContext(profile, { headless: process.env.BAT_WEBKIT_HEADED !== '1', executablePath: process.env.BAT_WEBKIT_EXECUTABLE || undefined, viewport: { width: 1280, height: 800 } })
 let page: Page = context.pages()[0] ?? (await context.newPage())
 
 let crashed = false

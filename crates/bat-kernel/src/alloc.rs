@@ -14,12 +14,28 @@ struct Pages;
 #[no_mangle]
 pub static BAT_MEM_GEN: AtomicU32 = AtomicU32::new(0);
 
+/// Pages added by one `memory.grow`: 64 MiB.
+const GROW_PAGES: usize = 1024;
+
 unsafe impl dlmalloc::Allocator for Pages {
     fn alloc(&self, size: usize) -> (*mut u8, usize, u32) {
-        let pages = size.div_ceil(65536);
-        // Grow in at least 1 MiB steps: each grow invalidates every JS view.
-        let pages = pages.max(16);
-        let prev = core::arch::wasm32::memory_grow(0, pages);
+        let needed = size.div_ceil(65536);
+        // Grow rarely, in GROW_PAGES steps. Each grow invalidates every JS view, and in
+        // WebKit each grow is a chance to crash the tab: JavaScriptCore's shared-memory grow
+        // walks every instance attached to the memory, and one that a terminated worker is
+        // in the middle of destroying makes it read a null pointer
+        // (docs/experiments/2026-10-11-webkit.md, section 9). Process workers are terminated
+        // all the time, so the fewer grows the better; this does not remove the fault.
+        // The cost of the step: V8 commits grown pages when they are first touched,
+        // JavaScriptCore zero-fills them at the grow, so there up to one step is resident
+        // before it is used.
+        let mut pages = needed.max(GROW_PAGES);
+        let mut prev = core::arch::wasm32::memory_grow(0, pages);
+        if prev == usize::MAX && pages > needed.max(16) {
+            // Near the ceiling (or the tab's limit): what was asked for, as before.
+            pages = needed.max(16);
+            prev = core::arch::wasm32::memory_grow(0, pages);
+        }
         if prev == usize::MAX {
             return (core::ptr::null_mut(), 0, 0);
         }

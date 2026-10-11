@@ -1,0 +1,25 @@
+<!doctype html><meta charset=utf-8><pre id=o></pre><script>
+window.state = { rounds: 0, terminated: 0, done: false }
+window.go = async (rounds, variant) => {
+  for (let r = 0; r < rounds; r++) {
+    const memory = new WebAssembly.Memory({ initial: 1, maximum: 65536, shared: true })
+    const grower = variant === 'nogrow' ? null : new Worker('/worker.js')
+    grower?.postMessage({ memory, grow: true })
+    const t0 = performance.now()
+    while (performance.now() - t0 < 1500) {
+      const ws = []
+      for (let i = 0; i < 4; i++) {
+        const w = new Worker('/worker.js')
+        ws.push(new Promise((res) => { w.onmessage = () => { setTimeout(() => { if (variant !== 'noterminate') { w.terminate(); state.terminated++ } res() }, Math.random() * 3) } }))
+        w.postMessage({ memory })
+      }
+      await Promise.all(ws)
+    }
+    grower?.terminate()
+    state.rounds++
+    document.getElementById('o').textContent = JSON.stringify(state) + ' pages ' + memory.buffer.byteLength / 65536
+  }
+  state.done = true
+  return state
+}
+</script>
