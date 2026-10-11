@@ -129,6 +129,14 @@ bun demo/run.ts --base http://127.0.0.1:4310/ --slow --record /tmp/take.mp4
 bun demo/gif.ts /tmp/take.mp4 /tmp/take.gif
 ```
 
+The README's GIF (`docs/media/terminal-demo.gif`) is the scripted take cut once more: its first
+5 s dropped and the whole of it at 2.2x, labelled:
+
+```sh
+ffmpeg -ss 5 -i take.mp4 -filter_complex "[0:v]setpts=(PTS-STARTPTS)/2.2,drawbox=x=8:y=ih-52:w=110:h=44:color=black@0.75:t=fill,drawtext=fontfile='/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf':text='2.2x':fontcolor=white:fontsize=28:x=20:y=h-44[v]" -map "[v]" -an fast.mp4
+ffmpeg -i fast.mp4 -vf "fps=12,scale=960:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128[p];[b][p]paletteuse=dither=bayer:bayer_scale=4" terminal-demo.gif
+```
+
 With the mock the model's words and its choice of tool calls are scripted; the tools, the
 edits and the hot update are the real ones.
 

@@ -14,11 +14,16 @@ your app's dev server, all in the user's tab.
 - **The real OpenCode, not a reimplementation.**
 - **Fits an existing app.** One package, and a second with React components if you want them.
 
-![The TODO example: two todos are added, "Open editor" starts the app's dev server and OpenCode inside the tab, the agent is asked for a dark theme and a todos-left counter, and the live preview updates](docs/media/todo-editor-demo-rust.gif)
+![The terminal example: two todos are added to a TODO app, the OpenCode terminal agent beside it is asked for a dark theme and a todos-left counter, it reads and edits the source, and the app turns dark without reloading](docs/media/terminal-demo.gif)
 
-The [TODO example](examples/todo-app/README.md), recorded in Chrome on this branch. The
-editor opens in real time (1.7 s here, the first open of a reset workspace); only the
-model's 22 s of work plays at 4x, where the "4x" label shows. Everything else is real time.
+The [terminal example](examples/terminal-app/README.md), recorded in Chrome: the app's dev
+server, the OpenCode server and the OpenCode terminal client all run in the tab. For this
+recording the model's replies are scripted (`mock-model.ts`); the tool calls, the edits and the
+hot reload are real. The first 5 s are cut and all of it plays at 2.2x, as the label says.
+
+The [TODO example](examples/todo-app/README.md), with a React chat panel in place of the
+terminal and a real model: [recording](docs/media/todo-editor-demo-rust.gif) (only the model's
+22 s of work plays at 4x).
 
 ## Try it
 
