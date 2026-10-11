@@ -10,8 +10,7 @@ the same list as the page around it, and a change on either side appears on the 
 Editor files: `src/editing.tsx` (the button; calls `preloadEditor()` when it is rendered),
 `src/editor-panel.tsx` (preview, chat, status and timings, Exit), `server.ts` (a Bun server:
 the editor handler, authorization, the model key, and the built app from `dist/` through
-`static-files.ts`), `prepare.ts`, `vite.config.ts` (the toolkit's `browserEditor` plugin, and
-two exclusions the preview needs, explained there), and two recordings of a real start that
+`static-files.ts`), `prepare.ts`, `vite.config.ts` (the toolkit's `browserEditor` plugin), and two recordings of a real start that
 `prepare.ts` passes on: `startup-modules.json` (the modules Vite had loaded when the app
 showed, emitted as one script the browser keeps compiled) and `editor-startup-order.txt`
 (what a start reads from the dependency image, laid out first so a first open does not

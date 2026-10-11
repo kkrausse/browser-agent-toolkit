@@ -157,6 +157,7 @@ The ranked list of known gaps is in the
 | `packages/guest-shims/` | packages laid over native-tool packages in the guest (esbuild, lightningcss, Tailwind oxide) |
 | `examples/todo-app/` | a plain React 19 + Vite 7 + Tailwind TODO app (todos in `localStorage`) behind a small Bun server, with the editor; `demo/` drives and records the scenario |
 | `examples/terminal-app/` | the same app with the OpenCode terminal client beside it, on a terminal of the runtime's kernel |
+| `examples/start-app/` | the TODO app full-stack: TanStack Start (server rendering, typed routes) with an Effect RPC API and SQLite, all in one dev server in the tab; shown by `examples/terminal-app` (`bun run fullstack`) |
 | `bench/` | the drivers behind the numbers in `docs/experiments/` |
 | `third_party/` | Node's `lib/` and the notices |
 | `docs/design/`, `docs/experiments/` | design, decisions, formats; measurements and reports |
@@ -190,6 +191,8 @@ wasi-sdk), the esbuild-shaped transform and the Tailwind scanner
 ```sh
 bun run setup       # build everything the example needs; incremental
 bun run editor      # setup, then prepare + build + serve examples/todo-app (PORT, default 3000)
+bun run terminal    # the same for examples/terminal-app (PORT, default 4310)
+bun run fullstack   # examples/terminal-app showing examples/start-app, the full-stack example (PORT, default 4320)
 bun run typecheck   # runtime, toolkit, example
 bun run build       # the toolkit package only
 ```

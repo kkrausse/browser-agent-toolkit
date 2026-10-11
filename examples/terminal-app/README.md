@@ -31,6 +31,15 @@ permission dialog: this page's configuration allows every tool (the agent's reac
 `?clientLog=debug` (the client logs every level to `/tmp/opencode-client/tui.log` in the guest),
 `?tunnel=<wss URL>` (a TCP relay for [the hosts a tab cannot read](#the-tunnel); `0` for none).
 
+**Another app.** `BAT_APP=<directory>` names the app the page shows and the agent edits, in
+place of the TODO example (`app.ts`). The app describes itself in a `terminal-app.json`:
+its title, the source the agent may edit, optionally changes to the dev-server launch, the
+two start-up recordings and the `localStorage` keys `?reset=1` forgets. It is prepared and
+built under `.editor/<name>/`, so both can be served side by side. `bun run fullstack` in
+the repository root is this with `examples/start-app` (TanStack Start with an Effect API,
+see its README). `record.ts` makes the recordings from a first open of a served build;
+`SCRIPTED_FILE=<guest path>` tells the mock which file holds the app's `<h1>`.
+
 After a setup, `bun run editor` in this directory repeats only the example's own steps
 (`display`, `prepare:editor`, `build` into `dist/`, `start`); set `BAT_PREPARE` when `bat-prepare` is not
 in `target/release` of this checkout.

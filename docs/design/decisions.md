@@ -1202,3 +1202,60 @@ machine. `examples/terminal-app/build.ts` takes `PUBLIC=1`; the development buil
   commit is built in a scratch repository from the built directory and pushed with force as
   `gh-pages`, so this checkout's branches and index are never involved and 55 MB builds do
   not accumulate. It does nothing without `--yes`.
+
+## 2026-10-11: a full-stack example (TanStack Start, Effect RPC, SQLite) and what it changed in the toolkit
+
+`examples/start-app` is the TODO app with a server: TanStack Start 1.168.61 on Vite 7.3.6,
+an Effect 4.0.3 RPC API mounted as a Start server route, `node:sqlite`. It ran in the tab
+with the runtime as it was: no Node API, worker or native package was missing.
+
+- **The terminal example takes its app as a parameter, not a third host.**
+  `examples/terminal-app/app.ts` reads `BAT_APP=<directory>` and that directory's
+  `terminal-app.json` (title, source list, launch changes, recordings, `localStorage` keys
+  to reset). The TODO app is the default, with the output directories it had; another app
+  is prepared and built under `.editor/<name>/`. `bun run fullstack` is `bun run terminal`
+  with `BAT_APP=examples/start-app` and port 4320. `record.ts` there makes both start-up
+  recordings from one first open (the bench recorders click the TODO page's "Open editor").
+- **The guest's Vite cache is `.browser-editor-cache/node_modules/.vite`** (was
+  `.browser-editor-cache/vite`). Plugins skip dependencies by `/node_modules/` in the path;
+  the old place had none, so they worked on the optimized ones. The first request for
+  `react-dom_client.js`, natively in guest mode: 1.00 s before (Babel, `@vitejs/plugin-react`),
+  0.03 s after. For that, `bat-prepare` accepts a derived file below a nested `node_modules`
+  (only the project's own, the image's mount, is refused), `vite-optimize-deps.mjs` the
+  same, and the policy's script owns `.browser-editor-cache` whole, so a workspace kept from
+  an earlier build loses the old directory. The TODO example's `react({ exclude })` is gone.
+  Wrapping other plugins' `transform` hooks was the alternative; it cannot tell Vite's own
+  plugins, which must run on those files, from the rest by anything but their names.
+- **Vite's dependency scan gets the editing module's stand-in** (an esbuild `onLoad` in
+  `optimizeDeps.esbuildOptions.plugins`): the scan reads files itself, not through the
+  plugin's `load`. The TODO example's `optimizeDeps.exclude` is gone; its shipped cache is
+  1.2 MB, 10 files, none of the editor's packages.
+- **`browserEditor()` takes no options for an app another page hosts** (`module` is
+  optional). It must come before `tanstackStart()`, which reads Vite's `base` in its own
+  `config` hook; after it, the server rendered for `/` and answered 404 under the prefix.
+- **`bat-prepare` accepts a project override that pins a substituted package to its one
+  locked version.** Start's plugin wants lightningcss `^1.33`, Tailwind 4.3.3 pins `1.32.0`;
+  two versions is a state `bat-prepare` refuses ("a root override cannot preserve them"),
+  and the pin that removes it was refused as a conflict with the policy. The root
+  `package.json` now pins `1.32.0`. The same pin is what makes Start work under Bun's
+  isolated linker at all: with two versions the Start plugin got its own Vite, and its
+  `instanceof` check of the server environment failed ("Cannot GET /").
+- **Effect RPC, not `HttpApi`.** `RpcServer.layerHttp` on an `HttpRouter`, turned into a
+  `Request -> Response` function with `HttpRouter.toWebHandler`, behind one Start route.
+  The client is `RpcClient` over `FetchHttpClient`; during server rendering its `Fetch`
+  reference is the handler itself. No fallback was needed.
+
+Measured in Chrome on this machine (headed on Xvfb, load average 8 to 19 from other work, so
+these are indications): first open on an origin the browser had not seen, to the app showing
+in the frame, 2.3 to 3.2 s for the Start example (three samples, load 8) against 1.6 to 2.0 s
+for the TODO app on the same host page (load 11); the Start page responds to input 5.4 to
+6.7 s after navigation, since it is server-rendered and hydrates later, where the TODO app
+shows and responds together. The two recordings about halve the time to showing (medians of
+four interleaved samples at load 14 to 19: 3.5 s with, 6.9 s without) and do nothing for
+hydration (10.0 s with, 9.3 s without). Sizes of the built directory: 65 MB against 44 MB;
+the dependency image 57 MB gzip (273 MB raw) against 37 MB (204 MB raw); the shipped
+optimizer cache 3.7 MB against 1.2 MB. A hot update of a component edited in the workspace:
+90 to 190 ms; an edited RPC handler is in effect at the next call, without a restart.
+
+Not done: a paid model conversation (one scripted turn through the mock instead), the
+public build and GitHub Pages with this app, Safari/WebKit, and `bench/startup` for it.

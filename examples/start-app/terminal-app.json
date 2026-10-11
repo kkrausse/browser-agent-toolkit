@@ -1,4 +1,6 @@
 {
   "title": "TanStack Start + Effect TODO app",
-  "source": ["src", "vite.config.ts", "tsconfig.json", "package.json"]
+  "source": ["src", "vite.config.ts", "tsconfig.json", "package.json"],
+  "startupModules": "startup-modules.json",
+  "startupOrder": "editor-startup-order.txt"
 }

@@ -23,7 +23,9 @@
   (the ghostty-web display, with its snapshot), `packages/relay` (the TCP relay of the
   tunnel) and `ports/opencode` (the OpenCode 2.0.26 terminal client as a Node program, and
   the 2.0.26 server bundle; its source checkouts are the gitignored `ports/opencode/vendor/`,
-  see its README) serve `examples/terminal-app` (`bun run terminal`). wasm-term and the
+  see its README) serve `examples/terminal-app` (`bun run terminal`). That page takes the app it
+  shows as a parameter (`BAT_APP`, `examples/terminal-app/app.ts`); `bun run fullstack` is it with
+  `examples/start-app` (TanStack Start, an Effect RPC API, SQLite). wasm-term and the
   Codex port are not in this tree: branch `wasm-term`.
 - Toolkit API: `prepare` (with the optional `startupModules` and `startupOrder`
   recordings), `createEditorHandler`, `openEditor` / `preloadEditor` / `resetWorkspace`,
