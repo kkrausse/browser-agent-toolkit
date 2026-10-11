@@ -10,5 +10,8 @@
     "build": "bun run --cwd packages/toolkit build && bun run --cwd packages/react build",
     "typecheck": "bun run --cwd runtime typecheck && bun run --cwd packages/toolkit typecheck && bun run --cwd packages/react typecheck && bun run --cwd packages/terminal typecheck && bun run --cwd packages/relay typecheck && bun run --cwd examples/todo-app typecheck && bun run --cwd examples/terminal-app typecheck",
     "example:fake": "bun run build && bun run --cwd examples/todo-app editor:fake"
+  },
+  "devDependencies": {
+    "playwright": "1.64.0"
   }
 }

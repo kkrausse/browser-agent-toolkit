@@ -1,6 +1,8 @@
 #!/bin/sh
-# Run every guest in runtime/harness/guests and print its exit code and time.
+# Run every guest in runtime/harness/guests and print its exit code and time (Chrome, through
+# browser-control, unless BAT_HARNESS_BROWSER says otherwise).
 #   runtime/harness/check.sh           (page is reloaded first)
+#   BAT_HARNESS_BROWSER=webkit runtime/harness/check.sh   the same in Playwright's WebKit (see cli.ts)
 # Expected: every line "0", except cjs.cjs which sets exit code 7 on purpose.
 cd "$(dirname "$0")/.."
 bun harness/cli.ts reload >/dev/null || exit 2

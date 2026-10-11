@@ -15,7 +15,10 @@
 //   --reload (reboot first)  --build (run runtime/build.ts first)  --query 'v=3&spare=0' (page query; implies reload)
 //
 // The server (runtime/harness/server.ts, port 4102) is started if it is not running. The page
-// lives in the browser-control session `bat-node`.
+// lives in the browser-control session `bat-node` (Chrome), or, with BAT_HARNESS_BROWSER=webkit,
+// in Playwright's WebKit behind runtime/harness/webkit/driver.ts (port BAT_HARNESS_WEBKIT_PORT,
+// default 4103; started if it is not running, `cli.ts webkit-stop` ends it, `cli.ts webkit-log`
+// prints the page's console since the last call).
 import { spawn, spawnSync } from 'node:child_process'
 import { readFileSync, writeFileSync, mkdtempSync, readdirSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -24,6 +27,8 @@ import { basename, dirname, join } from 'node:path'
 const PORT = Number(process.env.BAT_HARNESS_PORT ?? 4102)
 const SESSION = process.env.BAT_HARNESS_SESSION ?? 'bat-node'
 const ORIGIN = `http://127.0.0.1:${PORT}`
+const WEBKIT = process.env.BAT_HARNESS_BROWSER === 'webkit'
+const DRIVER = `http://127.0.0.1:${Number(process.env.BAT_HARNESS_WEBKIT_PORT ?? 4103)}`
 const here = import.meta.dir
 
 const argv = process.argv.slice(2)
@@ -74,8 +79,33 @@ async function ensureServer() {
   throw new Error(`harness server did not start on ${ORIGIN}`)
 }
 
-/** Run code in the browser-control session; returns the JSON value. */
-function browser(code: string, timeoutMs = 180000): any {
+async function driverUp(): Promise<boolean> {
+  try {
+    return (await fetch(`${DRIVER}/`, { signal: AbortSignal.timeout(1500) })).ok
+  } catch {
+    return false
+  }
+}
+async function ensureDriver() {
+  if (await driverUp()) return
+  const child = spawn('bun', [join(here, 'webkit/driver.ts'), new URL(DRIVER).port], { detached: true, stdio: 'ignore' })
+  child.unref()
+  for (let i = 0; i < 150; i++) {
+    if (await driverUp()) return
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  throw new Error(`webkit driver did not start on ${DRIVER}`)
+}
+
+/** Run code against the page (`page` in scope) in the chosen browser; returns the JSON value. */
+async function browser(code: string, timeoutMs = 180000): Promise<any> {
+  if (WEBKIT) {
+    await ensureDriver()
+    const r = await fetch(`${DRIVER}/execute`, { method: 'POST', body: code, signal: AbortSignal.timeout(timeoutMs) })
+    const parsed: any = await r.json()
+    if (!parsed.ok) throw new Error(`webkit driver: ${String(parsed.error).slice(0, 2000)}`)
+    return parsed.value
+  }
   const dir = mkdtempSync(join(tmpdir(), 'bat-harness-'))
   const file = join(dir, 'exec.js')
   writeFileSync(file, code)
@@ -117,18 +147,22 @@ async function main() {
     opts.reload = true
   }
   await ensureServer()
-  if (command === 'reload') {
-    console.log(JSON.stringify(ensurePage(true, opts.query ?? argv[0]), null, 1))
+  if (command === 'webkit-stop' || command === 'webkit-log') {
+    if (await driverUp()) console.log(await (await fetch(`${DRIVER}/${command.slice(7)}`, { method: command === 'webkit-stop' ? 'POST' : 'GET' })).text())
     return
   }
-  const ready = ensurePage(opts.reload, opts.query)
+  if (command === 'reload') {
+    console.log(JSON.stringify(await ensurePage(true, opts.query ?? argv[0]), null, 1))
+    return
+  }
+  const ready = await ensurePage(opts.reload, opts.query)
   if (opts.reload && !opts.json) console.error(`[harness] booted: ${JSON.stringify(ready)}`)
   if (command === 'eval') {
-    console.log(JSON.stringify(evaluate(argv.join(' ')), null, 1))
+    console.log(JSON.stringify(await evaluate(argv.join(' ')), null, 1))
     return
   }
   if (command === 'status' || command === 'stop') {
-    const r = evaluate(`batHarness.${command}(${Number(argv[0])})`)
+    const r = await evaluate(`batHarness.${command}(${Number(argv[0])})`)
     if (!r) throw new Error(`no background process ${argv[0]}`)
     if (r.stdout) process.stdout.write(r.stdout)
     if (r.stderr) process.stderr.write(r.stderr)
@@ -154,7 +188,7 @@ async function main() {
   if (command2 === 'node') run.args = argv
   else if (command2 === 'launch') {
     // `launch agent|preview [extra args]`: entry, args, cwd and env from the manifest's launch block.
-    const launch = evaluate(`batHarness.manifest.launch[${JSON.stringify(argv[0])}]`)
+    const launch = await evaluate(`batHarness.manifest.launch[${JSON.stringify(argv[0])}]`)
     if (!launch) throw new Error(`manifest has no launch.${argv[0]}`)
     run.args = [launch.entry, ...launch.args, ...argv.slice(1)]
     run.cwd = opts.cwd ?? launch.cwd
@@ -184,10 +218,10 @@ async function main() {
   } else throw new Error(`unknown command ${command}`)
   if (background) {
     run.timeoutMs = 0
-    console.log(browser(`return await page.evaluate(async (o) => { await window.batHarness.ready; return window.batHarness.start(o) }, ${JSON.stringify(run)})`))
+    console.log(await browser(`return await page.evaluate(async (o) => { await window.batHarness.ready; return window.batHarness.start(o) }, ${JSON.stringify(run)})`))
     return
   }
-  const result = browser(`return await page.evaluate(async (o) => { await window.batHarness.ready; return await window.batHarness.run(o) }, ${JSON.stringify(run)})`, opts.timeout + 30000)
+  const result = await browser(`return await page.evaluate(async (o) => { await window.batHarness.ready; return await window.batHarness.run(o) }, ${JSON.stringify(run)})`, opts.timeout + 30000)
   if (opts.json) {
     console.log(JSON.stringify(result))
     return

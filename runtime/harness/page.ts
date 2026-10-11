@@ -5,6 +5,7 @@ import { bootKernel, type BootedKernel } from '../src/kernel/boot'
 import { POLLHUP, POLLIN, TOKEN_CHILD, type Kernel } from '../src/kernel/kernel'
 import { processWorkerUrl } from '../src/process/config'
 import { DEFAULT_CONFIG } from '../src/process/runtime'
+import { traceCollect } from '../src/trace'
 
 export interface RunOptions {
   /** argv after `node`. */
@@ -54,6 +55,7 @@ const readers = new Map<number, () => void>()
 
 async function start() {
   out.textContent = ''
+  if (params.has('trace')) traceCollect('page')
   if (params.get('sw') === '1') {
     await navigator.serviceWorker.register('/sw.js', { scope: '/' })
     await navigator.serviceWorker.ready
@@ -86,6 +88,8 @@ async function start() {
     persist: false,
     noPersist: ['/.bat'],
     warmSpare: params.get('spare') !== '0',
+    // `?trace`: kerneld posts its marks too; collected in `__batTrace` (runtime/src/trace.ts).
+    trace: params.has('trace'),
   } as any)
   k = boot.kernel
   const t1 = performance.now()
