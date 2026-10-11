@@ -8,7 +8,8 @@
 //   OPENCODE_SERVER_URL        the server (default http://127.0.0.1:4096)
 //   OPENCODE_SERVER_PASSWORD   its HTTP Basic password
 //   OPENCODE_DIRECTORY         the project directory on the server's machine
-//   OPENCODE_TUI_LOG           a file the TUI's log is appended to (default: only errors, to stderr at exit)
+//   OPENCODE_TUI_LOG           a file the TUI's warnings and errors are appended to (stderr is the screen)
+//   OPENCODE_TUI_DEBUG         log every level there
 import { appendFileSync, readFileSync, writeSync } from "node:fs"
 import path from "node:path"
 import { bootOpentuiWasm } from "../src/boot"
@@ -30,7 +31,7 @@ env.OTUI_TREE_SITTER_WORKER_PATH ??= path.join(here, "parser.worker.js")
 
 const logFile = env.OPENCODE_TUI_LOG
 const log = (level: string, message: string, tags?: unknown) => {
-  if (!logFile) return
+  if (!logFile || (!env.OPENCODE_TUI_DEBUG && level !== "error" && level !== "warn")) return
   let detail = ""
   try {
     detail = tags === undefined ? "" : JSON.stringify(tags)

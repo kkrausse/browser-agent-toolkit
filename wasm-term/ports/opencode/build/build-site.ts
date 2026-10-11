@@ -12,6 +12,7 @@
 //   bun build/build-site.ts --target=node      -> dist/node/: the same files for a Node program,
 //       main.js             host/node-main.ts: `node main.js` on a terminal (the toolkit runtime's pty)
 //       tui.js              the TUI with Node's built-ins left as imports (no shim bundled in)
+//       parser.worker.js, tree-sitter.wasm, assets/   as above; the worker is a `node:worker_threads` Worker
 //   --minify (what `bun run build:tui` passes) halves tui.js; the linked source map still
 //   resolves stack traces. `bun run build:tui:debug` leaves it readable.
 import path from "node:path"
@@ -129,6 +130,16 @@ async function bundle(entry: string, outdir: string, name: string, plugins: BunP
   for (const output of result.outputs) console.log(path.relative(HERE, output.path), output.size)
 }
 
+/** web-tree-sitter's runtime and the grammars and queries OpenTUI ships. */
+function copyTreeSitterAssets(out: string) {
+  const core = path.join(OPENTUI_ROOT, "packages/core")
+  cpSync(Bun.resolveSync("web-tree-sitter/tree-sitter.wasm", core), path.join(out, "tree-sitter.wasm"))
+  cpSync(path.join(core, "src/lib/tree-sitter/assets"), path.join(out, "assets"), {
+    recursive: true,
+    filter: (source) => !/\.(ts|md)$/.test(source),
+  })
+}
+
 if (target === "bun") {
   await bundle("host/bun-main.ts", path.join(HERE, "dist"), "opencode-tui.bun.js", [conditionalStubs(), singleInstances(), opentuiWasmPlugin(), createSolidTransformPlugin()])
 } else if (target === "node") {
@@ -137,18 +148,16 @@ if (target === "bun") {
   mkdirSync(out, { recursive: true })
   await bundle("host/worker-app.ts", out, "tui.js", [conditionalStubs(), singleInstances(), opentuiWasmPlugin(), createSolidTransformPlugin()], { minify, sourcemap: "none" })
   await bundle("host/node-main.ts", out, "main.js", [], { sourcemap: "none" })
+  // OpenTUI's tree-sitter worker as it is: under Node it is a worker thread that reads its grammars from files.
+  await bundle(path.join(path.relative(HERE, OPENTUI_ROOT), "packages/core/src/lib/tree-sitter/parser.worker.ts"), out, "parser.worker.js", [opentuiWasmPlugin()], { minify, sourcemap: "none" })
   cpSync(path.join(HERE, "dist/opentui.wasm"), path.join(out, "opentui.wasm"))
+  copyTreeSitterAssets(out)
 } else {
   const site = path.join(HERE, "dist/site")
   mkdirSync(site, { recursive: true })
   await bundle("host/worker-app.ts", site, "tui.js", [nodeShimsPlugin(), conditionalStubs(), singleInstances(), opentuiWasmPlugin(), createSolidTransformPlugin()], { minify })
   await bundle("host/guest.ts", site, "guest.js", [nodeShimsPlugin()], { sourcemap: "none" })
   await bundle("src/tree-sitter-worker.ts", site, "parser.worker.js", [nodeShimsPlugin(), opentuiWasmPlugin()], { sourcemap: "none", minify })
-  const core = path.join(OPENTUI_ROOT, "packages/core")
   cpSync(path.join(HERE, "dist/opentui.wasm"), path.join(site, "opentui.wasm"))
-  cpSync(Bun.resolveSync("web-tree-sitter/tree-sitter.wasm", core), path.join(site, "tree-sitter.wasm"))
-  cpSync(path.join(core, "src/lib/tree-sitter/assets"), path.join(site, "assets"), {
-    recursive: true,
-    filter: (source) => !/\.(ts|md)$/.test(source),
-  })
+  copyTreeSitterAssets(site)
 }
