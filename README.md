@@ -10,7 +10,8 @@ Runs the OpenCode *server* in the browser, along with a filesystem, a shell and
 your app's dev server, all in the user's tab.
 
 - **Zero VM hosting costs.** Inference is the only per-session cost, and users
-  could cover that themselves by signing in with OpenAI (planned).
+  can cover that themselves: in the demo, signing in to a ChatGPT plan with a device code
+  works (ctrl+p, "Connect an integration", OpenAI).
 - **No sandbox to secure.** Agent-run code never executes on your servers. The
   browser tab is the sandbox, and a `Connection-Allowlist` header can stop it
   sending anything to another origin (planned).

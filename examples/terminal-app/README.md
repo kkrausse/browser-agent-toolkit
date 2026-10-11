@@ -66,9 +66,9 @@ sign-in. What differs from the development build, all of it decided when the pag
 | --- | --- | --- |
 | model | `?model=`, else `MODEL_URL`, else the mock on port 4311 of the page's host | none named: the OpenCode server's own `opencode` provider, OpenCode Zen with the key `public`, which has the models that cost nothing and needs no sign-in. `?model=` still names an endpoint |
 | first model | `?modelId=`, default `scripted` | `PUBLIC_MODEL` of the build (default `ling-3.1-flash-free`), for as long as `https://opencode.ai/zen/v1/models` lists it; then the server's choice. `?modelId=<id>` names another hosted one |
-| tunnel | `WISP_URL`, else `TUNNEL_URL`, else none; carries `api.openai.com`, `chatgpt.com`, OpenAI's keys document and `opencode.ai` | `WISP_URL`, else the public Wisp server `wss://wisp.mercurywork.shop/`; with `?wisp=0`, `TUNNEL_URL`, else none; carries `opencode.ai` and `chatgpt.com` (a ChatGPT plan signed in with the client's device code; seen blocked by CORS on the published page 2026-10-11, the relayed path not yet tried) |
+| tunnel | `WISP_URL`, else `TUNNEL_URL`, else none; carries `api.openai.com`, `chatgpt.com`, OpenAI's keys document and `opencode.ai` | `WISP_URL`, else the public Wisp server `wss://wisp.mercurywork.shop/`; with `?wisp=0`, `TUNNEL_URL`, else none; carries `opencode.ai` and `chatgpt.com` (a ChatGPT plan signed in with the client's device code) |
 | diagnostics | posted to the collector unless `?diag=0` | nothing is sent unless the address has `?diag=<url>` |
-| ChatGPT sign-in | the bar and the client's preload module (`client-tap.js`) | neither is installed; `client-tap.js` and `openai-jwks.json` are not shipped |
+| ChatGPT sign-in | the bar and the client's preload module (`client-tap.js`), or [a device code](#with-a-device-code) | [a device code](#with-a-device-code) only: the bar is not installed, `client-tap.js` and `openai-jwks.json` are not shipped |
 | the page says | title: model and tunnel | title: `free model from OpenCode Zen · relay <host>`; a two-line footer under the panel: what runs in the tab, whose model it is, what the relay carries, a link to the source |
 
 **Why a first model is named.** With no credentials and no `model` in its configuration,
@@ -254,6 +254,18 @@ read, because they are answered without `Access-Control-Allow-Origin`:
 [the tunnel](#the-tunnel). Without one, the keys come from a copy `build.ts` ships
 (`openai-jwks.json`, `BAT_FETCH_MAP`; when OpenAI rotates them the check fails with "invalid ID
 token" until the page is built again), the sign-in completes, and every model call fails.
+
+### With a device code
+
+The client's other OpenAI sign-in (same menu: ctrl+p, "Connect an integration", OpenAI) shows a
+code to type on OpenAI's page in another tab. Nothing is redirected to the tab, so it needs no
+bar and no pasted address, and it is the sign-in the public build has. Its model calls go to
+`https://chatgpt.com/backend-api/codex/responses`, which answers without CORS headers (the
+browser's fetch was blocked on the published page), so `chatgpt.com` is one of the hosts carried
+by [the tunnel](#the-tunnel) in both builds. Tried by hand on the published page on 2026-10-11,
+through the public Wisp server: the sign-in completed and the plan's model answered. One
+account, one browser; nothing automated checks it. The token is kept as below: plain text in
+this browser's storage for the page.
 
 ### The tunnel
 
