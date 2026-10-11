@@ -320,6 +320,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
     }
   }
   const kernelPages = stored('bat-kernel-memory-pages')
+  const kernelMaximum = stored('bat-kernel-memory-maximum-pages')
   let booted: BootedKernel
   try {
     booted = await bootKernel({
@@ -345,7 +346,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
       spareHints,
       images: images.map((i) => i.file),
       trace: tracing,
-      kernelMemory: options.kernelMemory ?? (kernelPages === undefined ? undefined : { pages: kernelPages }),
+      kernelMemory: options.kernelMemory ?? (kernelPages === undefined && kernelMaximum === undefined ? undefined : { pages: kernelPages, maximumPages: kernelMaximum }),
       imageCacheBytes: options.imageCacheBytes ?? stored('bat-image-cache-bytes'),
     } as Parameters<typeof bootKernel>[0])
   } catch (e) {

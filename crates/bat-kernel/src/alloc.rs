@@ -17,7 +17,21 @@ pub static BAT_MEM_GEN: AtomicU32 = AtomicU32::new(0);
 
 const PAGE: u64 = 65536;
 /// Pages added by one `memory.grow`, where the memory may grow at all: 64 MiB.
-const GROW_PAGES: u64 = 1024;
+const GROW_PAGES: u64 = match option_env!("BAT_KERNEL_GROW_PAGES") {
+    // For experiments only: a build that grows in other steps (16 = 1 MiB, as before 2026-10-11).
+    Some(pages) => parse_pages(pages),
+    None => 1024,
+};
+const fn parse_pages(text: &str) -> u64 {
+    let bytes = text.as_bytes();
+    let mut value = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        value = value * 10 + (bytes[i] - b'0') as u64;
+        i += 1;
+    }
+    value
+}
 
 extern "C" {
     static __heap_base: u8;

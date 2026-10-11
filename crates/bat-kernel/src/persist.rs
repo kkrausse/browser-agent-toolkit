@@ -252,6 +252,20 @@ pub fn take() -> (Vec<u8>, u64) {
 pub fn snapshot() -> (Vec<u8>, u64) {
     let mut v = VFS.write();
     let mut j = Journal::new();
+    // The records' size is known before they are written (a node record is 33 bytes and its
+    // contents, a link 17 and its name). Asked for at once: a buffer that grew by doubling
+    // took up to three times the overlay out of the kernel memory for a moment, and those
+    // pages stay resident for the rest of the session.
+    let mut size = 64;
+    for n in v.nodes.iter().flatten().filter(|n| n.persist) {
+        size += 33
+            + match &n.kind {
+                Kind::File(d) => d.len(),
+                Kind::Symlink(t) => t.len(),
+                Kind::Dir(d) => d.children.keys().map(|name| 17 + name.len()).sum(),
+            };
+    }
+    j.buf = Vec::with_capacity(size);
     // Nodes first, then links, so every link target exists at replay.
     for (i, n) in v.nodes.iter().enumerate() {
         if let Some(n) = n {
