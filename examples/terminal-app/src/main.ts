@@ -71,8 +71,9 @@ const builtTunnel = process.env.TUNNEL_URL || undefined
 const openAiKeys = 'https://auth.openai.com/.well-known/jwks.json'
 // What goes through the tunnel when there is one: the model API of a ChatGPT sign-in, whose
 // answers carry no CORS headers, and the keys above. The token exchange at auth.openai.com
-// allows any origin and stays with the browser's fetch.
-const tunnelled = ['api.openai.com', 'https://auth.openai.com/.well-known/']
+// allows any origin and stays with the browser's fetch. OpenCode's own hosted models
+// (opencode.ai/zen), which the server calls with no sign-in, refuse a browser's preflight (404).
+const tunnelled = ['api.openai.com', 'https://auth.openai.com/.well-known/', 'opencode.ai']
 
 const params = new URLSearchParams(location.search)
 // `?reset=1` is taken out of the address at once and remembered for this start only: the page
