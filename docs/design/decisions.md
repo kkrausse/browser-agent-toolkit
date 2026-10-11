@@ -1082,3 +1082,38 @@ talking through the page. The terminal is now a feature of the toolkit runtime. 
   ready (the page would have to tell keys from the terminal's own replies and guess
   readiness from the screen), and a fixed delay. To drop the edit, remove the plugin from
   `build-site.ts`; the early Enter is then lost again, as upstream.
+
+## 2026-10-10: wasm-term leaves this tree; what the toolkit used of it has places of its own
+
+Entries above name paths under `wasm-term/` and `scripts/opencode-server`; they are records
+and are not rewritten. Where those things are now:
+
+| Was | Is |
+| --- | --- |
+| `wasm-term/web/display.ts`, `osc52.ts`, `wasm-term/third_party/ghostty-web/` | `packages/terminal/` (the display, with the ghostty-web snapshot, its notices and `sync.sh`) |
+| `wasm-term/web/tcp-relay.ts`, `tcp-relay-main.ts` | `packages/relay/` |
+| `wasm-term/ports/opencode/` | `ports/opencode/` |
+| `scripts/opencode-server/` | `ports/opencode/server/` |
+| `wasm-term/vendor/` (untracked checkouts) | `ports/opencode/vendor/` (gitignored; `setup-vendor.sh` fetches the pinned tags) |
+| `wasm-term/kernel`'s pty | `crates/bat-pty` (since the entry before last) |
+
+- **wasm-term is a separate project and is not on this branch any more.** Its host (the
+  machine, the Node-style shim, the vfs), kernel wrapper, guests, dev and static pages, the
+  mock backend (`mock-llm`), the **Codex port** and the bun-web-terminal snapshot live only
+  on the branch `wasm-term`. Since the client became a toolkit process, nothing here ran on
+  that host; it was kept in the tree only because the three pieces above sat inside it.
+- **The split is by what a thing is, not where it came from.** `packages/` holds what a page
+  or a deployment takes as it is (the toolkit, the display, the relay); `ports/` holds a
+  program built from someone else's source for this runtime (OpenCode: its client, and the
+  server bundle of the same version beside it). Neither new package knows the toolkit: the
+  display takes bytes, the relay carries them.
+- **The port builds the Node program only.** Its browser target (the client as a guest of
+  wasm-term's machine: `host/guest.ts`, `web/guest.ts`, the tree-sitter worker wrapper,
+  `build:tui`) imported wasm-term's host and went with it. The Node build never used that
+  import; the built client is byte for byte the same before and after.
+- **The display imports its snapshot by path**, not as a `file:` dependency that the package
+  manager copies into `node_modules` (a copy that went stale until the next install).
+- **Not renamed:** what is compiled into the client under wasm-term's name (the channel
+  `wasm-term`, `__wasmTerm…` globals, `wasmTermAlloc`/`wasmTermFree` of the Wasm core,
+  `/wasm-term/…` asset paths, the relay's `wasm-term tcp relay:` error text). Renaming them
+  changes the built client or the wire for no gain.

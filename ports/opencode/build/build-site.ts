@@ -2,23 +2,18 @@
 // edit of opencode-edits-plugin.ts) with OpenTUI wired to the wasm core.
 //
 //   bun build/build-site.ts --target=bun       -> dist/opencode-tui.bun.js (Bun host, real Node APIs)
-//   bun build/build-site.ts --target=browser   -> dist/site/: everything the browser guest loads
-//       guest.js            host/guest.ts, the JS-guest entry the machine imports
-//       tui.js (+ .map)     the TUI itself (host/worker-app.ts)
+//   bun build/build-site.ts --target=node      -> dist/node/: a Node program,
+//       main.js             host/node-main.ts: `node main.js` on a terminal (the toolkit runtime's pty)
+//       tui.js              the TUI itself (host/worker-app.ts), Node's built-ins left as imports
 //       opentui.wasm        the Zig core (copied from dist/opentui.wasm; `bun run build:native`)
-//       parser.worker.js    OpenTUI's tree-sitter worker
+//       parser.worker.js    OpenTUI's tree-sitter worker, a `node:worker_threads` Worker
 //       tree-sitter.wasm    web-tree-sitter's runtime
 //       assets/<lang>/...   the grammars and queries OpenTUI ships (markdown, js, ts, zig)
-//   bun build/build-site.ts --target=node      -> dist/node/: the same files for a Node program,
-//       main.js             host/node-main.ts: `node main.js` on a terminal (the toolkit runtime's pty)
-//       tui.js              the TUI with Node's built-ins left as imports (no shim bundled in)
-//       parser.worker.js, tree-sitter.wasm, assets/   as above; the worker is a `node:worker_threads` Worker
-//   --minify (what `bun run build:tui` passes) halves tui.js; the linked source map still
-//   resolves stack traces. `bun run build:tui:debug` leaves it readable.
+//   --minify (what `bun run build:tui:node` passes) halves tui.js.
+// The browser target (the client as a guest of wasm-term's machine) is on the branch `wasm-term`.
 import path from "node:path"
 import { cpSync, mkdirSync } from "node:fs"
 import type { BunPlugin } from "bun"
-import { nodeShimsPlugin } from "../../../wasm-term/host/node/bun-plugin"
 import { opentuiWasmPlugin, OPENTUI_ROOT } from "./opentui-wasm-plugin"
 import { opencodeEditsPlugin } from "./opencode-edits-plugin"
 
@@ -26,7 +21,7 @@ const HERE = path.resolve(import.meta.dir, "..")
 const OPENCODE_ROOT = path.resolve(HERE, "vendor/opencode")
 const TUI = path.join(OPENCODE_ROOT, "packages/tui")
 const args = process.argv.slice(2)
-const target = (args.find((arg) => arg.startsWith("--target="))?.slice(9) ?? "bun") as "bun" | "browser" | "node"
+const target = (args.find((arg) => arg.startsWith("--target="))?.slice(9) ?? "bun") as "bun" | "node"
 
 const { createSolidTransformPlugin } = (await import(
   path.join(OPENTUI_ROOT, "packages/solid/scripts/solid-plugin.ts")
@@ -108,7 +103,6 @@ function conditionalStubs(): BunPlugin {
 
 const minify = args.includes("--minify")
 const define = {
-  ...(target === "browser" ? { global: "globalThis" } : {}),
   OPENCODE_VERSION: JSON.stringify(version),
   OPENCODE_CHANNEL: JSON.stringify("wasm-term"),
 }
@@ -153,12 +147,4 @@ if (target === "bun") {
   await bundle(path.join(path.relative(HERE, OPENTUI_ROOT), "packages/core/src/lib/tree-sitter/parser.worker.ts"), out, "parser.worker.js", [opentuiWasmPlugin()], { minify, sourcemap: "none" })
   cpSync(path.join(HERE, "dist/opentui.wasm"), path.join(out, "opentui.wasm"))
   copyTreeSitterAssets(out)
-} else {
-  const site = path.join(HERE, "dist/site")
-  mkdirSync(site, { recursive: true })
-  await bundle("host/worker-app.ts", site, "tui.js", [nodeShimsPlugin(), conditionalStubs(), singleInstances(), opentuiWasmPlugin(), opencodeEditsPlugin(), createSolidTransformPlugin()], { minify })
-  await bundle("host/guest.ts", site, "guest.js", [nodeShimsPlugin()], { sourcemap: "none" })
-  await bundle("src/tree-sitter-worker.ts", site, "parser.worker.js", [nodeShimsPlugin(), opentuiWasmPlugin()], { sourcemap: "none", minify })
-  cpSync(path.join(HERE, "dist/opentui.wasm"), path.join(site, "opentui.wasm"))
-  copyTreeSitterAssets(site)
-}
+} else throw new Error(`build-site.ts: --target=${target} is not built here (bun or node)`)
