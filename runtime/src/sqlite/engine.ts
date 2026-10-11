@@ -64,13 +64,15 @@ function instantiate(backend: FsBackend, module: WebAssembly.Module) {
   // moves the memory, each one costs time in proportion to its size: JavaScriptCore gives only
   // the first few memories of a process the kind that grows in place, and for any other a grow
   // allocates anew and copies (about 0.5 ms per MiB in Playwright's Linux WebKit). OpenCode's
-  // start takes this heap from 4 to 14 MiB, which was 146 grows and about a second there.
+  // start takes this heap from 4 to 14 MiB when its database exists and to 26 MiB when it
+  // makes one: 146 and 337 grows, one and two seconds there.
   // So the heap is grown in large steps instead: a block is allocated and freed, which leaves
-  // it with the allocator (it cannot give memory back). Once at the start, and again, by half
-  // the memory's size, whenever the allocator has had to grow by itself. The pages are not
-  // touched, so they cost address space only.
-  const RESERVE_FIRST = 16 << 20
-  const RESERVE_MIN = 8 << 20
+  // it with the allocator (it cannot give memory back). Once at the start, for what a start
+  // needs, and again, doubling the memory, whenever the allocator is found to have grown by
+  // itself (which is only noticed between calls and in the file callbacks, so the first step
+  // has to cover the start). The pages are not touched, so they cost address space only.
+  const RESERVE_FIRST = 32 << 20
+  const RESERVE_MIN = 16 << 20
   const RESERVE_MAX = 256 << 20
   let reserving = true // until the instance exists
   const reserve = (bytes: number) => {
@@ -85,7 +87,7 @@ function instantiate(backend: FsBackend, module: WebAssembly.Module) {
   /** Views die when the memory grows; any call into Wasm may grow it. */
   const refresh = () => {
     if (u8.byteLength !== 0) return
-    if (!reserving) reserve(Math.min(RESERVE_MAX, Math.max(RESERVE_MIN, memory.buffer.byteLength >>> 1)))
+    if (!reserving) reserve(Math.min(RESERVE_MAX, Math.max(RESERVE_MIN, memory.buffer.byteLength)))
     u8 = new Uint8Array(memory.buffer)
     u32 = new Uint32Array(memory.buffer)
     f64 = new Float64Array(memory.buffer)
