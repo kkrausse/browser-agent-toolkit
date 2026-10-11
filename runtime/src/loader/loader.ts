@@ -113,9 +113,36 @@ export function createLoader(rt: Runtime, builtins: Builtins): Loader {
 
   // ---- program scripts ----
   const defined = new Map<string, Function>()
+  // ES modules of a program script that was loaded ahead of its use are started at once, up to
+  // the `yield` their header begins with when it is given no context (`__bat_define(path, fn, 1)`).
+  // The point is when the engine compiles the body: JavaScriptCore parses a function again at
+  // its first call (for a generator: its first `next()`), skipping nested functions by offsets it
+  // kept from loading the script, and a garbage collection drops those offsets. Right after the
+  // load, OpenCode's 27 MB module costs about 0.1 s to start; after a collection, 0.4–0.6 s.
+  // `ready`: the generator is at rest at that `yield` (an async one awaits there first), so
+  // resuming it runs the prelude synchronously, which linking depends on.
+  const started = new Map<Function, { generator: any; ready: boolean }>()
+  /** Inside `importScripts` of a program: its modules are used in this same turn, so are not started early. */
+  let loadingForUse = 0
   Object.defineProperty(g, '__bat_define', {
-    value: (path: string, fn: Function) => {
+    value: (path: string, fn: Function, startable?: number) => {
       defined.set(path, fn)
+      if (startable !== 1 || loadingForUse) return
+      try {
+        const entry = { generator: fn.call(undefined, undefined), ready: false }
+        const first = entry.generator.next()
+        if (typeof first?.then === 'function') {
+          first.then(
+            () => {
+              entry.ready = true
+            },
+            () => {},
+          )
+        } else entry.ready = true
+        started.set(fn, entry)
+      } catch {
+        // it is called the ordinary way when linked, which also reports what is wrong with it
+      }
     },
     writable: true,
     configurable: true,
@@ -150,12 +177,15 @@ export function createLoader(rt: Runtime, builtins: Builtins): Loader {
     const url = rt.config.programs[name]
     if (!url) return undefined
     const t0 = performance.now()
+    loadingForUse++
     try {
       rt.host.importScripts(url)
     } catch (e) {
+      loadingForUse--
       rt.process?.emitWarning?.(`program script ${name} failed to load (${(e as Error).message}); falling back to the image`)
       return undefined
     }
+    loadingForUse--
     stats.programMs += performance.now() - t0
     stats.programs++
     rt.mark(`program ${name}`)
@@ -520,8 +550,16 @@ export function createLoader(rt: Runtime, builtins: Builtins): Loader {
   function link(record: ModuleRecord): void {
     if (record.kind !== 'esm' || record.state !== NEW) return
     record.state = LINKING
-    record.generator = record.fn!.call(undefined, new Context(record))
-    const prelude = record.generator.next()
+    const early = started.get(record.fn!)
+    if (early) started.delete(record.fn!)
+    let prelude: any
+    if (early?.ready) {
+      record.generator = early.generator
+      prelude = record.generator.next(new Context(record))
+    } else {
+      record.generator = record.fn!.call(undefined, new Context(record))
+      prelude = record.generator.next()
+    }
     if (record.facts!.async) prelude.catch(() => {})
     if (record.error) {
       record.state = FAILED
