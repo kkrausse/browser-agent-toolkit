@@ -183,8 +183,8 @@ and code-cached by the browser) at a content-addressed name
 `program-<name>-<first 16 hex of sha256>.js`. For each module, in order:
 
 ```js
-__bat_define("/app/server.js",async function*(__bat){<compiled body>
-});
+__bat_define("/app/server.js",async function*(__bat){"use strict";if(__bat===void 0)__bat=yield;<compiled body>
+},1);
 ```
 
 - `__bat_define(path, fn)` is a global the loader installs before loading the script. It
@@ -193,6 +193,12 @@ __bat_define("/app/server.js",async function*(__bat){<compiled body>
 - `fn` is exactly the function the loader would have built from the image's compiled
   body: header chosen from the facts word as above, the body starting on the same line
   as the header (so line numbers equal the compiled body's), a newline, `}`.
+- An ES module (since 2026-10-11, see decisions.md): the header carries
+  `"use strict";if(__bat===void 0)__bat=yield;` and the registration a third argument `1`.
+  Called with its context the function is what the loader would have built; called with
+  none it stops before its prelude and takes the context from the `next(context)` that
+  resumes it. The loader starts such a function when a script is loaded ahead of its use,
+  so that the engine compiles the body then. CommonJS functions are unchanged.
 - Facts and blob for the module are read from the image entry as for any other module;
   the entry has `IN_PROGRAM` set and no compiled body. If the script is not loaded the
   loader falls back to transforming the original, so programs are purely an optimisation.

@@ -12,7 +12,7 @@
 //! the others stay with the loader's `eval`. The caller checks that the whole file parses
 //! as a module (`await` as an identifier and HTML-like comments are errors there).
 
-use crate::program::{function_header, ProgramRecord, DEFINE};
+use crate::program::{define_tail, function_header, ProgramRecord, DEFINE};
 use crate::pack::sha256_hex;
 use anyhow::{anyhow, Context, Result};
 use bat_image::writer::ImageFile;
@@ -129,7 +129,9 @@ pub fn emit(images: &[(PathBuf, String)], name: &str, modules: &[String], out_di
         text.extend_from_slice(b",(");
         text.extend_from_slice(function_header(facts).as_bytes());
         text.extend_from_slice(code);
-        text.extend_from_slice(b"\n}));\n");
+        text.extend_from_slice(b"\n})");
+        text.extend_from_slice(define_tail(facts).as_bytes());
+        text.extend_from_slice(b");\n");
         taken.push(path.clone());
     }
     if taken.is_empty() {

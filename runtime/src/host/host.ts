@@ -291,7 +291,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
       },
     )
     done.catch(() => {})
-    return { img, ready: Promise.race([ready, done.then((r) => ({ file: r.file, arriving: false }))]), done, state }
+    return { img, ready: Promise.race([ready, done.then((r): NonNullable<StoreImageProgress['usable']> => ({ file: r.file, arriving: false }))]), done, state }
   })
   // An image with a start-up order pauses after it; `started()` or this timer lets it go on.
   const resumeImages = () => void netd.call('resumeImages').catch(() => {})
@@ -371,7 +371,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
         timed('image')
         if (!usable.arriving) progress({ phase: 'image', loaded: image.bytes, total: image.bytes, cached: timings.imageCached as boolean })
       }
-      const mounted = await booted.mountImage(usable.file, store.img.mount ?? '/', usable.arriving).catch((e) => {
+      const mounted = await booted.mountImage(usable.file, store.img.mount ?? '/', usable.arriving, usable.snapshot).catch((e) => {
         throw new Error(`mounting ${store.img.file} failed: ${e.message}`, { cause: e })
       })
       timings.mount += mounted.ms
@@ -380,7 +380,9 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
         const settle = (state: 0 | 2) => {
           if (!lifetime.signal.aborted) booted.kernel.x.bat_image_arriving(mounted.id, state)
         }
-        store.done.then(
+        // Read through snapshots so far: the supervisor takes the file's handle before reads stop waiting.
+        const arrived = usable.snapshot ? store.done.then(() => booted.imageArrived(mounted.id)) : store.done
+        arrived.then(
           () => {
             settle(0)
             if (index === 0) {

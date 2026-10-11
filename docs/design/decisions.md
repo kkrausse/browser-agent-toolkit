@@ -1342,3 +1342,82 @@ servers.
 - **Cost**: no memory-cache answer for those responses in any browser. Not measured.
 - `runtime/harness/webkit/preload-reuse/run.ts` shows the browser behaviour alone and fails
   when it is gone, which is when to take the header out.
+
+## 2026-10-11: an ES module of a program script is started when the script is loaded
+
+Measured in WebKit (Playwright's Linux build 2370; `docs/experiments/2026-10-11-webkit-perf.md`):
+the first call of OpenCode's module function, one `async function*` of 27 MB, takes 21–26 ms
+right after the program script is loaded and 260–500 ms once anything was allocated in
+between; in a start-up it was 440–540 ms, against about 10 ms in Chrome. JavaScriptCore
+checks a function's syntax when the script is loaded and parses it again when it is first
+called, skipping nested functions by offsets remembered from the first pass. A garbage
+collection drops those offsets, and the whole function is lexed a second time. A generator
+is two functions to that engine: the call makes the generator object, the body is compiled
+at the first `next()`. So calling the function early is not enough (tried: the 440 ms moved
+from the call to the first `next()`), and the first `next()` runs the module's prelude,
+which needs the module's context.
+
+Change to the program-script convention (`docs/design/image-format.md`):
+
+- The header of an ES module in a program script is
+  `function*(__bat){"use strict";if(__bat===void 0)__bat=yield;` (or `async function*`), and
+  it is registered with `__bat_define(path, fn, 1)`. Called with a context, the function
+  behaves as before. Called with none, it stops before its prelude and takes the context
+  from the `next(context)` that resumes it.
+- The loader, for a function registered with the third argument while a program script is
+  being loaded ahead of the launch (`import()` in a spare worker), calls it with no context
+  and runs it to that first `yield` at once: the body is compiled while the parser's offsets
+  are still there. Linking the module later resumes that generator with the context.
+- Only when the generator has come to rest. An `async function*` awaits at a `yield`, so a
+  generator started in the same turn as the link (a program loaded with `importScripts` on
+  first use) would run its prelude a microtask late, and linking reads the dependencies the
+  prelude names synchronously. Such a module is called the old way, with its context.
+- CommonJS modules are plain functions and cannot be started ahead of their turn; nothing
+  changes for them. Modules compiled by the loader from the image keep the old header.
+- Not by engine detection: where the parse is not repeated (V8) the function's entry is run
+  at load instead of at link, the same work a moment earlier. A/B in Chrome in the report.
+
+What this does not cover: the same second parse is paid by every function nested in the
+program the first time it is called after a collection (OpenCode's bundle has about 2,400
+module wrappers one level down). That is the larger part of what is left of the gap in
+OpenCode's start between the two engines, and nothing the page can do keeps the offsets.
+
+## 2026-10-11: where handles are exclusive, the arriving image is read through file snapshots
+
+Follows "where sync access handles are exclusive, only kerneld holds the image" above, which
+left the first-ever open in WebKit waiting for the whole image and named this as the way out.
+Built now; numbers in `docs/experiments/2026-10-11-webkit-perf.md`.
+
+Probed first (`runtime/harness/webkit/probe-getfile.ts`, Playwright's Linux WebKit 2370), while
+another worker holds the file's sync access handle and appends to it:
+
+- `getFile()` works and its File has everything written so far, flushed or not.
+- A File keeps the size it was taken with, and reading it fails with `NotFoundError` once the
+  file has been written to again (not at once: the check seems to be on a modification time
+  of coarse grain). So a snapshot serves one read, taken immediately before it, and a failed
+  read takes another.
+- 0.3 ms per `getFile()`, 1.6 ms per `FileReaderSync` read of 128 KiB.
+
+Design:
+
+- The download (`host/image.ts`) announces the partial file as soon as its head is written
+  where handles are shared, as before, **or** where they are not and `FileReaderSync` exists;
+  then with `usable.snapshot = { headBytes }`. Chrome reads the option, has shared handles and
+  takes the path it had.
+- kerneld mounts such an image without a handle. The kernel's read is synchronous and a
+  snapshot is not, so kerneld keeps a stash: the head is read into it before the mount; a
+  fault for a chunk reads 1 MiB from the chunk on (the image is laid out in start-up order,
+  and a read costs about the same up to that size), puts it in the stash and has the kernel
+  load the chunks it covers, which finds them there. A range that has not arrived is a short
+  read, which the kernel already answers for an arriving image by having the reader wait for
+  `bat_image_progress` and ask again. No timer and no polling were added.
+- When the download ends, the host calls kerneld's `imageArrived(id)` before
+  `bat_image_arriving(id, 0)`: kerneld takes the handle the writer has just closed and drops
+  the snapshot path. As in Chrome, the file keeps its `.partial` name for the session and is
+  renamed by the next open.
+- The pause of the download after the start-up's bytes now applies there too, as it does
+  wherever the image is used while it arrives.
+
+Not done: other workers reading through snapshots themselves (option 2 of the earlier entry
+for every thread). All reads of the arriving image go through kerneld, 1.6 ms a read
+instead of 0.05 ms; for the seconds a download lasts, that is the cheaper change.

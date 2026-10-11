@@ -1,0 +1,4184 @@
+{
+ "meta": {
+  "label": "wk-base",
+  "date": "2026-10-11T15:34:52.816Z",
+  "commit": "b4bf63f",
+  "variants": {
+   "wk-base": "http://127.0.0.1:4470"
+  },
+  "trace": true,
+  "settleMs": 800,
+  "browser": "Playwright WebKit, headless, persistent profile"
+ },
+ "summary": {
+  "wk-base": {
+   "reopen": {
+    "n": 4,
+    "load1": {
+     "n": 4,
+     "median": 11.6,
+     "min": 11.43,
+     "max": 11.76
+    },
+    "stages": {
+     "click → booted (manifest, runtime import, boot, mount)": {
+      "n": 4,
+      "median": 98.6,
+      "min": 87.3,
+      "max": 114.6
+     },
+     "boot + mount (bootRuntime alone)": {
+      "n": 4,
+      "median": 89.3,
+      "min": 81.3,
+      "max": 98.4
+     },
+     "vite spawn → listening": {
+      "n": 4,
+      "median": 831.9,
+      "min": 705.6,
+      "max": 1078.8
+     },
+     "vite spawn → app visible": {
+      "n": 4,
+      "median": 1738.8,
+      "min": 1426.1,
+      "max": 2008.8
+     },
+     "opencode spawn → attached": {
+      "n": 4,
+      "median": 3211.9,
+      "min": 2998.2,
+      "max": 3492.2
+     },
+     "opencode spawn → chat ready": {
+      "n": 4,
+      "median": 3264.9,
+      "min": 3076.2,
+      "max": 3544.2
+     },
+     "whole open (click → app visible and chat ready)": {
+      "n": 4,
+      "median": 3379.5,
+      "min": 3166.7,
+      "max": 3639.3
+     }
+    },
+    "steps": {
+     "open": {
+      "n": 4,
+      "median": 1.8,
+      "min": 1.3,
+      "max": 2.2
+     },
+     "manifest": {
+      "n": 4,
+      "median": 9.3,
+      "min": 6,
+      "max": 16.2
+     },
+     "boot.kernel": {
+      "n": 4,
+      "median": 81.9,
+      "min": 71.9,
+      "max": 105.7
+     },
+     "boot.image": {
+      "n": 4,
+      "median": 82,
+      "min": 72,
+      "max": 105.8
+     },
+     "boot.mounted": {
+      "n": 4,
+      "median": 97.3,
+      "min": 86.2,
+      "max": 113.4
+     },
+     "boot.done": {
+      "n": 4,
+      "median": 98.6,
+      "min": 87.3,
+      "max": 114.6
+     },
+     "boot": {
+      "n": 4,
+      "median": 98.6,
+      "min": 87.3,
+      "max": 114.6
+     },
+     "source.project": {
+      "n": 4,
+      "median": 98.9,
+      "min": 87.6,
+      "max": 114.9
+     },
+     "source.derived": {
+      "n": 4,
+      "median": 99.2,
+      "min": 87.8,
+      "max": 115.1
+     },
+     "source": {
+      "n": 4,
+      "median": 100.1,
+      "min": 88.6,
+      "max": 116.8
+     },
+     "preview.spawn": {
+      "n": 4,
+      "median": 102.6,
+      "min": 90.4,
+      "max": 118.7
+     },
+     "agent.spawn": {
+      "n": 4,
+      "median": 102.7,
+      "min": 90.5,
+      "max": 118.8
+     },
+     "preview.listening": {
+      "n": 4,
+      "median": 924.6,
+      "min": 824.3,
+      "max": 1189
+     },
+     "preview.ready": {
+      "n": 4,
+      "median": 1617.9,
+      "min": 1374.9,
+      "max": 1846.8
+     },
+     "agent.listening": {
+      "n": 4,
+      "median": 1816.5,
+      "min": 1610.7,
+      "max": 2020.7
+     },
+     "preview.visible": {
+      "n": 4,
+      "median": 1853.3,
+      "min": 1516.5,
+      "max": 2103.7
+     },
+     "agent.health": {
+      "n": 4,
+      "median": 1982.5,
+      "min": 1765.3,
+      "max": 2204
+     },
+     "agent.activated": {
+      "n": 4,
+      "median": 3305.3,
+      "min": 3067.8,
+      "max": 3565.2
+     },
+     "agent.plugins": {
+      "n": 4,
+      "median": 3313.4,
+      "min": 3075.8,
+      "max": 3572.4
+     },
+     "agent.config": {
+      "n": 4,
+      "median": 3317.8,
+      "min": 3080.1,
+      "max": 3579.2
+     },
+     "agent.ready": {
+      "n": 4,
+      "median": 3326.4,
+      "min": 3088.7,
+      "max": 3587.3
+     },
+     "chat.ready": {
+      "n": 4,
+      "median": 3379.5,
+      "min": 3166.7,
+      "max": 3639.3
+     }
+    },
+    "boot": {
+     "kernel": {
+      "n": 4,
+      "median": 73.1,
+      "min": 62.4,
+      "max": 88.8
+     },
+     "kernelCompile": {
+      "n": 4,
+      "median": 0,
+      "min": 0,
+      "max": 0
+     },
+     "kernelAttach": {
+      "n": 4,
+      "median": 10.8,
+      "min": 0.9,
+      "max": 24.9
+     },
+     "kerneldInit": {
+      "n": 4,
+      "median": 63.3,
+      "min": 45.8,
+      "max": 74.1
+     },
+     "restore": {
+      "n": 4,
+      "median": 37.5,
+      "min": 33.9,
+      "max": 50.5
+     },
+     "journalBytes": {
+      "n": 4,
+      "median": 17984,
+      "min": 0,
+      "max": 35837
+     },
+     "snapshotBytes": {
+      "n": 4,
+      "median": 8521513,
+      "min": 8521513,
+      "max": 8521513
+     },
+     "mount": {
+      "n": 4,
+      "median": 4.4,
+      "min": 3.3,
+      "max": 6.5
+     },
+     "image": {
+      "n": 4,
+      "median": 73.3,
+      "min": 63.2,
+      "max": 88.9
+     },
+     "mounted": {
+      "n": 4,
+      "median": 87.4,
+      "min": 79.6,
+      "max": 96.5
+     },
+     "serviceWorker": {
+      "n": 4,
+      "median": 88.7,
+      "min": 80.7,
+      "max": 97.6
+     },
+     "total": {
+      "n": 4,
+      "median": 88.7,
+      "min": 80.7,
+      "max": 97.7
+     }
+    }
+   }
+  }
+ },
+ "samples": [
+  {
+   "variant": "wk-base",
+   "kind": "reopen",
+   "load": [
+    11.64,
+    11.12,
+    8.6
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.9,
+    "manifest": 10.1,
+    "boot.kernel": 73.8,
+    "boot.image": 73.9,
+    "boot.mounted": 90.6,
+    "boot.done": 91.4,
+    "boot": 91.4,
+    "source.project": 91.7,
+    "source.derived": 92,
+    "source": 92.9,
+    "preview.spawn": 94.9,
+    "agent.spawn": 95.1,
+    "preview.listening": 984.1,
+    "preview.ready": 1846.8,
+    "agent.listening": 2020.7,
+    "preview.visible": 2103.7,
+    "agent.health": 2204,
+    "agent.activated": 3565.2,
+    "agent.plugins": 3572.4,
+    "agent.config": 3579.2,
+    "agent.ready": 3587.3,
+    "chat.ready": 3639.3
+   },
+   "trace": [
+    {
+     "src": "page",
+     "name": "boot.start",
+     "ms": 10.6
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.init",
+     "ms": 33.6
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.locked",
+     "ms": 34.9
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.attached",
+     "ms": 37.6
+    },
+    {
+     "src": "process",
+     "name": "worker.attached",
+     "ms": 64.1
+    },
+    {
+     "src": "process",
+     "name": "worker.attached",
+     "ms": 69.1
+    },
+    {
+     "src": "kerneld",
+     "name": "worker.ready",
+     "ms": 69.6,
+     "data": {
+      "thread": 16387728
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "worker.ready",
+     "ms": 69.7,
+     "data": {
+      "thread": 16391648
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.restored",
+     "ms": 72,
+     "data": {
+      "snapshotSeq": 15112652,
+      "seq": 15112652,
+      "snapshotBytes": 8521513,
+      "journalFrames": 0,
+      "journalBytes": 0,
+      "ms": 33.92
+     }
+    },
+    {
+     "src": "page",
+     "name": "boot.kernel",
+     "ms": 73
+    },
+    {
+     "src": "page",
+     "name": "boot.image",
+     "ms": 73.9
+    },
+    {
+     "src": "page",
+     "name": "boot.mounted",
+     "ms": 90.6
+    },
+    {
+     "src": "page",
+     "name": "boot.service-worker",
+     "ms": 91.3
+    },
+    {
+     "src": "page",
+     "name": "boot.done",
+     "ms": 91.4
+    },
+    {
+     "src": "process",
+     "name": "worker.warm",
+     "ms": 104.2
+    },
+    {
+     "src": "process",
+     "name": "worker.warm",
+     "ms": 111.8
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.request",
+     "ms": 117.8,
+     "data": {
+      "pid": 4,
+      "spares": 2
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.request",
+     "ms": 118.6,
+     "data": {
+      "pid": 5,
+      "spares": 1
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.run",
+     "ms": 118.9,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.run",
+     "ms": 118.9,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.programs",
+     "ms": 307,
+     "data": {
+      "names": [
+       "start-preview"
+      ],
+      "ms": 202.89999999999998
+     }
+    },
+    {
+     "src": "process",
+     "name": "runtime",
+     "ms": 323.8,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "adopted",
+     "ms": 324.9,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry",
+     "ms": 325.7,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry-returned",
+     "ms": 334,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 3,
+       "cjs": 0,
+       "esm": 1,
+       "json": 0,
+       "builtin": 2,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 1,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.programs",
+     "ms": 802.8,
+     "data": {
+      "names": [
+       "opencode-server"
+      ],
+      "ms": 691.1
+     }
+    },
+    {
+     "src": "process",
+     "name": "runtime",
+     "ms": 840.9,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "adopted",
+     "ms": 842.5,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry",
+     "ms": 843.1,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "listen 5173",
+     "ms": 983.5,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 576,
+       "cjs": 492,
+       "esm": 54,
+       "json": 2,
+       "builtin": 28,
+       "compiled": 4,
+       "sourceAsCode": 197,
+       "transformed": 2,
+       "fromProgram": 343,
+       "readMs": 19.39999999999992,
+       "compileMs": 22.939999999999316,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 825289
+      },
+      "resolveMs": 30.98000000000036
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/",
+     "ms": 1007.2,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/",
+     "ms": 1014.8,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry-returned",
+     "ms": 1507.9,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 25,
+       "cjs": 1,
+       "esm": 1,
+       "json": 0,
+       "builtin": 23,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 1,
+       "fromProgram": 1,
+       "readMs": 45.27999999999997,
+       "compileMs": 0.1999999999999318,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 845
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.attached",
+     "ms": 1678.2
+    },
+    {
+     "src": "kerneld",
+     "name": "worker.ready",
+     "ms": 1693,
+     "data": {
+      "thread": 13721832
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.warm",
+     "ms": 1746
+    },
+    {
+     "src": "process",
+     "name": "res 200 /preview/5173/",
+     "ms": 1844.1,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.57999999999919
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /preview/5173/",
+     "ms": 1845.1,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.57999999999919
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/browser-manifest",
+     "ms": 1862.7,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/node_modules/.bun/@react-router+dev@7.18.3+837444ebebad7315/node_m",
+     "ms": 1863.3,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/src/root.tsx",
+     "ms": 1864,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /node_modules/.bun/@react-router+dev@7.18.3+837444ebebad7315/node_modules/@react",
+     "ms": 1864.9,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.57999999999919
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /@id/__x00__virtual:react-router/browser-manifest",
+     "ms": 1909.4,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.57999999999919
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /src/root.tsx",
+     "ms": 1918.6,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.57999999999919
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/src/home.tsx",
+     "ms": 1940.2,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/inject-hmr-runtime",
+     "ms": 1940.7,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /@id/__x00__virtual:react-router/inject-hmr-runtime",
+     "ms": 1979.5,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.57999999999919
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /src/home.tsx",
+     "ms": 1984.3,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.57999999999919
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/@vite/client",
+     "ms": 1985.3,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/hmr-runtime",
+     "ms": 1985.9,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/src/lib/trpc.ts",
+     "ms": 1986.3,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/src/style.css",
+     "ms": 1986.6,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/src/editing.tsx",
+     "ms": 1987,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /@id/__x00__virtual:react-router/hmr-runtime",
+     "ms": 1989.9,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.57999999999919
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /src/lib/trpc.ts",
+     "ms": 1990.6,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.57999999999919
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /src/style.css",
+     "ms": 1991.1,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.57999999999919
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /src/editing.tsx",
+     "ms": 1991.5,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.57999999999919
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /@vite/client",
+     "ms": 2005.9,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.57999999999919
+     }
+    },
+    {
+     "src": "process",
+     "name": "listen 4096",
+     "ms": 2017.4,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 29,
+       "cjs": 1,
+       "esm": 1,
+       "json": 0,
+       "builtin": 27,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 1,
+       "fromProgram": 1,
+       "readMs": 45.27999999999997,
+       "compileMs": 0.1999999999999318,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 845
+      },
+      "resolveMs": 0.22000000000014097
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/di",
+     "ms": 2022,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/dist/client/env",
+     "ms": 2022.8,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.57999999999919
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/health",
+     "ms": 2198.4,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/health",
+     "ms": 2202.1,
+     "data": {
+      "pid": 5,
+      "loader": 29,
+      "compileMs": 0.1999999999999318
+     }
+    },
+    {
+     "src": "process",
+     "name": "req POST /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 2204.6,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 204 /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3564.3,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 3.9599999999996953
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/plugin?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3565.5,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/plugin?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3570.2,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 3.9599999999996953
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/config?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3575.4,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/config?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3578.4,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 3.9599999999996953
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/model?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3579.9,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/model?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3586.1,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 3.9599999999996953
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/event",
+     "ms": 3587.7,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session?directory=%2Fworkspace&order=desc",
+     "ms": 3592.2,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session?directory=%2Fworkspace&order=desc",
+     "ms": 3597.4,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 3.9599999999996953
+     }
+    },
+    {
+     "src": "process",
+     "name": "req POST /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3598,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 204 /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3598.9,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 3.9599999999996953
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session?directory=%2Fworkspace&cursor=eyJvcmRlciI6ImRlc2MiLCJkaXJlY3RvcnkiO",
+     "ms": 3599.4,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session?directory=%2Fworkspace&cursor=eyJvcmRlciI6ImRlc2MiLCJkaXJlY3RvcnkiO",
+     "ms": 3602.5,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 3.9599999999996953
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/model?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3603.4,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/model?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3608,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 3.9599999999996953
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/model/default?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3609.3,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/model/default?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3613.3,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 3.9599999999996953
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/message?order=desc&limit=50",
+     "ms": 3619,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/message?order=desc&limit=50",
+     "ms": 3623.4,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 3.9599999999996953
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/permission",
+     "ms": 3624,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/permission",
+     "ms": 3626.6,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 3.9599999999996953
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/form",
+     "ms": 3627,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/form",
+     "ms": 3630.3,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 3.9599999999996953
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session/active",
+     "ms": 3630.8,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session/active",
+     "ms": 3631.7,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 3.9599999999996953
+     }
+    }
+   ],
+   "boot": {
+    "kernel": 62.4,
+    "kernelCompile": 0,
+    "kernelAttach": 15.8,
+    "kerneldInit": 45.8,
+    "restore": 33.9,
+    "journalBytes": 0,
+    "snapshotBytes": 8521513,
+    "mount": 4.8,
+    "image": 63.2,
+    "imageCached": true,
+    "imageArriving": false,
+    "mounted": 79.9,
+    "serviceWorker": 80.7,
+    "total": 80.7
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [08:34:39.098] INFO (#447) http.span=1096ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [08:34:39.102] INFO (#447) http.span=1100ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [08:34:39.344] INFO (#447) http.span=1342ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12b9a0ff0001mCMblB0i73WwO6',",
+    "[agent]     created: 1791732879344,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [08:34:39.347] INFO (#447) http.span=1345ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12b9a0ff3001PumxCxdxPtPvAX',",
+    "[agent]     created: 1791732879347,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [08:34:39.354] INFO (#447) http.span=1352ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12b9a0ff9001pepIB3UkikIRZI',",
+    "[agent]     created: 1791732879353,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 91.4,
+    "boot + mount (bootRuntime alone)": 81.3,
+    "vite spawn → listening": 889.2,
+    "vite spawn → app visible": 2008.8,
+    "opencode spawn → attached": 3492.2,
+    "opencode spawn → chat ready": 3544.2,
+    "whole open (click → app visible and chat ready)": 3639.3
+   }
+  },
+  {
+   "variant": "wk-base",
+   "kind": "reopen",
+   "load": [
+    11.43,
+    11.08,
+    8.61
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.3,
+    "manifest": 6,
+    "boot.kernel": 71.9,
+    "boot.image": 72,
+    "boot.mounted": 86.2,
+    "boot.done": 87.3,
+    "boot": 87.3,
+    "source.project": 87.6,
+    "source.derived": 87.8,
+    "source": 88.6,
+    "preview.spawn": 90.4,
+    "agent.spawn": 90.5,
+    "preview.listening": 865,
+    "preview.ready": 1374.9,
+    "preview.visible": 1516.5,
+    "agent.listening": 1610.7,
+    "agent.health": 1765.3,
+    "agent.activated": 3067.8,
+    "agent.plugins": 3075.8,
+    "agent.config": 3080.1,
+    "agent.ready": 3088.7,
+    "chat.ready": 3166.7
+   },
+   "trace": [
+    {
+     "src": "page",
+     "name": "boot.start",
+     "ms": 6.4
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.init",
+     "ms": 31.2
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.locked",
+     "ms": 32.7
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.attached",
+     "ms": 36.3
+    },
+    {
+     "src": "process",
+     "name": "worker.attached",
+     "ms": 65.4
+    },
+    {
+     "src": "process",
+     "name": "worker.attached",
+     "ms": 67.5
+    },
+    {
+     "src": "kerneld",
+     "name": "worker.ready",
+     "ms": 68.7,
+     "data": {
+      "thread": 15342808
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "worker.ready",
+     "ms": 68.8,
+     "data": {
+      "thread": 15362112
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.restored",
+     "ms": 71.1,
+     "data": {
+      "snapshotSeq": 15112652,
+      "seq": 15124589,
+      "snapshotBytes": 8521513,
+      "journalFrames": 4,
+      "journalBytes": 12033,
+      "ms": 34.18
+     }
+    },
+    {
+     "src": "page",
+     "name": "boot.kernel",
+     "ms": 71.8
+    },
+    {
+     "src": "page",
+     "name": "boot.image",
+     "ms": 72
+    },
+    {
+     "src": "page",
+     "name": "boot.mounted",
+     "ms": 86
+    },
+    {
+     "src": "page",
+     "name": "boot.service-worker",
+     "ms": 87.2
+    },
+    {
+     "src": "page",
+     "name": "boot.done",
+     "ms": 87.3
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.request",
+     "ms": 89.8,
+     "data": {
+      "pid": 4,
+      "spares": 2
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.request",
+     "ms": 90.6,
+     "data": {
+      "pid": 5,
+      "spares": 1
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.run",
+     "ms": 90.7,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.run",
+     "ms": 90.8,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.warm",
+     "ms": 106.6
+    },
+    {
+     "src": "process",
+     "name": "worker.warm",
+     "ms": 110.8
+    },
+    {
+     "src": "process",
+     "name": "worker.programs",
+     "ms": 280.8,
+     "data": {
+      "names": [
+       "start-preview"
+      ],
+      "ms": 174.32
+     }
+    },
+    {
+     "src": "process",
+     "name": "runtime",
+     "ms": 298.3,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "adopted",
+     "ms": 299.5,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry",
+     "ms": 300.3,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry-returned",
+     "ms": 304.6,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 3,
+       "cjs": 0,
+       "esm": 1,
+       "json": 0,
+       "builtin": 2,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 1,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.programs",
+     "ms": 716.9,
+     "data": {
+      "names": [
+       "opencode-server"
+      ],
+      "ms": 606.2
+     }
+    },
+    {
+     "src": "process",
+     "name": "runtime",
+     "ms": 740.6,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "adopted",
+     "ms": 741.8,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry",
+     "ms": 742.4,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "listen 5173",
+     "ms": 865,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 576,
+       "cjs": 492,
+       "esm": 54,
+       "json": 2,
+       "builtin": 28,
+       "compiled": 4,
+       "sourceAsCode": 197,
+       "transformed": 2,
+       "fromProgram": 343,
+       "readMs": 25.319999999999425,
+       "compileMs": 18.620000000000175,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 825289
+      },
+      "resolveMs": 21.14000000000101
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/",
+     "ms": 883.7,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/",
+     "ms": 889.8,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry-returned",
+     "ms": 1272.1,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 25,
+       "cjs": 1,
+       "esm": 1,
+       "json": 0,
+       "builtin": 23,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 1,
+       "fromProgram": 1,
+       "readMs": 41.700000000000045,
+       "compileMs": 0.12000000000000455,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 845
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /preview/5173/",
+     "ms": 1374,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 21.320000000000903
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /preview/5173/",
+     "ms": 1375.1,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 21.320000000000903
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/inject-hmr-runtime",
+     "ms": 1399.5,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/@vite/client",
+     "ms": 1400.6,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/hmr-runtime",
+     "ms": 1401.2,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/src/lib/trpc.ts",
+     "ms": 1401.6,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/src/style.css",
+     "ms": 1402,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/src/editing.tsx",
+     "ms": 1402.4,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /src/style.css",
+     "ms": 1403.3,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 21.320000000000903
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /@id/__x00__virtual:react-router/hmr-runtime",
+     "ms": 1423,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 21.320000000000903
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /@id/__x00__virtual:react-router/inject-hmr-runtime",
+     "ms": 1425.9,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 21.320000000000903
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /src/editing.tsx",
+     "ms": 1427,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 21.320000000000903
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /@vite/client",
+     "ms": 1439.2,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 21.320000000000903
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /src/lib/trpc.ts",
+     "ms": 1443.5,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 21.320000000000903
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/di",
+     "ms": 1456.3,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/dist/client/env",
+     "ms": 1457,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 21.320000000000903
+     }
+    },
+    {
+     "src": "process",
+     "name": "listen 4096",
+     "ms": 1610.6,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 29,
+       "cjs": 1,
+       "esm": 1,
+       "json": 0,
+       "builtin": 27,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 1,
+       "fromProgram": 1,
+       "readMs": 41.700000000000045,
+       "compileMs": 0.12000000000000455,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 845
+      },
+      "resolveMs": 0.5600000000001728
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.attached",
+     "ms": 1629.6
+    },
+    {
+     "src": "kerneld",
+     "name": "worker.ready",
+     "ms": 1638.1,
+     "data": {
+      "thread": 14493200
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.warm",
+     "ms": 1672.2
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/health",
+     "ms": 1759.9,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/health",
+     "ms": 1763.9,
+     "data": {
+      "pid": 5,
+      "loader": 29,
+      "compileMs": 0.12000000000000455
+     }
+    },
+    {
+     "src": "process",
+     "name": "req POST /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 1766.9,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 204 /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3066.2,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.1200000000000045
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/plugin?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3071.7,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/plugin?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3075,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.1200000000000045
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/config?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3076.4,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/config?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3079.4,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.1200000000000045
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/model?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3080.4,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/model?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3087.7,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.1200000000000045
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/event",
+     "ms": 3089.1,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session?directory=%2Fworkspace&order=desc",
+     "ms": 3094.2,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session?directory=%2Fworkspace&order=desc",
+     "ms": 3101,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.1200000000000045
+     }
+    },
+    {
+     "src": "process",
+     "name": "req POST /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3101.7,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 204 /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3102.9,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.1200000000000045
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session?directory=%2Fworkspace&cursor=eyJvcmRlciI6ImRlc2MiLCJkaXJlY3RvcnkiO",
+     "ms": 3109.1,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session?directory=%2Fworkspace&cursor=eyJvcmRlciI6ImRlc2MiLCJkaXJlY3RvcnkiO",
+     "ms": 3114,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.1200000000000045
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/model?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3114.7,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/model?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3121.7,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.1200000000000045
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/model/default?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3131,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/model/default?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3135.2,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.1200000000000045
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/message?order=desc&limit=50",
+     "ms": 3141.3,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/message?order=desc&limit=50",
+     "ms": 3148,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.1200000000000045
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/permission",
+     "ms": 3148.8,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/permission",
+     "ms": 3153.3,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.1200000000000045
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/form",
+     "ms": 3154.1,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/form",
+     "ms": 3158.1,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.1200000000000045
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session/active",
+     "ms": 3158.7,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session/active",
+     "ms": 3160.1,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.1200000000000045
+     }
+    }
+   ],
+   "boot": {
+    "kernel": 65.3,
+    "kernelCompile": 0,
+    "kernelAttach": 0.9,
+    "kerneldInit": 63.6,
+    "restore": 34.2,
+    "journalBytes": 12033,
+    "snapshotBytes": 8521513,
+    "mount": 3.9,
+    "image": 65.5,
+    "imageCached": true,
+    "imageArriving": false,
+    "mounted": 79.6,
+    "serviceWorker": 80.8,
+    "total": 80.8
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [08:34:43.345] INFO (#447) http.span=1052ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [08:34:43.349] INFO (#447) http.span=1056ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [08:34:43.578] INFO (#447) http.span=1285ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12b9a207a001OYa690G5Spcg0C',",
+    "[agent]     created: 1791732883578,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [08:34:43.579] INFO (#447) http.span=1286ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12b9a207b001tieyTsFsFgXVgh',",
+    "[agent]     created: 1791732883579,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [08:34:43.583] INFO (#447) http.span=1290ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12b9a207f001fwsxsVS0P4656I',",
+    "[agent]     created: 1791732883583,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 87.3,
+    "boot + mount (bootRuntime alone)": 81.3,
+    "vite spawn → listening": 774.6,
+    "vite spawn → app visible": 1426.1,
+    "opencode spawn → attached": 2998.2,
+    "opencode spawn → chat ready": 3076.2,
+    "whole open (click → app visible and chat ready)": 3166.7
+   }
+  },
+  {
+   "variant": "wk-base",
+   "kind": "reopen",
+   "load": [
+    11.48,
+    11.1,
+    8.63
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2.2,
+    "manifest": 8.5,
+    "boot.kernel": 89.9,
+    "boot.image": 90,
+    "boot.mounted": 104,
+    "boot.done": 105.8,
+    "boot": 105.8,
+    "source.project": 106.1,
+    "source.derived": 106.3,
+    "source": 107.2,
+    "preview.spawn": 110.2,
+    "agent.spawn": 110.3,
+    "preview.listening": 1189,
+    "preview.ready": 1811.2,
+    "agent.listening": 1906.8,
+    "preview.visible": 1981.6,
+    "agent.health": 2078.6,
+    "agent.activated": 3330.9,
+    "agent.plugins": 3337.6,
+    "agent.config": 3341.7,
+    "agent.ready": 3349.1,
+    "chat.ready": 3399.4
+   },
+   "trace": [
+    {
+     "src": "page",
+     "name": "boot.start",
+     "ms": 9
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.init",
+     "ms": 39.9
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.locked",
+     "ms": 42
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.attached",
+     "ms": 47.5
+    },
+    {
+     "src": "process",
+     "name": "worker.attached",
+     "ms": 82.8
+    },
+    {
+     "src": "process",
+     "name": "worker.attached",
+     "ms": 82.8
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.restored",
+     "ms": 88.9,
+     "data": {
+      "snapshotSeq": 15112652,
+      "seq": 15136419,
+      "snapshotBytes": 8521513,
+      "journalFrames": 7,
+      "journalBytes": 23935,
+      "ms": 40.720000000000006
+     }
+    },
+    {
+     "src": "page",
+     "name": "boot.kernel",
+     "ms": 89.8
+    },
+    {
+     "src": "kerneld",
+     "name": "worker.ready",
+     "ms": 89.9,
+     "data": {
+      "thread": 8915048
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "worker.ready",
+     "ms": 89.9,
+     "data": {
+      "thread": 7866208
+     }
+    },
+    {
+     "src": "page",
+     "name": "boot.image",
+     "ms": 90
+    },
+    {
+     "src": "page",
+     "name": "boot.mounted",
+     "ms": 103.9
+    },
+    {
+     "src": "page",
+     "name": "boot.service-worker",
+     "ms": 105.5
+    },
+    {
+     "src": "page",
+     "name": "boot.done",
+     "ms": 105.7
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.request",
+     "ms": 108.5,
+     "data": {
+      "pid": 4,
+      "spares": 2
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.run",
+     "ms": 109.6,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.request",
+     "ms": 110,
+     "data": {
+      "pid": 5,
+      "spares": 1
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.run",
+     "ms": 110.3,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.warm",
+     "ms": 129.1
+    },
+    {
+     "src": "process",
+     "name": "worker.warm",
+     "ms": 142
+    },
+    {
+     "src": "process",
+     "name": "worker.programs",
+     "ms": 371.7,
+     "data": {
+      "names": [
+       "start-preview"
+      ],
+      "ms": 229.82
+     }
+    },
+    {
+     "src": "process",
+     "name": "runtime",
+     "ms": 393,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "adopted",
+     "ms": 395,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry",
+     "ms": 395.8,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry-returned",
+     "ms": 400.9,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 3,
+       "cjs": 0,
+       "esm": 1,
+       "json": 0,
+       "builtin": 2,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 1,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.programs",
+     "ms": 899.9,
+     "data": {
+      "names": [
+       "opencode-server"
+      ],
+      "ms": 770.92
+     }
+    },
+    {
+     "src": "process",
+     "name": "runtime",
+     "ms": 946.3,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "adopted",
+     "ms": 947.6,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry",
+     "ms": 948.1,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "listen 5173",
+     "ms": 1188.9,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 576,
+       "cjs": 492,
+       "esm": 54,
+       "json": 2,
+       "builtin": 28,
+       "compiled": 4,
+       "sourceAsCode": 197,
+       "transformed": 2,
+       "fromProgram": 343,
+       "readMs": 49.45999999999958,
+       "compileMs": 23.339999999999634,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 825289
+      },
+      "resolveMs": 33.16000000000088
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/",
+     "ms": 1211.5,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/",
+     "ms": 1217.5,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry-returned",
+     "ms": 1507.4,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 25,
+       "cjs": 1,
+       "esm": 1,
+       "json": 0,
+       "builtin": 23,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 1,
+       "fromProgram": 1,
+       "readMs": 5.419999999999959,
+       "compileMs": 0.22000000000002728,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 845
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.attached",
+     "ms": 1646.6
+    },
+    {
+     "src": "kerneld",
+     "name": "worker.ready",
+     "ms": 1649.5,
+     "data": {
+      "thread": 14155448
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.warm",
+     "ms": 1691.8
+    },
+    {
+     "src": "process",
+     "name": "res 200 /preview/5173/",
+     "ms": 1810.4,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.300000000000125
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /preview/5173/",
+     "ms": 1811.5,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.300000000000125
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/inject-hmr-runtime",
+     "ms": 1838.9,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /@id/__x00__virtual:react-router/inject-hmr-runtime",
+     "ms": 1841.9,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.300000000000125
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/@vite/client",
+     "ms": 1855,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/hmr-runtime",
+     "ms": 1855.9,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/src/lib/trpc.ts",
+     "ms": 1856.3,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/src/style.css",
+     "ms": 1856.6,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/src/editing.tsx",
+     "ms": 1857.1,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /@id/__x00__virtual:react-router/hmr-runtime",
+     "ms": 1859.4,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.300000000000125
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /src/style.css",
+     "ms": 1859.7,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.300000000000125
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /src/editing.tsx",
+     "ms": 1871.3,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.300000000000125
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /@vite/client",
+     "ms": 1883.4,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.300000000000125
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /src/lib/trpc.ts",
+     "ms": 1886.3,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.300000000000125
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/di",
+     "ms": 1906.4,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "listen 4096",
+     "ms": 1906.7,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 29,
+       "cjs": 1,
+       "esm": 1,
+       "json": 0,
+       "builtin": 27,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 1,
+       "fromProgram": 1,
+       "readMs": 5.419999999999959,
+       "compileMs": 0.22000000000002728,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 845
+      },
+      "resolveMs": 0.7599999999999909
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/dist/client/env",
+     "ms": 1907.1,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 26.300000000000125
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/health",
+     "ms": 2073.8,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/health",
+     "ms": 2077.3,
+     "data": {
+      "pid": 5,
+      "loader": 29,
+      "compileMs": 0.22000000000002728
+     }
+    },
+    {
+     "src": "process",
+     "name": "req POST /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 2080.6,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 204 /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3330.5,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.0600000000006276
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/plugin?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3333.6,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/plugin?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3336.9,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.0600000000006276
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/config?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3338.4,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/config?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3341.1,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.0600000000006276
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/model?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3342,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/model?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3348.3,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.0600000000006276
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/event",
+     "ms": 3349.5,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session?directory=%2Fworkspace&order=desc",
+     "ms": 3353.1,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session?directory=%2Fworkspace&order=desc",
+     "ms": 3357.6,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.0600000000006276
+     }
+    },
+    {
+     "src": "process",
+     "name": "req POST /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3358.1,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 204 /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3358.9,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.0600000000006276
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/model?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3360.7,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/model?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3366.4,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.0600000000006276
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session?directory=%2Fworkspace&cursor=eyJvcmRlciI6ImRlc2MiLCJkaXJlY3RvcnkiO",
+     "ms": 3367.5,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session?directory=%2Fworkspace&cursor=eyJvcmRlciI6ImRlc2MiLCJkaXJlY3RvcnkiO",
+     "ms": 3371,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.0600000000006276
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/model/default?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3372.3,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/model/default?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3375.7,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.0600000000006276
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/message?order=desc&limit=50",
+     "ms": 3380.6,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/message?order=desc&limit=50",
+     "ms": 3385.1,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.0600000000006276
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/permission",
+     "ms": 3385.6,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/permission",
+     "ms": 3388.1,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.0600000000006276
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/form",
+     "ms": 3388.5,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/form",
+     "ms": 3391.3,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.0600000000006276
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session/active",
+     "ms": 3391.7,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session/active",
+     "ms": 3392.4,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.0600000000006276
+     }
+    }
+   ],
+   "boot": {
+    "kernel": 80.8,
+    "kernelCompile": 0,
+    "kernelAttach": 5.7,
+    "kerneldInit": 74.1,
+    "restore": 40.7,
+    "journalBytes": 23935,
+    "snapshotBytes": 8521513,
+    "mount": 6.5,
+    "image": 81,
+    "imageCached": true,
+    "imageArriving": false,
+    "mounted": 94.8,
+    "serviceWorker": 96.5,
+    "total": 96.6
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [08:34:47.903] INFO (#447) http.span=1010ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [08:34:47.907] INFO (#447) http.span=1014ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [08:34:48.131] INFO (#447) http.span=1238ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12b9a32430012c9XDeK8jhBhWf',",
+    "[agent]     created: 1791732888131,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [08:34:48.132] INFO (#447) http.span=1239ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12b9a3244001cXmLC7hhflV3HW',",
+    "[agent]     created: 1791732888132,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [08:34:48.137] INFO (#447) http.span=1244ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12b9a32480014kTNjVwZE60Vmk',",
+    "[agent]     created: 1791732888137,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 105.8,
+    "boot + mount (bootRuntime alone)": 97.3,
+    "vite spawn → listening": 1078.8,
+    "vite spawn → app visible": 1871.4,
+    "opencode spawn → attached": 3238.8,
+    "opencode spawn → chat ready": 3289.1,
+    "whole open (click → app visible and chat ready)": 3399.4
+   }
+  },
+  {
+   "variant": "wk-base",
+   "kind": "reopen",
+   "load": [
+    11.76,
+    11.16,
+    8.66
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.7,
+    "manifest": 16.2,
+    "boot.kernel": 105.7,
+    "boot.image": 105.8,
+    "boot.mounted": 113.4,
+    "boot.done": 114.6,
+    "boot": 114.6,
+    "source.project": 114.9,
+    "source.derived": 115.1,
+    "source": 116.8,
+    "preview.spawn": 118.7,
+    "agent.spawn": 118.8,
+    "preview.listening": 824.3,
+    "preview.ready": 1424.6,
+    "preview.visible": 1724.9,
+    "agent.listening": 1726.2,
+    "agent.health": 1886.3,
+    "agent.activated": 3279.7,
+    "agent.plugins": 3289.1,
+    "agent.config": 3293.8,
+    "agent.ready": 3303.7,
+    "chat.ready": 3359.5
+   },
+   "trace": [
+    {
+     "src": "page",
+     "name": "boot.start",
+     "ms": 16.8
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.init",
+     "ms": 50
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.locked",
+     "ms": 51
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.attached",
+     "ms": 54
+    },
+    {
+     "src": "process",
+     "name": "worker.attached",
+     "ms": 87.7
+    },
+    {
+     "src": "process",
+     "name": "worker.attached",
+     "ms": 88.2
+    },
+    {
+     "src": "kerneld",
+     "name": "worker.ready",
+     "ms": 88.2,
+     "data": {
+      "thread": 7866208
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "worker.ready",
+     "ms": 88.5,
+     "data": {
+      "thread": 8915048
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "kerneld.restored",
+     "ms": 105.1,
+     "data": {
+      "snapshotSeq": 15112652,
+      "seq": 15148249,
+      "snapshotBytes": 8521513,
+      "journalFrames": 10,
+      "journalBytes": 35837,
+      "ms": 50.54
+     }
+    },
+    {
+     "src": "page",
+     "name": "boot.kernel",
+     "ms": 105.6
+    },
+    {
+     "src": "page",
+     "name": "boot.image",
+     "ms": 105.8
+    },
+    {
+     "src": "page",
+     "name": "boot.mounted",
+     "ms": 113.3
+    },
+    {
+     "src": "page",
+     "name": "boot.service-worker",
+     "ms": 114.4
+    },
+    {
+     "src": "page",
+     "name": "boot.done",
+     "ms": 114.5
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.request",
+     "ms": 118,
+     "data": {
+      "pid": 4,
+      "spares": 2
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.request",
+     "ms": 118.6,
+     "data": {
+      "pid": 5,
+      "spares": 1
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.run",
+     "ms": 118.8,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.warm",
+     "ms": 118.9
+    },
+    {
+     "src": "kerneld",
+     "name": "spawn.run",
+     "ms": 118.9,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.warm",
+     "ms": 123
+    },
+    {
+     "src": "process",
+     "name": "worker.programs",
+     "ms": 265,
+     "data": {
+      "names": [
+       "start-preview"
+      ],
+      "ms": 146.26000000000002
+     }
+    },
+    {
+     "src": "process",
+     "name": "runtime",
+     "ms": 278.5,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "adopted",
+     "ms": 279.9,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry",
+     "ms": 280.4,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry-returned",
+     "ms": 283.5,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 3,
+       "cjs": 0,
+       "esm": 1,
+       "json": 0,
+       "builtin": 2,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 1,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.programs",
+     "ms": 736.2,
+     "data": {
+      "names": [
+       "opencode-server"
+      ],
+      "ms": 613.32
+     }
+    },
+    {
+     "src": "process",
+     "name": "runtime",
+     "ms": 758.2,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "adopted",
+     "ms": 759.5,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry",
+     "ms": 760,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 0,
+       "cjs": 0,
+       "esm": 0,
+       "json": 0,
+       "builtin": 0,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 0,
+       "fromProgram": 0,
+       "readMs": 0,
+       "compileMs": 0,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 0
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "listen 5173",
+     "ms": 821.2,
+     "data": {
+      "pid": 4,
+      "loader": {
+       "modules": 576,
+       "cjs": 492,
+       "esm": 54,
+       "json": 2,
+       "builtin": 28,
+       "compiled": 4,
+       "sourceAsCode": 197,
+       "transformed": 2,
+       "fromProgram": 343,
+       "readMs": 18.460000000000548,
+       "compileMs": 17.86000000000024,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 825289
+      },
+      "resolveMs": 25.87999999999954
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/",
+     "ms": 838.4,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "entry-returned",
+     "ms": 1334.4,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 25,
+       "cjs": 1,
+       "esm": 1,
+       "json": 0,
+       "builtin": 23,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 1,
+       "fromProgram": 1,
+       "readMs": 46.92000000000007,
+       "compileMs": 0.20000000000004547,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 845
+      }
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /preview/5173/",
+     "ms": 1422.6,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 20.84000000000026
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/",
+     "ms": 1425.7,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /preview/5173/",
+     "ms": 1436.7,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 20.84000000000026
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/browser-manifest",
+     "ms": 1453.6,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/node_modules/.bun/@react-router+dev@7.18.3+837444ebebad7315/node_m",
+     "ms": 1454.3,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/src/root.tsx",
+     "ms": 1454.7,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/src/home.tsx",
+     "ms": 1455.1,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /node_modules/.bun/@react-router+dev@7.18.3+837444ebebad7315/node_modules/@react",
+     "ms": 1455.8,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 20.84000000000026
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /@id/__x00__virtual:react-router/browser-manifest",
+     "ms": 1544.3,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 20.84000000000026
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /src/root.tsx",
+     "ms": 1554.1,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 20.84000000000026
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /src/home.tsx",
+     "ms": 1555,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 20.84000000000026
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/inject-hmr-runtime",
+     "ms": 1576.1,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /@id/__x00__virtual:react-router/inject-hmr-runtime",
+     "ms": 1578,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 20.84000000000026
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/@vite/client",
+     "ms": 1580.6,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/@id/__x00__virtual:react-router/hmr-runtime",
+     "ms": 1581.1,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/src/lib/trpc.ts",
+     "ms": 1581.4,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /@id/__x00__virtual:react-router/hmr-runtime",
+     "ms": 1585,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 20.84000000000026
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /src/lib/trpc.ts",
+     "ms": 1585.4,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 20.84000000000026
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /@vite/client",
+     "ms": 1604.1,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 20.84000000000026
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/src/editing.tsx",
+     "ms": 1605.6,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /src/editing.tsx",
+     "ms": 1606,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 20.84000000000026
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/src/style.css",
+     "ms": 1606.5,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /src/style.css",
+     "ms": 1608.5,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 20.84000000000026
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /preview/5173/node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/di",
+     "ms": 1614.6,
+     "data": {
+      "pid": 4
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /node_modules/.bun/vite@7.3.6+a81ee2add532cde4/node_modules/vite/dist/client/env",
+     "ms": 1615.4,
+     "data": {
+      "pid": 4,
+      "loader": 704,
+      "compileMs": 20.84000000000026
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.attached",
+     "ms": 1676.9
+    },
+    {
+     "src": "process",
+     "name": "listen 4096",
+     "ms": 1720.5,
+     "data": {
+      "pid": 5,
+      "loader": {
+       "modules": 29,
+       "cjs": 1,
+       "esm": 1,
+       "json": 0,
+       "builtin": 27,
+       "compiled": 0,
+       "sourceAsCode": 0,
+       "transformed": 1,
+       "fromProgram": 1,
+       "readMs": 46.92000000000007,
+       "compileMs": 0.20000000000004547,
+       "programMs": 0,
+       "programs": 1,
+       "bytes": 845
+      },
+      "resolveMs": 0.2400000000000091
+     }
+    },
+    {
+     "src": "kerneld",
+     "name": "worker.ready",
+     "ms": 1729.7,
+     "data": {
+      "thread": 16382960
+     }
+    },
+    {
+     "src": "process",
+     "name": "worker.warm",
+     "ms": 1773.1
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/health",
+     "ms": 1880.6,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/health",
+     "ms": 1885,
+     "data": {
+      "pid": 5,
+      "loader": 29,
+      "compileMs": 0.20000000000004547
+     }
+    },
+    {
+     "src": "process",
+     "name": "req POST /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 1887.9,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 204 /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3278.9,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.839999999999463
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/plugin?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3284.2,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/plugin?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3288.3,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.839999999999463
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/config?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3289.7,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/config?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3293.1,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.839999999999463
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/model?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3294.3,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/model?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3302.5,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.839999999999463
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/event",
+     "ms": 3304.2,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session?directory=%2Fworkspace&order=desc",
+     "ms": 3310.1,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session?directory=%2Fworkspace&order=desc",
+     "ms": 3315.2,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.839999999999463
+     }
+    },
+    {
+     "src": "process",
+     "name": "req POST /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3315.9,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 204 /api/plugin/await-activation?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3317,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.839999999999463
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session?directory=%2Fworkspace&cursor=eyJvcmRlciI6ImRlc2MiLCJkaXJlY3RvcnkiO",
+     "ms": 3317.6,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session?directory=%2Fworkspace&cursor=eyJvcmRlciI6ImRlc2MiLCJkaXJlY3RvcnkiO",
+     "ms": 3321,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.839999999999463
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/model?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3321.8,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/model?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3326.9,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.839999999999463
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/model/default?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3329.4,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/model/default?location%5Bdirectory%5D=%2Fworkspace",
+     "ms": 3333.4,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.839999999999463
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/message?order=desc&limit=50",
+     "ms": 3339.1,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/message?order=desc&limit=50",
+     "ms": 3344.7,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.839999999999463
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/permission",
+     "ms": 3345.2,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/permission",
+     "ms": 3348.3,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.839999999999463
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/form",
+     "ms": 3348.9,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session/ses_ed46605f8ffexqkBBH9N0MRV5Z/form",
+     "ms": 3351.8,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.839999999999463
+     }
+    },
+    {
+     "src": "process",
+     "name": "req GET /api/session/active",
+     "ms": 3352.3,
+     "data": {
+      "pid": 5
+     }
+    },
+    {
+     "src": "process",
+     "name": "res 200 /api/session/active",
+     "ms": 3353.4,
+     "data": {
+      "pid": 5,
+      "loader": 32,
+      "compileMs": 4.839999999999463
+     }
+    }
+   ],
+   "boot": {
+    "kernel": 88.8,
+    "kernelCompile": 0,
+    "kernelAttach": 24.9,
+    "kerneldInit": 62.9,
+    "restore": 50.5,
+    "journalBytes": 35837,
+    "snapshotBytes": 8521513,
+    "mount": 3.3,
+    "image": 88.9,
+    "imageCached": true,
+    "imageArriving": false,
+    "mounted": 96.5,
+    "serviceWorker": 97.6,
+    "total": 97.7
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [08:34:52.279] INFO (#447) http.span=1093ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [08:34:52.283] INFO (#447) http.span=1097ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [08:34:52.558] INFO (#447) http.span=1372ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12b9a438d001eAL0ecwBhLbrGl',",
+    "[agent]     created: 1791732892558,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [08:34:52.559] INFO (#447) http.span=1373ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12b9a438f001PdDk8nxstqK29E',",
+    "[agent]     created: 1791732892559,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [08:34:52.566] INFO (#447) http.span=1380ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12b9a4396001FCUmHKmrQMLWBF',",
+    "[agent]     created: 1791732892566,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 114.6,
+    "boot + mount (bootRuntime alone)": 98.4,
+    "vite spawn → listening": 705.6,
+    "vite spawn → app visible": 1606.2,
+    "opencode spawn → attached": 3184.9,
+    "opencode spawn → chat ready": 3240.7,
+    "whole open (click → app visible and chat ready)": 3359.5
+   }
+  }
+ ]
+}

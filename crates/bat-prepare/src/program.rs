@@ -22,11 +22,26 @@ pub struct ProgramRecord {
 
 /// Function header for a compiled body, from the facts word (`bat-modules` layout:
 /// kind in bits 0..=2 with 1 = CommonJS, 2 = ESM; bit 3 = async).
+///
+/// An ES module's function can be started before its context exists: called with none, it
+/// stops at once and takes the context from the `next(context)` that resumes it. The loader
+/// does that when the script is loaded, so that the engine compiles the body then
+/// (docs/design/decisions.md, 2026-10-11). The compiled body opens with its own
+/// `"use strict"`, which is then an ordinary statement; the directive is repeated here.
 pub fn function_header(facts: u32) -> &'static str {
     match (facts & 0b111, facts & (1 << 3) != 0) {
-        (2, true) => "async function*(__bat){",
-        (2, false) => "function*(__bat){",
+        (2, true) => "async function*(__bat){\"use strict\";if(__bat===void 0)__bat=yield;",
+        (2, false) => "function*(__bat){\"use strict\";if(__bat===void 0)__bat=yield;",
         _ => "function(exports,require,module,__filename,__dirname,__bat){",
+    }
+}
+/// What follows the function in `__bat_define(path, fn…)`: `,1` marks a function that can be
+/// started without its context.
+pub fn define_tail(facts: u32) -> &'static str {
+    if facts & 0b111 == 2 {
+        ",1"
+    } else {
+        ""
     }
 }
 
@@ -40,7 +55,9 @@ pub fn script_text(modules: &[(String, &Compiled)]) -> Vec<u8> {
         // The header stays on the first line of the body so line numbers match the source.
         out.extend_from_slice(function_header(compiled.facts).as_bytes());
         out.extend_from_slice(&compiled.code);
-        out.extend_from_slice(b"\n});\n");
+        out.extend_from_slice(b"\n}");
+        out.extend_from_slice(define_tail(compiled.facts).as_bytes());
+        out.extend_from_slice(b");\n");
     }
     out
 }
