@@ -19,7 +19,7 @@ if [ -z "${BAT_PREPARE_NO_BUILD:-}" ]; then
   (cd "$repo" && cargo build --release -q -p bat-prepare)
 fi
 sources=""
-for s in src vite.config.ts react-router.config.ts tsconfig.json package.json; do
+for s in index.html src vite.config.ts tsconfig.json package.json; do
   [ -e "$app/$s" ] && sources="$sources --source $s"
 done
 # shellcheck disable=SC2086

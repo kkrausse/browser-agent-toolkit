@@ -1,12 +1,17 @@
 # TODO example
 
-A React Router 7 app with a Bun/tRPC API, plus "Open editor": a preview of the app's own dev
-server and an OpenCode chat that edits its source, both local to the browser tab. TODO items
-live in the server's memory; source edits live in the browser.
+A plain React app (React 19, Vite 7 with `@vitejs/plugin-react`, Tailwind 4, TypeScript;
+`index.html`, `src/main.tsx`, `src/App.tsx`), plus "Open editor": a preview of the app's own
+dev server and an OpenCode chat that edits its source, both local to the browser tab. There
+is no backend for the app itself: TODO items are kept in `localStorage`, source edits in the
+browser's private file system. The preview is a frame on the page's own origin, so it shows
+the same list as the page around it, and a change on either side appears on the other.
 
 Editor files: `src/editing.tsx` (the button; calls `preloadEditor()` when it is rendered),
-`src/editor-panel.tsx` (preview, chat, status and timings, Exit), `server.ts` (handler and
-authorization), `prepare.ts`, `vite.config.ts`, and two recordings of a real start that
+`src/editor-panel.tsx` (preview, chat, status and timings, Exit), `server.ts` (a Bun server:
+the editor handler, authorization, the model key, and the built app from `dist/` through
+`static-files.ts`), `prepare.ts`, `vite.config.ts` (the toolkit's `browserEditor` plugin, and
+two exclusions the preview needs, explained there), and two recordings of a real start that
 `prepare.ts` passes on: `startup-modules.json` (the modules Vite had loaded when the app
 showed, emitted as one script the browser keeps compiled) and `editor-startup-order.txt`
 (what a start reads from the dependency image, laid out first so a first open does not
@@ -34,7 +39,7 @@ elsewhere, e.g. with a custom `CARGO_TARGET_DIR`).
 
 Without a key the editor and preview work and chat answers with an explanation.
 "Reset workspace" on the home page deletes this browser's source edits and chat sessions;
-the next open starts from the prepared source again.
+the next open starts from the prepared source again. The TODO items stay.
 
 ## Demo driver
 
