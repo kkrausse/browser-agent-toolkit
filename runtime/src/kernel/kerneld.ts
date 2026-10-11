@@ -8,6 +8,7 @@ import { attachKernel, type KernelInstance } from './attach'
 import { createKernel, type Kernel } from './kernel'
 import { trace, traceEnable } from '../trace'
 import { fnv1a32, imageExists, openImageHandle, opfsDir, preopenImage, removeImage, storeImage, type SyncHandle } from './opfs'
+import { waitWord } from './wait'
 
 interface InitArgs {
   module: WebAssembly.Module
@@ -412,8 +413,7 @@ async function supervise() {
         console.error('kerneld:', e)
       }
     }
-    const r = (Atomics as any).waitAsync(i32, word, seen, 250)
-    if (r.async) await r.value
+    await waitWord(i32, word, seen, 250)
     if (journal && x.bat_persist_pending() > 0) {
       try {
         drainJournal()

@@ -5,6 +5,7 @@
 
 import type { KernelInstance } from './attach'
 import { EAGAIN, ENOENT, ENOTDIR, ERANGE, kernelError } from './errno'
+import { waitWord } from './wait'
 
 export const K_FILE = 0
 export const K_DIR = 1
@@ -817,8 +818,7 @@ export function createKernel(inst: KernelInstance) {
       sync()
       const seen = Atomics.load(i32, word)
       if (x.bat_persist_durable() >= target) return
-      const r = (Atomics as any).waitAsync(i32, word, seen, 1000)
-      if (r.async) await r.value
+      await waitWord(i32, word, seen, 1000)
     }
   }
   /** Blocking flush (workers only). */
@@ -847,8 +847,7 @@ export function createKernel(inst: KernelInstance) {
       } catch (e) {
         if ((e as any)?.errno !== EAGAIN) throw e
       }
-      const r = (Atomics as any).waitAsync(i32, word, seen, 100)
-      if (r.async) await r.value
+      await waitWord(i32, word, seen, 100)
     }
   }
 

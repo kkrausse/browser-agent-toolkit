@@ -8,6 +8,7 @@
 // private memory and hands it to the sink. Sending: `send` copies the caller's
 // bytes once, straight into the free part of the send ring.
 import type { Kernel } from '../kernel/kernel'
+import { waitWord } from '../kernel/wait'
 
 export const EV_HEAD = 1
 export const EV_BODY = 2
@@ -375,18 +376,16 @@ export function createCodec(kernel: Kernel) {
       const seen = Atomics.load(i32, word)
       const id = portListener(port)
       if (id) return id
-      const r = (Atomics as any).waitAsync(i32, word, seen, 1000)
-      if (r.async) {
-        if (signal) {
-          let onAbort!: () => void
-          const aborted = new Promise<void>((resolve) => {
-            onAbort = resolve
-            signal.addEventListener('abort', onAbort, { once: true })
-          })
-          await Promise.race([r.value, aborted])
-          signal.removeEventListener('abort', onAbort)
-        } else await r.value
-      }
+      const woke = waitWord(i32, word, seen, 1000)
+      if (signal) {
+        let onAbort!: () => void
+        const aborted = new Promise<void>((resolve) => {
+          onAbort = resolve
+          signal.addEventListener('abort', onAbort, { once: true })
+        })
+        await Promise.race([woke, aborted])
+        signal.removeEventListener('abort', onAbort)
+      } else await woke
     }
   }
 
