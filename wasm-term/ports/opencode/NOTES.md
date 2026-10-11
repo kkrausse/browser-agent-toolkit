@@ -3,7 +3,8 @@
 Target: opencode v2.0.26 (`anomalyco/opencode`, tag `v2.0.26`, commit `9b4ec571`), which pins
 OpenTUI 0.5.17 (`anomalyco/opentui`, tag `v0.5.17`, commit `6f0efd33`).
 
-**Result: it runs, as a guest on the main dev page.** The real opencode TUI source, unmodified,
+**Result: it runs, as a guest on the main dev page.** The real opencode TUI source (unmodified on
+disk; one edit at bundle time, `build/opencode-edits-plugin.ts`: a submit waits for the agent list)
 executes in a browser Web Worker on the wasm-term machine's node-style shim (`../../host/node`),
 renders through OpenTUI's Zig core compiled to wasm32-wasi into ghostty-web via the kernel pty, and
 talks to a remote `opencode serve` with `fetch` + SSE. No server-side PTY. Markdown and syntax
