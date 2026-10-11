@@ -253,6 +253,16 @@ async function toGuest(event: FetchEvent, guestPort: number, url: URL): Promise<
     }
   }
   for (const [name, value] of ISOLATION) out.set(name, value)
+  // A guest server lives as long as this tab's kernel; the browser's memory cache outlives
+  // it. WebKit reuses a resource an earlier document preloaded (`<link rel="modulepreload">`,
+  // which React Router writes for its entry and route modules) without asking anybody, even
+  // when it was answered `no-store`: a reopened preview then ran modules of the previous dev
+  // server, stale if the files had changed since, and the new server, never asked for them,
+  // sent no hot update when they were edited (docs/experiments/2026-10-11-webkit.md, section
+  // 10; runtime/harness/webkit/preload-reuse shows it without the runtime). The one header
+  // that stops the reuse is `Vary: *`, which no later request can match. A response that
+  // states a lifetime of its own (Vite's hashed dependencies: immutable) is left alone.
+  if (!/\b(max-age|s-maxage|immutable)\b/i.test(out.get('cache-control') ?? '')) out.set('Vary', '*')
   const discard = () => (res.body instanceof ReadableStream ? res.body.cancel().catch(() => {}) : undefined)
   if (res.status < 200 || res.status > 599) {
     await discard()

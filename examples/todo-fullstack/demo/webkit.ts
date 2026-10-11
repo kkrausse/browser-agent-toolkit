@@ -88,8 +88,10 @@ const trace = async () => {
 }
 const traced = (page: Page, since: number) => page.evaluate((since) => {
   const win = (document.querySelector('.todo-editor-preview iframe') as HTMLIFrameElement | null)?.contentWindow as any
-  const activity = (document.querySelector('.todo-editor-panel details pre')?.textContent ?? '').split('\n').filter((line) => /\[preview\]/.test(line)).slice(-12)
-  return { now: Date.now() - since, page: ((win?.__demoTrace ?? []) as [number, ...unknown[]][]).map(([at, ...rest]) => [at - since, ...rest]), activity }
+  const activity = ((window as any).__demoPreviewLog ?? []) as string[]
+  // How the frame got the modules it started with (a size of 0 is a copy the browser kept).
+  const first = ((win?.performance.getEntriesByType('resource') ?? []) as PerformanceResourceTiming[]).filter((e) => /\/src\/[\w.-]+$/.test(e.name)).map((e) => [e.name.slice(e.name.lastIndexOf('/') + 1), Math.round(e.startTime), `${Math.round(e.duration)} ms`, e.transferSize, e.encodedBodySize, (e as any).responseStatus])
+  return { now: Date.now() - since, first, page: ((win?.__demoTrace ?? []) as [number, ...unknown[]][]).map(([at, ...rest]) => [at - since, ...rest]), activity }
 }, since).catch((e) => String(e))
 
 async function once(): Promise<Record<string, unknown>> {
@@ -127,6 +129,12 @@ async function once(): Promise<Record<string, unknown>> {
     step = 'open'
     const clicked = Date.now()
     await page.getByRole('button', { name: 'Open editor', exact: true }).click()
+    // The dev server's own lines, kept as they pass: the panel's log holds the last 500 of all sources.
+    await page.evaluate(() => {
+      const kept: string[] = ((window as any).__demoPreviewLog = []), seen = new Set<string>()
+      const read = () => { for (const line of (document.querySelector('.todo-editor-panel details pre')?.textContent ?? '').split('\n')) if (line.startsWith('[preview]') && !seen.has(line)) { seen.add(line); kept.push(line) } }
+      setInterval(read, 100)
+    })
     let s = await panel(page)
     for (;;) {
       s = await panel(page)
@@ -142,6 +150,22 @@ async function once(): Promise<Record<string, unknown>> {
     // Survives hot updates, not a reload of the frame.
     await page.evaluate(() => { ((document.querySelector('.todo-editor-preview iframe') as HTMLIFrameElement).contentWindow as any).__demoDocument = true })
     await page.evaluate(trace).catch((e) => problems.push(`trace: ${String(e).slice(0, 200)}`))
+
+    // What the browser may reuse of the dev server's answers. A source module must arrive with
+    // `Vary: *`: without it WebKit answered a reopened preview's preloaded modules from its
+    // memory cache, never asking the new dev server, which then sent no hot update for them
+    // (report section 10). An optimized dependency states a lifetime and is left alone. The
+    // module asked for is not one the prompt edits, so the question does not change the run.
+    step = 'cache'
+    const kept = await page.evaluate(async (probe) => {
+      const win = (document.querySelector('.todo-editor-preview iframe') as HTMLIFrameElement).contentWindow as Window & typeof globalThis
+      const ask = async (url: string | URL) => { const h = (await win.fetch(url)).headers; return { vary: h.get('vary'), cacheControl: h.get('cache-control') } }
+      const dep = win.performance.getEntriesByType('resource').map((e) => e.name).find((n) => /\/deps\/[^?]+\?v=/.test(n))
+      return { source: await ask(new URL(probe, win.document.baseURI)), dep: dep ? await ask(dep) : null }
+    }, 'src/lib/trpc.ts')
+    result.reuse = kept
+    if (kept.source.vary !== '*') throw Error(`A source module of the preview can be reused from the browser's memory cache: Vary ${JSON.stringify(kept.source.vary)}, expected "*"`)
+    if (kept.dep && (kept.dep.vary === '*' || !/immutable|max-age/.test(kept.dep.cacheControl ?? ''))) throw Error(`An optimized dependency lost its lifetime: ${JSON.stringify(kept.dep)}`)
 
     if (!has('no-prompt')) {
       step = 'prompt'
