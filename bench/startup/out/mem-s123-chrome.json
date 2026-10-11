@@ -1,0 +1,3420 @@
+{
+ "meta": {
+  "label": "mem-s123-chrome",
+  "date": "2026-10-11T17:52:48.538Z",
+  "commit": "7dba393",
+  "variants": {
+   "base": "http://127.0.0.1:4888",
+   "new": "http://127.0.0.1:4881"
+  },
+  "trace": false,
+  "settleMs": 800,
+  "browser": "Chrome, headed on Xvfb, driven by browser-control"
+ },
+ "summary": {
+  "base": {
+   "fresh": {
+    "n": 3,
+    "load1": {
+     "n": 3,
+     "median": 6.2,
+     "min": 5.02,
+     "max": 6.35
+    },
+    "stages": {
+     "click → booted (manifest, runtime import, boot, mount)": {
+      "n": 3,
+      "median": 267.3,
+      "min": 149.2,
+      "max": 306.8
+     },
+     "boot + mount (bootRuntime alone)": {
+      "n": 3,
+      "median": 253.6,
+      "min": 135.2,
+      "max": 294.4
+     },
+     "vite spawn → listening": {
+      "n": 3,
+      "median": 558,
+      "min": 351,
+      "max": 569.5
+     },
+     "vite spawn → app visible": {
+      "n": 3,
+      "median": 1315,
+      "min": 1224.7,
+      "max": 1620.1
+     },
+     "opencode spawn → attached": {
+      "n": 3,
+      "median": 2159.7,
+      "min": 1510.3,
+      "max": 3179.5
+     },
+     "opencode spawn → chat ready": {
+      "n": 3,
+      "median": 2519.7,
+      "min": 1572.7,
+      "max": 3248.1
+     },
+     "whole open (click → app visible and chat ready)": {
+      "n": 3,
+      "median": 3139.1,
+      "min": 1812.7,
+      "max": 3648
+     }
+    },
+    "steps": {
+     "open": {
+      "n": 3,
+      "median": 2.4,
+      "min": 1.8,
+      "max": 2.8
+     },
+     "manifest": {
+      "n": 3,
+      "median": 13.7,
+      "min": 12.4,
+      "max": 14
+     },
+     "boot.kernel": {
+      "n": 3,
+      "median": 79.6,
+      "min": 55.4,
+      "max": 128.5
+     },
+     "boot.image": {
+      "n": 3,
+      "median": 122.7,
+      "min": 88.8,
+      "max": 147.1
+     },
+     "boot.mounted": {
+      "n": 3,
+      "median": 156.5,
+      "min": 115.6,
+      "max": 213.8
+     },
+     "boot.done": {
+      "n": 3,
+      "median": 267.2,
+      "min": 149.2,
+      "max": 306.7
+     },
+     "boot": {
+      "n": 3,
+      "median": 267.3,
+      "min": 149.2,
+      "max": 306.8
+     },
+     "source.project": {
+      "n": 3,
+      "median": 275.2,
+      "min": 152.8,
+      "max": 312.4
+     },
+     "source.derived": {
+      "n": 3,
+      "median": 393.4,
+      "min": 234.4,
+      "max": 613.1
+     },
+     "source": {
+      "n": 3,
+      "median": 395.5,
+      "min": 236.1,
+      "max": 615.1
+     },
+     "preview.spawn": {
+      "n": 3,
+      "median": 399.8,
+      "min": 239.8,
+      "max": 619.2
+     },
+     "agent.spawn": {
+      "n": 3,
+      "median": 399.9,
+      "min": 240,
+      "max": 619.4
+     },
+     "preview.listening": {
+      "n": 3,
+      "median": 957.8,
+      "min": 590.8,
+      "max": 1188.7
+     },
+     "preview.ready": {
+      "n": 3,
+      "median": 1445.1,
+      "min": 1085.7,
+      "max": 1642.2
+     },
+     "preview.visible": {
+      "n": 3,
+      "median": 1934.2,
+      "min": 1464.5,
+      "max": 2019.9
+     },
+     "agent.listening": {
+      "n": 3,
+      "median": 2361.9,
+      "min": 794.6,
+      "max": 2399.8
+     },
+     "agent.health": {
+      "n": 3,
+      "median": 2486.3,
+      "min": 959.9,
+      "max": 2707.3
+     },
+     "agent.activated": {
+      "n": 3,
+      "median": 2726.5,
+      "min": 1340.1,
+      "max": 3145.2
+     },
+     "agent.plugins": {
+      "n": 3,
+      "median": 2730.8,
+      "min": 1735.5,
+      "max": 3562.5
+     },
+     "agent.config": {
+      "n": 3,
+      "median": 2747.1,
+      "min": 1742.3,
+      "max": 3568
+     },
+     "agent.ready": {
+      "n": 3,
+      "median": 2779.1,
+      "min": 1750.3,
+      "max": 3579.4
+     },
+     "chat.ready": {
+      "n": 3,
+      "median": 3139.1,
+      "min": 1812.7,
+      "max": 3648
+     }
+    },
+    "boot": {
+     "kernel": {
+      "n": 3,
+      "median": 65.9,
+      "min": 40.1,
+      "max": 113.3
+     },
+     "kernelCompile": {
+      "n": 3,
+      "median": 0,
+      "min": 0,
+      "max": 0
+     },
+     "kernelAttach": {
+      "n": 3,
+      "median": 1.8,
+      "min": 1.5,
+      "max": 1.9
+     },
+     "kerneldInit": {
+      "n": 3,
+      "median": 63.1,
+      "min": 37.8,
+      "max": 110.3
+     },
+     "restore": {
+      "n": 3,
+      "median": 24.3,
+      "min": 12.6,
+      "max": 75.2
+     },
+     "journalBytes": {
+      "n": 3,
+      "median": 0,
+      "min": 0,
+      "max": 0
+     },
+     "snapshotBytes": {
+      "n": 3,
+      "median": 0,
+      "min": 0,
+      "max": 0
+     },
+     "mount": {
+      "n": 3,
+      "median": 23.4,
+      "min": 20.5,
+      "max": 49.1
+     },
+     "image": {
+      "n": 3,
+      "median": 109.1,
+      "min": 73.6,
+      "max": 131.9
+     },
+     "mounted": {
+      "n": 3,
+      "median": 142.9,
+      "min": 100.3,
+      "max": 198.7
+     },
+     "serviceWorker": {
+      "n": 3,
+      "median": 251.9,
+      "min": 133.8,
+      "max": 293
+     },
+     "total": {
+      "n": 3,
+      "median": 252,
+      "min": 133.9,
+      "max": 293.1
+     }
+    }
+   },
+   "reopen": {
+    "n": 8,
+    "load1": {
+     "n": 8,
+     "median": 8.1,
+     "min": 6.35,
+     "max": 10.14
+    },
+    "stages": {
+     "click → booted (manifest, runtime import, boot, mount)": {
+      "n": 8,
+      "median": 134.1,
+      "min": 103.3,
+      "max": 154.2
+     },
+     "boot + mount (bootRuntime alone)": {
+      "n": 8,
+      "median": 119.8,
+      "min": 87.4,
+      "max": 140.1
+     },
+     "vite spawn → listening": {
+      "n": 8,
+      "median": 587.5,
+      "min": 503.6,
+      "max": 729.8
+     },
+     "vite spawn → app visible": {
+      "n": 8,
+      "median": 1458.8,
+      "min": 1286.7,
+      "max": 2085.1
+     },
+     "opencode spawn → attached": {
+      "n": 8,
+      "median": 1402.7,
+      "min": 1274.2,
+      "max": 2095.1
+     },
+     "opencode spawn → chat ready": {
+      "n": 8,
+      "median": 1467.9,
+      "min": 1309.6,
+      "max": 2154.7
+     },
+     "whole open (click → app visible and chat ready)": {
+      "n": 8,
+      "median": 1629.7,
+      "min": 1442.4,
+      "max": 2318.1
+     }
+    },
+    "steps": {
+     "open": {
+      "n": 8,
+      "median": 2,
+      "min": 1.8,
+      "max": 3.3
+     },
+     "manifest": {
+      "n": 8,
+      "median": 14.4,
+      "min": 12.6,
+      "max": 17.5
+     },
+     "boot.kernel": {
+      "n": 8,
+      "median": 98.7,
+      "min": 72.4,
+      "max": 123.7
+     },
+     "boot.image": {
+      "n": 8,
+      "median": 108.6,
+      "min": 89.4,
+      "max": 132.5
+     },
+     "boot.mounted": {
+      "n": 8,
+      "median": 127.3,
+      "min": 101,
+      "max": 151.1
+     },
+     "boot.done": {
+      "n": 8,
+      "median": 134.1,
+      "min": 103.3,
+      "max": 154.1
+     },
+     "boot": {
+      "n": 8,
+      "median": 134.1,
+      "min": 103.3,
+      "max": 154.2
+     },
+     "source.project": {
+      "n": 8,
+      "median": 134.7,
+      "min": 103.8,
+      "max": 154.7
+     },
+     "source.derived": {
+      "n": 8,
+      "median": 135.3,
+      "min": 104.4,
+      "max": 155.3
+     },
+     "source": {
+      "n": 8,
+      "median": 137.4,
+      "min": 105.5,
+      "max": 156.5
+     },
+     "preview.spawn": {
+      "n": 8,
+      "median": 143.9,
+      "min": 109.3,
+      "max": 163.2
+     },
+     "agent.spawn": {
+      "n": 8,
+      "median": 144.5,
+      "min": 109.5,
+      "max": 163.4
+     },
+     "preview.listening": {
+      "n": 8,
+      "median": 730.6,
+      "min": 612.9,
+      "max": 893
+     },
+     "agent.listening": {
+      "n": 8,
+      "median": 892.4,
+      "min": 811.3,
+      "max": 1253
+     },
+     "agent.health": {
+      "n": 8,
+      "median": 1006.8,
+      "min": 932.6,
+      "max": 1510
+     },
+     "preview.ready": {
+      "n": 8,
+      "median": 1202.6,
+      "min": 1118.9,
+      "max": 1660.5
+     },
+     "agent.activated": {
+      "n": 8,
+      "median": 1507.7,
+      "min": 1374.7,
+      "max": 2233.2
+     },
+     "agent.plugins": {
+      "n": 8,
+      "median": 1515.9,
+      "min": 1385.4,
+      "max": 2243.5
+     },
+     "agent.config": {
+      "n": 8,
+      "median": 1524.6,
+      "min": 1398.5,
+      "max": 2250.3
+     },
+     "agent.ready": {
+      "n": 8,
+      "median": 1533.3,
+      "min": 1409.5,
+      "max": 2258.5
+     },
+     "preview.visible": {
+      "n": 8,
+      "median": 1613.9,
+      "min": 1422.5,
+      "max": 2248.3
+     },
+     "chat.ready": {
+      "n": 8,
+      "median": 1598.4,
+      "min": 1442.4,
+      "max": 2318.1
+     }
+    },
+    "boot": {
+     "kernel": {
+      "n": 8,
+      "median": 81.8,
+      "min": 56.8,
+      "max": 109
+     },
+     "kernelCompile": {
+      "n": 8,
+      "median": 0,
+      "min": 0,
+      "max": 0
+     },
+     "kernelAttach": {
+      "n": 8,
+      "median": 1.7,
+      "min": 1.6,
+      "max": 2
+     },
+     "kerneldInit": {
+      "n": 8,
+      "median": 78.9,
+      "min": 54.3,
+      "max": 106.3
+     },
+     "restore": {
+      "n": 8,
+      "median": 48.6,
+      "min": 24,
+      "max": 66.1
+     },
+     "journalBytes": {
+      "n": 8,
+      "median": 41789,
+      "min": 0,
+      "max": 83425
+     },
+     "snapshotBytes": {
+      "n": 8,
+      "median": 8521513,
+      "min": 8521513,
+      "max": 8521513
+     },
+     "mount": {
+      "n": 8,
+      "median": 11.9,
+      "min": 9.5,
+      "max": 31.8
+     },
+     "image": {
+      "n": 8,
+      "median": 93.1,
+      "min": 72,
+      "max": 117.8
+     },
+     "mounted": {
+      "n": 8,
+      "median": 111.7,
+      "min": 83.7,
+      "max": 136.4
+     },
+     "serviceWorker": {
+      "n": 8,
+      "median": 118.4,
+      "min": 85.9,
+      "max": 139
+     },
+     "total": {
+      "n": 8,
+      "median": 118.5,
+      "min": 85.9,
+      "max": 139.1
+     }
+    }
+   }
+  },
+  "new": {
+   "fresh": {
+    "n": 3,
+    "load1": {
+     "n": 3,
+     "median": 6.4,
+     "min": 5.26,
+     "max": 6.64
+    },
+    "stages": {
+     "click → booted (manifest, runtime import, boot, mount)": {
+      "n": 3,
+      "median": 230.4,
+      "min": 206,
+      "max": 369.7
+     },
+     "boot + mount (bootRuntime alone)": {
+      "n": 3,
+      "median": 218.4,
+      "min": 192.9,
+      "max": 357.4
+     },
+     "vite spawn → listening": {
+      "n": 3,
+      "median": 515.9,
+      "min": 305.6,
+      "max": 642.1
+     },
+     "vite spawn → app visible": {
+      "n": 3,
+      "median": 1354.8,
+      "min": 1108.6,
+      "max": 1603.3
+     },
+     "opencode spawn → attached": {
+      "n": 3,
+      "median": 2568.5,
+      "min": 1362.4,
+      "max": 2956.5
+     },
+     "opencode spawn → chat ready": {
+      "n": 3,
+      "median": 2620.4,
+      "min": 1404.2,
+      "max": 3069.5
+     },
+     "whole open (click → app visible and chat ready)": {
+      "n": 3,
+      "median": 2939.2,
+      "min": 1756.2,
+      "max": 3571.5
+     }
+    },
+    "steps": {
+     "open": {
+      "n": 3,
+      "median": 2,
+      "min": 1.8,
+      "max": 2.5
+     },
+     "manifest": {
+      "n": 3,
+      "median": 12.3,
+      "min": 12,
+      "max": 13.1
+     },
+     "boot.kernel": {
+      "n": 3,
+      "median": 71,
+      "min": 68.5,
+      "max": 139.7
+     },
+     "boot.image": {
+      "n": 3,
+      "median": 104.8,
+      "min": 94.8,
+      "max": 176.8
+     },
+     "boot.mounted": {
+      "n": 3,
+      "median": 150.1,
+      "min": 120,
+      "max": 209.7
+     },
+     "boot.done": {
+      "n": 3,
+      "median": 230.4,
+      "min": 205.9,
+      "max": 369.7
+     },
+     "boot": {
+      "n": 3,
+      "median": 230.4,
+      "min": 206,
+      "max": 369.7
+     },
+     "source.project": {
+      "n": 3,
+      "median": 233.3,
+      "min": 213.4,
+      "max": 378.5
+     },
+     "source.derived": {
+      "n": 3,
+      "median": 338.6,
+      "min": 304.8,
+      "max": 494.2
+     },
+     "source": {
+      "n": 3,
+      "median": 340.4,
+      "min": 310.1,
+      "max": 497.5
+     },
+     "preview.spawn": {
+      "n": 3,
+      "median": 351.8,
+      "min": 318.5,
+      "max": 501.8
+     },
+     "agent.spawn": {
+      "n": 3,
+      "median": 352,
+      "min": 318.8,
+      "max": 502
+     },
+     "preview.listening": {
+      "n": 3,
+      "median": 834.4,
+      "min": 657.4,
+      "max": 1143.9
+     },
+     "preview.ready": {
+      "n": 3,
+      "median": 1295.8,
+      "min": 1039.3,
+      "max": 1696.5
+     },
+     "preview.visible": {
+      "n": 3,
+      "median": 1673.3,
+      "min": 1460.4,
+      "max": 2105.1
+     },
+     "agent.listening": {
+      "n": 3,
+      "median": 2079.1,
+      "min": 848.5,
+      "max": 2590.6
+     },
+     "agent.health": {
+      "n": 3,
+      "median": 2335,
+      "min": 955.3,
+      "max": 2780.3
+     },
+     "agent.activated": {
+      "n": 3,
+      "median": 2573.9,
+      "min": 1414.6,
+      "max": 3108.8
+     },
+     "agent.plugins": {
+      "n": 3,
+      "median": 2600.6,
+      "min": 1705.3,
+      "max": 3441.6
+     },
+     "agent.config": {
+      "n": 3,
+      "median": 2882.1,
+      "min": 1709,
+      "max": 3449.1
+     },
+     "agent.ready": {
+      "n": 3,
+      "median": 2887.3,
+      "min": 1714.4,
+      "max": 3458.5
+     },
+     "chat.ready": {
+      "n": 3,
+      "median": 2939.2,
+      "min": 1756.2,
+      "max": 3571.5
+     }
+    },
+    "boot": {
+     "kernel": {
+      "n": 3,
+      "median": 57.6,
+      "min": 54.2,
+      "max": 126.1
+     },
+     "kernelCompile": {
+      "n": 3,
+      "median": 0,
+      "min": 0,
+      "max": 0
+     },
+     "kernelAttach": {
+      "n": 3,
+      "median": 3.5,
+      "min": 2.4,
+      "max": 4.1
+     },
+     "kerneldInit": {
+      "n": 3,
+      "median": 53.2,
+      "min": 50.9,
+      "max": 121.1
+     },
+     "restore": {
+      "n": 3,
+      "median": 33.8,
+      "min": 30.1,
+      "max": 83.7
+     },
+     "journalBytes": {
+      "n": 3,
+      "median": 0,
+      "min": 0,
+      "max": 0
+     },
+     "snapshotBytes": {
+      "n": 3,
+      "median": 0,
+      "min": 0,
+      "max": 0
+     },
+     "mount": {
+      "n": 3,
+      "median": 23.1,
+      "min": 20.8,
+      "max": 32.8
+     },
+     "image": {
+      "n": 3,
+      "median": 91.4,
+      "min": 80.5,
+      "max": 163.2
+     },
+     "mounted": {
+      "n": 3,
+      "median": 135.8,
+      "min": 105.7,
+      "max": 196.1
+     },
+     "serviceWorker": {
+      "n": 3,
+      "median": 216.9,
+      "min": 191.6,
+      "max": 355.3
+     },
+     "total": {
+      "n": 3,
+      "median": 217,
+      "min": 191.7,
+      "max": 356.1
+     }
+    }
+   },
+   "reopen": {
+    "n": 8,
+    "load1": {
+     "n": 8,
+     "median": 8.1,
+     "min": 6.35,
+     "max": 11.65
+    },
+    "stages": {
+     "click → booted (manifest, runtime import, boot, mount)": {
+      "n": 8,
+      "median": 166.7,
+      "min": 96.7,
+      "max": 223.3
+     },
+     "boot + mount (bootRuntime alone)": {
+      "n": 8,
+      "median": 151.8,
+      "min": 84.7,
+      "max": 209.1
+     },
+     "vite spawn → listening": {
+      "n": 8,
+      "median": 623.3,
+      "min": 546.2,
+      "max": 693.1
+     },
+     "vite spawn → app visible": {
+      "n": 8,
+      "median": 1421.6,
+      "min": 1361,
+      "max": 1822.7
+     },
+     "opencode spawn → attached": {
+      "n": 8,
+      "median": 1378.6,
+      "min": 1347.8,
+      "max": 1664.3
+     },
+     "opencode spawn → chat ready": {
+      "n": 8,
+      "median": 1443.4,
+      "min": 1394.2,
+      "max": 1773.3
+     },
+     "whole open (click → app visible and chat ready)": {
+      "n": 8,
+      "median": 1646.8,
+      "min": 1514,
+      "max": 2001.3
+     }
+    },
+    "steps": {
+     "open": {
+      "n": 8,
+      "median": 2.4,
+      "min": 1.4,
+      "max": 3
+     },
+     "manifest": {
+      "n": 8,
+      "median": 13.6,
+      "min": 12,
+      "max": 16.4
+     },
+     "boot.kernel": {
+      "n": 8,
+      "median": 116.3,
+      "min": 71.6,
+      "max": 164.5
+     },
+     "boot.image": {
+      "n": 8,
+      "median": 118.7,
+      "min": 81.4,
+      "max": 164.6
+     },
+     "boot.mounted": {
+      "n": 8,
+      "median": 155.2,
+      "min": 93.3,
+      "max": 209.4
+     },
+     "boot.done": {
+      "n": 8,
+      "median": 166.7,
+      "min": 96.7,
+      "max": 223.3
+     },
+     "boot": {
+      "n": 8,
+      "median": 166.7,
+      "min": 96.7,
+      "max": 223.3
+     },
+     "source.project": {
+      "n": 8,
+      "median": 167.2,
+      "min": 97.2,
+      "max": 224
+     },
+     "source.derived": {
+      "n": 8,
+      "median": 167.7,
+      "min": 97.7,
+      "max": 224.6
+     },
+     "source": {
+      "n": 8,
+      "median": 170.4,
+      "min": 98.8,
+      "max": 230.6
+     },
+     "preview.spawn": {
+      "n": 8,
+      "median": 178.5,
+      "min": 102.6,
+      "max": 250.1
+     },
+     "agent.spawn": {
+      "n": 8,
+      "median": 178.8,
+      "min": 103.6,
+      "max": 250.4
+     },
+     "preview.listening": {
+      "n": 8,
+      "median": 806.3,
+      "min": 648.8,
+      "max": 886.1
+     },
+     "agent.listening": {
+      "n": 8,
+      "median": 988.8,
+      "min": 797,
+      "max": 1100.9
+     },
+     "agent.health": {
+      "n": 8,
+      "median": 1083.1,
+      "min": 897.3,
+      "max": 1224.8
+     },
+     "preview.ready": {
+      "n": 8,
+      "median": 1246.7,
+      "min": 1085.7,
+      "max": 1461.5
+     },
+     "agent.activated": {
+      "n": 8,
+      "median": 1527.9,
+      "min": 1376.4,
+      "max": 1838.2
+     },
+     "agent.plugins": {
+      "n": 8,
+      "median": 1532.5,
+      "min": 1424.8,
+      "max": 1845.3
+     },
+     "agent.config": {
+      "n": 8,
+      "median": 1556.6,
+      "min": 1439.9,
+      "max": 1850.3
+     },
+     "agent.ready": {
+      "n": 8,
+      "median": 1566.6,
+      "min": 1457.1,
+      "max": 1857.7
+     },
+     "chat.ready": {
+      "n": 8,
+      "median": 1628,
+      "min": 1514,
+      "max": 1966.7
+     },
+     "preview.visible": {
+      "n": 8,
+      "median": 1615.1,
+      "min": 1483.8,
+      "max": 2001.3
+     }
+    },
+    "boot": {
+     "kernel": {
+      "n": 8,
+      "median": 101.6,
+      "min": 58.7,
+      "max": 149.4
+     },
+     "kernelCompile": {
+      "n": 8,
+      "median": 0,
+      "min": 0,
+      "max": 0
+     },
+     "kernelAttach": {
+      "n": 8,
+      "median": 2.5,
+      "min": 2.1,
+      "max": 12.5
+     },
+     "kerneldInit": {
+      "n": 8,
+      "median": 98.1,
+      "min": 55.9,
+      "max": 135.7
+     },
+     "restore": {
+      "n": 8,
+      "median": 53.4,
+      "min": 29.2,
+      "max": 101.1
+     },
+     "journalBytes": {
+      "n": 8,
+      "median": 41790,
+      "min": 0,
+      "max": 83449
+     },
+     "snapshotBytes": {
+      "n": 8,
+      "median": 8521513,
+      "min": 8521513,
+      "max": 8521513
+     },
+     "mount": {
+      "n": 8,
+      "median": 15.4,
+      "min": 5.8,
+      "max": 79.3
+     },
+     "image": {
+      "n": 8,
+      "median": 104.3,
+      "min": 68.5,
+      "max": 149.6
+     },
+     "mounted": {
+      "n": 8,
+      "median": 139,
+      "min": 80.3,
+      "max": 194
+     },
+     "serviceWorker": {
+      "n": 8,
+      "median": 150.3,
+      "min": 83.7,
+      "max": 207.8
+     },
+     "total": {
+      "n": 8,
+      "median": 150.4,
+      "min": 83.8,
+      "max": 207.9
+     }
+    }
+   }
+  }
+ },
+ "samples": [
+  {
+   "variant": "base",
+   "kind": "fresh",
+   "load": [
+    5.02,
+    6.26,
+    6.42
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.8,
+    "manifest": 12.4,
+    "boot.kernel": 79.6,
+    "boot.image": 122.7,
+    "boot.mounted": 156.5,
+    "boot.done": 306.7,
+    "boot": 306.8,
+    "source.project": 312.4,
+    "source.derived": 613.1,
+    "source": 615.1,
+    "preview.spawn": 619.2,
+    "agent.spawn": 619.4,
+    "preview.listening": 1188.7,
+    "preview.ready": 1642.2,
+    "preview.visible": 1934.2,
+    "agent.listening": 2361.9,
+    "agent.health": 2486.3,
+    "agent.activated": 2726.5,
+    "agent.plugins": 2730.8,
+    "agent.config": 2747.1,
+    "agent.ready": 2779.1,
+    "chat.ready": 3139.1
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 65.9,
+    "kernelCompile": 0,
+    "kernelAttach": 1.9,
+    "kerneldInit": 63.1,
+    "restore": 24.3,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 23.4,
+    "image": 109.1,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 142.9,
+    "serviceWorker": 293,
+    "total": 293.1
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [editor] model catalog document reduced to 1 of 183 providers",
+    "[agent] [10:51:00.402] INFO (#448) http.span=232ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c16e532001TDvStIcXiUCWev',",
+    "[agent]     created: 1791741060402,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:00.403] INFO (#448) http.span=233ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c16e533001Jnme8wi7aIUkeX',",
+    "[agent]     created: 1791741060403,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:00.405] INFO (#448) http.span=235ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c16e5350018vi1xW27zOm7E7',",
+    "[agent]     created: 1791741060405,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:00.792] INFO (#525): event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c16e6b8001QmULA3Qt2kGO5y',",
+    "[agent]     created: 1791741060792,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 306.8,
+    "boot + mount (bootRuntime alone)": 294.4,
+    "vite spawn → listening": 569.5,
+    "vite spawn → app visible": 1315,
+    "opencode spawn → attached": 2159.7,
+    "opencode spawn → chat ready": 2519.7,
+    "whole open (click → app visible and chat ready)": 3139.1
+   }
+  },
+  {
+   "variant": "new",
+   "kind": "fresh",
+   "load": [
+    5.26,
+    6.29,
+    6.43
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2,
+    "manifest": 12.3,
+    "boot.kernel": 139.7,
+    "boot.image": 176.8,
+    "boot.mounted": 209.7,
+    "boot.done": 369.7,
+    "boot": 369.7,
+    "source.project": 378.5,
+    "source.derived": 494.2,
+    "source": 497.5,
+    "preview.spawn": 501.8,
+    "agent.spawn": 502,
+    "preview.listening": 1143.9,
+    "preview.ready": 1696.5,
+    "preview.visible": 2105.1,
+    "agent.listening": 2590.6,
+    "agent.health": 2780.3,
+    "agent.activated": 3108.8,
+    "agent.plugins": 3441.6,
+    "agent.config": 3449.1,
+    "agent.ready": 3458.5,
+    "chat.ready": 3571.5
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 126.1,
+    "kernelCompile": 0,
+    "kernelAttach": 4.1,
+    "kerneldInit": 121.1,
+    "restore": 83.7,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 23.1,
+    "image": 163.2,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 196.1,
+    "serviceWorker": 355.3,
+    "total": 356.1
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [editor] model catalog document reduced to 1 of 183 providers",
+    "[agent] [10:51:07.269] INFO (#448) http.span=319ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c170005001Qw6w3LuB7gdrzR',",
+    "[agent]     created: 1791741067269,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:07.270] INFO (#448) http.span=320ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c170006001BTggRzvX2X5ST2',",
+    "[agent]     created: 1791741067270,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:07.272] INFO (#448) http.span=322ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c170008001CEigpSZApR1Wsx',",
+    "[agent]     created: 1791741067272,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:07.600] INFO (#525): event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c170150001tIOgnWnNGRfR40',",
+    "[agent]     created: 1791741067600,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 369.7,
+    "boot + mount (bootRuntime alone)": 357.4,
+    "vite spawn → listening": 642.1,
+    "vite spawn → app visible": 1603.3,
+    "opencode spawn → attached": 2956.5,
+    "opencode spawn → chat ready": 3069.5,
+    "whole open (click → app visible and chat ready)": 3571.5
+   }
+  },
+  {
+   "variant": "base",
+   "kind": "fresh",
+   "load": [
+    6.35,
+    6.48,
+    6.49
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2.8,
+    "manifest": 13.7,
+    "boot.kernel": 128.5,
+    "boot.image": 147.1,
+    "boot.mounted": 213.8,
+    "boot.done": 267.2,
+    "boot": 267.3,
+    "source.project": 275.2,
+    "source.derived": 393.4,
+    "source": 395.5,
+    "preview.spawn": 399.8,
+    "agent.spawn": 399.9,
+    "preview.listening": 957.8,
+    "preview.ready": 1445.1,
+    "preview.visible": 2019.9,
+    "agent.listening": 2399.8,
+    "agent.health": 2707.3,
+    "agent.activated": 3145.2,
+    "agent.plugins": 3562.5,
+    "agent.config": 3568,
+    "agent.ready": 3579.4,
+    "chat.ready": 3648
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 113.3,
+    "kernelCompile": 0,
+    "kernelAttach": 1.8,
+    "kerneldInit": 110.3,
+    "restore": 75.2,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 49.1,
+    "image": 131.9,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 198.7,
+    "serviceWorker": 251.9,
+    "total": 252
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [editor] model catalog document reduced to 1 of 183 providers",
+    "[agent] [10:51:15.041] INFO (#448) http.span=424ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c171e610019kdrGtTfIMH056',",
+    "[agent]     created: 1791741075041,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:15.042] INFO (#448) http.span=425ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c171e62001q556Enpq8Gv6Lb',",
+    "[agent]     created: 1791741075042,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:15.045] INFO (#448) http.span=428ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c171e65001aPie34sMzqPzPS',",
+    "[agent]     created: 1791741075045,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:15.461] INFO (#525): event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c172005001Eefsr453W4fCQU',",
+    "[agent]     created: 1791741075461,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 267.3,
+    "boot + mount (bootRuntime alone)": 253.6,
+    "vite spawn → listening": 558,
+    "vite spawn → app visible": 1620.1,
+    "opencode spawn → attached": 3179.5,
+    "opencode spawn → chat ready": 3248.1,
+    "whole open (click → app visible and chat ready)": 3648
+   }
+  },
+  {
+   "variant": "new",
+   "kind": "fresh",
+   "load": [
+    6.64,
+    6.54,
+    6.5
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.8,
+    "manifest": 13.1,
+    "boot.kernel": 68.5,
+    "boot.image": 94.8,
+    "boot.mounted": 120,
+    "boot.done": 205.9,
+    "boot": 206,
+    "source.project": 213.4,
+    "source.derived": 304.8,
+    "source": 310.1,
+    "preview.spawn": 318.5,
+    "agent.spawn": 318.8,
+    "preview.listening": 834.4,
+    "preview.ready": 1295.8,
+    "preview.visible": 1673.3,
+    "agent.listening": 2079.1,
+    "agent.health": 2335,
+    "agent.activated": 2573.9,
+    "agent.plugins": 2600.6,
+    "agent.config": 2882.1,
+    "agent.ready": 2887.3,
+    "chat.ready": 2939.2
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 54.2,
+    "kernelCompile": 0,
+    "kernelAttach": 2.4,
+    "kerneldInit": 50.9,
+    "restore": 33.8,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 20.8,
+    "image": 80.5,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 105.7,
+    "serviceWorker": 191.6,
+    "total": 191.7
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [editor] model catalog document reduced to 1 of 183 providers",
+    "[agent] [10:51:21.352] INFO (#448) http.span=233ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c173708001QJRkeqeTCmdCbO',",
+    "[agent]     created: 1791741081352,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:21.352] INFO (#448) http.span=233ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c173708002kTeJpyRYvD28y2',",
+    "[agent]     created: 1791741081352,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:21.354] INFO (#448) http.span=235ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c17370a001LBcT6eMQun9cL1',",
+    "[agent]     created: 1791741081354,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:21.663] INFO (#525): event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c17383f001XzhUMg3RDdnsrt',",
+    "[agent]     created: 1791741081663,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 206,
+    "boot + mount (bootRuntime alone)": 192.9,
+    "vite spawn → listening": 515.9,
+    "vite spawn → app visible": 1354.8,
+    "opencode spawn → attached": 2568.5,
+    "opencode spawn → chat ready": 2620.4,
+    "whole open (click → app visible and chat ready)": 2939.2
+   }
+  },
+  {
+   "variant": "base",
+   "kind": "fresh",
+   "load": [
+    6.15,
+    6.44,
+    6.47
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2.4,
+    "manifest": 14,
+    "boot.kernel": 55.4,
+    "boot.image": 88.8,
+    "boot.mounted": 115.6,
+    "boot.done": 149.2,
+    "boot": 149.2,
+    "source.project": 152.8,
+    "source.derived": 234.4,
+    "source": 236.1,
+    "preview.spawn": 239.8,
+    "agent.spawn": 240,
+    "preview.listening": 590.8,
+    "agent.listening": 794.6,
+    "agent.health": 959.9,
+    "preview.ready": 1085.7,
+    "agent.activated": 1340.1,
+    "preview.visible": 1464.5,
+    "agent.plugins": 1735.5,
+    "agent.config": 1742.3,
+    "agent.ready": 1750.3,
+    "chat.ready": 1812.7
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 40.1,
+    "kernelCompile": 0,
+    "kernelAttach": 1.5,
+    "kerneldInit": 37.8,
+    "restore": 12.6,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 20.5,
+    "image": 73.6,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 100.3,
+    "serviceWorker": 133.8,
+    "total": 133.9
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [editor] model catalog document reduced to 1 of 183 providers",
+    "[agent] [10:51:26.460] INFO (#448) http.span=365ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c174afc001LgcqAp39HNoh4O',",
+    "[agent]     created: 1791741086460,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:26.461] INFO (#448) http.span=366ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c174afd001kAw6pd00m1q5u5',",
+    "[agent]     created: 1791741086461,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:26.464] INFO (#448) http.span=369ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c174b00001jYIn9mCUK4RAnC',",
+    "[agent]     created: 1791741086464,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:26.859] INFO (#525): event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c174c8b001Tgs5DMUiGE2856',",
+    "[agent]     created: 1791741086859,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 149.2,
+    "boot + mount (bootRuntime alone)": 135.2,
+    "vite spawn → listening": 351,
+    "vite spawn → app visible": 1224.7,
+    "opencode spawn → attached": 1510.3,
+    "opencode spawn → chat ready": 1572.7,
+    "whole open (click → app visible and chat ready)": 1812.7
+   }
+  },
+  {
+   "variant": "new",
+   "kind": "fresh",
+   "load": [
+    6.38,
+    6.48,
+    6.49
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2.5,
+    "manifest": 12,
+    "boot.kernel": 71,
+    "boot.image": 104.8,
+    "boot.mounted": 150.1,
+    "boot.done": 230.4,
+    "boot": 230.4,
+    "source.project": 233.3,
+    "source.derived": 338.6,
+    "source": 340.4,
+    "preview.spawn": 351.8,
+    "agent.spawn": 352,
+    "preview.listening": 657.4,
+    "agent.listening": 848.5,
+    "agent.health": 955.3,
+    "preview.ready": 1039.3,
+    "agent.activated": 1414.6,
+    "preview.visible": 1460.4,
+    "agent.plugins": 1705.3,
+    "agent.config": 1709,
+    "agent.ready": 1714.4,
+    "chat.ready": 1756.2
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 57.6,
+    "kernelCompile": 0,
+    "kernelAttach": 3.5,
+    "kerneldInit": 53.2,
+    "restore": 30.1,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 32.8,
+    "image": 91.4,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 135.8,
+    "serviceWorker": 216.9,
+    "total": 217
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [editor] model catalog document reduced to 1 of 183 providers",
+    "[agent] [10:51:32.001] INFO (#448) http.span=430ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c1760a1001FlH120EXfGpajF',",
+    "[agent]     created: 1791741092001,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:32.001] INFO (#448) http.span=430ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c1760a10023FXIRvpa9u9Xd8',",
+    "[agent]     created: 1791741092001,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:32.004] INFO (#448) http.span=433ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c1760a40011Ank9YykPyB2qx',",
+    "[agent]     created: 1791741092004,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:32.317] INFO (#525): event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c1761dd001PlIXeBQKxkzMCZ',",
+    "[agent]     created: 1791741092317,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 230.4,
+    "boot + mount (bootRuntime alone)": 218.4,
+    "vite spawn → listening": 305.6,
+    "vite spawn → app visible": 1108.6,
+    "opencode spawn → attached": 1362.4,
+    "opencode spawn → chat ready": 1404.2,
+    "whole open (click → app visible and chat ready)": 1756.2
+   }
+  },
+  {
+   "variant": "base",
+   "kind": "reopen",
+   "load": [
+    6.35,
+    6.47,
+    6.48
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2.1,
+    "manifest": 14.5,
+    "boot.kernel": 72.4,
+    "boot.image": 92.2,
+    "boot.mounted": 130.4,
+    "boot.done": 137.7,
+    "boot": 137.7,
+    "source.project": 138.5,
+    "source.derived": 139.1,
+    "source": 140.3,
+    "preview.spawn": 149.6,
+    "agent.spawn": 150.5,
+    "preview.listening": 663.4,
+    "agent.listening": 833.5,
+    "agent.health": 968,
+    "preview.ready": 1140.9,
+    "agent.activated": 1422.2,
+    "agent.plugins": 1434.5,
+    "agent.config": 1447.4,
+    "agent.ready": 1458.4,
+    "preview.visible": 1472.4,
+    "chat.ready": 1499.1
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 56.8,
+    "kernelCompile": 0,
+    "kernelAttach": 1.7,
+    "kerneldInit": 54.3,
+    "restore": 24,
+    "journalBytes": 0,
+    "snapshotBytes": 8521513,
+    "mount": 31.8,
+    "image": 76.7,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 114.9,
+    "serviceWorker": 122.1,
+    "total": 122.2
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [10:51:36.695] INFO (#447) http.span=221ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [10:51:36.698] INFO (#447) http.span=224ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [10:51:36.898] INFO (#447) http.span=424ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c1773c20013vU9gzCRULNs7s',",
+    "[agent]     created: 1791741096898,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:36.899] INFO (#447) http.span=425ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c1773c30015YQb35gWdfnRlJ',",
+    "[agent]     created: 1791741096899,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:36.901] INFO (#447) http.span=427ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c1773c5001d3TNZ6r3ODqsos',",
+    "[agent]     created: 1791741096901,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 137.7,
+    "boot + mount (bootRuntime alone)": 123.2,
+    "vite spawn → listening": 513.8,
+    "vite spawn → app visible": 1322.8,
+    "opencode spawn → attached": 1307.9,
+    "opencode spawn → chat ready": 1348.6,
+    "whole open (click → app visible and chat ready)": 1499.1
+   }
+  },
+  {
+   "variant": "new",
+   "kind": "reopen",
+   "load": [
+    6.35,
+    6.47,
+    6.48
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2.3,
+    "manifest": 14.2,
+    "boot.kernel": 89.2,
+    "boot.image": 119.6,
+    "boot.mounted": 209.4,
+    "boot.done": 223.3,
+    "boot": 223.3,
+    "source.project": 224,
+    "source.derived": 224.6,
+    "source": 230.6,
+    "preview.spawn": 250.1,
+    "agent.spawn": 250.4,
+    "preview.listening": 870.2,
+    "agent.listening": 1100.9,
+    "agent.health": 1224.8,
+    "preview.ready": 1438.8,
+    "agent.activated": 1756.6,
+    "agent.plugins": 1763.9,
+    "agent.config": 1770.6,
+    "agent.ready": 1778.6,
+    "chat.ready": 1903.1,
+    "preview.visible": 1936.1
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 73.8,
+    "kernelCompile": 0,
+    "kernelAttach": 3.9,
+    "kerneldInit": 69.3,
+    "restore": 45.7,
+    "journalBytes": 0,
+    "snapshotBytes": 8521513,
+    "mount": 79.3,
+    "image": 104.3,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 194,
+    "serviceWorker": 207.8,
+    "total": 207.9
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [10:51:41.219] INFO (#447) http.span=270ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [10:51:41.243] INFO (#447) http.span=294ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [10:51:41.461] INFO (#447) http.span=512ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c1785950011Ag4c8O6U4f5V0',",
+    "[agent]     created: 1791741101461,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:41.462] INFO (#447) http.span=513ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c178596001JT36wXnwFR3z1E',",
+    "[agent]     created: 1791741101462,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:41.465] INFO (#447) http.span=516ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c178599001TTLYPj8mJEXScF',",
+    "[agent]     created: 1791741101465,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 223.3,
+    "boot + mount (bootRuntime alone)": 209.1,
+    "vite spawn → listening": 620.1,
+    "vite spawn → app visible": 1686,
+    "opencode spawn → attached": 1528.2,
+    "opencode spawn → chat ready": 1652.7,
+    "whole open (click → app visible and chat ready)": 1936.1
+   }
+  },
+  {
+   "variant": "base",
+   "kind": "reopen",
+   "load": [
+    6.48,
+    6.5,
+    6.49
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 3.3,
+    "manifest": 16.6,
+    "boot.kernel": 117,
+    "boot.image": 130.3,
+    "boot.mounted": 151,
+    "boot.done": 154.1,
+    "boot": 154.2,
+    "source.project": 154.7,
+    "source.derived": 155.3,
+    "source": 156.5,
+    "preview.spawn": 163.2,
+    "agent.spawn": 163.4,
+    "preview.listening": 893,
+    "agent.listening": 1253,
+    "agent.health": 1510,
+    "preview.ready": 1660.5,
+    "agent.activated": 2233.2,
+    "agent.plugins": 2243.5,
+    "preview.visible": 2248.3,
+    "agent.config": 2250.3,
+    "agent.ready": 2258.5,
+    "chat.ready": 2318.1
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 99.1,
+    "kernelCompile": 0,
+    "kernelAttach": 2,
+    "kerneldInit": 96,
+    "restore": 66.1,
+    "journalBytes": 12033,
+    "snapshotBytes": 8521513,
+    "mount": 16.7,
+    "image": 112.4,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 133.1,
+    "serviceWorker": 136.1,
+    "total": 136.2
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [10:51:46.824] INFO (#447) http.span=328ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [10:51:46.826] INFO (#447) http.span=330ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [10:51:47.173] INFO (#447) http.span=677ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c179be5001OnulYyi0K5Qaxg',",
+    "[agent]     created: 1791741107173,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:47.174] INFO (#447) http.span=678ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c179be6001wRxKnw7BorYsGa',",
+    "[agent]     created: 1791741107174,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:47.179] INFO (#447) http.span=683ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c179bea0019Se0TXDEK5Vrkm',",
+    "[agent]     created: 1791741107179,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 154.2,
+    "boot + mount (bootRuntime alone)": 137.6,
+    "vite spawn → listening": 729.8,
+    "vite spawn → app visible": 2085.1,
+    "opencode spawn → attached": 2095.1,
+    "opencode spawn → chat ready": 2154.7,
+    "whole open (click → app visible and chat ready)": 2318.1
+   }
+  },
+  {
+   "variant": "new",
+   "kind": "reopen",
+   "load": [
+    7.18,
+    6.65,
+    6.54
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 3,
+    "manifest": 13,
+    "boot.kernel": 164.5,
+    "boot.image": 164.6,
+    "boot.mounted": 197.6,
+    "boot.done": 205.1,
+    "boot": 206.2,
+    "source.project": 207,
+    "source.derived": 220.7,
+    "source": 227.4,
+    "preview.spawn": 232.5,
+    "agent.spawn": 232.7,
+    "preview.listening": 833.9,
+    "agent.listening": 997.8,
+    "agent.health": 1089,
+    "preview.ready": 1243.9,
+    "agent.activated": 1545,
+    "agent.plugins": 1557,
+    "agent.config": 1569.3,
+    "agent.ready": 1580.5,
+    "preview.visible": 1593.5,
+    "chat.ready": 1628.4
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 149.4,
+    "kernelCompile": 0,
+    "kernelAttach": 12.5,
+    "kerneldInit": 135.7,
+    "restore": 101.1,
+    "journalBytes": 12035,
+    "snapshotBytes": 8521513,
+    "mount": 14.3,
+    "image": 149.6,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 182.6,
+    "serviceWorker": 188.9,
+    "total": 190
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [10:51:51.828] INFO (#447) http.span=197ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [10:51:51.835] INFO (#447) http.span=204ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [10:51:52.039] INFO (#447) http.span=408ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c17aee7001r8h6kkJHAQC03N',",
+    "[agent]     created: 1791741112039,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:52.040] INFO (#447) http.span=409ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c17aee8001kAJi13HC1O3wND',",
+    "[agent]     created: 1791741112040,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:52.043] INFO (#447) http.span=412ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c17aeeb001YMDYfyOt2cvILg',",
+    "[agent]     created: 1791741112043,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 206.2,
+    "boot + mount (bootRuntime alone)": 193.2,
+    "vite spawn → listening": 601.4,
+    "vite spawn → app visible": 1361,
+    "opencode spawn → attached": 1347.8,
+    "opencode spawn → chat ready": 1395.7,
+    "whole open (click → app visible and chat ready)": 1628.4
+   }
+  },
+  {
+   "variant": "base",
+   "kind": "reopen",
+   "load": [
+    7.8,
+    6.79,
+    6.59
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.8,
+    "manifest": 14.2,
+    "boot.kernel": 92.8,
+    "boot.image": 106.9,
+    "boot.mounted": 119.9,
+    "boot.done": 123.4,
+    "boot": 123.5,
+    "source.project": 123.9,
+    "source.derived": 124.4,
+    "source": 125.4,
+    "preview.spawn": 130.4,
+    "agent.spawn": 130.7,
+    "preview.listening": 673.5,
+    "agent.listening": 817.4,
+    "agent.health": 932.6,
+    "preview.ready": 1118.9,
+    "agent.activated": 1374.7,
+    "agent.plugins": 1385.4,
+    "agent.config": 1398.5,
+    "agent.ready": 1409.5,
+    "preview.visible": 1422.5,
+    "chat.ready": 1442.4
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 77.3,
+    "kernelCompile": 0,
+    "kernelAttach": 1.6,
+    "kerneldInit": 74.6,
+    "restore": 49,
+    "journalBytes": 23935,
+    "snapshotBytes": 8521513,
+    "mount": 10.5,
+    "image": 91.5,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 104.5,
+    "serviceWorker": 107.9,
+    "total": 108
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [10:51:56.170] INFO (#447) http.span=184ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [10:51:56.172] INFO (#447) http.span=186ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [10:51:56.378] INFO (#447) http.span=392ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c17bfda001wP1Q16NUo7YsPI',",
+    "[agent]     created: 1791741116378,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:56.379] INFO (#447) http.span=393ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c17bfdb001oa2qEhDJ8l5Wqy',",
+    "[agent]     created: 1791741116379,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:51:56.383] INFO (#447) http.span=397ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c17bfdf001Frz45yH3gKLbSS',",
+    "[agent]     created: 1791741116383,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 123.5,
+    "boot + mount (bootRuntime alone)": 109.3,
+    "vite spawn → listening": 543.1,
+    "vite spawn → app visible": 1292.1,
+    "opencode spawn → attached": 1278.8,
+    "opencode spawn → chat ready": 1311.7,
+    "whole open (click → app visible and chat ready)": 1442.4
+   }
+  },
+  {
+   "variant": "new",
+   "kind": "reopen",
+   "load": [
+    7.8,
+    6.79,
+    6.59
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.4,
+    "manifest": 12,
+    "boot.kernel": 71.6,
+    "boot.image": 81.4,
+    "boot.mounted": 93.3,
+    "boot.done": 96.7,
+    "boot": 96.7,
+    "source.project": 97.2,
+    "source.derived": 97.7,
+    "source": 98.8,
+    "preview.spawn": 102.6,
+    "agent.spawn": 103.6,
+    "preview.listening": 648.8,
+    "agent.listening": 797,
+    "agent.health": 897.3,
+    "preview.ready": 1085.7,
+    "agent.activated": 1376.4,
+    "agent.plugins": 1424.8,
+    "agent.config": 1439.9,
+    "agent.ready": 1457.1,
+    "preview.visible": 1483.8,
+    "chat.ready": 1514
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 58.7,
+    "kernelCompile": 0,
+    "kernelAttach": 2.1,
+    "kerneldInit": 55.9,
+    "restore": 29.2,
+    "journalBytes": 23937,
+    "snapshotBytes": 8521513,
+    "mount": 5.8,
+    "image": 68.5,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 80.3,
+    "serviceWorker": 83.7,
+    "total": 83.8
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [10:52:00.416] INFO (#447) http.span=221ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [10:52:00.419] INFO (#447) http.span=224ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [10:52:00.664] INFO (#447) http.span=469ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c17d098001qQSVdxPjFO0sba',",
+    "[agent]     created: 1791741120664,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:00.665] INFO (#447) http.span=470ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c17d099001fiU9DDQbRVnQDO',",
+    "[agent]     created: 1791741120665,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:00.668] INFO (#447) http.span=473ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c17d09c001RSpr8KRaCJrOFC',",
+    "[agent]     created: 1791741120668,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 96.7,
+    "boot + mount (bootRuntime alone)": 84.7,
+    "vite spawn → listening": 546.2,
+    "vite spawn → app visible": 1381.2,
+    "opencode spawn → attached": 1353.5,
+    "opencode spawn → chat ready": 1410.4,
+    "whole open (click → app visible and chat ready)": 1514
+   }
+  },
+  {
+   "variant": "base",
+   "kind": "reopen",
+   "load": [
+    7.9,
+    6.82,
+    6.6
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.9,
+    "manifest": 13.7,
+    "boot.kernel": 123.7,
+    "boot.image": 132.5,
+    "boot.mounted": 151.1,
+    "boot.done": 153.8,
+    "boot": 153.8,
+    "source.project": 154.3,
+    "source.derived": 155,
+    "source": 156,
+    "preview.spawn": 160.6,
+    "agent.spawn": 160.8,
+    "preview.listening": 760.1,
+    "agent.listening": 981,
+    "agent.health": 1100.5,
+    "preview.ready": 1293.9,
+    "agent.activated": 1681.1,
+    "agent.plugins": 1693.8,
+    "agent.config": 1705.2,
+    "agent.ready": 1719.1,
+    "preview.visible": 1755.4,
+    "chat.ready": 1777.5
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 109,
+    "kernelCompile": 0,
+    "kernelAttach": 1.7,
+    "kerneldInit": 106.3,
+    "restore": 51.3,
+    "journalBytes": 35837,
+    "snapshotBytes": 8521513,
+    "mount": 14.7,
+    "image": 117.8,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 136.4,
+    "serviceWorker": 139,
+    "total": 139.1
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [10:52:04.980] INFO (#447) http.span=276ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [10:52:04.982] INFO (#447) http.span=278ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [10:52:05.226] INFO (#447) http.span=522ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c17e26a001rk9cvQ0c6cv2Az',",
+    "[agent]     created: 1791741125226,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:05.227] INFO (#447) http.span=523ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c17e26b001dkAFiM4Om5EZqB',",
+    "[agent]     created: 1791741125227,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:05.233] INFO (#447) http.span=529ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c17e271001su54h3KNQVoTVE',",
+    "[agent]     created: 1791741125233,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 153.8,
+    "boot + mount (bootRuntime alone)": 140.1,
+    "vite spawn → listening": 599.5,
+    "vite spawn → app visible": 1594.8,
+    "opencode spawn → attached": 1558.3,
+    "opencode spawn → chat ready": 1616.7,
+    "whole open (click → app visible and chat ready)": 1777.5
+   }
+  },
+  {
+   "variant": "new",
+   "kind": "reopen",
+   "load": [
+    7.59,
+    6.78,
+    6.58
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2.8,
+    "manifest": 15.4,
+    "boot.kernel": 120.3,
+    "boot.image": 141.3,
+    "boot.mounted": 175,
+    "boot.done": 183.2,
+    "boot": 183.2,
+    "source.project": 183.8,
+    "source.derived": 184.4,
+    "source": 186,
+    "preview.spawn": 193,
+    "agent.spawn": 193.4,
+    "preview.listening": 886.1,
+    "agent.listening": 1099.3,
+    "agent.health": 1207.2,
+    "preview.ready": 1461.5,
+    "agent.activated": 1838.2,
+    "agent.plugins": 1845.3,
+    "agent.config": 1850.3,
+    "agent.ready": 1857.7,
+    "chat.ready": 1966.7,
+    "preview.visible": 2001.3
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 103.4,
+    "kernelCompile": 0,
+    "kernelAttach": 2.7,
+    "kerneldInit": 99.6,
+    "restore": 68.1,
+    "journalBytes": 35839,
+    "snapshotBytes": 8521513,
+    "mount": 23.2,
+    "image": 122.9,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 158.1,
+    "serviceWorker": 166.2,
+    "total": 166.3
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [10:52:10.390] INFO (#447) http.span=306ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [10:52:10.404] INFO (#447) http.span=320ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [10:52:10.687] INFO (#447) http.span=603ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c17f7be001a51Q3lOIXeOYlP',",
+    "[agent]     created: 1791741130686,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:10.689] INFO (#447) http.span=605ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c17f7c10012DdmEk8jzWInmI',",
+    "[agent]     created: 1791741130689,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:10.694] INFO (#447) http.span=610ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c17f7c50010kri33fJUZlSWi',",
+    "[agent]     created: 1791741130694,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 183.2,
+    "boot + mount (bootRuntime alone)": 167.8,
+    "vite spawn → listening": 693.1,
+    "vite spawn → app visible": 1808.3,
+    "opencode spawn → attached": 1664.3,
+    "opencode spawn → chat ready": 1773.3,
+    "whole open (click → app visible and chat ready)": 2001.3
+   }
+  },
+  {
+   "variant": "base",
+   "kind": "reopen",
+   "load": [
+    8.74,
+    7.03,
+    6.67
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2.5,
+    "manifest": 17.5,
+    "boot.kernel": 95.7,
+    "boot.image": 103.2,
+    "boot.mounted": 121.5,
+    "boot.done": 125,
+    "boot": 125.1,
+    "source.project": 125.5,
+    "source.derived": 126.1,
+    "source": 127.2,
+    "preview.spawn": 133.9,
+    "agent.spawn": 134.2,
+    "preview.listening": 747.5,
+    "agent.listening": 918.8,
+    "agent.health": 1032.3,
+    "preview.ready": 1167.4,
+    "agent.activated": 1416.5,
+    "agent.plugins": 1427.9,
+    "agent.config": 1438.2,
+    "agent.ready": 1444.6,
+    "preview.visible": 1449.8,
+    "chat.ready": 1473
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 76.2,
+    "kernelCompile": 0,
+    "kernelAttach": 1.7,
+    "kerneldInit": 73.3,
+    "restore": 41.4,
+    "journalBytes": 47741,
+    "snapshotBytes": 8521513,
+    "mount": 13.2,
+    "image": 83.9,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 102.1,
+    "serviceWorker": 105.6,
+    "total": 105.6
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [10:52:15.247] INFO (#447) http.span=189ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [10:52:15.248] INFO (#447) http.span=190ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [10:52:15.426] INFO (#447) http.span=368ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c180a42001djM0ba7onCjOb3',",
+    "[agent]     created: 1791741135426,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:15.427] INFO (#447) http.span=369ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c180a43001IYhRrR5fIR3AwH',",
+    "[agent]     created: 1791741135427,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:15.430] INFO (#447) http.span=372ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c180a46001bY0q81UvhCaPMC',",
+    "[agent]     created: 1791741135430,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 125.1,
+    "boot + mount (bootRuntime alone)": 107.6,
+    "vite spawn → listening": 613.6,
+    "vite spawn → app visible": 1315.9,
+    "opencode spawn → attached": 1310.4,
+    "opencode spawn → chat ready": 1338.8,
+    "whole open (click → app visible and chat ready)": 1473
+   }
+  },
+  {
+   "variant": "new",
+   "kind": "reopen",
+   "load": [
+    8.6,
+    7.03,
+    6.67
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2.3,
+    "manifest": 12.3,
+    "boot.kernel": 117.7,
+    "boot.image": 117.8,
+    "boot.mounted": 137.9,
+    "boot.done": 144.1,
+    "boot": 144.1,
+    "source.project": 144.7,
+    "source.derived": 145.5,
+    "source": 150.6,
+    "preview.spawn": 155.7,
+    "agent.spawn": 155.9,
+    "preview.listening": 795.2,
+    "agent.listening": 1000.2,
+    "agent.health": 1109.1,
+    "preview.ready": 1243.1,
+    "agent.activated": 1478.4,
+    "agent.plugins": 1490.2,
+    "agent.config": 1501.8,
+    "agent.ready": 1511.2,
+    "preview.visible": 1523.7,
+    "chat.ready": 1550.1
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 104,
+    "kernelCompile": 0,
+    "kernelAttach": 2.2,
+    "kerneldInit": 100.7,
+    "restore": 50.3,
+    "journalBytes": 47741,
+    "snapshotBytes": 8521513,
+    "mount": 16.4,
+    "image": 104.2,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 124.2,
+    "serviceWorker": 130.4,
+    "total": 130.5
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [10:52:19.448] INFO (#447) http.span=191ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [10:52:19.458] INFO (#447) http.span=201ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [10:52:19.609] INFO (#447) http.span=352ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c181a990015r0icjLHLcAK6Z',",
+    "[agent]     created: 1791741139609,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:19.609] INFO (#447) http.span=352ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c181a99002Z4ddIE4dI31jW6',",
+    "[agent]     created: 1791741139609,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:19.612] INFO (#447) http.span=355ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c181a9b001yh9XFg5LyAG138',",
+    "[agent]     created: 1791741139611,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 144.1,
+    "boot + mount (bootRuntime alone)": 131.8,
+    "vite spawn → listening": 639.5,
+    "vite spawn → app visible": 1368,
+    "opencode spawn → attached": 1355.3,
+    "opencode spawn → chat ready": 1394.2,
+    "whole open (click → app visible and chat ready)": 1550.1
+   }
+  },
+  {
+   "variant": "base",
+   "kind": "reopen",
+   "load": [
+    8.23,
+    6.98,
+    6.66
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2.1,
+    "manifest": 14,
+    "boot.kernel": 102,
+    "boot.image": 110.2,
+    "boot.mounted": 124.1,
+    "boot.done": 130.4,
+    "boot": 130.4,
+    "source.project": 130.9,
+    "source.derived": 131.5,
+    "source": 134.5,
+    "preview.spawn": 138.2,
+    "agent.spawn": 138.4,
+    "preview.listening": 713.7,
+    "agent.listening": 866,
+    "agent.health": 972,
+    "preview.ready": 1126.2,
+    "agent.activated": 1377.7,
+    "agent.plugins": 1389.6,
+    "agent.config": 1402.4,
+    "agent.ready": 1412.6,
+    "preview.visible": 1424.9,
+    "chat.ready": 1448
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 86.3,
+    "kernelCompile": 0,
+    "kernelAttach": 2,
+    "kerneldInit": 83.3,
+    "restore": 48.1,
+    "journalBytes": 59645,
+    "snapshotBytes": 8521513,
+    "mount": 10.3,
+    "image": 94.6,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 108.5,
+    "serviceWorker": 114.7,
+    "total": 114.7
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [10:52:23.560] INFO (#447) http.span=174ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [10:52:23.561] INFO (#447) http.span=175ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [10:52:23.763] INFO (#447) http.span=377ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c182ad3001TU4eH5qJ51yslg',",
+    "[agent]     created: 1791741143763,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:23.763] INFO (#447) http.span=377ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c182ad30029AZTZ2YJGRRxmx',",
+    "[agent]     created: 1791741143763,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:23.766] INFO (#447) http.span=380ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c182ad6001QLQN391VaA2h9W',",
+    "[agent]     created: 1791741143766,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 130.4,
+    "boot + mount (bootRuntime alone)": 116.4,
+    "vite spawn → listening": 575.5,
+    "vite spawn → app visible": 1286.7,
+    "opencode spawn → attached": 1274.2,
+    "opencode spawn → chat ready": 1309.6,
+    "whole open (click → app visible and chat ready)": 1448
+   }
+  },
+  {
+   "variant": "new",
+   "kind": "reopen",
+   "load": [
+    8.37,
+    7.03,
+    6.67
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2.5,
+    "manifest": 16.4,
+    "boot.kernel": 139.2,
+    "boot.image": 139.3,
+    "boot.mounted": 156.6,
+    "boot.done": 165.3,
+    "boot": 165.4,
+    "source.project": 165.8,
+    "source.derived": 166.4,
+    "source": 167.9,
+    "preview.spawn": 172.4,
+    "agent.spawn": 172.7,
+    "preview.listening": 798.9,
+    "agent.listening": 918.8,
+    "agent.health": 1036.6,
+    "preview.ready": 1262,
+    "agent.activated": 1534.9,
+    "agent.plugins": 1539.3,
+    "agent.config": 1543.9,
+    "agent.ready": 1552.7,
+    "chat.ready": 1627.6,
+    "preview.visible": 1995.1
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 121.4,
+    "kernelCompile": 0,
+    "kernelAttach": 3,
+    "kerneldInit": 116.9,
+    "restore": 72.6,
+    "journalBytes": 59645,
+    "snapshotBytes": 8521513,
+    "mount": 13.1,
+    "image": 121.6,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 138.9,
+    "serviceWorker": 147.4,
+    "total": 147.6
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [10:52:27.955] INFO (#447) http.span=215ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [10:52:27.962] INFO (#447) http.span=222ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [10:52:28.223] INFO (#447) http.span=483ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c183c3e0010sMJ4vMEDl8Py5',",
+    "[agent]     created: 1791741148222,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:28.223] INFO (#447) http.span=483ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c183c3f001VmT9iPS0kuB26a',",
+    "[agent]     created: 1791741148223,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:28.227] INFO (#447) http.span=487ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c183c430011NGBxjHf4ei3MY',",
+    "[agent]     created: 1791741148227,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 165.4,
+    "boot + mount (bootRuntime alone)": 149,
+    "vite spawn → listening": 626.5,
+    "vite spawn → app visible": 1822.7,
+    "opencode spawn → attached": 1380,
+    "opencode spawn → chat ready": 1454.9,
+    "whole open (click → app visible and chat ready)": 1995.1
+   }
+  },
+  {
+   "variant": "base",
+   "kind": "reopen",
+   "load": [
+    9.39,
+    7.26,
+    6.75
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.8,
+    "manifest": 12.6,
+    "boot.kernel": 101.6,
+    "boot.image": 112.8,
+    "boot.mounted": 134.9,
+    "boot.done": 152,
+    "boot": 152,
+    "source.project": 153,
+    "source.derived": 153.8,
+    "source": 155.1,
+    "preview.spawn": 160.7,
+    "agent.spawn": 160.9,
+    "preview.listening": 870.2,
+    "agent.listening": 1042.7,
+    "agent.health": 1181.4,
+    "preview.ready": 1411.8,
+    "agent.activated": 1641.7,
+    "agent.plugins": 1646.1,
+    "agent.config": 1649.8,
+    "agent.ready": 1655.8,
+    "chat.ready": 1748.2,
+    "preview.visible": 1764
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 87.7,
+    "kernelCompile": 0,
+    "kernelAttach": 1.7,
+    "kerneldInit": 85.2,
+    "restore": 51.3,
+    "journalBytes": 71523,
+    "snapshotBytes": 8521513,
+    "mount": 9.5,
+    "image": 99,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 121.1,
+    "serviceWorker": 138,
+    "total": 138.1
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [10:52:33.121] INFO (#447) http.span=215ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [10:52:33.123] INFO (#447) http.span=217ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [10:52:33.342] INFO (#447) http.span=436ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c18503e001C0tUpfjsaZF32d',",
+    "[agent]     created: 1791741153342,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:33.343] INFO (#447) http.span=437ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c18503f001Vg6xrUsibNGQ6S',",
+    "[agent]     created: 1791741153343,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:33.347] INFO (#447) http.span=441ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c185042001A3ZbuluOHqGFuD',",
+    "[agent]     created: 1791741153347,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 152,
+    "boot + mount (bootRuntime alone)": 139.4,
+    "vite spawn → listening": 709.5,
+    "vite spawn → app visible": 1603.3,
+    "opencode spawn → attached": 1494.9,
+    "opencode spawn → chat ready": 1587.3,
+    "whole open (click → app visible and chat ready)": 1764
+   }
+  },
+  {
+   "variant": "new",
+   "kind": "reopen",
+   "load": [
+    9.19,
+    7.26,
+    6.75
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2.5,
+    "manifest": 13.5,
+    "boot.kernel": 85,
+    "boot.image": 116.5,
+    "boot.mounted": 153.8,
+    "boot.done": 168,
+    "boot": 168,
+    "source.project": 168.5,
+    "source.derived": 169,
+    "source": 172.8,
+    "preview.spawn": 184.6,
+    "agent.spawn": 184.8,
+    "preview.listening": 813.7,
+    "agent.listening": 979.8,
+    "agent.health": 1077.2,
+    "preview.ready": 1249.4,
+    "agent.activated": 1520.9,
+    "agent.plugins": 1525.7,
+    "agent.config": 1574.5,
+    "agent.ready": 1592.1,
+    "preview.visible": 1636.7,
+    "chat.ready": 1665.2
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 70.1,
+    "kernelCompile": 0,
+    "kernelAttach": 2.3,
+    "kerneldInit": 66.8,
+    "restore": 46.1,
+    "journalBytes": 71547,
+    "snapshotBytes": 8521513,
+    "mount": 31.4,
+    "image": 101.6,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 139,
+    "serviceWorker": 153.1,
+    "total": 153.1
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [10:52:37.531] INFO (#447) http.span=199ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [10:52:37.532] INFO (#447) http.span=200ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [10:52:37.757] INFO (#447) http.span=425ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c18617c001xyX5Dwc02bsg1A',",
+    "[agent]     created: 1791741157756,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:37.758] INFO (#447) http.span=426ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c18617e001ViwP3hKB6G9SZz',",
+    "[agent]     created: 1791741157758,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:37.762] INFO (#447) http.span=430ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c1861810012urP4KLLszrAFy',",
+    "[agent]     created: 1791741157761,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 168,
+    "boot + mount (bootRuntime alone)": 154.5,
+    "vite spawn → listening": 629.1,
+    "vite spawn → app visible": 1452.1,
+    "opencode spawn → attached": 1407.3,
+    "opencode spawn → chat ready": 1480.4,
+    "whole open (click → app visible and chat ready)": 1665.2
+   }
+  },
+  {
+   "variant": "base",
+   "kind": "reopen",
+   "load": [
+    10.14,
+    7.49,
+    6.83
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.8,
+    "manifest": 15.9,
+    "boot.kernel": 79.4,
+    "boot.image": 89.4,
+    "boot.mounted": 101,
+    "boot.done": 103.3,
+    "boot": 103.3,
+    "source.project": 103.8,
+    "source.derived": 104.4,
+    "source": 105.5,
+    "preview.spawn": 109.3,
+    "agent.spawn": 109.5,
+    "preview.listening": 612.9,
+    "agent.listening": 811.3,
+    "agent.health": 981.3,
+    "preview.ready": 1237.8,
+    "agent.activated": 1593.2,
+    "agent.plugins": 1597.3,
+    "agent.config": 1601.8,
+    "agent.ready": 1608.1,
+    "chat.ready": 1697.6,
+    "preview.visible": 1760.3
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 62,
+    "kernelCompile": 0,
+    "kernelAttach": 1.9,
+    "kerneldInit": 58.8,
+    "restore": 24.7,
+    "journalBytes": 83425,
+    "snapshotBytes": 8521513,
+    "mount": 9.5,
+    "image": 72,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 83.7,
+    "serviceWorker": 85.9,
+    "total": 85.9
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [10:52:42.484] INFO (#447) http.span=306ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [10:52:42.489] INFO (#447) http.span=311ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [10:52:42.741] INFO (#447) http.span=563ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c1874f5001Agj9Hf7X4PziTx',",
+    "[agent]     created: 1791741162741,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:42.745] INFO (#447) http.span=567ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c1874f6001cxtFoaP6D5J5kG',",
+    "[agent]     created: 1791741162742,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:42.754] INFO (#447) http.span=576ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c187501001hyxJWKp8Ks2sAy',",
+    "[agent]     created: 1791741162753,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 103.3,
+    "boot + mount (bootRuntime alone)": 87.4,
+    "vite spawn → listening": 503.6,
+    "vite spawn → app visible": 1651,
+    "opencode spawn → attached": 1498.6,
+    "opencode spawn → chat ready": 1588.1,
+    "whole open (click → app visible and chat ready)": 1760.3
+   }
+  },
+  {
+   "variant": "new",
+   "kind": "reopen",
+   "load": [
+    11.65,
+    7.84,
+    6.95
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.7,
+    "manifest": 13.7,
+    "boot.kernel": 114.8,
+    "boot.image": 114.9,
+    "boot.mounted": 129.7,
+    "boot.done": 134,
+    "boot": 134.1,
+    "source.project": 134.6,
+    "source.derived": 135.2,
+    "source": 136.6,
+    "preview.spawn": 141.6,
+    "agent.spawn": 141.8,
+    "preview.listening": 733,
+    "agent.listening": 897.7,
+    "agent.health": 1001,
+    "preview.ready": 1157.3,
+    "agent.activated": 1483.7,
+    "agent.plugins": 1495.4,
+    "agent.config": 1508.2,
+    "agent.ready": 1519,
+    "preview.visible": 1532.6,
+    "chat.ready": 1573.7
+   },
+   "trace": [],
+   "boot": {
+    "kernel": 99.8,
+    "kernelCompile": 0,
+    "kernelAttach": 2.1,
+    "kerneldInit": 96.6,
+    "restore": 56.5,
+    "journalBytes": 83449,
+    "snapshotBytes": 8521513,
+    "mount": 7.1,
+    "image": 100,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 114.8,
+    "serviceWorker": 119,
+    "total": 119.1
+   },
+   "log": [
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-javascript.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-javascript.js'",
+    "[agent] }",
+    "[agent] [10:52:47.080] INFO (#447) http.span=217ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-catalog.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-catalog.js'",
+    "[agent] }",
+    "[agent] [10:52:47.084] INFO (#447) http.span=221ms: {",
+    "[agent]   msg: 'loading plugin',",
+    "[agent]   id: '/workspace/.server/config/opencode/plugins/editor-model-headers.js',",
+    "[agent]   entrypoint: 'file:///workspace/.server/config/opencode/plugins/editor-model-headers.js'",
+    "[agent] }",
+    "[agent] [10:52:47.307] INFO (#447) http.span=444ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c1886cb00180kIU1Fma3wg5B',",
+    "[agent]     created: 1791741167307,",
+    "[agent]     type: 'agent.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:47.308] INFO (#447) http.span=445ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c1886cc001zg6dUSrJEQd1ik',",
+    "[agent]     created: 1791741167308,",
+    "[agent]     type: 'command.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }",
+    "[agent] [10:52:47.311] INFO (#447) http.span=448ms: event {",
+    "[agent]   event: {",
+    "[agent]     id: 'evt_12c1886cf001BlDf4VRoJR62XN',",
+    "[agent]     created: 1791741167311,",
+    "[agent]     type: 'catalog.updated',",
+    "[agent]     location: { directory: '/workspace', workspaceID: undefined },",
+    "[agent]     data: {}",
+    "[agent]   }",
+    "[agent] }"
+   ],
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 134.1,
+    "boot + mount (bootRuntime alone)": 120.4,
+    "vite spawn → listening": 591.4,
+    "vite spawn → app visible": 1391,
+    "opencode spawn → attached": 1377.2,
+    "opencode spawn → chat ready": 1431.9,
+    "whole open (click → app visible and chat ready)": 1573.7
+   }
+  }
+ ]
+}

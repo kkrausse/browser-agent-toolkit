@@ -1,0 +1,5173 @@
+{
+ "meta": {
+  "label": "wk-v2-todo-reopen",
+  "example": "todo",
+  "kind": "reopen",
+  "base": "http://127.0.0.1:4890/",
+  "idleSeconds": 30,
+  "queryObjects": false,
+  "startedAt": "2026-10-11T18:39:34.879Z",
+  "browser": "webkit (Playwright, Linux)",
+  "chrome": "Google Chrome 154.0.8037.97",
+  "kernel": "Linux 7.0.0-38-generic",
+  "cores": 12,
+  "memory": "MemTotal: 63628224 kB; MemAvailable: 37701460 kB; SwapTotal: 8388604 kB; SwapFree: 404812 kB",
+  "git": "d393748",
+  "units": "process figures in kB (smaps_rollup, smaps, status); browser figures in bytes",
+  "finishedAt": "2026-10-11T18:43:40.742Z",
+  "loadAtEnd": [
+   5.09,
+   6.46,
+   7.49
+  ]
+ },
+ "runs": [
+  {
+   "index": 1,
+   "example": "todo",
+   "kind": "reopen",
+   "startedAt": "2026-10-11T18:39:50.931Z",
+   "points": [
+    {
+     "name": "loaded",
+     "peakSincePreviousPoint": {
+      "rss": 270672,
+      "pss": 123808
+     },
+     "pre": {
+      "at": 1791744002409,
+      "load": [
+       9.4,
+       7.51,
+       8.01
+      ],
+      "main": {
+       "rss": 267600,
+       "pss": 120673,
+       "pssAnon": 60112,
+       "pssFile": 52551,
+       "pssShmem": 8010,
+       "privateDirty": 69096,
+       "swap": 0,
+       "hwm": 273248,
+       "threads": 31,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "pool-0": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "JITWorker": 2,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 4,
+        "HeapHelper": 7,
+        "ollector Thread": 1
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 13620,
+         "pss": 13620,
+         "swap": 0,
+         "size": 2783284,
+         "maps": 153
+        },
+        "file: other": {
+         "rss": 216756,
+         "pss": 69582,
+         "swap": 0,
+         "size": 563664,
+         "maps": 966
+        },
+        "[heap]": {
+         "rss": 3640,
+         "pss": 3640,
+         "swap": 0,
+         "size": 4152,
+         "maps": 1
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 592,
+         "pss": 592,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 3
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 24164,
+         "pss": 24164,
+         "swap": 0,
+         "size": 294936,
+         "maps": 473
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 692,
+         "pss": 692,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 5
+        },
+        "[anon:JSGigacage]": {
+         "rss": 0,
+         "pss": 0,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 4
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 132,
+         "pss": 124,
+         "swap": 0,
+         "size": 184,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 690624,
+        "name": "bash",
+        "rss": 3932,
+        "pss": 909,
+        "pssAnon": 324,
+        "pssFile": 585,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3932,
+        "threads": 1
+       },
+       {
+        "pid": 690658,
+        "name": "MiniBrowser",
+        "rss": 153592,
+        "pss": 45341,
+        "pssAnon": 26728,
+        "pssFile": 18611,
+        "pssShmem": 2,
+        "privateDirty": 26760,
+        "swap": 0,
+        "hwm": 154576,
+        "threads": 14
+       },
+       {
+        "pid": 690809,
+        "name": "WPENetworkProcess",
+        "rss": 75724,
+        "pss": 24367,
+        "pssAnon": 14624,
+        "pssFile": 9738,
+        "pssShmem": 5,
+        "privateDirty": 14692,
+        "swap": 0,
+        "hwm": 76372,
+        "threads": 14
+       },
+       {
+        "pid": 690814,
+        "name": "WPEWebProcess",
+        "rss": 213480,
+        "pss": 74242,
+        "pssAnon": 35676,
+        "pssFile": 38558,
+        "pssShmem": 8,
+        "privateDirty": 36016,
+        "swap": 0,
+        "hwm": 224208,
+        "threads": 22
+       }
+      ]
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/"
+       }
+      ],
+      "errors": [],
+      "workers": 0,
+      "page": {
+       "isolated": true,
+       "storage": {
+        "quota": 1048576000,
+        "usage": 249427417
+       },
+       "frames": 0
+      },
+      "runtime": null
+     },
+     "post": {
+      "at": 1791744003503,
+      "load": [
+       9.4,
+       7.51,
+       8.01
+      ],
+      "main": {
+       "rss": 267672,
+       "pss": 120744,
+       "pssAnon": 60184,
+       "pssFile": 52550,
+       "pssShmem": 8010,
+       "privateDirty": 69168,
+       "swap": 0,
+       "hwm": 273248,
+       "threads": 31,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "pool-0": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "JITWorker": 2,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 4,
+        "HeapHelper": 7,
+        "ollector Thread": 1
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 13620,
+         "pss": 13620,
+         "swap": 0,
+         "size": 2783284,
+         "maps": 153
+        },
+        "file: other": {
+         "rss": 216756,
+         "pss": 69582,
+         "swap": 0,
+         "size": 563664,
+         "maps": 966
+        },
+        "[heap]": {
+         "rss": 3640,
+         "pss": 3640,
+         "swap": 0,
+         "size": 4152,
+         "maps": 1
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 592,
+         "pss": 592,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 3
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 24236,
+         "pss": 24236,
+         "swap": 0,
+         "size": 294936,
+         "maps": 451
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 692,
+         "pss": 692,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 5
+        },
+        "[anon:JSGigacage]": {
+         "rss": 0,
+         "pss": 0,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 4
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 132,
+         "pss": 124,
+         "swap": 0,
+         "size": 184,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 690624,
+        "name": "bash",
+        "rss": 3932,
+        "pss": 910,
+        "pssAnon": 324,
+        "pssFile": 586,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3932,
+        "threads": 1
+       },
+       {
+        "pid": 690658,
+        "name": "MiniBrowser",
+        "rss": 153608,
+        "pss": 45358,
+        "pssAnon": 26744,
+        "pssFile": 18612,
+        "pssShmem": 2,
+        "privateDirty": 26776,
+        "swap": 0,
+        "hwm": 154576,
+        "threads": 14
+       },
+       {
+        "pid": 690809,
+        "name": "WPENetworkProcess",
+        "rss": 75796,
+        "pss": 24408,
+        "pssAnon": 14632,
+        "pssFile": 9771,
+        "pssShmem": 5,
+        "privateDirty": 14700,
+        "swap": 0,
+        "hwm": 76372,
+        "threads": 14
+       },
+       {
+        "pid": 690814,
+        "name": "WPEWebProcess",
+        "rss": 213480,
+        "pss": 74242,
+        "pssAnon": 35676,
+        "pssFile": 38558,
+        "pssShmem": 8,
+        "privateDirty": 36016,
+        "swap": 0,
+        "hwm": 224208,
+        "threads": 22
+       }
+      ]
+     }
+    },
+    {
+     "name": "open",
+     "peakSincePreviousPoint": {
+      "rss": 1116788,
+      "pss": 967233
+     },
+     "pre": {
+      "at": 1791744016764,
+      "load": [
+       9.2,
+       7.57,
+       8.02
+      ],
+      "main": {
+       "rss": 1050100,
+       "pss": 900502,
+       "pssAnon": 800952,
+       "pssFile": 91540,
+       "pssShmem": 8010,
+       "privateDirty": 844352,
+       "swap": 0,
+       "hwm": 1134428,
+       "threads": 42,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "JITWorker": 1,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 4,
+        "HeapHelper": 7,
+        "ollector Thread": 3,
+        "WebCore: Worker": 5,
+        "CryptoQueue": 4,
+        "onnection queue": 1,
+        ": ServiceWorker": 1
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 15020,
+         "pss": 15020,
+         "swap": 0,
+         "size": 3922016,
+         "maps": 189
+        },
+        "file: other": {
+         "rss": 258416,
+         "pss": 108572,
+         "swap": 0,
+         "size": 597772,
+         "maps": 969
+        },
+        "[heap]": {
+         "rss": 3812,
+         "pss": 3812,
+         "swap": 0,
+         "size": 4420,
+         "maps": 1
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 635396,
+         "pss": 635396,
+         "swap": 0,
+         "size": 1414352,
+         "maps": 3139
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 10048,
+         "pss": 10048,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 3
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 26104,
+         "pss": 26104,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 19
+        },
+        "[anon:JSGigacage]": {
+         "rss": 90256,
+         "pss": 90256,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 114
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 132,
+         "pss": 124,
+         "swap": 0,
+         "size": 184,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 690624,
+        "name": "bash",
+        "rss": 3932,
+        "pss": 910,
+        "pssAnon": 324,
+        "pssFile": 586,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3932,
+        "threads": 1
+       },
+       {
+        "pid": 690658,
+        "name": "MiniBrowser",
+        "rss": 154036,
+        "pss": 45408,
+        "pssAnon": 26724,
+        "pssFile": 18682,
+        "pssShmem": 2,
+        "privateDirty": 26724,
+        "swap": 0,
+        "hwm": 154576,
+        "threads": 14
+       },
+       {
+        "pid": 690809,
+        "name": "WPENetworkProcess",
+        "rss": 76748,
+        "pss": 24361,
+        "pssAnon": 14348,
+        "pssFile": 10007,
+        "pssShmem": 5,
+        "privateDirty": 14352,
+        "swap": 0,
+        "hwm": 112220,
+        "threads": 14
+       },
+       {
+        "pid": 690814,
+        "name": "WPEWebProcess",
+        "rss": 213148,
+        "pss": 73825,
+        "pssAnon": 35344,
+        "pssFile": 38473,
+        "pssShmem": 8,
+        "privateDirty": 35684,
+        "swap": 0,
+        "hwm": 224208,
+        "threads": 12
+       }
+      ]
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/"
+       }
+      ],
+      "errors": [],
+      "workers": 2,
+      "page": {
+       "isolated": true,
+       "storage": {
+        "quota": 1048576000,
+        "usage": 250475993
+       },
+       "frames": 1
+      },
+      "runtime": null
+     },
+     "post": {
+      "at": 1791744017916,
+      "load": [
+       9.2,
+       7.57,
+       8.02
+      ],
+      "main": {
+       "rss": 1042808,
+       "pss": 893210,
+       "pssAnon": 793660,
+       "pssFile": 91540,
+       "pssShmem": 8010,
+       "privateDirty": 837060,
+       "swap": 0,
+       "hwm": 1134428,
+       "threads": 42,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "JITWorker": 1,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 4,
+        "HeapHelper": 7,
+        "ollector Thread": 3,
+        "WebCore: Worker": 5,
+        "CryptoQueue": 4,
+        "onnection queue": 1,
+        ": ServiceWorker": 1
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 15020,
+         "pss": 15020,
+         "swap": 0,
+         "size": 3922016,
+         "maps": 189
+        },
+        "file: other": {
+         "rss": 258416,
+         "pss": 108572,
+         "swap": 0,
+         "size": 597772,
+         "maps": 969
+        },
+        "[heap]": {
+         "rss": 3812,
+         "pss": 3812,
+         "swap": 0,
+         "size": 4420,
+         "maps": 1
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 631024,
+         "pss": 631024,
+         "swap": 0,
+         "size": 1414352,
+         "maps": 3335
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 10048,
+         "pss": 10048,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 3
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 26104,
+         "pss": 26104,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 19
+        },
+        "[anon:JSGigacage]": {
+         "rss": 90256,
+         "pss": 90256,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 114
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 132,
+         "pss": 124,
+         "swap": 0,
+         "size": 184,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 690624,
+        "name": "bash",
+        "rss": 3932,
+        "pss": 910,
+        "pssAnon": 324,
+        "pssFile": 586,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3932,
+        "threads": 1
+       },
+       {
+        "pid": 690658,
+        "name": "MiniBrowser",
+        "rss": 154004,
+        "pss": 45376,
+        "pssAnon": 26692,
+        "pssFile": 18682,
+        "pssShmem": 2,
+        "privateDirty": 26692,
+        "swap": 0,
+        "hwm": 154576,
+        "threads": 14
+       },
+       {
+        "pid": 690809,
+        "name": "WPENetworkProcess",
+        "rss": 76820,
+        "pss": 24369,
+        "pssAnon": 14356,
+        "pssFile": 10008,
+        "pssShmem": 5,
+        "privateDirty": 14360,
+        "swap": 0,
+        "hwm": 112220,
+        "threads": 13
+       },
+       {
+        "pid": 690814,
+        "name": "WPEWebProcess",
+        "rss": 213148,
+        "pss": 73825,
+        "pssAnon": 35344,
+        "pssFile": 38473,
+        "pssShmem": 8,
+        "privateDirty": 35684,
+        "swap": 0,
+        "hwm": 224208,
+        "threads": 12
+       }
+      ]
+     }
+    },
+    {
+     "name": "turn1",
+     "peakSincePreviousPoint": {
+      "rss": 1054896,
+      "pss": 905296
+     },
+     "pre": {
+      "at": 1791744024777,
+      "load": [
+       8.54,
+       7.48,
+       7.98
+      ],
+      "main": {
+       "rss": 982128,
+       "pss": 832355,
+       "pssAnon": 730292,
+       "pssFile": 94053,
+       "pssShmem": 8010,
+       "privateDirty": 741268,
+       "swap": 0,
+       "hwm": 1134428,
+       "threads": 56,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "JITWorker": 3,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 4,
+        "HeapHelper": 7,
+        "ollector Thread": 5,
+        "WebCore: Worker": 5,
+        "CryptoQueue": 4,
+        "onnection queue": 1,
+        ": ServiceWorker": 1,
+        "t Helper Thread": 10
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 15820,
+         "pss": 15820,
+         "swap": 0,
+         "size": 4003976,
+         "maps": 187
+        },
+        "file: other": {
+         "rss": 261104,
+         "pss": 111085,
+         "swap": 0,
+         "size": 599132,
+         "maps": 970
+        },
+        "[heap]": {
+         "rss": 3948,
+         "pss": 3948,
+         "swap": 0,
+         "size": 4552,
+         "maps": 1
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 561732,
+         "pss": 561732,
+         "swap": 0,
+         "size": 1414352,
+         "maps": 3147
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 9556,
+         "pss": 9556,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 13
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 32116,
+         "pss": 32116,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 9
+        },
+        "[anon:JSGigacage]": {
+         "rss": 89716,
+         "pss": 89716,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 118
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 132,
+         "pss": 124,
+         "swap": 0,
+         "size": 184,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 690624,
+        "name": "bash",
+        "rss": 3932,
+        "pss": 910,
+        "pssAnon": 324,
+        "pssFile": 586,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3932,
+        "threads": 1
+       },
+       {
+        "pid": 690658,
+        "name": "MiniBrowser",
+        "rss": 154104,
+        "pss": 45423,
+        "pssAnon": 26728,
+        "pssFile": 18693,
+        "pssShmem": 2,
+        "privateDirty": 26728,
+        "swap": 0,
+        "hwm": 154576,
+        "threads": 14
+       },
+       {
+        "pid": 690809,
+        "name": "WPENetworkProcess",
+        "rss": 77052,
+        "pss": 24596,
+        "pssAnon": 14588,
+        "pssFile": 10003,
+        "pssShmem": 5,
+        "privateDirty": 14592,
+        "swap": 0,
+        "hwm": 112220,
+        "threads": 14
+       },
+       {
+        "pid": 690814,
+        "name": "WPEWebProcess",
+        "rss": 213136,
+        "pss": 73808,
+        "pssAnon": 35332,
+        "pssFile": 38468,
+        "pssShmem": 8,
+        "privateDirty": 35672,
+        "swap": 0,
+        "hwm": 224208,
+        "threads": 11
+       }
+      ]
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/"
+       }
+      ],
+      "errors": [],
+      "workers": 2,
+      "page": {
+       "isolated": true,
+       "storage": {
+        "quota": 1048576000,
+        "usage": 250475993
+       },
+       "frames": 1
+      },
+      "runtime": null
+     },
+     "post": {
+      "at": 1791744025920,
+      "load": [
+       8.54,
+       7.48,
+       7.98
+      ],
+      "main": {
+       "rss": 982128,
+       "pss": 832354,
+       "pssAnon": 730292,
+       "pssFile": 94052,
+       "pssShmem": 8010,
+       "privateDirty": 741276,
+       "swap": 0,
+       "hwm": 1134428,
+       "threads": 55,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "JITWorker": 3,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 4,
+        "HeapHelper": 7,
+        "ollector Thread": 4,
+        "WebCore: Worker": 5,
+        "CryptoQueue": 4,
+        "onnection queue": 1,
+        ": ServiceWorker": 1,
+        "t Helper Thread": 10
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 15816,
+         "pss": 15816,
+         "swap": 0,
+         "size": 4003976,
+         "maps": 187
+        },
+        "file: other": {
+         "rss": 261104,
+         "pss": 111085,
+         "swap": 0,
+         "size": 599132,
+         "maps": 970
+        },
+        "[heap]": {
+         "rss": 3948,
+         "pss": 3948,
+         "swap": 0,
+         "size": 4552,
+         "maps": 1
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 561736,
+         "pss": 561736,
+         "swap": 0,
+         "size": 1414352,
+         "maps": 3147
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 9556,
+         "pss": 9556,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 13
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 32116,
+         "pss": 32116,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 9
+        },
+        "[anon:JSGigacage]": {
+         "rss": 89716,
+         "pss": 89716,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 118
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 132,
+         "pss": 124,
+         "swap": 0,
+         "size": 184,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 690624,
+        "name": "bash",
+        "rss": 3932,
+        "pss": 909,
+        "pssAnon": 324,
+        "pssFile": 585,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3932,
+        "threads": 1
+       },
+       {
+        "pid": 690658,
+        "name": "MiniBrowser",
+        "rss": 154128,
+        "pss": 45447,
+        "pssAnon": 26752,
+        "pssFile": 18693,
+        "pssShmem": 2,
+        "privateDirty": 26752,
+        "swap": 0,
+        "hwm": 154576,
+        "threads": 14
+       },
+       {
+        "pid": 690809,
+        "name": "WPENetworkProcess",
+        "rss": 77060,
+        "pss": 24604,
+        "pssAnon": 14596,
+        "pssFile": 10002,
+        "pssShmem": 5,
+        "privateDirty": 14600,
+        "swap": 0,
+        "hwm": 112220,
+        "threads": 14
+       },
+       {
+        "pid": 690814,
+        "name": "WPEWebProcess",
+        "rss": 213136,
+        "pss": 73807,
+        "pssAnon": 35332,
+        "pssFile": 38467,
+        "pssShmem": 8,
+        "privateDirty": 35672,
+        "swap": 0,
+        "hwm": 224208,
+        "threads": 11
+       }
+      ]
+     }
+    },
+    {
+     "name": "turns",
+     "peakSincePreviousPoint": {
+      "rss": 1229528,
+      "pss": 1079742
+     },
+     "pre": {
+      "at": 1791744059005,
+      "load": [
+       7.96,
+       7.45,
+       7.95
+      ],
+      "main": {
+       "rss": 1058396,
+       "pss": 908612,
+       "pssAnon": 830008,
+       "pssFile": 70594,
+       "pssShmem": 8010,
+       "privateDirty": 850476,
+       "swap": 0,
+       "hwm": 1260388,
+       "threads": 49,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "JITWorker": 3,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 6,
+        "HeapHelper": 7,
+        "WebCore: Worker": 5,
+        "CryptoQueue": 4,
+        "onnection queue": 1,
+        ": ServiceWorker": 1,
+        "ollector Thread": 2,
+        "t Helper Thread": 4
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 16056,
+         "pss": 16056,
+         "swap": 0,
+         "size": 3971192,
+         "maps": 189
+        },
+        "file: other": {
+         "rss": 237656,
+         "pss": 87623,
+         "swap": 0,
+         "size": 575592,
+         "maps": 970
+        },
+        "[heap]": {
+         "rss": 3968,
+         "pss": 3968,
+         "swap": 0,
+         "size": 4536,
+         "maps": 1
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 648632,
+         "pss": 648632,
+         "swap": 0,
+         "size": 1587956,
+         "maps": 2346
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 9556,
+         "pss": 9556,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 13
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 41176,
+         "pss": 41176,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 11
+        },
+        "[anon:JSGigacage]": {
+         "rss": 93192,
+         "pss": 93192,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 150
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 200,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 690624,
+        "name": "bash",
+        "rss": 3932,
+        "pss": 912,
+        "pssAnon": 324,
+        "pssFile": 588,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3932,
+        "threads": 1
+       },
+       {
+        "pid": 690658,
+        "name": "MiniBrowser",
+        "rss": 154348,
+        "pss": 45670,
+        "pssAnon": 26972,
+        "pssFile": 18696,
+        "pssShmem": 2,
+        "privateDirty": 26972,
+        "swap": 0,
+        "hwm": 154812,
+        "threads": 14
+       },
+       {
+        "pid": 690809,
+        "name": "WPENetworkProcess",
+        "rss": 77984,
+        "pss": 25331,
+        "pssAnon": 15320,
+        "pssFile": 10006,
+        "pssShmem": 5,
+        "privateDirty": 15324,
+        "swap": 0,
+        "hwm": 112220,
+        "threads": 14
+       },
+       {
+        "pid": 690814,
+        "name": "WPEWebProcess",
+        "rss": 212604,
+        "pss": 73267,
+        "pssAnon": 34800,
+        "pssFile": 38459,
+        "pssShmem": 8,
+        "privateDirty": 35140,
+        "swap": 0,
+        "hwm": 224208,
+        "threads": 11
+       }
+      ]
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/"
+       }
+      ],
+      "errors": [],
+      "workers": 2,
+      "page": {
+       "isolated": true,
+       "storage": {
+        "quota": 1048576000,
+        "usage": 253621721
+       },
+       "frames": 1
+      },
+      "runtime": null
+     },
+     "post": {
+      "at": 1791744060119,
+      "load": [
+       7.96,
+       7.45,
+       7.95
+      ],
+      "main": {
+       "rss": 1076204,
+       "pss": 926419,
+       "pssAnon": 847816,
+       "pssFile": 70593,
+       "pssShmem": 8010,
+       "privateDirty": 868284,
+       "swap": 0,
+       "hwm": 1260388,
+       "threads": 47,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "JITWorker": 3,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 6,
+        "HeapHelper": 7,
+        "WebCore: Worker": 5,
+        "CryptoQueue": 4,
+        "onnection queue": 1,
+        ": ServiceWorker": 1,
+        "ollector Thread": 2,
+        "t Helper Thread": 2
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 16016,
+         "pss": 16016,
+         "swap": 0,
+         "size": 3962996,
+         "maps": 189
+        },
+        "file: other": {
+         "rss": 237656,
+         "pss": 87623,
+         "swap": 0,
+         "size": 575592,
+         "maps": 970
+        },
+        "[heap]": {
+         "rss": 3968,
+         "pss": 3968,
+         "swap": 0,
+         "size": 4536,
+         "maps": 1
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 646144,
+         "pss": 646144,
+         "swap": 0,
+         "size": 1587956,
+         "maps": 2749
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 9556,
+         "pss": 9556,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 13
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 41184,
+         "pss": 41184,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 11
+        },
+        "[anon:JSGigacage]": {
+         "rss": 113512,
+         "pss": 113512,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 150
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 200,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 690624,
+        "name": "bash",
+        "rss": 3932,
+        "pss": 912,
+        "pssAnon": 324,
+        "pssFile": 588,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3932,
+        "threads": 1
+       },
+       {
+        "pid": 690658,
+        "name": "MiniBrowser",
+        "rss": 154316,
+        "pss": 45637,
+        "pssAnon": 26940,
+        "pssFile": 18695,
+        "pssShmem": 2,
+        "privateDirty": 26940,
+        "swap": 0,
+        "hwm": 154812,
+        "threads": 14
+       },
+       {
+        "pid": 690809,
+        "name": "WPENetworkProcess",
+        "rss": 77996,
+        "pss": 25343,
+        "pssAnon": 15332,
+        "pssFile": 10005,
+        "pssShmem": 5,
+        "privateDirty": 15336,
+        "swap": 0,
+        "hwm": 112220,
+        "threads": 14
+       },
+       {
+        "pid": 690814,
+        "name": "WPEWebProcess",
+        "rss": 212604,
+        "pss": 73267,
+        "pssAnon": 34800,
+        "pssFile": 38459,
+        "pssShmem": 8,
+        "privateDirty": 35140,
+        "swap": 0,
+        "hwm": 224208,
+        "threads": 11
+       }
+      ]
+     }
+    },
+    {
+     "name": "idle",
+     "peakSincePreviousPoint": {
+      "rss": 1076204,
+      "pss": 926420
+     },
+     "pre": {
+      "at": 1791744090402,
+      "load": [
+       6.5,
+       7.13,
+       7.83
+      ],
+      "main": {
+       "rss": 994680,
+       "pss": 844894,
+       "pssAnon": 766292,
+       "pssFile": 70592,
+       "pssShmem": 8010,
+       "privateDirty": 786812,
+       "swap": 0,
+       "hwm": 1260388,
+       "threads": 40,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 6,
+        "WebCore: Worker": 5,
+        "CryptoQueue": 4,
+        "onnection queue": 1,
+        ": ServiceWorker": 1,
+        "HeapHelper": 7
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 15644,
+         "pss": 15644,
+         "swap": 0,
+         "size": 3872840,
+         "maps": 190
+        },
+        "file: other": {
+         "rss": 237656,
+         "pss": 87622,
+         "swap": 0,
+         "size": 575592,
+         "maps": 970
+        },
+        "[heap]": {
+         "rss": 3968,
+         "pss": 3968,
+         "swap": 0,
+         "size": 4536,
+         "maps": 1
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 568700,
+         "pss": 568700,
+         "swap": 0,
+         "size": 1587956,
+         "maps": 6550
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 9524,
+         "pss": 9524,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 13
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 40744,
+         "pss": 40744,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 111
+        },
+        "[anon:JSGigacage]": {
+         "rss": 110276,
+         "pss": 110276,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 144
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 200,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 690624,
+        "name": "bash",
+        "rss": 3932,
+        "pss": 660,
+        "pssAnon": 324,
+        "pssFile": 336,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3932,
+        "threads": 1
+       },
+       {
+        "pid": 690658,
+        "name": "MiniBrowser",
+        "rss": 154260,
+        "pss": 45580,
+        "pssAnon": 26884,
+        "pssFile": 18694,
+        "pssShmem": 2,
+        "privateDirty": 26884,
+        "swap": 0,
+        "hwm": 154812,
+        "threads": 14
+       },
+       {
+        "pid": 690809,
+        "name": "WPENetworkProcess",
+        "rss": 77996,
+        "pss": 25342,
+        "pssAnon": 15332,
+        "pssFile": 10005,
+        "pssShmem": 5,
+        "privateDirty": 15336,
+        "swap": 0,
+        "hwm": 112220,
+        "threads": 12
+       },
+       {
+        "pid": 690814,
+        "name": "WPEWebProcess",
+        "rss": 212604,
+        "pss": 73266,
+        "pssAnon": 34800,
+        "pssFile": 38458,
+        "pssShmem": 8,
+        "privateDirty": 35140,
+        "swap": 0,
+        "hwm": 224208,
+        "threads": 11
+       }
+      ]
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/"
+       }
+      ],
+      "errors": [],
+      "workers": 2,
+      "page": {
+       "isolated": true,
+       "storage": {
+        "quota": 1048576000,
+        "usage": 270398937
+       },
+       "frames": 1
+      },
+      "runtime": null
+     },
+     "post": {
+      "at": 1791744091597,
+      "load": [
+       6.5,
+       7.13,
+       7.83
+      ],
+      "main": {
+       "rss": 994688,
+       "pss": 844902,
+       "pssAnon": 766300,
+       "pssFile": 70592,
+       "pssShmem": 8010,
+       "privateDirty": 786824,
+       "swap": 0,
+       "hwm": 1260388,
+       "threads": 40,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 6,
+        "WebCore: Worker": 5,
+        "CryptoQueue": 4,
+        "onnection queue": 1,
+        ": ServiceWorker": 1,
+        "HeapHelper": 7
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 15644,
+         "pss": 15644,
+         "swap": 0,
+         "size": 3872840,
+         "maps": 190
+        },
+        "file: other": {
+         "rss": 237656,
+         "pss": 87623,
+         "swap": 0,
+         "size": 575592,
+         "maps": 970
+        },
+        "[heap]": {
+         "rss": 3968,
+         "pss": 3968,
+         "swap": 0,
+         "size": 4536,
+         "maps": 1
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 568708,
+         "pss": 568708,
+         "swap": 0,
+         "size": 1587956,
+         "maps": 6544
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 9524,
+         "pss": 9524,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 13
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 40744,
+         "pss": 40744,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 111
+        },
+        "[anon:JSGigacage]": {
+         "rss": 110276,
+         "pss": 110276,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 144
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 200,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 690624,
+        "name": "bash",
+        "rss": 3932,
+        "pss": 660,
+        "pssAnon": 324,
+        "pssFile": 336,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3932,
+        "threads": 1
+       },
+       {
+        "pid": 690658,
+        "name": "MiniBrowser",
+        "rss": 154292,
+        "pss": 45612,
+        "pssAnon": 26916,
+        "pssFile": 18694,
+        "pssShmem": 2,
+        "privateDirty": 26916,
+        "swap": 0,
+        "hwm": 154812,
+        "threads": 14
+       },
+       {
+        "pid": 690809,
+        "name": "WPENetworkProcess",
+        "rss": 78004,
+        "pss": 25350,
+        "pssAnon": 15340,
+        "pssFile": 10005,
+        "pssShmem": 5,
+        "privateDirty": 15344,
+        "swap": 0,
+        "hwm": 112220,
+        "threads": 12
+       },
+       {
+        "pid": 690814,
+        "name": "WPEWebProcess",
+        "rss": 212604,
+        "pss": 73266,
+        "pssAnon": 34800,
+        "pssFile": 38458,
+        "pssShmem": 8,
+        "privateDirty": 35140,
+        "swap": 0,
+        "hwm": 224208,
+        "threads": 11
+       }
+      ]
+     }
+    },
+    {
+     "name": "exited",
+     "peakSincePreviousPoint": {
+      "rss": 1004280,
+      "pss": 854420
+     },
+     "pre": {
+      "at": 1791744096956,
+      "load": [
+       6.3,
+       7.08,
+       7.81
+      ],
+      "main": {
+       "rss": 534380,
+       "pss": 384520,
+       "pssAnon": 305736,
+       "pssFile": 70774,
+       "pssShmem": 8010,
+       "privateDirty": 326260,
+       "swap": 0,
+       "hwm": 1260388,
+       "threads": 45,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 6,
+        "CryptoQueue": 1,
+        "onnection queue": 1,
+        ": ServiceWorker": 1,
+        "HeapHelper": 7,
+        "JITWorker": 3,
+        "t Helper Thread": 7,
+        "ollector Thread": 2,
+        "s Signal Sender": 1
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 15672,
+         "pss": 15672,
+         "swap": 0,
+         "size": 3954800,
+         "maps": 189
+        },
+        "file: other": {
+         "rss": 237912,
+         "pss": 87803,
+         "swap": 0,
+         "size": 575592,
+         "maps": 970
+        },
+        "[heap]": {
+         "rss": 3968,
+         "pss": 3968,
+         "swap": 0,
+         "size": 4536,
+         "maps": 1
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 198820,
+         "pss": 198820,
+         "swap": 0,
+         "size": 1587956,
+         "maps": 7708
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 1376,
+         "pss": 1376,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 41
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 13380,
+         "pss": 13380,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 801
+        },
+        "[anon:JSGigacage]": {
+         "rss": 55084,
+         "pss": 55084,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 77
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 200,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 690624,
+        "name": "bash",
+        "rss": 3932,
+        "pss": 911,
+        "pssAnon": 324,
+        "pssFile": 587,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3932,
+        "threads": 1
+       },
+       {
+        "pid": 690658,
+        "name": "MiniBrowser",
+        "rss": 154464,
+        "pss": 45775,
+        "pssAnon": 27088,
+        "pssFile": 18685,
+        "pssShmem": 2,
+        "privateDirty": 27088,
+        "swap": 0,
+        "hwm": 155480,
+        "threads": 14
+       },
+       {
+        "pid": 690809,
+        "name": "WPENetworkProcess",
+        "rss": 77928,
+        "pss": 25253,
+        "pssAnon": 15264,
+        "pssFile": 9984,
+        "pssShmem": 5,
+        "privateDirty": 15268,
+        "swap": 0,
+        "hwm": 112220,
+        "threads": 13
+       },
+       {
+        "pid": 690814,
+        "name": "WPEWebProcess",
+        "rss": 212604,
+        "pss": 73242,
+        "pssAnon": 34800,
+        "pssFile": 38434,
+        "pssShmem": 8,
+        "privateDirty": 35140,
+        "swap": 0,
+        "hwm": 224208,
+        "threads": 11
+       }
+      ]
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/"
+       }
+      ],
+      "errors": [],
+      "workers": 0,
+      "page": {
+       "isolated": true,
+       "storage": {
+        "quota": 1048576000,
+        "usage": 270398937
+       },
+       "frames": 0
+      },
+      "runtime": null
+     },
+     "post": {
+      "at": 1791744098124,
+      "load": [
+       6.3,
+       7.08,
+       7.81
+      ],
+      "main": {
+       "rss": 534012,
+       "pss": 384110,
+       "pssAnon": 305368,
+       "pssFile": 70732,
+       "pssShmem": 8010,
+       "privateDirty": 325892,
+       "swap": 0,
+       "hwm": 1260388,
+       "threads": 45,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 6,
+        "CryptoQueue": 1,
+        "onnection queue": 1,
+        ": ServiceWorker": 1,
+        "HeapHelper": 7,
+        "JITWorker": 3,
+        "t Helper Thread": 7,
+        "ollector Thread": 2,
+        "s Signal Sender": 1
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 15672,
+         "pss": 15672,
+         "swap": 0,
+         "size": 3954800,
+         "maps": 189
+        },
+        "file: other": {
+         "rss": 237912,
+         "pss": 87760,
+         "swap": 0,
+         "size": 575592,
+         "maps": 970
+        },
+        "[heap]": {
+         "rss": 3968,
+         "pss": 3968,
+         "swap": 0,
+         "size": 4536,
+         "maps": 1
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 198452,
+         "pss": 198452,
+         "swap": 0,
+         "size": 1587956,
+         "maps": 7708
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 1376,
+         "pss": 1376,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 41
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 13380,
+         "pss": 13380,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 801
+        },
+        "[anon:JSGigacage]": {
+         "rss": 55084,
+         "pss": 55084,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 77
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 200,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 690624,
+        "name": "bash",
+        "rss": 3932,
+        "pss": 910,
+        "pssAnon": 324,
+        "pssFile": 586,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3932,
+        "threads": 1
+       },
+       {
+        "pid": 690658,
+        "name": "MiniBrowser",
+        "rss": 154308,
+        "pss": 45609,
+        "pssAnon": 26932,
+        "pssFile": 18675,
+        "pssShmem": 2,
+        "privateDirty": 26932,
+        "swap": 0,
+        "hwm": 155480,
+        "threads": 14
+       },
+       {
+        "pid": 690809,
+        "name": "WPENetworkProcess",
+        "rss": 77936,
+        "pss": 25251,
+        "pssAnon": 15272,
+        "pssFile": 9974,
+        "pssShmem": 5,
+        "privateDirty": 15276,
+        "swap": 0,
+        "hwm": 112220,
+        "threads": 13
+       },
+       {
+        "pid": 690814,
+        "name": "WPEWebProcess",
+        "rss": 212604,
+        "pss": 73223,
+        "pssAnon": 34800,
+        "pssFile": 38415,
+        "pssShmem": 8,
+        "privateDirty": 35140,
+        "swap": 0,
+        "hwm": 224208,
+        "threads": 11
+       }
+      ]
+     }
+    }
+   ],
+   "light": [
+    {
+     "secondsIdle": 30,
+     "load": [
+      6.5,
+      7.13,
+      7.83
+     ],
+     "main": {
+      "rss": 994672,
+      "pss": 844886,
+      "pssAnon": 766284,
+      "pssFile": 70592,
+      "pssShmem": 8010,
+      "privateDirty": 786804,
+      "swap": 0,
+      "hwm": 1260388,
+      "threads": 40
+     },
+     "wasmMemories": []
+    }
+   ],
+   "events": [],
+   "mainPid": 691261,
+   "openTimeline": [
+    {
+     "ms": 300,
+     "rss": 350336,
+     "pss": 201524,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 50
+    },
+    {
+     "ms": 577,
+     "rss": 604076,
+     "pss": 455264,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 50
+    },
+    {
+     "ms": 826,
+     "rss": 807200,
+     "pss": 658258,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 51
+    },
+    {
+     "ms": 1067,
+     "rss": 594268,
+     "pss": 445070,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 53
+    },
+    {
+     "ms": 1322,
+     "rss": 676664,
+     "pss": 527269,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 54
+    },
+    {
+     "ms": 1572,
+     "rss": 741912,
+     "pss": 592485,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 56
+    },
+    {
+     "ms": 1841,
+     "rss": 767132,
+     "pss": 617643,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 57
+    },
+    {
+     "ms": 2117,
+     "rss": 857480,
+     "pss": 707956,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 57
+    },
+    {
+     "ms": 2355,
+     "rss": 988092,
+     "pss": 838568,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 59
+    },
+    {
+     "ms": 2603,
+     "rss": 1035972,
+     "pss": 886448,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 59
+    },
+    {
+     "ms": 2861,
+     "rss": 1098268,
+     "pss": 948744,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 59
+    },
+    {
+     "ms": 3119,
+     "rss": 1133396,
+     "pss": 983799,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 3349,
+     "rss": 1101824,
+     "pss": 952226,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 3593,
+     "rss": 1100968,
+     "pss": 951371,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 3852,
+     "rss": 1100960,
+     "pss": 951362,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 4106,
+     "rss": 1100276,
+     "pss": 950678,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 4357,
+     "rss": 1100272,
+     "pss": 950674,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 4623,
+     "rss": 1100276,
+     "pss": 950677,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 4864,
+     "rss": 1100268,
+     "pss": 950670,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 5109,
+     "rss": 1100276,
+     "pss": 950678,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 5357,
+     "rss": 1099608,
+     "pss": 950010,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 5608,
+     "rss": 1096864,
+     "pss": 947266,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 5866,
+     "rss": 1096860,
+     "pss": 947262,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 6116,
+     "rss": 1096856,
+     "pss": 947258,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 6369,
+     "rss": 1096864,
+     "pss": 947264,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 6618,
+     "rss": 1096864,
+     "pss": 947266,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 6870,
+     "rss": 1096856,
+     "pss": 947258,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 7119,
+     "rss": 1096864,
+     "pss": 947266,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 7369,
+     "rss": 1092676,
+     "pss": 943078,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 7622,
+     "rss": 1092672,
+     "pss": 943074,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 7881,
+     "rss": 1078596,
+     "pss": 928998,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 8132,
+     "rss": 1078568,
+     "pss": 928970,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 8382,
+     "rss": 1078560,
+     "pss": 928962,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 8633,
+     "rss": 1078568,
+     "pss": 928970,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 8885,
+     "rss": 1078560,
+     "pss": 928962,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 9130,
+     "rss": 1078448,
+     "pss": 928850,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 9379,
+     "rss": 1078440,
+     "pss": 928842,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 9629,
+     "rss": 1078448,
+     "pss": 928851,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 9884,
+     "rss": 1078448,
+     "pss": 928850,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 10139,
+     "rss": 1078440,
+     "pss": 928842,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 10389,
+     "rss": 1078172,
+     "pss": 928574,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 10644,
+     "rss": 1077012,
+     "pss": 927414,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 10890,
+     "rss": 1075932,
+     "pss": 926334,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 11143,
+     "rss": 1059916,
+     "pss": 910318,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 57
+    }
+   ],
+   "open": {
+    "openMs": 3182,
+    "timings": {
+     "manifest": 18,
+     "boot": 91,
+     "source": 94,
+     "preview.spawn": 102,
+     "agent.spawn": 102,
+     "preview.listening": 1137,
+     "preview.ready": 1805,
+     "agent.listening": 2001,
+     "preview.visible": 2388,
+     "agent.ready": 3024,
+     "chat.ready": 3092
+    }
+   },
+   "turn1": {
+    "replyMs": 3522,
+    "heading": "Memory A",
+    "tools": 2,
+    "assistants": 3
+   },
+   "turns": [
+    {
+     "replyMs": 3347,
+     "heading": "Memory A",
+     "tools": 0,
+     "assistants": 4
+    },
+    {
+     "replyMs": 15925,
+     "heading": "Memory A",
+     "tools": 5,
+     "assistants": 10
+    },
+    {
+     "replyMs": 3492,
+     "heading": "Memory B",
+     "tools": 2,
+     "assistants": 13
+    },
+    {
+     "replyMs": 3416,
+     "heading": "Memory C",
+     "tools": 2,
+     "assistants": 16
+    },
+    {
+     "replyMs": 3178,
+     "heading": "Memory C",
+     "tools": 0,
+     "assistants": 17
+    }
+   ],
+   "processesGoneAfterClose": {
+    "main": true,
+    "sw": true
+   }
+  },
+  {
+   "index": 2,
+   "example": "todo",
+   "kind": "reopen",
+   "startedAt": "2026-10-11T18:41:52.981Z",
+   "points": [
+    {
+     "name": "loaded",
+     "peakSincePreviousPoint": {
+      "rss": 271064,
+      "pss": 122843
+     },
+     "pre": {
+      "at": 1791744124367,
+      "load": [
+       6.06,
+       6.94,
+       7.74
+      ],
+      "main": {
+       "rss": 268032,
+       "pss": 119724,
+       "pssAnon": 60220,
+       "pssFile": 51494,
+       "pssShmem": 8010,
+       "privateDirty": 68768,
+       "swap": 0,
+       "hwm": 274168,
+       "threads": 31,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "pool-0": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "JITWorker": 2,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 4,
+        "HeapHelper": 7,
+        "ollector Thread": 1
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 13616,
+         "pss": 13616,
+         "swap": 0,
+         "size": 2783284,
+         "maps": 148
+        },
+        "file: other": {
+         "rss": 217080,
+         "pss": 68527,
+         "swap": 0,
+         "size": 563664,
+         "maps": 966
+        },
+        "[heap]": {
+         "rss": 3640,
+         "pss": 3640,
+         "swap": 0,
+         "size": 4152,
+         "maps": 1
+        },
+        "[anon:JSGigacage]": {
+         "rss": 0,
+         "pss": 0,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 4
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 592,
+         "pss": 592,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 3
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 24272,
+         "pss": 24272,
+         "swap": 0,
+         "size": 294936,
+         "maps": 474
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 696,
+         "pss": 696,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 5
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 132,
+         "pss": 124,
+         "swap": 0,
+         "size": 184,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 835812,
+        "name": "bash",
+        "rss": 3952,
+        "pss": 730,
+        "pssAnon": 324,
+        "pssFile": 406,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3952,
+        "threads": 1
+       },
+       {
+        "pid": 835848,
+        "name": "MiniBrowser",
+        "rss": 153508,
+        "pss": 44206,
+        "pssAnon": 26676,
+        "pssFile": 17528,
+        "pssShmem": 2,
+        "privateDirty": 26708,
+        "swap": 0,
+        "hwm": 154504,
+        "threads": 14
+       },
+       {
+        "pid": 835994,
+        "name": "WPENetworkProcess",
+        "rss": 75400,
+        "pss": 24374,
+        "pssAnon": 14740,
+        "pssFile": 9628,
+        "pssShmem": 5,
+        "privateDirty": 14808,
+        "swap": 0,
+        "hwm": 76252,
+        "threads": 14
+       },
+       {
+        "pid": 836003,
+        "name": "WPEWebProcess",
+        "rss": 212984,
+        "pss": 73007,
+        "pssAnon": 35652,
+        "pssFile": 37347,
+        "pssShmem": 8,
+        "privateDirty": 35992,
+        "swap": 0,
+        "hwm": 223588,
+        "threads": 21
+       }
+      ]
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/"
+       }
+      ],
+      "errors": [],
+      "workers": 0,
+      "page": {
+       "isolated": true,
+       "storage": {
+        "quota": 1048576000,
+        "usage": 249427417
+       },
+       "frames": 0
+      },
+      "runtime": null
+     },
+     "post": {
+      "at": 1791744125450,
+      "load": [
+       6.06,
+       6.94,
+       7.74
+      ],
+      "main": {
+       "rss": 268128,
+       "pss": 119820,
+       "pssAnon": 60316,
+       "pssFile": 51494,
+       "pssShmem": 8010,
+       "privateDirty": 68864,
+       "swap": 0,
+       "hwm": 274168,
+       "threads": 31,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "pool-0": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "JITWorker": 2,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 4,
+        "HeapHelper": 7,
+        "ollector Thread": 1
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 13616,
+         "pss": 13616,
+         "swap": 0,
+         "size": 2783284,
+         "maps": 148
+        },
+        "file: other": {
+         "rss": 217080,
+         "pss": 68528,
+         "swap": 0,
+         "size": 563664,
+         "maps": 966
+        },
+        "[heap]": {
+         "rss": 3640,
+         "pss": 3640,
+         "swap": 0,
+         "size": 4152,
+         "maps": 1
+        },
+        "[anon:JSGigacage]": {
+         "rss": 0,
+         "pss": 0,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 4
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 592,
+         "pss": 592,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 3
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 24368,
+         "pss": 24368,
+         "swap": 0,
+         "size": 294936,
+         "maps": 450
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 696,
+         "pss": 696,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 5
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 132,
+         "pss": 124,
+         "swap": 0,
+         "size": 184,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 835812,
+        "name": "bash",
+        "rss": 3952,
+        "pss": 731,
+        "pssAnon": 324,
+        "pssFile": 407,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3952,
+        "threads": 1
+       },
+       {
+        "pid": 835848,
+        "name": "MiniBrowser",
+        "rss": 153528,
+        "pss": 44226,
+        "pssAnon": 26696,
+        "pssFile": 17528,
+        "pssShmem": 2,
+        "privateDirty": 26728,
+        "swap": 0,
+        "hwm": 154504,
+        "threads": 14
+       },
+       {
+        "pid": 835994,
+        "name": "WPENetworkProcess",
+        "rss": 75468,
+        "pss": 24410,
+        "pssAnon": 14744,
+        "pssFile": 9661,
+        "pssShmem": 5,
+        "privateDirty": 14812,
+        "swap": 0,
+        "hwm": 76252,
+        "threads": 14
+       },
+       {
+        "pid": 836003,
+        "name": "WPEWebProcess",
+        "rss": 212984,
+        "pss": 73008,
+        "pssAnon": 35652,
+        "pssFile": 37348,
+        "pssShmem": 8,
+        "privateDirty": 35992,
+        "swap": 0,
+        "hwm": 223588,
+        "threads": 21
+       }
+      ]
+     }
+    },
+    {
+     "name": "open",
+     "peakSincePreviousPoint": {
+      "rss": 1135532,
+      "pss": 984603
+     },
+     "pre": {
+      "at": 1791744138355,
+      "load": [
+       6.28,
+       6.96,
+       7.74
+      ],
+      "main": {
+       "rss": 1087004,
+       "pss": 936066,
+       "pssAnon": 837572,
+       "pssFile": 90484,
+       "pssShmem": 8010,
+       "privateDirty": 847308,
+       "swap": 0,
+       "hwm": 1137736,
+       "threads": 39,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "JITWorker": 1,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 4,
+        "HeapHelper": 7,
+        "WebCore: Worker": 5,
+        "CryptoQueue": 4,
+        "onnection queue": 1,
+        ": ServiceWorker": 1
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 14964,
+         "pss": 14964,
+         "swap": 0,
+         "size": 3897428,
+         "maps": 187
+        },
+        "file: other": {
+         "rss": 258700,
+         "pss": 107515,
+         "swap": 0,
+         "size": 597772,
+         "maps": 969
+        },
+        "[heap]": {
+         "rss": 3816,
+         "pss": 3816,
+         "swap": 0,
+         "size": 4416,
+         "maps": 1
+        },
+        "[anon:JSGigacage]": {
+         "rss": 99760,
+         "pss": 99760,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 124
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 665684,
+         "pss": 665684,
+         "swap": 0,
+         "size": 1361120,
+         "maps": 2203
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 10112,
+         "pss": 10112,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 1
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 25832,
+         "pss": 25832,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 5
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 132,
+         "pss": 124,
+         "swap": 0,
+         "size": 184,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 835812,
+        "name": "bash",
+        "rss": 3952,
+        "pss": 731,
+        "pssAnon": 324,
+        "pssFile": 407,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3952,
+        "threads": 1
+       },
+       {
+        "pid": 835848,
+        "name": "MiniBrowser",
+        "rss": 154040,
+        "pss": 44371,
+        "pssAnon": 26760,
+        "pssFile": 17609,
+        "pssShmem": 2,
+        "privateDirty": 26760,
+        "swap": 0,
+        "hwm": 154504,
+        "threads": 14
+       },
+       {
+        "pid": 835994,
+        "name": "WPENetworkProcess",
+        "rss": 76284,
+        "pss": 24291,
+        "pssAnon": 14388,
+        "pssFile": 9898,
+        "pssShmem": 5,
+        "privateDirty": 14456,
+        "swap": 0,
+        "hwm": 109016,
+        "threads": 14
+       },
+       {
+        "pid": 836003,
+        "name": "WPEWebProcess",
+        "rss": 212668,
+        "pss": 72630,
+        "pssAnon": 35336,
+        "pssFile": 37286,
+        "pssShmem": 8,
+        "privateDirty": 35676,
+        "swap": 0,
+        "hwm": 223588,
+        "threads": 12
+       }
+      ]
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/"
+       }
+      ],
+      "errors": [],
+      "workers": 2,
+      "page": {
+       "isolated": true,
+       "storage": {
+        "quota": 1048576000,
+        "usage": 250475993
+       },
+       "frames": 1
+      },
+      "runtime": null
+     },
+     "post": {
+      "at": 1791744139479,
+      "load": [
+       6.1,
+       6.91,
+       7.72
+      ],
+      "main": {
+       "rss": 1075788,
+       "pss": 924850,
+       "pssAnon": 826356,
+       "pssFile": 90484,
+       "pssShmem": 8010,
+       "privateDirty": 836092,
+       "swap": 0,
+       "hwm": 1137736,
+       "threads": 34,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "JITWorker": 3,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 4,
+        "WebCore: Worker": 5,
+        "CryptoQueue": 4,
+        "onnection queue": 1,
+        ": ServiceWorker": 1
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 14868,
+         "pss": 14868,
+         "swap": 0,
+         "size": 3856448,
+         "maps": 188
+        },
+        "file: other": {
+         "rss": 258700,
+         "pss": 107516,
+         "swap": 0,
+         "size": 597772,
+         "maps": 969
+        },
+        "[heap]": {
+         "rss": 3816,
+         "pss": 3816,
+         "swap": 0,
+         "size": 4416,
+         "maps": 1
+        },
+        "[anon:JSGigacage]": {
+         "rss": 99760,
+         "pss": 99760,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 124
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 654564,
+         "pss": 654564,
+         "swap": 0,
+         "size": 1361120,
+         "maps": 2856
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 10112,
+         "pss": 10112,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 1
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 25836,
+         "pss": 25836,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 5
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 132,
+         "pss": 124,
+         "swap": 0,
+         "size": 184,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 835812,
+        "name": "bash",
+        "rss": 3952,
+        "pss": 731,
+        "pssAnon": 324,
+        "pssFile": 407,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3952,
+        "threads": 1
+       },
+       {
+        "pid": 835848,
+        "name": "MiniBrowser",
+        "rss": 153972,
+        "pss": 44303,
+        "pssAnon": 26692,
+        "pssFile": 17609,
+        "pssShmem": 2,
+        "privateDirty": 26692,
+        "swap": 0,
+        "hwm": 154504,
+        "threads": 14
+       },
+       {
+        "pid": 835994,
+        "name": "WPENetworkProcess",
+        "rss": 76356,
+        "pss": 24299,
+        "pssAnon": 14396,
+        "pssFile": 9898,
+        "pssShmem": 5,
+        "privateDirty": 14464,
+        "swap": 0,
+        "hwm": 109016,
+        "threads": 13
+       },
+       {
+        "pid": 836003,
+        "name": "WPEWebProcess",
+        "rss": 212668,
+        "pss": 72630,
+        "pssAnon": 35336,
+        "pssFile": 37286,
+        "pssShmem": 8,
+        "privateDirty": 35676,
+        "swap": 0,
+        "hwm": 223588,
+        "threads": 12
+       }
+      ]
+     }
+    },
+    {
+     "name": "turn1",
+     "peakSincePreviousPoint": {
+      "rss": 1264860,
+      "pss": 1113747
+     },
+     "pre": {
+      "at": 1791744146256,
+      "load": [
+       6.57,
+       7,
+       7.74
+      ],
+      "main": {
+       "rss": 1096856,
+       "pss": 945742,
+       "pssAnon": 878436,
+       "pssFile": 59296,
+       "pssShmem": 8010,
+       "privateDirty": 889476,
+       "swap": 0,
+       "hwm": 1298596,
+       "threads": 56,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "JITWorker": 3,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 5,
+        "WebCore: Worker": 5,
+        "CryptoQueue": 4,
+        "onnection queue": 1,
+        ": ServiceWorker": 1,
+        "HeapHelper": 7,
+        "t Helper Thread": 11,
+        "ollector Thread": 3
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 15412,
+         "pss": 15412,
+         "swap": 0,
+         "size": 4003976,
+         "maps": 188
+        },
+        "file: other": {
+         "rss": 227688,
+         "pss": 76327,
+         "swap": 0,
+         "size": 565368,
+         "maps": 968
+        },
+        "[heap]": {
+         "rss": 3892,
+         "pss": 3892,
+         "swap": 0,
+         "size": 4380,
+         "maps": 1
+        },
+        "[anon:JSGigacage]": {
+         "rss": 82216,
+         "pss": 82216,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 118
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 717260,
+         "pss": 717260,
+         "swap": 0,
+         "size": 1654112,
+         "maps": 2595
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 10440,
+         "pss": 10440,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 1
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 31812,
+         "pss": 31812,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 5
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 132,
+         "pss": 124,
+         "swap": 0,
+         "size": 184,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 835812,
+        "name": "bash",
+        "rss": 3952,
+        "pss": 730,
+        "pssAnon": 324,
+        "pssFile": 406,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3952,
+        "threads": 1
+       },
+       {
+        "pid": 835848,
+        "name": "MiniBrowser",
+        "rss": 154056,
+        "pss": 44334,
+        "pssAnon": 26712,
+        "pssFile": 17620,
+        "pssShmem": 2,
+        "privateDirty": 26712,
+        "swap": 0,
+        "hwm": 154504,
+        "threads": 14
+       },
+       {
+        "pid": 835994,
+        "name": "WPENetworkProcess",
+        "rss": 76568,
+        "pss": 24506,
+        "pssAnon": 14608,
+        "pssFile": 9892,
+        "pssShmem": 5,
+        "privateDirty": 14612,
+        "swap": 0,
+        "hwm": 109016,
+        "threads": 14
+       },
+       {
+        "pid": 836003,
+        "name": "WPEWebProcess",
+        "rss": 212656,
+        "pss": 72613,
+        "pssAnon": 35324,
+        "pssFile": 37281,
+        "pssShmem": 8,
+        "privateDirty": 35664,
+        "swap": 0,
+        "hwm": 223588,
+        "threads": 11
+       }
+      ]
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/"
+       }
+      ],
+      "errors": [],
+      "workers": 2,
+      "page": {
+       "isolated": true,
+       "storage": {
+        "quota": 1048576000,
+        "usage": 250475993
+       },
+       "frames": 1
+      },
+      "runtime": null
+     },
+     "post": {
+      "at": 1791744147386,
+      "load": [
+       6.57,
+       7,
+       7.74
+      ],
+      "main": {
+       "rss": 1096868,
+       "pss": 945755,
+       "pssAnon": 878448,
+       "pssFile": 59297,
+       "pssShmem": 8010,
+       "privateDirty": 889488,
+       "swap": 0,
+       "hwm": 1298596,
+       "threads": 56,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "JITWorker": 3,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 5,
+        "WebCore: Worker": 5,
+        "CryptoQueue": 4,
+        "onnection queue": 1,
+        ": ServiceWorker": 1,
+        "HeapHelper": 7,
+        "t Helper Thread": 11,
+        "ollector Thread": 3
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 15412,
+         "pss": 15412,
+         "swap": 0,
+         "size": 4003976,
+         "maps": 188
+        },
+        "file: other": {
+         "rss": 227688,
+         "pss": 76328,
+         "swap": 0,
+         "size": 565368,
+         "maps": 968
+        },
+        "[heap]": {
+         "rss": 3892,
+         "pss": 3892,
+         "swap": 0,
+         "size": 4380,
+         "maps": 1
+        },
+        "[anon:JSGigacage]": {
+         "rss": 82216,
+         "pss": 82216,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 118
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 717272,
+         "pss": 717272,
+         "swap": 0,
+         "size": 1654112,
+         "maps": 2587
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 10440,
+         "pss": 10440,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 1
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 31812,
+         "pss": 31812,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 5
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 132,
+         "pss": 124,
+         "swap": 0,
+         "size": 184,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 835812,
+        "name": "bash",
+        "rss": 3952,
+        "pss": 731,
+        "pssAnon": 324,
+        "pssFile": 407,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3952,
+        "threads": 1
+       },
+       {
+        "pid": 835848,
+        "name": "MiniBrowser",
+        "rss": 154084,
+        "pss": 44362,
+        "pssAnon": 26740,
+        "pssFile": 17620,
+        "pssShmem": 2,
+        "privateDirty": 26740,
+        "swap": 0,
+        "hwm": 154504,
+        "threads": 14
+       },
+       {
+        "pid": 835994,
+        "name": "WPENetworkProcess",
+        "rss": 76576,
+        "pss": 24514,
+        "pssAnon": 14616,
+        "pssFile": 9893,
+        "pssShmem": 5,
+        "privateDirty": 14620,
+        "swap": 0,
+        "hwm": 109016,
+        "threads": 14
+       },
+       {
+        "pid": 836003,
+        "name": "WPEWebProcess",
+        "rss": 212656,
+        "pss": 72613,
+        "pssAnon": 35324,
+        "pssFile": 37281,
+        "pssShmem": 8,
+        "privateDirty": 35664,
+        "swap": 0,
+        "hwm": 223588,
+        "threads": 11
+       }
+      ]
+     }
+    },
+    {
+     "name": "turns",
+     "peakSincePreviousPoint": {
+      "rss": 1903048,
+      "pss": 1751935
+     },
+     "pre": {
+      "at": 1791744180225,
+      "load": [
+       5.57,
+       6.7,
+       7.61
+      ],
+      "main": {
+       "rss": 1266528,
+       "pss": 1115416,
+       "pssAnon": 1037820,
+       "pssFile": 69586,
+       "pssShmem": 8010,
+       "privateDirty": 1058308,
+       "swap": 0,
+       "hwm": 1903716,
+       "threads": 51,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "JITWorker": 3,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 5,
+        "WebCore: Worker": 5,
+        "CryptoQueue": 4,
+        "onnection queue": 1,
+        ": ServiceWorker": 1,
+        "t Helper Thread": 4,
+        "ollector Thread": 5,
+        "HeapHelper": 7
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 15740,
+         "pss": 15740,
+         "swap": 0,
+         "size": 3971192,
+         "maps": 188
+        },
+        "file: other": {
+         "rss": 237976,
+         "pss": 86617,
+         "swap": 0,
+         "size": 575592,
+         "maps": 970
+        },
+        "[heap]": {
+         "rss": 3932,
+         "pss": 3932,
+         "swap": 0,
+         "size": 4516,
+         "maps": 1
+        },
+        "[anon:JSGigacage]": {
+         "rss": 83084,
+         "pss": 83084,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 164
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 886264,
+         "pss": 886264,
+         "swap": 0,
+         "size": 2440544,
+         "maps": 28073
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 9952,
+         "pss": 9952,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 43
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 21416,
+         "pss": 21416,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 699
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 160,
+         "pss": 152,
+         "swap": 0,
+         "size": 196,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 835812,
+        "name": "bash",
+        "rss": 3952,
+        "pss": 731,
+        "pssAnon": 324,
+        "pssFile": 407,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3952,
+        "threads": 1
+       },
+       {
+        "pid": 835848,
+        "name": "MiniBrowser",
+        "rss": 154280,
+        "pss": 44559,
+        "pssAnon": 26936,
+        "pssFile": 17621,
+        "pssShmem": 2,
+        "privateDirty": 26936,
+        "swap": 0,
+        "hwm": 154512,
+        "threads": 14
+       },
+       {
+        "pid": 835994,
+        "name": "WPENetworkProcess",
+        "rss": 77500,
+        "pss": 25225,
+        "pssAnon": 15324,
+        "pssFile": 9895,
+        "pssShmem": 5,
+        "privateDirty": 15328,
+        "swap": 0,
+        "hwm": 109016,
+        "threads": 14
+       },
+       {
+        "pid": 836003,
+        "name": "WPEWebProcess",
+        "rss": 212120,
+        "pss": 72078,
+        "pssAnon": 34788,
+        "pssFile": 37282,
+        "pssShmem": 8,
+        "privateDirty": 35128,
+        "swap": 0,
+        "hwm": 223588,
+        "threads": 11
+       }
+      ]
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/"
+       }
+      ],
+      "errors": [],
+      "workers": 2,
+      "page": {
+       "isolated": true,
+       "storage": {
+        "quota": 1048576000,
+        "usage": 253621721
+       },
+       "frames": 1
+      },
+      "runtime": null
+     },
+     "post": {
+      "at": 1791744181633,
+      "load": [
+       5.57,
+       6.7,
+       7.61
+      ],
+      "main": {
+       "rss": 1284252,
+       "pss": 1133140,
+       "pssAnon": 1055544,
+       "pssFile": 69586,
+       "pssShmem": 8010,
+       "privateDirty": 1076036,
+       "swap": 0,
+       "hwm": 1903716,
+       "threads": 49,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "JITWorker": 3,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 5,
+        "WebCore: Worker": 5,
+        "CryptoQueue": 4,
+        "onnection queue": 1,
+        ": ServiceWorker": 1,
+        "t Helper Thread": 2,
+        "ollector Thread": 5,
+        "HeapHelper": 7
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 15728,
+         "pss": 15728,
+         "swap": 0,
+         "size": 3971192,
+         "maps": 188
+        },
+        "file: other": {
+         "rss": 237976,
+         "pss": 86618,
+         "swap": 0,
+         "size": 575592,
+         "maps": 970
+        },
+        "[heap]": {
+         "rss": 3932,
+         "pss": 3932,
+         "swap": 0,
+         "size": 4516,
+         "maps": 1
+        },
+        "[anon:JSGigacage]": {
+         "rss": 103372,
+         "pss": 103372,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 164
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 881976,
+         "pss": 881976,
+         "swap": 0,
+         "size": 2440544,
+         "maps": 28517
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 9952,
+         "pss": 9952,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 43
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 21428,
+         "pss": 21428,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 699
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 160,
+         "pss": 152,
+         "swap": 0,
+         "size": 196,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 835812,
+        "name": "bash",
+        "rss": 3952,
+        "pss": 732,
+        "pssAnon": 324,
+        "pssFile": 408,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3952,
+        "threads": 1
+       },
+       {
+        "pid": 835848,
+        "name": "MiniBrowser",
+        "rss": 154240,
+        "pss": 44519,
+        "pssAnon": 26896,
+        "pssFile": 17621,
+        "pssShmem": 2,
+        "privateDirty": 26896,
+        "swap": 0,
+        "hwm": 154512,
+        "threads": 14
+       },
+       {
+        "pid": 835994,
+        "name": "WPENetworkProcess",
+        "rss": 77512,
+        "pss": 25236,
+        "pssAnon": 15336,
+        "pssFile": 9895,
+        "pssShmem": 5,
+        "privateDirty": 15340,
+        "swap": 0,
+        "hwm": 109016,
+        "threads": 14
+       },
+       {
+        "pid": 836003,
+        "name": "WPEWebProcess",
+        "rss": 212120,
+        "pss": 72078,
+        "pssAnon": 34788,
+        "pssFile": 37282,
+        "pssShmem": 8,
+        "privateDirty": 35128,
+        "swap": 0,
+        "hwm": 223588,
+        "threads": 11
+       }
+      ]
+     }
+    },
+    {
+     "name": "idle",
+     "peakSincePreviousPoint": {
+      "rss": 1282428,
+      "pss": 1131316
+     },
+     "pre": {
+      "at": 1791744212237,
+      "load": [
+       5.57,
+       6.6,
+       7.55
+      ],
+      "main": {
+       "rss": 1016480,
+       "pss": 865355,
+       "pssAnon": 787772,
+       "pssFile": 69573,
+       "pssShmem": 8010,
+       "privateDirty": 808276,
+       "swap": 0,
+       "hwm": 1903716,
+       "threads": 32,
+       "threadNames": {
+        "WPEWebProcess": 4,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 5,
+        "WebCore: Worker": 5,
+        "CryptoQueue": 4,
+        "onnection queue": 1,
+        ": ServiceWorker": 1,
+        "JITWorker": 1
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 15328,
+         "pss": 15328,
+         "swap": 0,
+         "size": 3840056,
+         "maps": 188
+        },
+        "file: other": {
+         "rss": 237976,
+         "pss": 86605,
+         "swap": 0,
+         "size": 575592,
+         "maps": 970
+        },
+        "[heap]": {
+         "rss": 3932,
+         "pss": 3932,
+         "swap": 0,
+         "size": 4516,
+         "maps": 1
+        },
+        "[anon:JSGigacage]": {
+         "rss": 103148,
+         "pss": 103148,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 156
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 616740,
+         "pss": 616740,
+         "swap": 0,
+         "size": 2440544,
+         "maps": 17589
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 9952,
+         "pss": 9952,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 43
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 21240,
+         "pss": 21240,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 701
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 160,
+         "pss": 152,
+         "swap": 0,
+         "size": 196,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 835812,
+        "name": "bash",
+        "rss": 3952,
+        "pss": 732,
+        "pssAnon": 324,
+        "pssFile": 408,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3952,
+        "threads": 1
+       },
+       {
+        "pid": 835848,
+        "name": "MiniBrowser",
+        "rss": 154200,
+        "pss": 44479,
+        "pssAnon": 26856,
+        "pssFile": 17621,
+        "pssShmem": 2,
+        "privateDirty": 26856,
+        "swap": 0,
+        "hwm": 154512,
+        "threads": 14
+       },
+       {
+        "pid": 835994,
+        "name": "WPENetworkProcess",
+        "rss": 77512,
+        "pss": 25236,
+        "pssAnon": 15336,
+        "pssFile": 9895,
+        "pssShmem": 5,
+        "privateDirty": 15340,
+        "swap": 0,
+        "hwm": 109016,
+        "threads": 12
+       },
+       {
+        "pid": 836003,
+        "name": "WPEWebProcess",
+        "rss": 212120,
+        "pss": 72078,
+        "pssAnon": 34788,
+        "pssFile": 37282,
+        "pssShmem": 8,
+        "privateDirty": 35128,
+        "swap": 0,
+        "hwm": 223588,
+        "threads": 11
+       }
+      ]
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/"
+       }
+      ],
+      "errors": [],
+      "workers": 2,
+      "page": {
+       "isolated": true,
+       "storage": {
+        "quota": 1048576000,
+        "usage": 270398937
+       },
+       "frames": 1
+      },
+      "runtime": null
+     },
+     "post": {
+      "at": 1791744213521,
+      "load": [
+       5.57,
+       6.6,
+       7.55
+      ],
+      "main": {
+       "rss": 1016500,
+       "pss": 865376,
+       "pssAnon": 787792,
+       "pssFile": 69574,
+       "pssShmem": 8010,
+       "privateDirty": 808296,
+       "swap": 0,
+       "hwm": 1903716,
+       "threads": 32,
+       "threadNames": {
+        "WPEWebProcess": 4,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 5,
+        "WebCore: Worker": 5,
+        "CryptoQueue": 4,
+        "onnection queue": 1,
+        ": ServiceWorker": 1,
+        "JITWorker": 1
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 15328,
+         "pss": 15328,
+         "swap": 0,
+         "size": 3840056,
+         "maps": 188
+        },
+        "file: other": {
+         "rss": 237976,
+         "pss": 86606,
+         "swap": 0,
+         "size": 575592,
+         "maps": 970
+        },
+        "[heap]": {
+         "rss": 3932,
+         "pss": 3932,
+         "swap": 0,
+         "size": 4516,
+         "maps": 1
+        },
+        "[anon:JSGigacage]": {
+         "rss": 103148,
+         "pss": 103148,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 156
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 616760,
+         "pss": 616760,
+         "swap": 0,
+         "size": 2440544,
+         "maps": 17559
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 9952,
+         "pss": 9952,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 43
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 21240,
+         "pss": 21240,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 701
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 160,
+         "pss": 152,
+         "swap": 0,
+         "size": 196,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 835812,
+        "name": "bash",
+        "rss": 3952,
+        "pss": 732,
+        "pssAnon": 324,
+        "pssFile": 408,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3952,
+        "threads": 1
+       },
+       {
+        "pid": 835848,
+        "name": "MiniBrowser",
+        "rss": 154236,
+        "pss": 44515,
+        "pssAnon": 26892,
+        "pssFile": 17621,
+        "pssShmem": 2,
+        "privateDirty": 26892,
+        "swap": 0,
+        "hwm": 154512,
+        "threads": 14
+       },
+       {
+        "pid": 835994,
+        "name": "WPENetworkProcess",
+        "rss": 77520,
+        "pss": 25244,
+        "pssAnon": 15344,
+        "pssFile": 9895,
+        "pssShmem": 5,
+        "privateDirty": 15348,
+        "swap": 0,
+        "hwm": 109016,
+        "threads": 12
+       },
+       {
+        "pid": 836003,
+        "name": "WPEWebProcess",
+        "rss": 212120,
+        "pss": 72078,
+        "pssAnon": 34788,
+        "pssFile": 37282,
+        "pssShmem": 8,
+        "privateDirty": 35128,
+        "swap": 0,
+        "hwm": 223588,
+        "threads": 11
+       }
+      ]
+     }
+    },
+    {
+     "name": "exited",
+     "peakSincePreviousPoint": {
+      "rss": 1022976,
+      "pss": 871777
+     },
+     "pre": {
+      "at": 1791744219226,
+      "load": [
+       5.09,
+       6.46,
+       7.49
+      ],
+      "main": {
+       "rss": 472648,
+       "pss": 321449,
+       "pssAnon": 243428,
+       "pssFile": 70011,
+       "pssShmem": 8010,
+       "privateDirty": 263936,
+       "swap": 0,
+       "hwm": 1903716,
+       "threads": 42,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 5,
+        "CryptoQueue": 1,
+        "onnection queue": 1,
+        ": ServiceWorker": 1,
+        "JITWorker": 3,
+        "t Helper Thread": 5,
+        "HeapHelper": 7,
+        "ollector Thread": 2,
+        "s Signal Sender": 1
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 15476,
+         "pss": 15476,
+         "swap": 0,
+         "size": 3930212,
+         "maps": 185
+        },
+        "file: other": {
+         "rss": 238488,
+         "pss": 87042,
+         "swap": 0,
+         "size": 575592,
+         "maps": 970
+        },
+        "[heap]": {
+         "rss": 3932,
+         "pss": 3932,
+         "swap": 0,
+         "size": 4516,
+         "maps": 1
+        },
+        "[anon:JSGigacage]": {
+         "rss": 54288,
+         "pss": 54288,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 27
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 144320,
+         "pss": 144320,
+         "swap": 0,
+         "size": 2440544,
+         "maps": 6732
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 1360,
+         "pss": 1360,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 25
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 6620,
+         "pss": 6620,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 537
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 160,
+         "pss": 152,
+         "swap": 0,
+         "size": 196,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 835812,
+        "name": "bash",
+        "rss": 3952,
+        "pss": 732,
+        "pssAnon": 324,
+        "pssFile": 408,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3952,
+        "threads": 1
+       },
+       {
+        "pid": 835848,
+        "name": "MiniBrowser",
+        "rss": 154440,
+        "pss": 44719,
+        "pssAnon": 27096,
+        "pssFile": 17621,
+        "pssShmem": 2,
+        "privateDirty": 27096,
+        "swap": 0,
+        "hwm": 155388,
+        "threads": 14
+       },
+       {
+        "pid": 835994,
+        "name": "WPENetworkProcess",
+        "rss": 77348,
+        "pss": 25062,
+        "pssAnon": 15172,
+        "pssFile": 9884,
+        "pssShmem": 5,
+        "privateDirty": 15176,
+        "swap": 0,
+        "hwm": 109016,
+        "threads": 13
+       },
+       {
+        "pid": 836003,
+        "name": "WPEWebProcess",
+        "rss": 212120,
+        "pss": 72078,
+        "pssAnon": 34788,
+        "pssFile": 37282,
+        "pssShmem": 8,
+        "privateDirty": 35128,
+        "swap": 0,
+        "hwm": 223588,
+        "threads": 11
+       }
+      ]
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/"
+       }
+      ],
+      "errors": [],
+      "workers": 0,
+      "page": {
+       "isolated": true,
+       "storage": {
+        "quota": 1048576000,
+        "usage": 270398937
+       },
+       "frames": 0
+      },
+      "runtime": null
+     },
+     "post": {
+      "at": 1791744220355,
+      "load": [
+       5.09,
+       6.46,
+       7.49
+      ],
+      "main": {
+       "rss": 472632,
+       "pss": 321432,
+       "pssAnon": 243412,
+       "pssFile": 70010,
+       "pssShmem": 8010,
+       "privateDirty": 263920,
+       "swap": 0,
+       "hwm": 1903716,
+       "threads": 42,
+       "threadNames": {
+        "WPEWebProcess": 5,
+        "EventDispatcher": 1,
+        "rruptDispatcher": 1,
+        "ReceiveQueue": 2,
+        "pool-spawner": 1,
+        "gmain": 1,
+        "gdbus": 1,
+        "eadedCompositor": 3,
+        "Core: Scrolling": 1,
+        "SkiaCPUWorker": 5,
+        "CryptoQueue": 1,
+        "onnection queue": 1,
+        ": ServiceWorker": 1,
+        "JITWorker": 3,
+        "t Helper Thread": 5,
+        "HeapHelper": 7,
+        "ollector Thread": 2,
+        "s Signal Sender": 1
+       },
+       "regions": {
+        "anon (unnamed)": {
+         "rss": 15476,
+         "pss": 15476,
+         "swap": 0,
+         "size": 3930212,
+         "maps": 185
+        },
+        "file: other": {
+         "rss": 238488,
+         "pss": 87041,
+         "swap": 0,
+         "size": 575592,
+         "maps": 970
+        },
+        "[heap]": {
+         "rss": 3932,
+         "pss": 3932,
+         "swap": 0,
+         "size": 4516,
+         "maps": 1
+        },
+        "[anon:JSGigacage]": {
+         "rss": 54288,
+         "pss": 54288,
+         "swap": 0,
+         "size": 67108864,
+         "maps": 27
+        },
+        "[anon:WKFastMalloc]": {
+         "rss": 144304,
+         "pss": 144304,
+         "swap": 0,
+         "size": 2440544,
+         "maps": 6756
+        },
+        "[anon:JSStructureHeap]": {
+         "rss": 1360,
+         "pss": 1360,
+         "swap": 0,
+         "size": 4194304,
+         "maps": 25
+        },
+        "shm: WebKitSharedMemory": {
+         "rss": 8004,
+         "pss": 8002,
+         "swap": 0,
+         "size": 8008,
+         "maps": 4
+        },
+        "[anon:JSJITCode]": {
+         "rss": 6620,
+         "pss": 6620,
+         "swap": 0,
+         "size": 1048576,
+         "maps": 537
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 160,
+         "pss": 152,
+         "swap": 0,
+         "size": 196,
+         "maps": 7
+        }
+       },
+       "wasmMemories": []
+      },
+      "others": [
+       {
+        "pid": 835812,
+        "name": "bash",
+        "rss": 3952,
+        "pss": 732,
+        "pssAnon": 324,
+        "pssFile": 408,
+        "pssShmem": 0,
+        "privateDirty": 324,
+        "swap": 0,
+        "hwm": 3952,
+        "threads": 1
+       },
+       {
+        "pid": 835848,
+        "name": "MiniBrowser",
+        "rss": 154344,
+        "pss": 44623,
+        "pssAnon": 27000,
+        "pssFile": 17621,
+        "pssShmem": 2,
+        "privateDirty": 27000,
+        "swap": 0,
+        "hwm": 155388,
+        "threads": 14
+       },
+       {
+        "pid": 835994,
+        "name": "WPENetworkProcess",
+        "rss": 77356,
+        "pss": 25070,
+        "pssAnon": 15180,
+        "pssFile": 9884,
+        "pssShmem": 5,
+        "privateDirty": 15184,
+        "swap": 0,
+        "hwm": 109016,
+        "threads": 13
+       },
+       {
+        "pid": 836003,
+        "name": "WPEWebProcess",
+        "rss": 212120,
+        "pss": 72077,
+        "pssAnon": 34788,
+        "pssFile": 37281,
+        "pssShmem": 8,
+        "privateDirty": 35128,
+        "swap": 0,
+        "hwm": 223588,
+        "threads": 11
+       }
+      ]
+     }
+    }
+   ],
+   "light": [
+    {
+     "secondsIdle": 30,
+     "load": [
+      5.57,
+      6.6,
+      7.55
+     ],
+     "main": {
+      "rss": 1016472,
+      "pss": 865347,
+      "pssAnon": 787764,
+      "pssFile": 69573,
+      "pssShmem": 8010,
+      "privateDirty": 808268,
+      "swap": 0,
+      "hwm": 1903716,
+      "threads": 32
+     },
+     "wasmMemories": []
+    }
+   ],
+   "events": [],
+   "mainPid": 836577,
+   "openTimeline": [
+    {
+     "ms": 293,
+     "rss": 367004,
+     "pss": 216830,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 50
+    },
+    {
+     "ms": 568,
+     "rss": 711608,
+     "pss": 561434,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 50
+    },
+    {
+     "ms": 813,
+     "rss": 731476,
+     "pss": 581206,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 51
+    },
+    {
+     "ms": 1058,
+     "rss": 615936,
+     "pss": 465376,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 53
+    },
+    {
+     "ms": 1313,
+     "rss": 704368,
+     "pss": 553579,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 55
+    },
+    {
+     "ms": 1568,
+     "rss": 738612,
+     "pss": 587823,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 55
+    },
+    {
+     "ms": 1822,
+     "rss": 809000,
+     "pss": 658147,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 57
+    },
+    {
+     "ms": 2100,
+     "rss": 939112,
+     "pss": 788225,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 57
+    },
+    {
+     "ms": 2353,
+     "rss": 1061480,
+     "pss": 910593,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 59
+    },
+    {
+     "ms": 2614,
+     "rss": 1126536,
+     "pss": 975607,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 59
+    },
+    {
+     "ms": 2846,
+     "rss": 1111004,
+     "pss": 960075,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 59
+    },
+    {
+     "ms": 3094,
+     "rss": 1108640,
+     "pss": 957679,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 59
+    },
+    {
+     "ms": 3342,
+     "rss": 1108524,
+     "pss": 957564,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 3588,
+     "rss": 1107704,
+     "pss": 956744,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 3832,
+     "rss": 1105356,
+     "pss": 954429,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 4086,
+     "rss": 1105336,
+     "pss": 954409,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 4347,
+     "rss": 1105332,
+     "pss": 954405,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 4586,
+     "rss": 1105332,
+     "pss": 954403,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 4839,
+     "rss": 1105180,
+     "pss": 954252,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 5087,
+     "rss": 1105180,
+     "pss": 954252,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 5336,
+     "rss": 1105160,
+     "pss": 954233,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 5591,
+     "rss": 1105160,
+     "pss": 954233,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 5844,
+     "rss": 1105160,
+     "pss": 954233,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 6104,
+     "rss": 1105160,
+     "pss": 954222,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 6434,
+     "rss": 1105160,
+     "pss": 954220,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 6656,
+     "rss": 1105160,
+     "pss": 954220,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 6976,
+     "rss": 1105160,
+     "pss": 954221,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 7148,
+     "rss": 1105268,
+     "pss": 954329,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 7401,
+     "rss": 1103940,
+     "pss": 953001,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 7663,
+     "rss": 1103936,
+     "pss": 952997,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 7918,
+     "rss": 1103936,
+     "pss": 952997,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 8169,
+     "rss": 1103936,
+     "pss": 952997,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 8396,
+     "rss": 1103936,
+     "pss": 952997,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 8659,
+     "rss": 1103936,
+     "pss": 952997,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 8900,
+     "rss": 1103700,
+     "pss": 952762,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 9148,
+     "rss": 1103700,
+     "pss": 952761,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 9389,
+     "rss": 1103700,
+     "pss": 952761,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 9640,
+     "rss": 1103700,
+     "pss": 952762,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 9895,
+     "rss": 1103700,
+     "pss": 952762,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 10144,
+     "rss": 1103700,
+     "pss": 952762,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 10397,
+     "rss": 1103424,
+     "pss": 952486,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 10655,
+     "rss": 1102264,
+     "pss": 951325,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    },
+    {
+     "ms": 10911,
+     "rss": 1102040,
+     "pss": 951101,
+     "partitionAlloc": 0,
+     "v8Sandbox": 0,
+     "wasmMemories": 0,
+     "v8": 0,
+     "threads": 58
+    }
+   ],
+   "open": {
+    "openMs": 2815,
+    "timings": {
+     "manifest": 21,
+     "boot": 83,
+     "source": 86,
+     "preview.spawn": 91,
+     "agent.spawn": 92,
+     "preview.listening": 1145,
+     "agent.listening": 1665,
+     "preview.ready": 1796,
+     "preview.visible": 2310,
+     "agent.ready": 2638,
+     "chat.ready": 2720
+    }
+   },
+   "turn1": {
+    "replyMs": 3488,
+    "heading": "Memory A",
+    "tools": 2,
+    "assistants": 3
+   },
+   "turns": [
+    {
+     "replyMs": 3177,
+     "heading": "Memory A",
+     "tools": 0,
+     "assistants": 4
+    },
+    {
+     "replyMs": 15864,
+     "heading": "Memory A",
+     "tools": 5,
+     "assistants": 10
+    },
+    {
+     "replyMs": 3331,
+     "heading": "Memory B",
+     "tools": 2,
+     "assistants": 13
+    },
+    {
+     "replyMs": 3334,
+     "heading": "Memory C",
+     "tools": 2,
+     "assistants": 16
+    },
+    {
+     "replyMs": 3520,
+     "heading": "Memory C",
+     "tools": 0,
+     "assistants": 17
+    }
+   ],
+   "processesGoneAfterClose": {
+    "main": true,
+    "sw": true
+   }
+  }
+ ]
+}
