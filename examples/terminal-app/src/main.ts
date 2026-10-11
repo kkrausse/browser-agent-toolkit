@@ -26,8 +26,8 @@
 //
 // The public build (`PUBLIC=1 bun run build`, a page for strangers) differs: with no `?model=`
 // the server has no provider of this page's and uses OpenCode's own hosted free models
-// (opencode.ai/zen, no key), which it reaches through the tunnel; only opencode.ai is
-// tunnelled; nothing is posted anywhere without `?diag=<url>`; the ChatGPT sign-in bar is off.
+// (opencode.ai/zen, no key), which it reaches through the tunnel; opencode.ai and
+// chatgpt.com (a ChatGPT plan signed in with a code) are tunnelled; nothing is posted anywhere without `?diag=<url>`; the ChatGPT sign-in bar is off.
 //   ?clientLog=debug     the client logs every level to its file in the guest (/tmp/opencode-client/tui.log)
 //   ?reset=1             first forget this browser's workspace (source edits, sessions) and the client's saved state
 import { installDerived, installSource, type BootRuntime, type EditorManifest, type RuntimeHost, type RuntimeProcess, type RuntimeTerminal, type TerminalSize } from '@kkrausse/browser-agent-toolkit/browser'
@@ -82,8 +82,10 @@ const openAiKeys = 'https://auth.openai.com/.well-known/jwks.json'
 // answers carry no CORS headers, and the keys above. The token exchange at auth.openai.com
 // allows any origin and stays with the browser's fetch. OpenCode's own hosted models
 // (opencode.ai/zen), which the server calls with no sign-in, refuse a browser's preflight (404).
-// The public build carries the last one alone: its relay allows nothing else.
-const tunnelled = isPublic ? ['opencode.ai'] : ['api.openai.com', 'https://auth.openai.com/.well-known/', 'opencode.ai']
+// A ChatGPT plan signed in with a device code (the client's own "login with code", which needs
+// no bar of this page) is called at chatgpt.com/backend-api/codex/responses, also without CORS
+// headers. The public build carries the last two: its sign-in bar is off, the code one is not.
+const tunnelled = isPublic ? ['chatgpt.com', 'opencode.ai'] : ['api.openai.com', 'chatgpt.com', 'https://auth.openai.com/.well-known/', 'opencode.ai']
 
 const params = new URLSearchParams(location.search)
 // `?reset=1` is taken out of the address at once and remembered for this start only: the page
