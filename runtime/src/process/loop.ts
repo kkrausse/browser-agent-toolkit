@@ -240,7 +240,7 @@ export function createLoop(host: {
     unref() {
       if (this[kRefed]) {
         this[kRefed] = false
-        if (!this._destroyed) refs--
+        if (!this._destroyed) released()
       }
       return this
     }
@@ -278,7 +278,7 @@ export function createLoop(host: {
     t._destroyed = true
     t._onTimeout = null
     timersById.delete(t._id)
-    if (t[kRefed]) refs--
+    if (t[kRefed]) released()
   }
   function setTimeout(fn: (...a: any[]) => void, ms?: number, ...args: unknown[]) {
     if (typeof fn !== 'function') throw typeError('ERR_INVALID_ARG_TYPE', 'The "callback" argument must be of type function')
@@ -337,7 +337,7 @@ export function createLoop(host: {
     unref() {
       if (this[kRefed]) {
         this[kRefed] = false
-        if (!this._destroyed) refs--
+        if (!this._destroyed) released()
       }
       return this
     }
@@ -361,7 +361,7 @@ export function createLoop(host: {
     if (!im || !(im instanceof Immediate) || im._destroyed) return
     im._destroyed = true
     im._onImmediate = null
-    if (im[kRefed]) refs--
+    if (im[kRefed]) released()
   }
   function defer(fn: () => void) {
     setImmediate(fn)
@@ -503,6 +503,17 @@ export function createLoop(host: {
   let exitCheck = 0
   let ranAtTurnStart = 0
   let inTurn = false
+  /**
+   * Drop one reference. Only the end of a turn looks at whether anything is left, and a
+   * reference dropped from a browser task of its own (the continuation of a native promise:
+   * a `fetch` that settled, a body that was read to its end, a `clearTimeout` after either)
+   * is not in a turn: without a turn asked for here, a process whose last reference went that
+   * way sat until its next timer or kernel event, or for ever.
+   */
+  function released() {
+    refs--
+    if (refs <= 0 && !inTurn) ping()
+  }
   /** 0 idle, 1 timers, 2 kernel events, 3 immediates. A turn that yields between callbacks resumes in its phase. */
   let phase = 0
   function turn() {
@@ -581,7 +592,7 @@ export function createLoop(host: {
       refs++
     },
     unref() {
-      refs--
+      released()
     },
     refs: () => refs,
     defer,
