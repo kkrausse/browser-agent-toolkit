@@ -73,7 +73,7 @@ export interface ServerNetwork {
   /** Exact URLs the runtime fetches from somewhere else (a copy this page serves). */
   fetchMap?: Record<string, string>
   /** Requests the runtime makes itself, with its own TLS, through a TCP relay instead of the browser's fetch. */
-  tunnel?: { url: string; to: string[] }
+  tunnel?: { url: string; protocol?: 'relay' | 'wisp'; to: string[] }
 }
 
 export function serverLaunch(description: LaunchDescription, password: string, model: ModelEndpoint | undefined, { fetchMap = {}, tunnel }: ServerNetwork = {}): Launch {
@@ -89,7 +89,7 @@ export function serverLaunch(description: LaunchDescription, password: string, m
     // Exact URLs the runtime fetches from somewhere else (a copy this page serves).
     ...(Object.keys(fetchMap).length ? { BAT_FETCH_MAP: JSON.stringify(fetchMap) } : {}),
     // Hosts (or URL prefixes) that answer without CORS headers: see the runtime's net/fetch.ts.
-    ...(tunnel ? { BAT_FETCH_TUNNEL: tunnel.to.join(' '), BAT_FETCH_TUNNEL_URL: tunnel.url } : {}),
+    ...(tunnel ? { BAT_FETCH_TUNNEL: tunnel.to.join(' '), BAT_FETCH_TUNNEL_URL: tunnel.url, ...(tunnel.protocol === 'wisp' ? { BAT_FETCH_TUNNEL_PROTOCOL: 'wisp' } : {}) } : {}),
     // At INFO the server prints every bus event; the page logs (and posts) what it prints.
     OPENCODE_LOG_LEVEL: 'WARN',
     // In the guest, loopback means the guest's own listeners. A model endpoint on this

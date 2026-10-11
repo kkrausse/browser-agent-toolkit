@@ -18,10 +18,12 @@
 //               for a page that is not published beside its mock
 //   TUNNEL_URL  the default `?tunnel=` of the built page: the WebSocket address of a TCP relay
 //               (`wss://relay.example/tcp`) that allows the page's origin
+//   WISP_URL    the default `?wisp=` of the built page: a Wisp server (`wss://wisp.example/`), used
+//               instead of TUNNEL_URL's relay unless the address says otherwise
 //   PUBLIC=1    the public build, a page for strangers (README.md, "The public build"): no
 //               default model endpoint (the server uses OpenCode's hosted free models), no
 //               diagnostics unless the address asks, no ChatGPT sign-in bar, only opencode.ai
-//               tunnelled. TUNNEL_URL then defaults to the relay below; MODEL_URL is refused
+//               tunnelled. WISP_URL and TUNNEL_URL then default to the two below; MODEL_URL is refused
 //   PUBLIC_MODEL  the hosted free model a fresh workspace of the public build starts on
 //               (default below; empty for the server's own choice)
 import { copyFileSync, createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
@@ -34,11 +36,15 @@ const isPublic = process.env.PUBLIC === '1'
 // The relay of the public build: packages/relay/tcp-relay-deno.ts on Deno Deploy, which carries
 // opencode.ai:443 and nothing else, for the page origins in its RELAY_ORIGINS.
 const publicRelay = 'wss://bat-relay-2.kevonavin.deno.net/tcp'
+// What the public build uses first: Mercury Workshop's public Wisp server, which is not ours
+// and promises nothing (it carried opencode.ai:443 on 2026-10-11). `?wisp=0` on the page
+// goes back to the relay above; `?wisp=<wss URL>` names another Wisp server.
+const publicWisp = 'wss://wisp.mercurywork.shop/'
 if (isPublic && process.env.MODEL_URL) throw Error('PUBLIC=1 builds a page with no default model endpoint: unset MODEL_URL')
 // OpenCode Zen's free models come and go. This one answered on 2026-10-10; the page stops
 // naming it once Zen no longer lists it (src/main.ts, hostedModel).
 const publicModel = isPublic ? process.env.PUBLIC_MODEL ?? 'ling-3.1-flash-free' : ''
-const modelUrl = process.env.MODEL_URL ?? '', tunnelUrl = process.env.TUNNEL_URL ?? (isPublic ? publicRelay : '')
+const modelUrl = process.env.MODEL_URL ?? '', tunnelUrl = process.env.TUNNEL_URL ?? (isPublic ? publicRelay : ''), wispUrl = process.env.WISP_URL ?? (isPublic ? publicWisp : '')
 const out = resolve(here, process.env.OUT_DIR ?? 'dist')
 for (const [path, how] of [['.display/display.js', 'bun run display'], ['.editor/prepared/manifest.json', 'bun run prepare:editor']] as const) {
   if (!existsSync(resolve(here, path))) throw Error(`Missing ${path}: run \`${how}\` in examples/terminal-app (or \`bun run terminal\` in the repository root).`)
@@ -96,10 +102,10 @@ async function bundle(entry: string, name: string, options: Partial<Parameters<t
   await Bun.write(join(out, name), await result.outputs[0]!.text())
   kept.add(name)
 }
-await bundle('src/main.ts', 'main.js', { define: { 'process.env.MODEL_URL': JSON.stringify(modelUrl), 'process.env.TUNNEL_URL': JSON.stringify(tunnelUrl), 'process.env.PUBLIC': JSON.stringify(isPublic ? '1' : ''), 'process.env.PUBLIC_MODEL': JSON.stringify(publicModel) } })
+await bundle('src/main.ts', 'main.js', { define: { 'process.env.MODEL_URL': JSON.stringify(modelUrl), 'process.env.TUNNEL_URL': JSON.stringify(tunnelUrl), 'process.env.WISP_URL': JSON.stringify(wispUrl), 'process.env.PUBLIC': JSON.stringify(isPublic ? '1' : ''), 'process.env.PUBLIC_MODEL': JSON.stringify(publicModel) } })
 await bundle('sw.ts', 'sw.js', { format: 'iife', define: { GZIPPED: JSON.stringify(gzipped) } })
 if (!isPublic) await bundle('client-tap.ts', 'client-tap.js', { target: 'node' })
 
 for (const path of walk(out)) if (!kept.has(path)) rmSync(join(out, path))
 const bytes = [...kept].reduce((sum, path) => sum + statSync(join(out, path)).size, 0)
-console.log(`Built ${out}: ${kept.size} files, ${(bytes / 1e6).toFixed(1)} MB (${compressed} compressed now, ${reused} unchanged, ${copied} copied; ${gzipped.length} shipped as .gz)${isPublic ? `; public build${publicModel ? `, starting on ${publicModel}` : ''}` : ''}${modelUrl ? `; default model ${modelUrl}` : ''}${tunnelUrl ? `; default tunnel ${tunnelUrl}` : ''}`)
+console.log(`Built ${out}: ${kept.size} files, ${(bytes / 1e6).toFixed(1)} MB (${compressed} compressed now, ${reused} unchanged, ${copied} copied; ${gzipped.length} shipped as .gz)${isPublic ? `; public build${publicModel ? `, starting on ${publicModel}` : ''}` : ''}${modelUrl ? `; default model ${modelUrl}` : ''}${tunnelUrl ? `; default tunnel ${tunnelUrl}` : ''}${wispUrl ? `; default Wisp server ${wispUrl}` : ''}`)

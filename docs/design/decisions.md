@@ -1202,3 +1202,26 @@ machine. `examples/terminal-app/build.ts` takes `PUBLIC=1`; the development buil
   commit is built in a scratch repository from the built directory and pushed with force as
   `gh-pages`, so this checkout's branches and index are never involved and 55 MB builds do
   not accumulate. It does nothing without `--yes`.
+
+## 2026-10-11: the tunnel also speaks Wisp, and the public build uses a public Wisp server
+
+The public page depended on one deployment of ours (the relay on Deno Deploy). The tunnel only
+needs somebody to carry TCP for a tab, and there is a public protocol for that with public
+servers.
+
+- **A second wire format in the same client, not a second client.** `tunnelRequest` takes
+  `protocol: 'wisp'` (`BAT_FETCH_TUNNEL_PROTOCOL=wisp` in a process's environment): Wisp v1
+  framing around the same queues, TLS engine and HTTP parser. The default and every path of
+  the relay's own format are unchanged.
+- **One stream per WebSocket**, as with the relay, although Wisp multiplexes: a request's
+  failure, abort and cleanup stay those of one socket. Sharing a socket would save a WebSocket
+  handshake per request and is not done.
+- **No reply to a v2 server's INFO.** A CONNECT as the first packet keeps such a server on v1,
+  which is all that is used.
+- **What Wisp lacks**: an answer to CONNECT (TLS starts at once and a refusal arrives as a
+  CLOSE with a reason), and flow control towards the page (received bytes are held in the tab
+  until the body's reader takes them; the relay's format stops the far end instead).
+- **The public build's default is `wss://wisp.mercurywork.shop/`**, which is not ours and
+  publishes no terms; the Deno relay stays one `?wisp=0` away. Measured there on 2026-10-11,
+  outside a browser: `GET https://opencode.ai/zen/v1/models` through this client, 200,
+  `TLSv1_3 TLS13_AES_256_GCM_SHA384`, 0.25 s with the WebSocket handshake.

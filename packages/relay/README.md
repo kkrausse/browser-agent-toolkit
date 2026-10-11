@@ -10,6 +10,9 @@ example's `?tunnel=` names one (`examples/terminal-app/README.md`, "The tunnel")
 cd packages/relay && RELAY_ORIGINS='https://<page origin> https://<another>' PORT=4799 bun tcp-relay-main.ts
 ```
 
+The runtime's tunnel also speaks Wisp v1 (`BAT_FETCH_TUNNEL_PROTOCOL=wisp`, the example's `?wisp=`),
+for which any stock or public Wisp server will do and nothing here is needed.
+
 `tcp-relay-main.ts` is the program (its header lists `RELAY_ORIGINS`, `RELAY_HOSTS`,
 `TCP_RELAY_ALLOW`, `HOST`, `PORT`); `tcp-relay.ts` has the wire format, the allowlist and every
 limit. No dependencies.

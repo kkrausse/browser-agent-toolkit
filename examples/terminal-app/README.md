@@ -29,7 +29,8 @@ permission dialog: this page's configuration allows every tool (the agent's reac
 `?reset=1` (forget this browser's workspace, the client's saved state and the TODO list first),
 `?diag=<url>` (where the page posts its diagnostics; `0` turns them off; [the public build](#the-public-build) posts none without it),
 `?clientLog=debug` (the client logs every level to `/tmp/opencode-client/tui.log` in the guest),
-`?tunnel=<wss URL>` (a TCP relay for [the hosts a tab cannot read](#the-tunnel); `0` for none).
+`?tunnel=<wss URL>` (a TCP relay for [the hosts a tab cannot read](#the-tunnel); `0` for none),
+`?wisp=<wss URL>` ([a Wisp server](#a-wisp-server-instead) in that relay's place; `0` for none).
 
 After a setup, `bun run editor` in this directory repeats only the example's own steps
 (`display`, `prepare:editor`, `build` into `dist/`, `start`); set `BAT_PREPARE` when `bat-prepare` is not
@@ -46,7 +47,7 @@ MODEL_URL=https://<mock host>:4311/v1 OUT_DIR=dist-published bun run build
 is 37 MB): copy it to a file shelf and open its URL. `MODEL_URL` is the built page's default
 `?model=` and, at `/diag` of the same host, its diagnostics collector; without it the default
 is port 4311 of the page's own host, which only suits a page served beside its mock.
-`TUNNEL_URL=wss://<relay>/tcp` is the built page's default `?tunnel=`.
+`TUNNEL_URL=wss://<relay>/tcp` is the built page's default `?tunnel=`, `WISP_URL` its default `?wisp=`.
 
 ### The public build
 
@@ -63,7 +64,7 @@ sign-in. What differs from the development build, all of it decided when the pag
 | --- | --- | --- |
 | model | `?model=`, else `MODEL_URL`, else the mock on port 4311 of the page's host | none named: the OpenCode server's own `opencode` provider, OpenCode Zen with the key `public`, which has the models that cost nothing and needs no sign-in. `?model=` still names an endpoint |
 | first model | `?modelId=`, default `scripted` | `PUBLIC_MODEL` of the build (default `ling-3.1-flash-free`), for as long as `https://opencode.ai/zen/v1/models` lists it; then the server's choice. `?modelId=<id>` names another hosted one |
-| tunnel | `TUNNEL_URL`, else none; carries `api.openai.com`, OpenAI's keys document and `opencode.ai` | `TUNNEL_URL`, else `wss://bat-relay-2.kevonavin.deno.net/tcp` (`packages/relay/tcp-relay-deno.ts` on Deno Deploy); carries `opencode.ai` only |
+| tunnel | `WISP_URL`, else `TUNNEL_URL`, else none; carries `api.openai.com`, OpenAI's keys document and `opencode.ai` | `WISP_URL`, else the public Wisp server `wss://wisp.mercurywork.shop/`; with `?wisp=0`, `TUNNEL_URL`, else `wss://bat-relay-2.kevonavin.deno.net/tcp` (`packages/relay/tcp-relay-deno.ts` on Deno Deploy); carries `opencode.ai` only |
 | diagnostics | posted to the collector unless `?diag=0` | nothing is sent unless the address has `?diag=<url>` |
 | ChatGPT sign-in | the bar and the client's preload module (`client-tap.js`) | neither is installed; `client-tap.js` and `openai-jwks.json` are not shipped |
 | the page says | title: model and tunnel | title: `free model from OpenCode Zen · relay <host>`; a two-line footer under the panel: what runs in the tab, whose model it is, what the relay carries, a link to the source |
@@ -284,6 +285,24 @@ title and the log say which relay is in use.
   first, is answered as a plain GET, logs "session websocket connect failed; using http" and
   posts; that warning is expected with every OpenAI prompt.
 - **Roots** change only with a new `bat_tls.wasm` (`runtime/src/net/tls/native/build.sh`).
+
+#### A Wisp server instead
+
+`?wisp=wss://<server>/` (or the build's `WISP_URL`) names a [Wisp](https://github.com/MercuryWorkshop/wisp-protocol)
+server to carry the same connections: a public protocol for TCP streams over a WebSocket, with
+stock servers in several languages and public instances that are nobody's of this project. TLS
+and HTTP are the same code in the tab, so such a server sees what the relay above sees and no
+more. The differences are in what it promises:
+
+- **Whose it is.** The public build's default, `wss://wisp.mercurywork.shop/`, is Mercury
+  Workshop's. It publishes no terms; it may throttle, refuse this page's origin one day, or go
+  away. `?wisp=0` goes back to the relay above, `?wisp=<another>` to another server.
+- **Its allowlists are its own.** The page tunnels only the hosts it names, but nothing on the
+  server ties it to this page or to those hosts.
+- **No flow control towards the page** in Wisp v1: what the server sends faster than the
+  response's reader takes is held in the tab.
+- An address with `?wisp=` or `?tunnel=` comes before either built default; with both, the
+  Wisp server is used.
 
 The tokens are a row of the server's database, `/workspace/.server/data/opencode.sqlite`, in
 plain text: in this browser's storage for this page (OPFS), kept across reloads, removed by

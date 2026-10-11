@@ -19,6 +19,9 @@
 //                        `?model=`: which hosted free model to start on, default the build's PUBLIC_MODEL)
 //   ?tunnel=<wss URL>    a TCP relay (packages/relay/tcp-relay-main.ts) for the hosts that answer without CORS headers.
 //                        Default: the build's TUNNEL_URL, else none; `0` for none
+//   ?wisp=<wss URL>      a Wisp server (anybody's: the protocol is public) to carry those hosts instead of that relay.
+//                        Default: the build's WISP_URL, else none; `0` for none, which leaves `?tunnel=`. A `?wisp=` or
+//                        `?tunnel=` in the address comes before either built default
 //   ?diag=<url>          where the page posts its diagnostics (diag.ts); `0` for nowhere
 //
 // The public build (`PUBLIC=1 bun run build`, a page for strangers) differs: with no `?model=`
@@ -111,8 +114,11 @@ async function hostedModel(): Promise<string | undefined> {
   return undefined
 }
 
-const givenTunnel = params.get('tunnel') ?? builtTunnel
-const tunnel = givenTunnel && givenTunnel !== '0' && /^wss?:$/.test(URL.parse(givenTunnel)?.protocol ?? '') ? { url: givenTunnel, to: tunnelled } : undefined
+const relayAddress = (given: string | null | undefined) => given && given !== '0' && /^wss?:$/.test(URL.parse(given)?.protocol ?? '') ? given : undefined
+// The address's own choice first, then the build's; of two, the Wisp server.
+const wispUrl = relayAddress(params.get('wisp')) ?? (params.get('wisp') === '0' || relayAddress(params.get('tunnel')) ? undefined : relayAddress(process.env.WISP_URL))
+const tunnelUrl = wispUrl ?? relayAddress(params.get('tunnel') ?? builtTunnel)
+const tunnel = tunnelUrl ? { url: tunnelUrl, protocol: wispUrl ? 'wisp' as const : 'relay' as const, to: tunnelled } : undefined
 
 const status = document.querySelector<HTMLPreElement>('#status')!
 const frame = document.querySelector<HTMLIFrameElement>('#app')!
@@ -231,8 +237,8 @@ async function main() {
   // The page watches for a sign-in that waits on a loopback redirect (signin.ts).
   await installClient(runtime.fs, tapScript && { script: await tapScript, exchange: watchSignIn(() => window.batTerminal.runtime, log) })
   if (model) log(`[page] model endpoint: ${model.baseURL} (model ${model.id}), fetched by this tab directly`)
-  else log(`[page] model: OpenCode's hosted free models (opencode.ai/zen), no key, starting on ${hostedId ?? "the server's choice"}${tunnel ? '' : '; they need a relay (?tunnel=) and there is none'}`)
-  if (tunnel) log(`[page] tunnel: ${tunnel.to.join(', ')} through the relay at ${new URL(tunnel.url).host}, with TLS in this tab`)
+  else log(`[page] model: OpenCode's hosted free models (opencode.ai/zen), no key, starting on ${hostedId ?? "the server's choice"}${tunnel ? '' : '; they need a relay (?wisp= or ?tunnel=) and there is none'}`)
+  if (tunnel) log(`[page] tunnel: ${tunnel.to.join(', ')} through the ${tunnel.protocol === 'wisp' ? 'Wisp server' : 'relay'} at ${new URL(tunnel.url).host}, with TLS in this tab`)
 
   // Both programs start at once; each is its own Worker.
   say('Starting the app and the OpenCode server…')

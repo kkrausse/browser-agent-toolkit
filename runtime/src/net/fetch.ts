@@ -23,7 +23,8 @@
 //
 // `BAT_FETCH_TUNNEL` (host names, or `https://host/path` prefixes for only the URLs under a
 // path; separated by spaces or commas) with `BAT_FETCH_TUNNEL_URL` (`wss://relay.example/tcp`)
-// in the process's environment: an https request to one of those is not given to the browser. The runtime opens a WebSocket to the relay, which opens
+// in the process's environment (and `BAT_FETCH_TUNNEL_PROTOCOL=wisp` when that address is a Wisp
+// server's rather than packages/relay's): an https request to one of those is not given to the browser. The runtime opens a WebSocket to the relay, which opens
 // a TCP connection to the host and carries bytes; TLS (certificate chain and name verified
 // against public roots; nothing can turn that off) and HTTP/1.1 are spoken here, in the tab.
 // For an API that answers without `Access-Control-Allow-Origin`, whose response the browser's
@@ -142,7 +143,7 @@ function createGuestFetch(rt: Runtime): GuestFetch {
   async function tunnelled(relay: string, url: URL, req: Wire): Promise<WireResponse & { url: string }> {
     const via = `tunnel via ${(() => { try { return new URL(relay).host } catch { return 'an unreadable relay address' } })()}`
     try {
-      const res = await tunnelRequest({ relayUrl: relay, WebSocket: rt.host.WebSocket, engine: tlsEngine }, { url, ...req })
+      const res = await tunnelRequest({ relayUrl: relay, protocol: env('BAT_FETCH_TUNNEL_PROTOCOL') === 'wisp' ? 'wisp' : 'relay', WebSocket: rt.host.WebSocket, engine: tlsEngine }, { url, ...req })
       said(url, { method: req.method }, `HTTP ${res.status} (${via}, ${res.tls})`)
       return { status: res.status, statusText: res.statusText, headers: res.headers, body: res.body, url: url.href }
     } catch (error) {
