@@ -47,6 +47,14 @@ logs FFI call and copy volume once a second.
 ../../mock-llm/down.sh
 ```
 
+**Also as an ordinary Node program** (2026-10-10). `bun run build:tui:node` writes `dist/node/`:
+the same TUI with `node:*` left as imports and no shim compiled in, an entry (`host/node-main.ts`),
+the wasm core, and OpenTUI's tree-sitter worker unmodified (a `node:worker_threads` worker that
+reads its grammars from files). The toolkit runtime runs it as a process on its kernel's pty:
+that is what `examples/terminal-app` uses now, in place of this page's machine. The numbers
+below are for the machine on this page; the ones for the toolkit are in
+`docs/experiments/2026-10-10-toolkit-pty.md`.
+
 Other entry points:
 
 | Command | What it shows |

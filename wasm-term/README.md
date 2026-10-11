@@ -66,7 +66,7 @@ notes call this repository's Rust runtime "bat-rust", the name of its checkout.
 
 | Path | What |
 | --- | --- |
-| `kernel/` | Rust crate(s): pty + line discipline, compiled to wasm |
+| `kernel/` | Rust crate: the C ABI over the pty + line discipline, compiled to wasm. The pty itself is `../crates/bat-pty`, shared with the toolkit runtime's kernel |
 | `host/` | TypeScript: worker runtime, WASI + custom imports, vfs, net bridge, persistence; `host/node/` runs JavaScript programs on the same machine (node-style `process`, `fs`, ...); `host/proc.ts`, `host/sh/`, `host/shell-worker.ts` are child processes: the shell (`host/sh/build.sh` builds it from `../crates/bat-sh`) |
 | `web/` | Bun dev server (COOP/COEP), the launcher and the page wiring ghostty-web to a program; `web/static.ts` builds codex-local as static files with no server behind them; `web/verify/` browser checks |
 | `guests/` | Test programs built for the guest ABI |

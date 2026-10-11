@@ -220,7 +220,11 @@ async function main() {
   const launch = clientLaunch(agent.port, password)
   // `?clientLog=debug`: the client logs every level to its file, not only warnings and errors.
   if (params.get('clientLog') === 'debug') launch.env = { ...launch.env, OPENCODE_TUI_DEBUG: '1' }
-  client = await runtime.spawnTerminal(launch, { ...display.size(), onOutput: data => display.write(data) })
+  let first = true
+  client = await runtime.spawnTerminal(launch, { ...display.size(), onOutput: data => {
+    if (first) { first = false; log(`[page] the client's first output came ${Math.round(performance.now() - started)} ms after its start`) }
+    display.write(data)
+  } })
   log(`[page] OpenCode client started on a terminal of the runtime (pid ${client.pid}, ${display.size().cols}x${display.size().rows})`)
   void client.exited.then(exit => {
     log(`[client] exited (code ${exit.code}, signal ${exit.signal ?? 'none'}) after ${Math.round(performance.now() - started)} ms`)

@@ -1,9 +1,10 @@
 # Terminal example
 
 The TODO app of `../todo-app` with the real OpenCode terminal client beside it, everything in
-one browser tab: the app's Vite dev server and the OpenCode 2.0.26 server run on the toolkit's
-runtime, the OpenCode 2.0.26 TUI runs on [wasm-term](#the-terminal-half)'s pty machine in a
-ghostty-web terminal. The terminal is a panel on the right: **Close** / **OpenCode** slide it,
+one browser tab, on one runtime: the app's Vite dev server, the OpenCode 2.0.26 server and the
+OpenCode 2.0.26 TUI are all processes of the toolkit's runtime. The TUI runs on a terminal of
+the runtime's kernel (a pty with a line discipline) and is drawn by a
+[ghostty-web display](#the-terminal-half) on the page. The terminal is a panel on the right: **Close** / **OpenCode** slide it,
 the grip on its left edge drags its width, and the terminal refits. No chat UI.
 
 The example is a **directory of static files** (`dist/`, with an `index.html`): any file
@@ -27,6 +28,7 @@ hot-reloads. ``run `echo hi` `` makes the mock call the shell tool, which runs w
 permission dialog: this page's configuration allows every tool (the agent's reach is the tab). Page parameters: `?model=<base URL>`, `?modelId=<id>` (default `scripted`),
 `?reset=1` (forget this browser's workspace and the client's saved state first),
 `?diag=<url>` (where the page posts its diagnostics; `0` turns them off),
+`?clientLog=debug` (the client logs every level to `/tmp/opencode-client/tui.log` in the guest),
 `?tunnel=<wss URL>` (a TCP relay for [the hosts a tab cannot read](#the-tunnel); `0` for none).
 
 After a setup, `bun run editor` in this directory repeats only the example's own steps
@@ -61,17 +63,33 @@ Every URL is relative to the page, so the directory works at `/` and at
 
 ## The terminal half
 
-wasm-term is [`wasm-term/`](../../wasm-term/README.md) of this repository; its build outputs
-are megabytes and gitignored, so they have to be built there first. `wasm-term.ts` bundles its
-page wiring (`web/embed.ts`, `host/js-worker.ts`) and copies its built files into the gitignored
-`.wasm-term/`; it says what is missing. `WASM_TERM_DIR` names another `wasm-term` directory
+Three separate things, none of which knows the others:
+
+| Piece | Where | What it is |
+| --- | --- | --- |
+| the terminal | the runtime's kernel (`crates/bat-kernel/src/tty.rs`, on `crates/bat-pty`) | a pty pair: canonical and raw mode, echo, ^C, window size |
+| the handle | `runtime.spawnTerminal(launch, { cols, rows, onOutput })` | starts a program with the pty as its stdin, stdout and stderr; `write(bytes)`, `resize(size)`, `exited` |
+| the display | `wasm-term/web/display.ts` (ghostty-web), bundled by `wasm-term.ts` into `wasm-term/display.js` | draws bytes, reports typed input and how many cells fit |
+
+`src/main.ts` joins them in a dozen lines. The client is an ordinary program of the prepared
+image: wasm-term's OpenCode port built for Node (`cd wasm-term/ports/opencode && bun run
+build:native && bun run build:tui:node`, see its NOTES.md for the checkouts that needs), which
+`prepare.ts` puts under `/app/tui/` beside the server. `process.stdout.isTTY`, raw mode,
+`columns`/`rows` and `resize` are the runtime's Node stand-ins over the kernel's terminal;
+OpenTUI's tree-sitter worker is a `node:worker_threads` worker (here: a second process). The
+client's settings, prompt history and open tabs are files under `/home/user` in the workspace's
+storage, so a reload keeps them and `?reset=1` forgets them.
+
+wasm-term's program host (its own pty machine, shim and page relay) is not used here any more.
+`WASM_TERM_DIR` names another `wasm-term` directory for the display and the client build
 (default `../../wasm-term`).
 
 ## How the pieces talk
 
 | From → to | How |
 | --- | --- |
-| terminal client → OpenCode server | the client is given the address `http://opencode.in-tab`; wasm-term relays its `fetch` calls under that prefix to the page (`pageFetch`), which answers with `runtime.endpoint(4096).fetch` and adds the server's per-start Basic credential. The event stream stays a stream |
+| terminal client → OpenCode server | `http://127.0.0.1:4096` in the guest: a socket of the runtime's kernel, with the server's per-start Basic credential in the client's environment. The page is not in between |
+| page ↔ terminal client | bytes over the pty (`spawnTerminal`): keys in, drawing out, the window size |
 | OpenCode server → model | the runtime hands any non-guest URL to the browser's `fetch`, so the request goes from the tab straight to `?model=`. A loopback endpoint (the mock) is named in `BAT_HOST_LOOPBACK_PORTS`, since loopback otherwise means a guest listener |
 | OpenCode server → `api.openai.com` | with a tunnel configured, not the browser's fetch: the runtime's own TLS and HTTP/1.1 over a WebSocket to a TCP relay ([below](#the-tunnel)) |
 | app in the frame → `/api` | the service worker, to the guest program on port 3001 (`setGuestPaths`) |
@@ -115,7 +133,9 @@ the server opens on `127.0.0.1:<random port>`. OpenAI accepts only loopback redi
 `redirect_uri`), and in the tab that listener is a socket inside the runtime, which no other
 browser tab can reach. So the last step is by hand (`src/signin.ts`):
 
-1. While the client shows "Waiting for authorization…", a bar appears above the terminal.
+1. While the client shows "Waiting for authorization…", a bar appears above the terminal
+   (the page learns of the attempt from a preload module it gives the client, `client-tap.ts`:
+   it reports the client's sign-in exchanges, and nothing else, through a file the page watches).
    **Open the sign-in page** opens OpenAI's page in a new tab (the page also tries to open it
    by itself; a popup blocker may stop that).
 2. Sign in and approve there. The browser then goes to
