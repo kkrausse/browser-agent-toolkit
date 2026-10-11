@@ -34,3 +34,8 @@
   `packages/toolkit/NOTICES.md`, `packages/react/NOTICES.md` or `packages/terminal/README.md`.
 - Commit only your own paths. Do not push.
 - Browser automation uses the Bun-backed `browser-control` CLI.
+- WebKit (branch `webkit-support`, `docs/experiments/2026-10-11-webkit.md`): `browser-control` is
+  Chromium-only, so WebKit is driven with the `playwright` package (root dev dependency, 1.64.0 =
+  WebKit build 2370). `BAT_HARNESS_BROWSER=webkit runtime/harness/check.sh` runs the same 12
+  scripts there; `examples/todo-app/demo/webkit.ts` is the README scenario, free with the
+  scripted model (`EDITOR_MODEL_BASE_URL`). It is the Linux WebKit port, not Safari.

@@ -1253,3 +1253,24 @@ Picked: 1, by feature detection and without touching Chrome's path.
   of reaching the "already open in another tab" message (the Web Lock is only taken when
   the overlay persists, and it is asked for before the mount, so the persisted case still
   reports correctly; the harness page, which does not persist, does not).
+
+## 2026-10-11: no `Atomics.waitAsync` with a timeout; the guest's User-Agent is not sent
+
+Two smaller changes forced by the first runs in WebKit
+(`docs/experiments/2026-10-11-webkit.md`).
+
+- **A non-blocking wait with a time limit is the un-timed `waitAsync` raced against
+  `setTimeout`** (`runtime/src/kernel/wait.ts`), on every engine. The design has kerneld and
+  the page sleep on a wake word with `Atomics.waitAsync`; three of those waits carried a
+  timeout. In WebKit (Playwright's Linux build 2370) a worker waiting with a timeout was
+  woken neither by `notify` nor by the timeout until something else ran on its event loop:
+  31 of 40 notifies unanswered after 3 s, against 0 of 1,500 for the un-timed form
+  (`runtime/harness/webkit/probe-waitasync.ts`). kerneld then sat on spawn requests for
+  seconds. Not done by engine detection: the fault is intermittent, so it cannot be tested
+  for at start-up, and the replacement costs Chrome one timer per kerneld wake-up (A/B in
+  Chrome, n = 12 each, load 9–18: whole open 1,936 ms new against 2,070 ms base, inside
+  the spread).
+- **A request the browser sends for a guest does not carry the guest's `user-agent`**
+  (`runtime/src/net/fetch.ts`). Chromium never sent it. WebKit does, and the header makes
+  the request need a CORS preflight, which `models.opencode.ai` answers with 405. The
+  host's proxy already sets the provider's User-Agent on model requests itself.

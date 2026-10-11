@@ -56,7 +56,7 @@ const app = (page: Page) => page.evaluate(() => {
   const frame = document.querySelector('.todo-editor-preview iframe') as HTMLIFrameElement | null
   const doc = frame?.contentDocument, win = frame?.contentWindow as any
   if (!doc?.body) return null
-  const luminance = (el: Element) => { const m = /rgba?\(([\d.]+), ([\d.]+), ([\d.]+)(?:, ([\d.]+))?/.exec(win.getComputedStyle(el).backgroundColor); return !m || m[4] === '0' ? null : (0.2126 * +m[1] + 0.7152 * +m[2] + 0.0722 * +m[3]) / 255 }
+  const luminance = (el: Element) => { const m = /rgba?\(([\d.]+), ([\d.]+), ([\d.]+)(?:, ([\d.]+))?/.exec(win.getComputedStyle(el).backgroundColor); return !m || m[4] === '0' ? null : (0.2126 * Number(m[1]) + 0.7152 * Number(m[2]) + 0.0722 * Number(m[3])) / 255 }
   const text = (doc.querySelector('main') as HTMLElement | null)?.innerText ?? doc.body.innerText
   const left = /(\d+)\s*(?:of\s*\d+\s*)?(?:todos?|items?|tasks?)?\s*(?:left|remaining|to go)/i.exec(text) ?? /(?:left|remaining)\D{0,12}(\d+)/i.exec(text)
   return { background: luminance(doc.body) ?? luminance(doc.documentElement) ?? 1, left: left ? Number(left[1]) : null, text: text.slice(0, 600), sameDocument: win.__demoDocument === true }
