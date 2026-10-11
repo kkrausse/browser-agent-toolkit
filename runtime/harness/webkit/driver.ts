@@ -24,6 +24,7 @@ const profile = process.env.BAT_WEBKIT_PROFILE ?? join(tmpdir(), `bat-harness-we
 const context = await webkit.launchPersistentContext(profile, { headless: process.env.BAT_WEBKIT_HEADED !== '1', viewport: { width: 1280, height: 800 } })
 let page: Page = context.pages()[0] ?? (await context.newPage())
 
+let crashed = false
 const lines: string[] = []
 const note = (kind: string, text: string) => {
   lines.push(JSON.stringify({ t: Date.now(), kind, text: text.slice(0, 4000) }))
@@ -33,7 +34,10 @@ function watch(p: Page) {
   p.on('console', (m) => note(`console.${m.type()}`, `${m.text()}${m.location().url ? `  (${m.location().url}:${m.location().lineNumber})` : ''}`))
   p.on('pageerror', (e) => note('pageerror', String(e.stack ?? e)))
   p.on('requestfailed', (r) => note('requestfailed', `${r.method()} ${r.url()} ${r.failure()?.errorText ?? ''}`))
-  p.on('crash', () => note('crash', p.url()))
+  p.on('crash', () => {
+    note('crash', p.url())
+    if (p === page) crashed = true
+  })
   p.on('worker', (w) => note('worker', w.url()))
 }
 watch(page)
@@ -62,7 +66,10 @@ const server = Bun.serve({
     }
     if (path === '/execute' && req.method === 'POST') {
       try {
-        if (page.isClosed()) {
+        // A page whose web process crashed stays crashed: continue in a new one.
+        if (page.isClosed() || crashed) {
+          if (crashed) await page.close().catch(() => {})
+          crashed = false
           page = await context.newPage()
           watch(page)
         }

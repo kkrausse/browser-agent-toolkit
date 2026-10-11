@@ -1,5 +1,5 @@
 // Does a worker sleeping in Atomics.waitAsync wake promptly when another worker notifies?
-//   bun runtime/harness/webkit/probe-waitasync.ts [webkit|chrome] [rounds=200]
+//   bun runtime/harness/webkit/probe-waitasync.ts [webkit|chrome] [rounds=200] [variant,…]
 // A "waiter" worker loops on waitAsync (like kerneld's supervisor loop and a process's
 // event loop); a "pinger" worker bumps the word, notifies, and blocks until the waiter
 // answers, with a pause of 0-60 ms between rounds. Variants: with a 250 ms timeout on the
@@ -49,10 +49,12 @@ const rounds = Number(process.argv[3] ?? 200)
 const b = await (which === 'webkit' ? webkit : chromium).launchPersistentContext(mkdtempSync(join(tmpdir(), 'bat-probe-')), which === 'webkit' ? {} : { channel: 'chrome', headless: true })
 const page = await b.newPage()
 await page.goto(`http://localhost:${srv.port}/`)
-const r = await page.evaluate(async (rounds) => {
+const only = process.argv[4]?.split(',')
+const r = await page.evaluate(async ({ rounds, only }) => {
   const ask = (w: Worker, m: any, transfer: Transferable[] = []) => new Promise<any>((res) => { w.onmessage = (e) => res(e.data); w.postMessage(m, transfer) })
   const out: any = {}
   for (const [name, timeout, port] of [['timeout250', 250, false], ['noTimeout', 0, false], ['noTimeoutPlusPort', 0, true]] as const) {
+    if (only && !only.includes(name)) continue
     const sab = new SharedArrayBuffer(16)
     const ch = port ? new MessageChannel() : undefined
     const waiter = new Worker('/w.js'), pinger = new Worker('/w.js')
@@ -61,6 +63,6 @@ const r = await page.evaluate(async (rounds) => {
     waiter.terminate(); pinger.terminate()
   }
   return out
-}, rounds)
+}, { rounds, only })
 console.log(which, JSON.stringify(r))
 await b.close(); srv.stop(true)
