@@ -7,6 +7,9 @@
 //   bun bench/startup/run.ts --label before [--reopen 5] [--fresh 5] [--trace] [--max-load 14]
 //   bun bench/startup/run.ts --label rec --reopen 2 --trace --record-modules examples/todo-app/startup-modules.json
 //   bun bench/startup/run.ts --label ab --variants base=4121,new=4120 --reopen 8     (interleaved A/B)
+//   bun bench/startup/run.ts --label wk --browser webkit [--profile DIR] [--headed] --reopen 8
+//       the same samples in Playwright's WebKit (persistent profile, headless; a fresh
+//       directory per invocation unless --profile), driven in this process
 //
 // A sample is: load the page, wait until it is idle, click "Open editor", wait for the
 // preview to show the app and for the chat to be ready, read the marks, click "Exit".
@@ -49,7 +52,25 @@ async function waitForLoad() {
   for (let waited = 0; waited < Number(arg('max-wait', '600')) && load()[0] > maxLoad; waited += 5) await sleep(5000)
 }
 
+// WebKit: `browser-control` is Chromium-only, so the same driver code runs against a
+// Playwright WebKit of this process. The profile must persist (OPFS sync access handles).
+const browser = arg('browser', 'chrome')!
+const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (...args: string[]) => (...args: unknown[]) => Promise<string>
+let webkitPage: { page: unknown; context: { close(): Promise<void> } } | undefined
+async function webkitTarget() {
+  if (webkitPage) return webkitPage
+  const { webkit } = await import('playwright')
+  const { mkdtempSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const context = await webkit.launchPersistentContext(arg('profile') ?? mkdtempSync(join(tmpdir(), 'bat-bench-webkit-')), { headless: !flag('headed'), viewport: { width: 1280, height: 800 } })
+  return (webkitPage = { page: context.pages()[0] ?? (await context.newPage()), context })
+}
+
 async function execute<T>(code: string): Promise<T> {
+  if (browser === 'webkit') {
+    const { page, context } = await webkitTarget()
+    return JSON.parse(await new AsyncFunction('page', 'context', code)(page, context))
+  }
   const text = await $`browser-control execute --json --session ${session} ${code}`.quiet().nothrow().text()
   let parsed: any
   try {
@@ -222,7 +243,7 @@ for (const [variant] of variants) for (const kind of ['fresh', 'reopen'] as cons
   const mine = samples.filter((s) => s.variant === variant && s.kind === kind && s.outcome === 'ok')
   if (mine.length) (summary[variant] ??= {})[kind] = summarize(mine)
 }
-const result = { meta: { label, date: new Date().toISOString(), commit, variants: Object.fromEntries(variants.map(([v, p]) => [v, originOf(p)])), trace, settleMs, chrome: 'headed on Xvfb, driven by browser-control' }, summary, samples }
+const result = { meta: { label, date: new Date().toISOString(), commit, variants: Object.fromEntries(variants.map(([v, p]) => [v, originOf(p)])), trace, settleMs, browser: browser === 'webkit' ? `Playwright WebKit, ${flag('headed') ? 'headed' : 'headless'}, persistent profile` : 'Chrome, headed on Xvfb, driven by browser-control' }, summary, samples }
 mkdirSync(dirname(out), { recursive: true })
 await Bun.write(out, JSON.stringify(result, null, 1))
 for (const [variant, kinds] of Object.entries(summary)) for (const [kind, s] of Object.entries(kinds) as [string, ReturnType<typeof summarize>][]) {
@@ -230,3 +251,4 @@ for (const [variant, kinds] of Object.entries(summary)) for (const [kind, s] of 
   for (const [name, v] of Object.entries(s.stages)) if (v) console.log(`  ${name.padEnd(56)} ${String(v.median).padStart(7)}  (${v.min}–${v.max})`)
 }
 console.log(`\n${out}`)
+await webkitPage?.context.close()
