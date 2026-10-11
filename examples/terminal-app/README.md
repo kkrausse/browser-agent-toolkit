@@ -28,6 +28,7 @@ hot-reloads. ``run `echo hi` `` makes the mock call the shell tool, which runs w
 permission dialog: this page's configuration allows every tool (the agent's reach is the tab). Page parameters: `?model=<base URL>`, `?modelId=<id>` (default `scripted`),
 `?reset=1` (forget this browser's workspace, the client's saved state and the TODO list first),
 `?diag=<url>` (where the page posts its diagnostics; `0` turns them off; [the public build](#the-public-build) posts none without it),
+`?diag=1` ([a panel on the page](#trying-it-on-a-phone) instead of a collector), `?mock=1` (the scripted model inside the page's own service worker: no network), `?kmem=<MiB>` (the size of the runtime's kernel memory, default 256),
 `?clientLog=debug` (the client logs every level to `/tmp/opencode-client/tui.log` in the guest),
 `?tunnel=<wss URL>` (a TCP relay for [the hosts a tab cannot read](#the-tunnel); `0` for none),
 `?wisp=<wss URL>` ([a Wisp server](#a-wisp-server-instead) in that relay's place; `0` for none).
@@ -115,6 +116,38 @@ OpenCode sends. Preflights only, asked with `curl` on 2026-10-10 with the header
 DeepSeek and xAI answered with the headers allowed; OpenRouter and Mistral answered with a
 header list that has no `x-opencode-*`; Anthropic answered 400. A key typed there is kept
 like the sign-in tokens [below](#the-tunnel): plain text in this browser's storage for the page.
+
+### Trying it on a phone
+
+```sh
+# in examples/terminal-app, after a setup, `bun run display` and `bun run prepare:editor`
+bun build-phone.ts          # dist-phone/: index.html, demo/, probes/
+```
+
+`dist-phone/` is the public build with two additions for a device that has no console, plus
+the WebKit probes of `runtime/harness/webkit/` as pages. Put the directory on any https file
+shelf and open its `index.html`; nothing is published by the script.
+
+- **The panel** (`src/diag.ts`; always on in this build, `?diag=1` in any other, `?panel=0`
+  hides it): user agent, `crossOriginIsolated`, whether the service worker controls the page,
+  `navigator.storage.estimate()`, a probe of an OPFS sync access handle, the size the kernel
+  memory was made with, every start-up stage with its time (the page's own, the runtime's
+  boot marks, and the trace marks of every thread), the last error with its stack and causes,
+  uncaught errors, unhandled rejections, errors of the workers the page creates, what the
+  runtime's supervisor reports about its process workers, and the last log lines. **Copy
+  all** copies the whole readout. It is saved in `localStorage` as it changes, so a tab the
+  system killed shows what it had reached when the page is opened again ("previous load").
+  Once the terminal is up and nothing failed it folds into a button in the corner.
+- **`?mock=1`**: the model is the scripted one of `mock-model.ts`, answered by the page's
+  service worker at `<page>/mock/v1/` (`mock-script.ts`). After the page's files have
+  arrived nothing leaves the tab: no key, no relay, no sign-in. `hello`, `set the heading to
+  "Tasks"` and the demo's dark-theme prompt work as with the mock server.
+- **`?kmem=<MiB>`**: another size for the kernel memory, if the browser refuses 256 MiB.
+- **`probes/`**: `features.html` (what `probe.ts` asks, and shared memories of several
+  sizes), `preload-reuse.html` (report section 10; the probes' service worker stands in for
+  the script's server) and `grow-crash.html` (section 9.1; it may crash the tab, and says at
+  the next load that a run never finished). They are isolated by a service worker of their
+  own, `probes/sw.js`.
 
 ### The demo video
 

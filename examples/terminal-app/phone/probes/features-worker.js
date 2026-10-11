@@ -18,7 +18,8 @@ onmessage = async ({ data }) => {
     const d = await navigator.storage.getDirectory()
     const f = await d.getFileHandle('probe', { create: true })
     let h
-    try { h = await f.createSyncAccessHandle(); say('sync access handle', 'ok') } catch (e) { say('sync access handle', err(e)); h = await f.createSyncAccessHandle({ mode: 'readwrite-unsafe' }) }
+    // Asked for as a shared handle, which is how the runtime asks; WebKit ignores the option.
+    try { h = await f.createSyncAccessHandle({ mode: 'readwrite-unsafe' }); say('sync access handle', 'ok') } catch (e) { say('sync access handle', err(e)); throw e }
     say('  its mode property', String(h.mode ?? 'none (exclusive handles: expected in WebKit)'))
     try { const h2 = await f.createSyncAccessHandle({ mode: 'readwrite-unsafe' }); say('  a second handle on the same file', 'ok (shared handles, as in Chrome)'); h2.close() } catch (e) { say('  a second handle on the same file', `refused, ${e.name} (expected in WebKit: the runtime reads through its supervisor)`) }
     h.write(new TextEncoder().encode('snapshot-me'), { at: 0 }); h.flush()
