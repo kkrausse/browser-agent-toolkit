@@ -76,7 +76,7 @@ const trace = async () => {
   const hot = createHotContext('/__demo-trace')
   for (const event of ['vite:beforeUpdate', 'vite:afterUpdate', 'vite:beforeFullReload', 'vite:error', 'vite:invalidate', 'vite:ws:connect', 'vite:ws:disconnect', 'react-router:hmr']) hot.on(event, (p: unknown) => log.push([Date.now(), event, brief(p)]))
   new win.PerformanceObserver((list: PerformanceObserverEntryList) => {
-    for (const e of list.getEntries()) if (/home\.tsx|style\.css/.test(e.name)) log.push([Date.now(), 'fetched', e.name.slice(e.name.lastIndexOf('/') + 1), `${Math.round(e.duration)} ms`])
+    for (const e of list.getEntries()) if (/App\.tsx|style\.css/.test(e.name)) log.push([Date.now(), 'fetched', e.name.slice(e.name.lastIndexOf('/') + 1), `${Math.round(e.duration)} ms`])
   }).observe({ type: 'resource' })
   const token = /const wsToken = "([^"]+)"/.exec(await (await win.fetch(client)).text())?.[1]
   const url = new URL(`..?token=${token}`, client)
@@ -195,12 +195,12 @@ async function once(): Promise<Record<string, unknown>> {
       const win = (document.querySelector('.todo-editor-preview iframe') as HTMLIFrameElement | null)?.contentWindow as (Window & typeof globalThis) | null | undefined
       if (!win) return null
       const out: Record<string, unknown> = {}
-      for (const path of ['src/home.tsx', 'app/routes/home.tsx']) {
+      for (const path of ['src/App.tsx']) {
         const text = await win.fetch(new URL(`${path}?t=${Date.now()}`, win.document.baseURI)).then((r) => (r.ok ? r.text() : `HTTP ${r.status}`), (e) => String(e))
         out[path] = { bytes: text.length, hasCount: /const left\b/.test(text), hasLine: /className: "left"/.test(text) }
       }
       // And what the document itself has loaded of it: the hot updates it took, in order.
-      out.loaded = win.performance.getEntriesByType('resource').map((e) => e.name).filter((n) => /home\.tsx/.test(n)).map((n) => n.slice(n.indexOf('home.tsx')))
+      out.loaded = win.performance.getEntriesByType('resource').map((e) => e.name).filter((n) => /App\.tsx/.test(n)).map((n) => n.slice(n.indexOf('App.tsx')))
       return out
     }).catch((e) => String(e))
   }
