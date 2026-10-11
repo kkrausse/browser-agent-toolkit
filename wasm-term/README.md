@@ -95,7 +95,7 @@ which source tree and what module came out (`host/sh/build.sh --record` after
 the crate changed).
 
 ```sh
-cd wasm-term/kernel && cargo test          # line discipline against termios behaviour
+cargo test -p bat-pty                     # line discipline against termios behaviour (the crate is crates/bat-pty)
 cd ../web && bun install
 bun run build                               # kernel wasm + guests -> guests/dist/*.wasm, the shell -> host/sh/dist/bat_sh.wasm
 bun run dev                                 # http://127.0.0.1:4790/

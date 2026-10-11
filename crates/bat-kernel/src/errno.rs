@@ -16,6 +16,7 @@ pub const ENOTDIR: i32 = 20;
 pub const EISDIR: i32 = 21;
 pub const EINVAL: i32 = 22;
 pub const EMFILE: i32 = 24;
+pub const ENOTTY: i32 = 25;
 pub const ESPIPE: i32 = 29;
 pub const EROFS: i32 = 30;
 pub const EPIPE: i32 = 32;

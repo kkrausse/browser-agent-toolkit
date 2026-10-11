@@ -127,6 +127,7 @@ name = "bat-kernel"
 version = "0.1.0"
 dependencies = [
  "bat-image",
+ "bat-pty",
  "dlmalloc",
  "httparse",
 ]
@@ -181,6 +182,10 @@ dependencies = [
  "sha2",
  "zstd",
 ]
+
+[[package]]
+name = "bat-pty"
+version = "0.1.0"
 
 [[package]]
 name = "bat-sh"

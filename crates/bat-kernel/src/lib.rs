@@ -16,6 +16,7 @@ pub mod resolve;
 pub mod spike;
 pub mod sys;
 pub mod thread;
+pub mod tty;
 pub mod vfs;
 pub mod ws;
 

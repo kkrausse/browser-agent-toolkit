@@ -8,6 +8,10 @@ publish = false
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[dependencies]
+# The pty and line discipline themselves, shared with the toolkit kernel.
+bat-pty = { path = "../../crates/bat-pty" }
+
 [profile.release]
 opt-level = "s"
 lto = true

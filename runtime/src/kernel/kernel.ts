@@ -536,6 +536,40 @@ export function createKernel(inst: KernelInstance) {
     return [i32[outP >>> 2], i32[(outP >>> 2) + 1]]
   }
 
+  // ---- terminals ----
+
+  /** A terminal: `master` is the emulator's end (write keys, read what to draw), `slave` a program's stdio. */
+  function ttyOpen(cols: number, rows: number): { master: number; slave: number } {
+    sync()
+    check(x.bat_tty_open(cols, rows, outP), 'openpty')
+    return { master: i32[outP >>> 2], slave: i32[(outP >>> 2) + 1] }
+  }
+  function isatty(fd: number): boolean {
+    return x.bat_isatty(fd) === 1
+  }
+  /** The 44-byte termios: iflag, oflag, cflag, lflag (u32 LE, Linux values), 20 control characters, two speeds. */
+  function ttyGetattr(fd: number): Uint8Array {
+    sync()
+    check(x.bat_tty_getattr(fd, dataP), 'tcgetattr')
+    return u8.slice(dataP, dataP + 44)
+  }
+  /** action: 0 now, 2 discard pending input first. */
+  function ttySetattr(fd: number, termios: Uint8Array, action = 0): void {
+    sync()
+    u8.set(termios.subarray(0, 44), dataP)
+    check(x.bat_tty_setattr(fd, action, dataP), 'tcsetattr')
+  }
+  function ttyWinsize(fd: number): { cols: number; rows: number; xpixel: number; ypixel: number } {
+    sync()
+    check(x.bat_tty_winsize(fd, dataP), 'ioctl')
+    const dv = inst.dv()
+    return { rows: dv.getUint16(dataP, true), cols: dv.getUint16(dataP + 2, true), xpixel: dv.getUint16(dataP + 4, true), ypixel: dv.getUint16(dataP + 6, true) }
+  }
+  /** A changed size raises SIGWINCH on the terminal's foreground process. */
+  function ttyResize(fd: number, cols: number, rows: number, xpixel = 0, ypixel = 0): void {
+    check(x.bat_tty_resize(fd, cols, rows, xpixel, ypixel), 'ioctl')
+  }
+
   // ---- readiness ----
 
   /** Queue an event (token = fd) on this process's event word when `fd` becomes ready. mask 0 unsubscribes. */
@@ -825,6 +859,7 @@ export function createKernel(inst: KernelInstance) {
     symlink, link, readlink, realpath, chmod, utimes, truncate, readdir,
     open, close, read, readRaw, write, writeRaw, seek, fstat, ftruncate, fsetmeta, setNonblock, dup, fdPath, pipe,
     listen, connect, accept, shutdown, sockPorts, socketpair,
+    ttyOpen, isatty, ttyGetattr, ttySetattr, ttyWinsize, ttyResize,
     subscribe, pollFd, poll, takeEvents, runEvents, watchAdd, watchRemove, watchRead,
     getpid, getppid, chdir, getcwd, spawn, procInfo, exit, waitpid, kill, sigTake, procList,
     imageNames, imageStats, imageSection,

@@ -639,3 +639,41 @@ Content-Length, `16` Expect: 100-continue, `32` body runs until close, `64` HTTP
   with the *next* name (it used to require the overlay directory to be empty), so a mount
   point or a written file in a directory does not slow lookups of its siblings.
 
+
+## 18. Terminals (2026-10-10)
+
+A terminal is a pty pair with an N_TTY-style line discipline (`crates/bat-pty`: the code
+wasm-term's kernel was written around, with its tests; `crates/bat-kernel/src/tty.rs` puts
+one behind a kernel lock). The **master** end is the terminal emulator's: it writes the
+bytes typed and reads the bytes to draw. The **slave** end is a program's stdin, stdout
+and stderr. Both are file descriptors: `bat_read` / `bat_write` / `bat_close` /
+`bat_set_nonblock` / `bat_dup` / `bat_fd_subscribe` / `bat_fd_poll` / `bat_poll` work on
+them, and `bat_fstat` reports kind 5.
+
+| Export | Result | Notes |
+| --- | --- | --- |
+| `bat_tty_open(cols, rows, out)` | 0 | `out`: 2 × `i32` = master fd, slave fd, both in the caller. Starts in the mode of a fresh Linux pty (canonical, echo, `ISIG`, `OPOST|ONLCR`) |
+| `bat_isatty(fd)` | 0 / 1 | either end |
+| `bat_tty_getattr(fd, buf)` | 0 | 44 bytes: `iflag, oflag, cflag, lflag` (u32 LE, Linux values), 20 control characters, input and output speed (u32). `ENOTTY` |
+| `bat_tty_setattr(fd, action, buf)` | 0 | action 0 now, 1 = 0, 2 discards pending input first |
+| `bat_tty_winsize(fd, buf)` | 0 | 8 bytes: rows, cols, xpixel, ypixel (u16 LE) |
+| `bat_tty_resize(fd, cols, rows, xpixel, ypixel)` | 0 | from either end; a change raises `SIGWINCH` |
+
+To run a program on a terminal: `bat_tty_open`, `bat_spawn` with the slave as all three
+stdio slots (`STDIO_FD`), close the caller's slave fd, keep the master.
+
+- **Reading the slave** follows the discipline: in canonical mode a read returns one line,
+  0 for ^D on an empty line; otherwise `VMIN`/`VTIME` apply. A thread that may block waits
+  in the kernel (a wait queue word, with the `VTIME` deadline as the timeout); one that
+  may not gets `-EAGAIN`. Readable (`1`) is "a read would not block". A `VTIME` timer is
+  not an event: an event-driven reader with `VMIN = 0, VTIME > 0` has to poll.
+- **Writing the slave** applies output processing and never fails for lack of space; a
+  thread that may block waits while more than 1 MiB of output is untaken (also while the
+  terminal has stopped output with ^S). `EIO` once the master is closed.
+- **The master** reads `-EAGAIN` when there is nothing to draw and 0 when no slave
+  descriptor is left and everything was taken (mask `1 | 16`). A master write never
+  blocks; echo becomes readable on the master at once.
+- **Signals.** ^C, ^\, ^Z (under `ISIG`), a resize and the close of the master (`SIGHUP`,
+  and end of input for readers) are delivered as by `bat_kill` to the terminal's
+  *foreground process*: the newest process still alive that was spawned with the slave as
+  its stdin. There are no process groups, sessions or job control.

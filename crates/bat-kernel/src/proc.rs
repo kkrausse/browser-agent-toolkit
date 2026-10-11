@@ -268,7 +268,15 @@ pub fn spawn(parent: &Process, req: &[u8], out_fds: &mut [i32; 3]) -> R<u32> {
         };
         child_fds.push(Some(f));
     }
+    // A process started on a terminal becomes its foreground process (tty.rs).
+    let terminal = match child_fds[0].as_deref().map(|f| &f.kind) {
+        Some(OfKind::PtyS(t)) => Some(t.clone()),
+        _ => None,
+    };
     let child = Process::new(parent.pid, cwd, child_fds, info.to_vec(), ST_STARTING);
+    if let Some(t) = terminal {
+        t.attach(child.pid);
+    }
     for (i, e) in parent_ends.into_iter().enumerate() {
         out_fds[i] = match e {
             Some(f) => parent.install(f),

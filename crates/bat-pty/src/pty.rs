@@ -249,6 +249,11 @@ impl Pty {
         n
     }
 
+    /// Output not yet taken by the terminal, whether or not it is stopped (for flow control).
+    pub fn output_len(&self) -> usize {
+        self.out.len()
+    }
+
     pub fn master_pending(&self) -> usize {
         if self.stopped {
             0

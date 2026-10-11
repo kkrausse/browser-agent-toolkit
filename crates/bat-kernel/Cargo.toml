@@ -9,6 +9,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 bat-image = { path = "../bat-image", default-features = false }
+bat-pty = { path = "../bat-pty" }
 httparse = { version = "1.10", default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

@@ -1,9 +1,10 @@
-//! Open file descriptions, pipes and sockets.
+//! Open file descriptions, pipes, sockets and terminal ends.
 
 use crate::errno::*;
 use crate::image::ImageMount;
 use crate::lock::{Mutex, WaitQ};
 use crate::proc::Process;
+use crate::tty::Tty;
 use crate::vfs;
 use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::*};
 use std::collections::{BTreeMap, VecDeque};
@@ -26,7 +27,7 @@ pub struct Sub {
     pub queue: bool,
 }
 
-fn post(subs: &[Sub], mask: u32) {
+pub(crate) fn post(subs: &[Sub], mask: u32) {
     for s in subs {
         if s.mask & mask != 0 {
             if s.queue {
@@ -222,6 +223,10 @@ pub enum OfKind {
     PipeW(Arc<Pipe>),
     Sock { rx: Arc<Pipe>, tx: Arc<Pipe>, wr_shut: AtomicBool, local: u32, peer: u32 },
     Listener(Arc<Listener>),
+    /// The terminal emulator's end of a terminal (tty.rs).
+    PtyM(Arc<Tty>),
+    /// A program's end of a terminal: its stdin, stdout and stderr.
+    PtyS(Arc<Tty>),
     /// Writes go to the host log at this level.
     Console(u32),
     Null,
@@ -247,6 +252,8 @@ impl Drop for OpenFile {
                     tx.close_writer();
                 }
             }
+            OfKind::PtyM(t) => t.master_closed(),
+            OfKind::PtyS(t) => t.slave_closed(),
             OfKind::Listener(l) => {
                 let mut ports = PORTS.lock();
                 if ports.get(&l.port).map(|x| Arc::ptr_eq(x, l)).unwrap_or(false) {
@@ -275,6 +282,12 @@ pub fn file(kind: OfKind, flags: u32, path: &[u8]) -> Arc<OpenFile> {
 pub fn pipe() -> (Arc<OpenFile>, Arc<OpenFile>) {
     let p = Pipe::new(PIPE_CAP);
     (file(OfKind::PipeR(p.clone()), 0, b""), file(OfKind::PipeW(p), vfs::O_WRONLY, b""))
+}
+
+/// A terminal: (master end, slave end). One open file per end, shared by every descriptor of it.
+pub fn tty(cols: u16, rows: u16) -> (Arc<OpenFile>, Arc<OpenFile>) {
+    let t = Tty::new(cols, rows);
+    (file(OfKind::PtyM(t.clone()), vfs::O_RDWR, b""), file(OfKind::PtyS(t), vfs::O_RDWR, b"/dev/tty"))
 }
 
 pub fn listen(port: u32) -> R<Arc<OpenFile>> {
@@ -397,6 +410,8 @@ impl OpenFile {
             }
             OfKind::PipeR(p) => p.read(dst, self.nonblock()),
             OfKind::Sock { rx, .. } => rx.read(dst, self.nonblock()),
+            OfKind::PtyM(t) => t.master_read(dst, self.nonblock()),
+            OfKind::PtyS(t) => t.read(dst, self.nonblock()),
             OfKind::Dir => Err(EISDIR),
             OfKind::Null | OfKind::Console(_) => Ok(0),
             OfKind::PipeW(_) | OfKind::Listener(_) => Err(EBADF),
@@ -423,6 +438,8 @@ impl OpenFile {
                 }
                 tx.write(src, self.nonblock())
             }
+            OfKind::PtyM(t) => t.master_write(src),
+            OfKind::PtyS(t) => t.write(src, self.nonblock()),
             OfKind::Console(level) => {
                 crate::sys::log(*level, &String::from_utf8_lossy(src));
                 Ok(src.len())
@@ -470,6 +487,8 @@ impl OpenFile {
                 }
                 m
             }
+            OfKind::PtyM(t) => t.master_state(),
+            OfKind::PtyS(t) => t.slave_state(),
             OfKind::Listener(l) => {
                 let i = l.inner.lock();
                 if !i.queue.is_empty() {
@@ -496,6 +515,8 @@ impl OpenFile {
                     tx.subscribe(sub(mask & (POLLOUT | POLLERR)));
                 }
             }
+            OfKind::PtyM(t) => t.subscribe(true, sub(mask)),
+            OfKind::PtyS(t) => t.subscribe(false, sub(mask)),
             OfKind::Listener(l) => {
                 let mut i = l.inner.lock();
                 i.subs.retain(|x| !(x.proc.pid == proc.pid && x.token == token && x.queue == queue));
@@ -511,6 +532,8 @@ impl OpenFile {
                 rx.unsubscribe(pid, token, queue);
                 tx.unsubscribe(pid, token, queue);
             }
+            OfKind::PtyM(t) => t.unsubscribe(true, pid, token, queue),
+            OfKind::PtyS(t) => t.unsubscribe(false, pid, token, queue),
             OfKind::Listener(l) => {
                 let old: Vec<Sub>;
                 {
@@ -524,6 +547,13 @@ impl OpenFile {
                 drop(old);
             }
             _ => {}
+        }
+    }
+    /// The terminal this descriptor is an end of.
+    pub fn tty(&self) -> R<&Arc<Tty>> {
+        match &self.kind {
+            OfKind::PtyM(t) | OfKind::PtyS(t) => Ok(t),
+            _ => Err(ENOTTY),
         }
     }
     pub fn ports(&self) -> (u32, u32) {

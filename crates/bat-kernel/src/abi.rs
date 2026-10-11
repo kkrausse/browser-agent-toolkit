@@ -332,6 +332,60 @@ pub unsafe extern "C" fn bat_socketpair(out: *mut i32) -> i32 {
     }))
 }
 
+// ---- terminals ----
+
+/// Create a terminal. out[0] = master end (the terminal emulator's), out[1] = slave end.
+#[no_mangle]
+pub unsafe extern "C" fn bat_tty_open(cols: u32, rows: u32, out: *mut i32) -> i32 {
+    ret(proc::cur().map(|p| {
+        let (m, s) = fd::tty(cols as u16, rows as u16);
+        *out = p.install(m);
+        *out.add(1) = p.install(s);
+        0
+    }))
+}
+/// 1 if `fd` is an end of a terminal, else 0.
+#[no_mangle]
+pub extern "C" fn bat_isatty(fd: i32) -> i32 {
+    ret(proc::cur().and_then(|p| p.fd(fd)).map(|f| f.tty().is_ok() as i32))
+}
+/// `buf`: 44 bytes, the termios layout of wasm-term/docs/abi.md (Linux flag values).
+#[no_mangle]
+pub unsafe extern "C" fn bat_tty_getattr(fd: i32, buf: *mut u8) -> i32 {
+    ret(proc::cur().and_then(|p| p.fd(fd)).and_then(|f| {
+        let b = f.tty()?.termios();
+        core::ptr::copy_nonoverlapping(b.as_ptr(), buf, b.len());
+        Ok(0)
+    }))
+}
+/// action: 0 now, 1 after output drained (same as now), 2 flush pending input first.
+#[no_mangle]
+pub unsafe extern "C" fn bat_tty_setattr(fd: i32, action: u32, buf: *const u8) -> i32 {
+    ret(proc::cur().and_then(|p| p.fd(fd)).and_then(|f| {
+        let mut b = [0u8; 44];
+        core::ptr::copy_nonoverlapping(buf, b.as_mut_ptr(), b.len());
+        f.tty()?.set_termios(action, &b);
+        Ok(0)
+    }))
+}
+/// `buf`: 8 bytes = rows, cols, xpixel, ypixel as u16.
+#[no_mangle]
+pub unsafe extern "C" fn bat_tty_winsize(fd: i32, buf: *mut u8) -> i32 {
+    ret(proc::cur().and_then(|p| p.fd(fd)).and_then(|f| {
+        let b = f.tty()?.winsize();
+        core::ptr::copy_nonoverlapping(b.as_ptr(), buf, b.len());
+        Ok(0)
+    }))
+}
+/// Set the window size from either end; a change raises SIGWINCH on the foreground process.
+#[no_mangle]
+pub extern "C" fn bat_tty_resize(fd: i32, cols: u32, rows: u32, xpixel: u32, ypixel: u32) -> i32 {
+    ret(proc::cur().and_then(|p| p.fd(fd)).and_then(|f| {
+        f.tty()?.set_winsize(cols as u16, rows as u16, xpixel as u16, ypixel as u16);
+        Ok(0)
+    }))
+}
+
 // ---- readiness ----
 
 #[no_mangle]
