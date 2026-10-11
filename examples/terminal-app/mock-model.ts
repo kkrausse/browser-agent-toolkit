@@ -16,6 +16,11 @@
 //                        appends a dark, violet theme to the stylesheet and adds a count of
 //                        the todos left under the list (three edits), with a pause before
 //                        each step as if it thought; ends SCRIPTED-THEME-DONE
+//   … and "theme-color" the same, plus the two edits that left the preview's input dead on
+//                        2026-10-11 (docs/experiments/2026-10-11-preview-input-dead-after-edit-handoff.md):
+//                        a <meta name="theme-color"> in src/root.tsx, the root route that
+//                        renders <html>, and a rule in src/editor-panel.css. They come after
+//                        the other three, or before them with "theme-color first"
 //   starts "run `…`"     calls the shell tool with the command between the backquotes (the
 //                        page's configuration does not allow it, so the client asks first)
 //                        and repeats its output; ends SCRIPTED-SHELL-DONE
@@ -52,14 +57,25 @@ li { padding: .6rem .8rem; background: #1f1b2e; border: 1px solid #3b3357; borde
 .left { color: #a78bfa; }`
 const errorLine = '  const error = todos.error ?? add.error ?? complete.error ?? remove.error\n'
 const listEnd = '      </ul>\n    </main>'
-const themeEdits: { file: string; say: string; before: string; after: string }[] = [
+const baseEdits: { file: string; say: string; before: string; after: string }[] = [
   { file: sheet, say: 'The stylesheet is small and plain. I will add a dark palette with a violet accent after its last rule.', before: lastRule, after: theme },
   { file, say: 'Now the count. First a value for the todos that are not done.', before: errorLine, after: `${errorLine}  const left = todos.data?.filter((todo) => !todo.completed).length ?? 0\n` },
   { file, say: 'And a line under the list that shows it.', before: listEnd, after: `      </ul>\n      <p className="left">{left} {left === 1 ? 'todo' : 'todos'} left</p>\n    </main>` },
 ]
 
+// The root-layout variant: what one real model also did, and what broke the preview.
+const root = '/workspace/src/root.tsx', panelSheet = '/workspace/src/editor-panel.css'
+const viewport = '        <meta name="viewport" content="width=device-width, initial-scale=1" />\n'
+const panelRule = '.todo-editor-panel summary{cursor:pointer}'
+const rootEdits: typeof baseEdits = [
+  { file: root, say: 'The browser chrome should match: a theme-color in the document head.', before: viewport, after: `${viewport}        <meta name="theme-color" content="#14121c" />\n` },
+  { file: panelSheet, say: 'And the editor panel gets the accent.', before: panelRule, after: `${panelRule}\n.todo-editor-panel>header{border-color:#8b5cf6}` },
+]
+
 function themeStep(turn: Turn, offered: string): Step {
   const done = turn.results.length, pauseMs = 1200
+  const withRoot = /theme-color/i.test(turn.user)
+  const themeEdits = !withRoot ? baseEdits : /theme-color first/i.test(turn.user) ? [...rootEdits, ...baseEdits] : [...baseEdits, ...rootEdits]
   const reads = [[sheet, 'I will look at the stylesheet first.'], [file, 'Then the page that draws the list.']] as const
   if (done < reads.length) {
     const [path, text] = reads[done]!
