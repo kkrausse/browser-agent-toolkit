@@ -14,16 +14,17 @@ const tapDirectory = '/tmp/opencode-client'
 export const clientLog = `${tapDirectory}/tui.log`
 const tap = { script: `${tapDirectory}/tap.mjs`, file: `${tapDirectory}/signin.jsonl` }
 
-export function clientLaunch(port: number, password: string): Launch {
+/** `tapped`: with the preload module that reports sign-in exchanges (`installClient` put it there). */
+export function clientLaunch(port: number, password: string, tapped: boolean): Launch {
   return {
-    argv: ['node', '--import', tap.script, clientEntry],
+    argv: ['node', ...(tapped ? ['--import', tap.script] : []), clientEntry],
     cwd: workspace,
     env: {
       PATH: '/bin', HOME: home, TERM: 'xterm-256color', COLORTERM: 'truecolor',
       OPENCODE_SERVER_URL: `http://127.0.0.1:${port}`,
       OPENCODE_SERVER_PASSWORD: password,
       OPENCODE_DIRECTORY: workspace,
-      SIGNIN_TAP_FILE: tap.file,
+      ...(tapped ? { SIGNIN_TAP_FILE: tap.file } : {}),
       // The client's own log (errors and warnings unless it is asked for more): a file, since its stderr is the terminal.
       OPENCODE_TUI_LOG: clientLog,
     },
@@ -31,13 +32,15 @@ export function clientLaunch(port: number, password: string): Launch {
   }
 }
 
-/** Before the client starts: its preload module, and no locks of a client that a reload killed
- * (it takes one per state file and would wait a minute for each to go stale). */
-export async function installClient(fs: RuntimeFs, tapScript: Uint8Array, exchange: (exchange: SignInExchange) => void): Promise<void> {
+/** Before the client starts: no locks of a client that a reload killed (it takes one per state
+ * file and would wait a minute for each to go stale), and, with `signIn`, its preload module. */
+export async function installClient(fs: RuntimeFs, signIn?: { script: Uint8Array; exchange(exchange: SignInExchange): void }): Promise<void> {
   const state = `${home}/.local/state/opencode`
   for (const directory of [state, ...await fs.readdir(state).then(names => names.map(name => `${state}/${name}`), () => [])]) await fs.remove(`${directory}/locks`)
   await fs.mkdir(tapDirectory)
-  await fs.writeFile(tap.script, tapScript)
+  if (!signIn) return
+  const { exchange } = signIn
+  await fs.writeFile(tap.script, signIn.script)
   await fs.writeFile(tap.file, '')
   let seen = 0
   const decoder = new TextDecoder()

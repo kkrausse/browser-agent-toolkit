@@ -20,15 +20,24 @@ export interface ModelEndpoint {
   apiKey: string
 }
 
-/** The whole global configuration: one provider, one model, every tool allowed without asking. */
-export function serverConfig(model: ModelEndpoint) {
-  return {
+/** The whole global configuration: one provider, one model, every tool allowed without asking.
+ * Without `model` it names no provider. The server then has what it has with no credentials:
+ * its `opencode` provider (OpenCode Zen, key `public`) with the models that cost nothing.
+ * `hosted` is the id of one of those to start on. Without it the server's own default applies:
+ * the most recently released enabled model of its catalog (models.opencode.ai, which the tab
+ * can read; a bundled copy otherwise), which is not always one that Zen still serves. */
+export function serverConfig(model?: ModelEndpoint, hosted?: string) {
+  const base = {
     $schema: 'https://opencode.ai/config.json',
-    model: `direct/${model.id}`,
     snapshots: false,
     // Every tool without asking, the shell (the runtime's `/bin/sh`) included: the agent's reach
     // is this tab's own filesystem and processes, and a dialog per command only slows it down.
     permissions: [{ action: '*', resource: '*', effect: 'allow' as const }],
+  }
+  if (!model) return hosted ? { ...base, model: `opencode/${hosted}` } : base
+  return {
+    ...base,
+    model: `direct/${model.id}`,
     providers: { direct: {
       name: new URL(model.baseURL).host,
       activation: 'enabled' as const,
@@ -41,14 +50,14 @@ export function serverConfig(model: ModelEndpoint) {
   }
 }
 
-export async function installServerConfig(fs: RuntimeFs, model: ModelEndpoint): Promise<void> {
+export async function installServerConfig(fs: RuntimeFs, model?: ModelEndpoint, hosted?: string): Promise<void> {
   for (const name of ['home', 'config/opencode/plugins', 'state', 'data', 'cache', 'tmp']) await fs.mkdir(`${state}/${name}`)
   // The server's state is inside the workspace so that it persists with it; tools that scan
   // the project by its ignore rules (Tailwind's Vite plugin) must not see it.
   await fs.writeFile(`${state}/.gitignore`, '*\n')
   // An earlier open through the toolkit's editor may have left its proxy plugins here.
   for (const name of ['editor-model-headers.js', 'editor-javascript.js', 'editor-model-catalog.js']) await fs.remove(`${state}/config/opencode/plugins/${name}`)
-  await fs.writeFile(configPath, JSON.stringify(serverConfig(model), null, 2))
+  await fs.writeFile(configPath, JSON.stringify(serverConfig(model, hosted), null, 2))
 }
 
 export function toLaunch(description: LaunchDescription, env: Record<string, string> = {}): Launch {
@@ -67,9 +76,9 @@ export interface ServerNetwork {
   tunnel?: { url: string; to: string[] }
 }
 
-export function serverLaunch(description: LaunchDescription, password: string, model: ModelEndpoint, { fetchMap = {}, tunnel }: ServerNetwork = {}): Launch {
-  const url = new URL(model.baseURL)
-  const loopback = /^(localhost|127(\.\d+){3}|\[::1\])$/.test(url.hostname) && url.protocol === 'http:'
+export function serverLaunch(description: LaunchDescription, password: string, model: ModelEndpoint | undefined, { fetchMap = {}, tunnel }: ServerNetwork = {}): Launch {
+  const url = model && new URL(model.baseURL)
+  const loopback = !!url && /^(localhost|127(\.\d+){3}|\[::1\])$/.test(url.hostname) && url.protocol === 'http:'
   return toLaunch(description, {
     OPENCODE_PASSWORD: password,
     OPENCODE_DATABASE_PATH: `${state}/data/opencode.sqlite`,
@@ -85,7 +94,7 @@ export function serverLaunch(description: LaunchDescription, password: string, m
     OPENCODE_LOG_LEVEL: 'WARN',
     // In the guest, loopback means the guest's own listeners. A model endpoint on this
     // machine's loopback (the mock) is named here so the runtime hands it to the browser.
-    ...(loopback ? { BAT_HOST_LOOPBACK_PORTS: url.port || '80' } : {}),
+    ...(loopback ? { BAT_HOST_LOOPBACK_PORTS: url!.port || '80' } : {}),
   })
 }
 

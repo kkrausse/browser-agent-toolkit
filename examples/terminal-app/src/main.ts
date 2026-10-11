@@ -16,9 +16,16 @@
 // service worker (sw.ts) gives the responses the headers a server would have sent.
 //
 //   ?model=<base URL>    an OpenAI Responses API. Default: the build's MODEL_URL, else this host, port 4311 (mock-model.ts)
-//   ?modelId=<id>        the model id sent in requests. Default `scripted`
+//   ?modelId=<id>        the model id sent in requests. Default `scripted` (public build without
+//                        `?model=`: which hosted free model to start on, default the build's PUBLIC_MODEL)
 //   ?tunnel=<wss URL>    a TCP relay (packages/relay/tcp-relay-main.ts) for the hosts that answer without CORS headers.
 //                        Default: the build's TUNNEL_URL, else none; `0` for none
+//   ?diag=<url>          where the page posts its diagnostics (diag.ts); `0` for nowhere
+//
+// The public build (`PUBLIC=1 bun run build`, a page for strangers) differs: with no `?model=`
+// the server has no provider of this page's and uses OpenCode's own hosted free models
+// (opencode.ai/zen, no key), which it reaches through the tunnel; only opencode.ai is
+// tunnelled; nothing is posted anywhere without `?diag=<url>`; the ChatGPT sign-in bar is off.
 //   ?clientLog=debug     the client logs every level to its file in the guest (/tmp/opencode-client/tui.log)
 //   ?reset=1             first forget this browser's workspace (source edits, sessions) and the client's saved state
 import { installDerived, installSource, type BootRuntime, type EditorManifest, type RuntimeHost, type RuntimeProcess, type RuntimeTerminal, type TerminalSize } from '@kkrausse/browser-agent-toolkit/browser'
@@ -64,6 +71,8 @@ const api = { script: '/tmp/todo-api.mjs', port: 3001, store: `${workspace}/.ser
 // Set when the page is built (`MODEL_URL=… bun run build`), for a page published away from its mock.
 const builtModel = process.env.MODEL_URL || undefined
 const builtTunnel = process.env.TUNNEL_URL || undefined
+/** The public build: a page for strangers, with no address of ours as a default (see the head of this file). */
+const isPublic = process.env.PUBLIC === '1'
 
 // OpenAI's signing keys, which the server reads to check the identity token of a ChatGPT sign-in.
 // That document is served without CORS headers. With a tunnel the server reads the real one
@@ -73,7 +82,8 @@ const openAiKeys = 'https://auth.openai.com/.well-known/jwks.json'
 // answers carry no CORS headers, and the keys above. The token exchange at auth.openai.com
 // allows any origin and stays with the browser's fetch. OpenCode's own hosted models
 // (opencode.ai/zen), which the server calls with no sign-in, refuse a browser's preflight (404).
-const tunnelled = ['api.openai.com', 'https://auth.openai.com/.well-known/', 'opencode.ai']
+// The public build carries the last one alone: its relay allows nothing else.
+const tunnelled = isPublic ? ['opencode.ai'] : ['api.openai.com', 'https://auth.openai.com/.well-known/', 'opencode.ai']
 
 const params = new URLSearchParams(location.search)
 // `?reset=1` is taken out of the address at once and remembered for this start only: the page
@@ -84,10 +94,24 @@ if (params.get('reset') === '1') {
   params.delete('reset')
   history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}`)
 }
-const model: ModelEndpoint = {
-  baseURL: params.get('model') ?? builtModel ?? `${location.protocol}//${location.hostname}:4311/v1`,
-  id: params.get('modelId') ?? 'scripted',
-  apiKey: 'not-a-key',
+// The public build names no endpoint: without `?model=` the server is left to its own default,
+// OpenCode's hosted free models, starting on `hostedModel()` (opencode.ts).
+const modelUrl = params.get('model') ?? builtModel ?? (isPublic ? undefined : `${location.protocol}//${location.hostname}:4311/v1`)
+const model: ModelEndpoint | undefined = modelUrl ? { baseURL: modelUrl, id: params.get('modelId') ?? 'scripted', apiKey: 'not-a-key' } : undefined
+
+/** Which hosted free model a fresh workspace starts on, when the page names no endpoint. The
+ * server's own choice with no credentials is the newest free model of its catalog, and on
+ * 2026-10-10 that was one Zen answered with HTTP 410 ("deprecated"), so the build names one
+ * that answered (PUBLIC_MODEL). To outlive that one: it is used only while Zen's own list of
+ * models (readable from a tab) still has it; after that the server's choice applies again. */
+async function hostedModel(): Promise<string | undefined> {
+  const id = params.get('modelId') ?? (process.env.PUBLIC_MODEL || undefined)
+  if (!id) return undefined
+  const listed = await fetch('https://opencode.ai/zen/v1/models', { signal: AbortSignal.timeout(4000) })
+    .then(async response => response.ok ? ((await response.json()) as { data?: { id?: string }[] }).data?.map(entry => entry.id) : undefined, () => undefined)
+  if (!listed || listed.includes(id)) return id
+  log(`[page] OpenCode Zen no longer lists ${id}: leaving the choice of model to the server`)
+  return undefined
 }
 
 const givenTunnel = params.get('tunnel') ?? builtTunnel
@@ -96,10 +120,12 @@ const tunnel = givenTunnel && givenTunnel !== '0' && /^wss?:$/.test(URL.parse(gi
 const status = document.querySelector<HTMLPreElement>('#status')!
 const frame = document.querySelector<HTMLIFrameElement>('#app')!
 const logPane = document.querySelector<HTMLPreElement>('#log pre')!
-const diag = installDiag(params, builtModel && new URL('/diag', builtModel).href)
+const diag = installDiag(params, isPublic ? null : builtModel && new URL('/diag', builtModel).href)
 const say = (text: string, error = false) => { status.textContent = text; status.classList.toggle('error', error); diag.event(error ? 'failed' : 'stage', text) }
 window.batTerminal = { log: [], model }
-document.querySelector('#title')!.textContent = `OpenCode · model ${model.id} at ${new URL(model.baseURL).host}${tunnel ? ` · tunnel ${new URL(tunnel.url).host}` : ''}`
+document.querySelector('#title')!.textContent = `OpenCode · ${model ? `model ${model.id} at ${new URL(model.baseURL).host}` : 'free model from OpenCode Zen'}${tunnel ? ` · ${isPublic ? 'relay' : 'tunnel'} ${new URL(tunnel.url).host}` : ''}`
+// What the public page says about itself; it names the free model, so not with a `?model=` of the visitor's.
+document.querySelector<HTMLElement>('#about')!.hidden = !isPublic || !!model
 const panel = installPanel({ onOpen: () => window.batTerminal.terminal?.display.focus() })
 // Ctrl+Tab and Ctrl+Shift+Tab switch browser tabs. The terminal would take them (and cancel
 // the browser's handling) like any other key, so they are kept from it here.
@@ -151,7 +177,9 @@ async function main() {
     void bytes.catch(() => {})
     return bytes
   }
-  const apiScript = script('todo-api.js'), tapScript = script('client-tap.js')
+  // The public build ships no tap: the sign-in it serves needs hosts its relay does not carry.
+  const hosted = model ? undefined : hostedModel()
+  const apiScript = script('todo-api.js'), tapScript = isPublic ? undefined : script('client-tap.js')
 
   say('Loading…')
   const response = await fetch(manifestUrl, { cache: 'no-store' })
@@ -177,12 +205,14 @@ async function main() {
   const source = await installSource(runtime.fs, manifest.project)
   log(`[page] ${source.preserved ? 'kept the workspace already in this browser' : `installed ${source.installed} source files`}`)
   await installDerived(runtime.fs, manifest, manifestUrl)
-  await installServerConfig(runtime.fs, model)
+  const hostedId = await hosted
+  await installServerConfig(runtime.fs, model, hostedId)
   if (!runtime.spawnTerminal) throw Error('This runtime has no terminals (spawnTerminal)')
   if (!await runtime.fs.stat(clientEntry).then(() => true, () => false)) throw Error(`The prepared image has no OpenCode client (${clientEntry}): build ports/opencode for Node and prepare again`)
   // The page watches for a sign-in that waits on a loopback redirect (signin.ts).
-  await installClient(runtime.fs, await tapScript, watchSignIn(() => window.batTerminal.runtime, log))
-  log(`[page] model endpoint: ${model.baseURL} (model ${model.id}), fetched by this tab directly`)
+  await installClient(runtime.fs, tapScript && { script: await tapScript, exchange: watchSignIn(() => window.batTerminal.runtime, log) })
+  if (model) log(`[page] model endpoint: ${model.baseURL} (model ${model.id}), fetched by this tab directly`)
+  else log(`[page] model: OpenCode's hosted free models (opencode.ai/zen), no key, starting on ${hostedId ?? "the server's choice"}${tunnel ? '' : '; they need a relay (?tunnel=) and there is none'}`)
   if (tunnel) log(`[page] tunnel: ${tunnel.to.join(', ')} through the relay at ${new URL(tunnel.url).host}, with TLS in this tab`)
 
   // Both programs start at once; each is its own Worker.
@@ -198,7 +228,7 @@ async function main() {
   const [appProcess, serverProcess, apiProcess] = await Promise.all([
     // The dev server's base is the frame's path, which depends on where this page is served.
     runtime.spawn(toLaunch(preview, { BROWSER_AGENT_PORT: String(preview.port), BROWSER_AGENT_BASE: new URL(app.url).pathname })),
-    runtime.spawn(serverLaunch(agent, password, model, tunnel ? { tunnel } : { fetchMap: { [openAiKeys]: new URL('openai-jwks.json', here).href } })),
+    runtime.spawn(serverLaunch(agent, password, model, tunnel ? { tunnel } : isPublic ? {} : { fetchMap: { [openAiKeys]: new URL('openai-jwks.json', here).href } })),
     runtime.spawn({ argv: ['node', api.script], cwd: workspace, env: { PATH: '/bin', PORT: String(api.port), TODO_STORE: api.store }, programs: [] }),
   ])
   follow('app', appProcess, false)
@@ -222,7 +252,7 @@ async function main() {
     onResize: size => client?.resize(size),
   })
   const started = performance.now()
-  const launch = clientLaunch(agent.port, password)
+  const launch = clientLaunch(agent.port, password, !!tapScript)
   // `?clientLog=debug`: the client logs every level to its file, not only warnings and errors.
   if (params.get('clientLog') === 'debug') launch.env = { ...launch.env, OPENCODE_TUI_DEBUG: '1' }
   let first = true

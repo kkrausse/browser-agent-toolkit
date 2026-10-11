@@ -39,6 +39,10 @@
     #log { flex: 0 0 auto; border-top: 1px solid #363646; font: 12px ui-monospace, monospace; }
     #log summary { padding: 4px 10px; cursor: pointer; user-select: none; }
     #log pre { margin: 0; padding: 0 10px 8px; height: 26vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+    /* The public build's two lines about itself (main.ts shows them). */
+    #about { flex: 0 0 auto; margin: 0; padding: 5px 10px 6px; border-top: 1px solid #363646; font: 11px/1.45 ui-monospace, monospace; color: #727169; }
+    #about[hidden] { display: none; }
+    #about a { color: #7e9cd8; }
     @media (max-width: 700px) { body { --panel: 100vw; } }
   </style>
 </head>
@@ -55,6 +59,7 @@
     </form>
     <div id="body"><div id="terminal"></div><pre id="status">Starting…</pre></div>
     <details id="log"><summary>OpenCode server output</summary><pre></pre></details>
+    <p id="about" hidden>Everything here runs in this tab: the app, its dev server and the agent. The model is OpenCode's free hosted one; requests to it leave through a relay that carries only encrypted bytes. <a href="https://github.com/kkrausse/browser-agent-toolkit" target="_blank" rel="noreferrer">Source</a></p>
   </aside>
   <button id="open">OpenCode</button>
   <script type="module" src="main.js"></script>

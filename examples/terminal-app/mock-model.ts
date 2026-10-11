@@ -12,6 +12,10 @@
 //   contains "heading"   reads src/home.tsx, then replaces the text of its <h1> with the
 //                        quoted text of the prompt (`set the heading to "Tasks"`), or with
 //                        the old text plus " (edited in the tab)"; ends SCRIPTED-EDIT-DONE
+//   contains "dark theme" the demo video's prompt (demo/run.ts): reads src/style.css and src/home.tsx,
+//                        appends a dark, violet theme to the stylesheet and adds a count of
+//                        the todos left under the list (three edits), with a pause before
+//                        each step as if it thought; ends SCRIPTED-THEME-DONE
 //   starts "run `…`"     calls the shell tool with the command between the backquotes (the
 //                        page's configuration does not allow it, so the client asks first)
 //                        and repeats its output; ends SCRIPTED-SHELL-DONE
@@ -25,10 +29,48 @@ import { appendFile } from 'node:fs/promises'
 type Json = Record<string, any>
 interface Tool { name: string; properties: string[] }
 interface Turn { model: string; user: string; results: string[]; tools: Tool[] }
-interface Step { text: string; call?: { name: string; arguments: string } }
+interface Step { text: string; call?: { name: string; arguments: string }; pauseMs?: number }
 
 const file = '/workspace/src/home.tsx'
 const plain = 'Hello from the scripted model. This reply is streamed in small pieces by a mock on another origin that this tab fetched directly; no model was called and no tokens were spent. Ask me to change the heading (for example: set the heading to "Tasks") and I will read and edit src/home.tsx in this tab. SCRIPTED-PLAIN-DONE'
+
+// The theme script: what it reads and the three edits it makes, each an exact replacement in
+// the TODO app's source as it is shipped. The rules are appended, since the stylesheet's
+// later `border: 1px solid` would reset a border colour set above it.
+const sheet = '/workspace/src/style.css'
+const lastRule = 'li label { overflow-wrap: anywhere; min-width: 0; }'
+const theme = `${lastRule}
+
+:root { --accent: #8b5cf6; color-scheme: dark; }
+html, body { background: #14121c; color: #e7e3f4; }
+h1 { color: var(--accent); }
+input:not([type="checkbox"]) { background: #1f1b2e; color: inherit; border-color: #3b3357; }
+input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input[type="checkbox"] { accent-color: var(--accent); }
+button { background: var(--accent); color: white; border-color: var(--accent); cursor: pointer; }
+li { padding: .6rem .8rem; background: #1f1b2e; border: 1px solid #3b3357; border-radius: .5rem; }
+.left { color: #a78bfa; }`
+const errorLine = '  const error = todos.error ?? add.error ?? complete.error ?? remove.error\n'
+const listEnd = '      </ul>\n    </main>'
+const themeEdits: { file: string; say: string; before: string; after: string }[] = [
+  { file: sheet, say: 'The stylesheet is small and plain. I will add a dark palette with a violet accent after its last rule.', before: lastRule, after: theme },
+  { file, say: 'Now the count. First a value for the todos that are not done.', before: errorLine, after: `${errorLine}  const left = todos.data?.filter((todo) => !todo.completed).length ?? 0\n` },
+  { file, say: 'And a line under the list that shows it.', before: listEnd, after: `      </ul>\n      <p className="left">{left} {left === 1 ? 'todo' : 'todos'} left</p>\n    </main>` },
+]
+
+function themeStep(turn: Turn, offered: string): Step {
+  const done = turn.results.length, pauseMs = 1200
+  const reads = [[sheet, 'I will look at the stylesheet first.'], [file, 'Then the page that draws the list.']] as const
+  if (done < reads.length) {
+    const [path, text] = reads[done]!
+    const read = call(turn, 'read', { filePath: path, file_path: path, path })
+    return read ? { text, call: read, pauseMs } : { text: `The theme script needs the read tool ${offered}.` }
+  }
+  const change = themeEdits[done - reads.length]
+  if (!change) return { text: 'Done. The app is dark with a violet accent, and the number of todos left is shown under the list. The preview beside this panel updated by itself. SCRIPTED-THEME-DONE', pauseMs }
+  const edit = call(turn, 'edit', { filePath: change.file, file_path: change.file, path: change.file, oldString: change.before, old_string: change.before, newString: change.after, new_string: change.after })
+  return edit ? { text: change.say, call: edit, pauseMs: 2200 } : { text: `The theme script needs the edit tool ${offered}.` }
+}
 
 const textOf = (content: unknown): string => typeof content === 'string' ? content
   : Array.isArray(content) ? content.map(part => typeof part?.text === 'string' ? part.text : '').filter(Boolean).join('\n') : ''
@@ -66,6 +108,7 @@ function next(turn: Turn): Step {
     const shell = call(turn, 'shell', { command })
     return shell ? { text: `Running \`${command}\`.`, call: shell } : { text: `The run script needs the shell tool ${offered}.` }
   }
+  if (/\bdark theme\b/i.test(turn.user)) return themeStep(turn, offered)
   if (!/\bheading\b/i.test(turn.user)) return { text: plain }
   if (turn.results.length === 0) {
     const read = call(turn, 'read', { filePath: file, file_path: file, path: file })
@@ -101,6 +144,7 @@ function reply(turn: Turn, step: Step): Response {
         if (delay > 0) await Bun.sleep(delay)
       }
       try {
+        if (step.pauseMs) await Bun.sleep(step.pauseMs)
         await send('response.created', { response: { ...base, status: 'in_progress' } })
         await send('response.in_progress', { response: { ...base, status: 'in_progress' } })
         for (const [output_index, item] of items.entries()) {
