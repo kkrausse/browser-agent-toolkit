@@ -43,8 +43,12 @@ export interface BootedKernel {
   /** Download an image into OPFS unless it is already there. */
   storeImage(name: string, url: string): Promise<{ bytes: number; ms: number; cached: boolean }>
   /** Mount a stored image at `path`. `arriving`: its file is still being written front to
-   * back; reads wait for what is not there yet until `bat_image_arriving(id, 0 | 2)`. */
-  mountImage(name: string, path: string, arriving?: boolean): Promise<{ id: number; entries: number; ms: number; openHandleMs: number; indexMs: number }>
+   * back; reads wait for what is not there yet until `bat_image_arriving(id, 0 | 2)`.
+   * `snapshot`: the file cannot be opened while it arrives and is read through snapshots;
+   * then `imageArrived(id)` must be awaited before `bat_image_arriving(id, 0)`. */
+  mountImage(name: string, path: string, arriving?: boolean, snapshot?: { headBytes: number }): Promise<{ id: number; entries: number; ms: number; openHandleMs: number; indexMs: number }>
+  /** The download of an image mounted with `snapshot` is complete: the supervisor opens the file. */
+  imageArrived(id: number): Promise<void>
   restored?: { snapshotSeq: number; seq: number; snapshotBytes?: number; journalFrames: number; journalBytes: number; ms: number }
   timings: { compileMs: number; attachMs: number; kerneldMs: number }
   close(): void
@@ -106,7 +110,8 @@ export async function bootKernel(opts: BootOptions): Promise<BootedKernel> {
     memory,
     kerneld,
     storeImage: (name, url) => kerneld('storeImage', { name, url: new URL(url, location.href).href }),
-    mountImage: (name, path, arriving) => kerneld('mount', { name, path, arriving }),
+    mountImage: (name, path, arriving, snapshot) => kerneld('mount', { name, path, arriving, snapshot }),
+    imageArrived: (id) => kerneld('imageArrived', { id }),
     restored: init.restored,
     timings: { compileMs: t1 - t0, attachMs: t2 - t1, kerneldMs: t3 - t2 },
     close: () => worker.terminate(),

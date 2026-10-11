@@ -14,6 +14,12 @@
 // once the head is in the file the caller is told (`usable`), mounts it, and
 // kernel reads of ranges that are not there yet wait for them.
 //
+// Reading while it arrives. Where a file can have several sync access handles (Chrome),
+// the readers open their own on the growing file. Where the writer's handle is the only
+// one a file can have (WebKit), the supervisor reads the growing file through snapshots
+// instead (`getFile()` and `FileReaderSync`, see kerneld.ts) until the download is
+// complete and it can take the handle itself; `usable.snapshot` says so.
+//
 // Names. `image-<hash>.batimg` exists only complete and verified, as before.
 // A download goes to `<name>.partial`. That file cannot be renamed while
 // workers hold it open (which they do when it was mounted early), so a
@@ -53,8 +59,10 @@ export interface StoreImageResult {
 export interface StoreImageProgress {
   loaded?: number
   total?: number
-  /** Sent once: `file` can be opened and its head read. `arriving`: the rest is still being written. */
-  usable?: { file: string; arriving: boolean }
+  /** Sent once: `file` can be opened and its head read. `arriving`: the rest is still being
+   * written. `snapshot`: while it arrives the file cannot be opened (its writer holds the only
+   * handle it can have) and is read through `getFile()`; the head is its first `headBytes`. */
+  usable?: { file: string; arriving: boolean; snapshot?: { headBytes: number } }
 }
 
 interface Hasher {
@@ -146,10 +154,14 @@ async function download(a: StoreImageArgs, dir: FileSystemDirectoryHandle, onPro
   const tmpName = partialOf(a.name)
   const tmp = await dir.getFileHandle(tmpName, { create: true })
   // Shared with the workers that read the image while it arrives, where the engine has
-  // shared handles. Where it has not (WebKit), this is the file's only handle: nobody can
-  // read the image until it is complete and closed, so it is not announced before that.
+  // shared handles. Where it has not (WebKit), this is the file's only handle, and the
+  // image is read while it arrives through snapshots of the file, which need none. (What a
+  // sync access handle has written is in a snapshot taken afterwards without a flush:
+  // runtime/harness/webkit/probe-getfile.ts.) Without either, nobody can read the image
+  // until it is complete and closed, so it is not announced before that.
   const handle = await openSyncHandle(tmp, 'readwrite-unsafe')
-  const readableWhileArriving = handlesAreShared() === true
+  const snapshots = handlesAreShared() === false && a.headBytes !== undefined && typeof (globalThis as any).FileReaderSync === 'function'
+  const readableWhileArriving = handlesAreShared() === true || snapshots
   const blockBytes = a.sums?.blockBytes ?? 1 << 20
   const streaming = !!a.sums && a.bytes !== undefined
   let written = 0
@@ -187,7 +199,7 @@ async function download(a: StoreImageArgs, dir: FileSystemDirectoryHandle, onPro
           onProgress({ loaded: written, total })
           if (streaming && readableWhileArriving && !announced && written >= Math.min(a.headBytes ?? 0, a.bytes!)) {
             announced = true
-            onProgress({ usable: { file: tmpName, arriving: true } })
+            onProgress({ usable: { file: tmpName, arriving: true, snapshot: snapshots ? { headBytes: a.headBytes! } : undefined } })
           }
         })
         .catch((e) => {
@@ -201,7 +213,7 @@ async function download(a: StoreImageArgs, dir: FileSystemDirectoryHandle, onPro
     let fill = 0
     let received = 0
     // Not reading is the pause: the response backs up to the server.
-    // (Only where the image is used while it arrives: elsewhere the start-up waits for all of it.)
+    // (Only where the image is used while it arrives: otherwise the start-up waits for all of it.)
     let pauseAt = streaming && readableWhileArriving && resume && a.firstBytes && a.firstBytes < a.bytes! ? Math.ceil(a.firstBytes / blockBytes) * blockBytes : 0
     for (;;) {
       if (pauseAt && received >= pauseAt) {

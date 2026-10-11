@@ -58,7 +58,7 @@ let journalSize = 0
 let journalWrittenAt = 0
 let nextSlot: 'snap-a' | 'snap-b' = 'snap-a'
 let outP = 0
-const stats = { spawns: 0, kills: 0, faults: 0, journalFrames: 0, journalBytes: 0, snapshots: 0 }
+const stats = { spawns: 0, kills: 0, faults: 0, snapshotReads: 0, journalFrames: 0, journalBytes: 0, snapshots: 0 }
 
 // ---- process workers ----
 
@@ -179,13 +179,104 @@ function kill(pid: number, sig: number) {
 
 // ---- images ----
 
-async function mount(name: string, path: string, arriving = false) {
+// An image that is still being downloaded, where its writer's sync access handle is the only
+// one the file can have (WebKit): until the download ends, this worker reads the growing file
+// through snapshots. `getFile()` gives a File of what has been written so far (flushed or
+// not), and `FileReaderSync` reads a slice of it; both work while the writer holds its handle
+// (runtime/harness/webkit/probe-getfile.ts). Taking a snapshot is asynchronous and the
+// kernel's read is not, so a fault is served in two steps: the bytes are read into `stash`,
+// then the kernel is told to load the chunk and finds them there. A range that has not
+// arrived comes back short, which the kernel answers as it does for any arriving image: the
+// reader waits for `bat_image_progress` and asks again.
+interface ArrivingImage {
+  name: string
+  file: FileSystemFileHandle
+  stash: { at: number; bytes: Uint8Array }[]
+  /** Chunks being fetched. */
+  pending: Set<number>
+}
+const arrivingImages: (ArrivingImage | undefined)[] = []
+const IMAGE_CHUNK = 1 << 17 // the kernel's (crates/bat-kernel/src/image.rs)
+// One snapshot read costs about 1.5 ms whatever its length up to this, and a start-up reads
+// the image front to back (prepare lays it out in that order): fetch what follows as well.
+const SNAPSHOT_CHUNKS = 8
+let snapshotReader: { readAsArrayBuffer(blob: Blob): ArrayBuffer } | undefined
+
+/** Up to `length` bytes at `at` of what the file holds now; fewer when it ends before that. */
+async function readSnapshot(file: FileSystemFileHandle, at: number, length: number): Promise<Uint8Array> {
+  snapshotReader ??= new (globalThis as any).FileReaderSync()
+  for (let attempt = 0; ; attempt++) {
+    const snapshot = await file.getFile()
+    if (snapshot.size <= at) return new Uint8Array(0)
+    try {
+      return new Uint8Array(snapshotReader!.readAsArrayBuffer(snapshot.slice(at, Math.min(snapshot.size, at + length))))
+    } catch (e) {
+      // A snapshot stops being readable when the file is written to after it was taken: take another.
+      if (attempt >= 8) throw e
+    }
+  }
+}
+function readStash(image: ArrivingImage, offset: number, dst: Uint8Array): number {
+  for (const s of image.stash) {
+    if (offset >= s.at && offset + dst.length <= s.at + s.bytes.length) {
+      dst.set(s.bytes.subarray(offset - s.at, offset - s.at + dst.length))
+      return dst.length
+    }
+  }
+  return 0 // not arrived (or not fetched): a short read
+}
+async function faultArriving(id: number, chunk: number) {
+  const image = arrivingImages[id]
+  if (!image || image.pending.has(chunk)) return
+  image.pending.add(chunk)
+  try {
+    const at = chunk * IMAGE_CHUNK
+    const bytes = await readSnapshot(image.file, at, SNAPSHOT_CHUNKS * IMAGE_CHUNK)
+    if (arrivingImages[id] !== image) {
+      // The download ended meanwhile and the file is open: an ordinary fault.
+      if (handles[id]) k.x.bat_image_fault(id, chunk)
+      return
+    }
+    if (!bytes.length) return
+    const stashed = { at, bytes }
+    image.stash.push(stashed)
+    stats.snapshotReads++
+    try {
+      // The chunk asked for, and the whole chunks read along with it. (A chunk cut short by the
+      // end of what has arrived stays unloaded; the image's last chunk is short by itself.)
+      for (let ci = chunk; ci * IMAGE_CHUNK < at + bytes.length; ci++) k.x.bat_image_fault(id, ci)
+    } finally {
+      image.stash.splice(image.stash.indexOf(stashed), 1)
+    }
+  } catch (e) {
+    console.error('kerneld: reading an arriving image:', e)
+  } finally {
+    image.pending.delete(chunk)
+  }
+}
+/** The download is complete and its writer has closed the file: read it through a handle from here on. */
+async function imageArrived(id: number) {
+  const image = arrivingImages[id]
+  if (!image) return
+  handles[id] = await openImageHandle(cfg.namespace, image.name, true)
+  arrivingImages[id] = undefined
+}
+
+async function mount(name: string, path: string, arriving = false, snapshot?: { headBytes: number }) {
   const t0 = performance.now()
   const id: number = k.x.bat_image_reserve()
   // Before the mount: from its first read on, a range that is not in the file yet is waited for.
   if (arriving) k.x.bat_image_arriving(id, 1)
-  // kerneld is the keeper: where a file can have one handle only, this is it (opfs.ts).
-  handles[id] = await openImageHandle(cfg.namespace, name, true)
+  let head: ArrivingImage['stash'][number] | undefined
+  if (arriving && snapshot) {
+    const file = await (await opfsDir(cfg.namespace, 'images')).getFileHandle(name)
+    // The mount reads the head, which is in the file before the image is announced.
+    head = { at: 0, bytes: await readSnapshot(file, 0, snapshot.headBytes) }
+    arrivingImages[id] = { name, file, stash: [head], pending: new Set() }
+  } else {
+    // kerneld is the keeper: where a file can have one handle only, this is it (opfs.ts).
+    handles[id] = await openImageHandle(cfg.namespace, name, true)
+  }
   const tOpen = performance.now()
   const u8 = inst.u8()
   const enc = new TextEncoder()
@@ -198,6 +289,9 @@ async function mount(name: string, path: string, arriving = false) {
   const rc = k.x.bat_image_mount(id, p, nb.length, p + nb.length, pb.length)
   k.x.bat_free(p, nb.length + pb.length + 8)
   if (rc < 0) throw new Error(`mount ${name} at ${path} failed: errno ${-rc}`)
+  // The kernel keeps the head in its own memory.
+  const still = arrivingImages[id]
+  if (head && still) still.stash.splice(still.stash.indexOf(head), 1)
   const t1 = performance.now()
   for (const spare of spares) void spare.ready.then((s) => s.worker.postMessage({ type: 'images' })).catch(() => {})
   for (const proc of procs.values()) proc.worker.postMessage({ type: 'images' })
@@ -408,7 +502,8 @@ async function supervise() {
           if (proc) retire(proc, 50)
         } else if (kind === 4) {
           stats.faults++
-          x.bat_image_fault(a, b)
+          if (arrivingImages[a]) void faultArriving(a, b)
+          else x.bat_image_fault(a, b)
         } else if (kind === 5) drainJournal()
       } catch (e) {
         console.error('kerneld:', e)
@@ -467,7 +562,9 @@ async function init(args: InitArgs) {
     host: {
       imageRead(image, offset, dst) {
         const h = handles[image]
-        return h ? h.read(dst, { at: offset }) : -11
+        if (h) return h.read(dst, { at: offset })
+        const arriving = arrivingImages[image]
+        return arriving ? readStash(arriving, offset, dst) : -11
       },
     },
   })
@@ -484,7 +581,8 @@ async function init(args: InitArgs) {
 
 const ops: Record<string, (a: any) => unknown> = {
   init,
-  mount: (a: { name: string; path: string; arriving?: boolean }) => mount(a.name, a.path, a.arriving),
+  mount: (a: { name: string; path: string; arriving?: boolean; snapshot?: { headBytes: number } }) => mount(a.name, a.path, a.arriving, a.snapshot),
+  imageArrived: (a: { id: number }) => imageArrived(a.id),
   hasImage: (a: { name: string }) => imageExists(cfg.namespace, a.name),
   storeImage: async (a: { name: string; url: string }) => {
     const have = await imageExists(cfg.namespace, a.name)
