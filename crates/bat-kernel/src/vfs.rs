@@ -546,7 +546,7 @@ impl Vfs {
         let kind = match e.kind {
             IKind::File => {
                 let ext = e.body().unwrap();
-                let mut data = vec![0u8; ext.len as usize];
+                let mut data = crate::mem::zeroed(ext.len as usize, ENOSPC)?;
                 m.read_at(ext.offset, &mut data)?;
                 Kind::File(data)
             }
@@ -901,6 +901,9 @@ impl Vfs {
     fn truncate_ino(&mut self, ino: u32, len: usize) -> R<()> {
         let n = self.node_mut(ino);
         let Kind::File(d) = &mut n.kind else { return Err(EINVAL) };
+        if len > d.len() {
+            crate::mem::reserve(d, len - d.len(), ENOSPC)?;
+        }
         d.resize(len, 0);
         if len == 0 {
             d.shrink_to_fit();
@@ -921,8 +924,11 @@ impl Vfs {
         if end > d.len() {
             if end > d.capacity() {
                 // Grow geometrically but not absurdly for big files.
+                // Near a full memory: what is needed, or the write fails with ENOSPC.
                 let want = end.max(d.capacity() + d.capacity() / 2);
-                d.reserve_exact(want - d.len());
+                if want == end || !crate::mem::can_take(want - d.capacity()) || crate::mem::reserve(d, want - d.len(), ENOSPC).is_err() {
+                    crate::mem::reserve(d, end - d.len(), ENOSPC)?;
+                }
             }
             d.resize(end, 0);
         }

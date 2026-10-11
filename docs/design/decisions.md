@@ -1439,3 +1439,49 @@ Decision: **2**, with N = **4,096 pages, 256 MiB**, by default.
 
 Merging with `webkit-support`: `7f8bf72` changes the same function in `alloc.rs`. This
 entry's version contains its step and its fallback; take this side.
+
+## 2026-10-11: the image chunk cache has a limit (32 MiB) and drops chunks by a clock
+
+Item 4 of the footprint report: chunks of the dependency image read into the kernel memory
+were never dropped, so the cache was bounded only by the image (240 MB), and it was most
+of what made the kernel memory grow in a session. With a kernel memory of fixed size
+(previous entry) an unbounded cache is also what would fill it.
+
+Measured before choosing (`bench/memory/read-image.cjs` through the harness, a guest reading
+98 MB of image files three times, 892 chunks; n = 2 per cell, load 3; ms per pass):
+
+| limit | Chrome: first pass | later passes | WebKit: first pass | later passes | chunks read in all |
+| --- | --- | --- | --- | --- | --- |
+| none | 150, 154 | 80–104 | 167, 176 | 70–85 | 892 |
+| 64 MiB | 129, 144 | 100–112 | 109, 120 | 67–125 | 2,670 |
+| 32 MiB | 115, 123 | 92–106 | 106, 141 | 116–135 | 2,697 |
+| 16 MiB | 108, 119 | 87–106 | 82, 92 | 61–126 (one 361) | 2,718 |
+| 8 MiB | 105, 111 | 98–108 | 83, 101 | 86–120 | 2,752 |
+
+Reading a dropped chunk again costs about 0.02 ms in Chrome (the reader's own file handle)
+and about 0.05 ms in WebKit (a request to kerneld, which holds the only handle), against
+0.1 ms to copy a cached chunk out to the guest and decode it. A first pass is faster with
+a limit than without one: the cache reuses the same pages instead of touching new ones.
+
+Options: no limit; a limit with least-recently-used order (a list to maintain under a lock
+on every read); a limit with a second-chance clock (one bit per chunk set on a read, a hand
+that sweeps only when something must go); no cache at all (every read through the host:
+for threads without a handle that is a round trip per read, not per chunk).
+
+Decision: **a clock, limit 32 MiB over all images, configurable** (`imageCacheBytes` on the
+boot options, `bat_image_cache_limit`). 32 MiB holds what either example reads to start
+(figures in the report) with the cost of being wrong shown above to be small, so the
+number is not delicate; an embedder short of memory can set 8 MiB at the price in the last
+row. Reads take no lock: a reader pins the chunk for its copy with a counter beside the
+slot, inside the kill gate so a terminated worker leaves no pin; the thread about to load
+a chunk over the limit runs the sweep. A pin that never goes away (not expected) costs
+that one chunk, never a wait.
+
+Correction to the previous entry: pipe and socket buffers do not go through
+`mem::reserve`. They are of fixed size (at most 1 MiB), allocated when the pipe is made,
+and count as small allocations. What asks first is file contents (write, truncate,
+copy-up), image chunks and `bat_alloc` above 64 KiB. Also learned by filling a 64 MiB
+memory (`bench/memory/fill-memory.cjs`, both browsers: `ENOSPC` after 20–24 MiB, the
+runtime carried on): a file is one contiguous buffer that grows by half, so growing it
+needs the old and the new buffer at once and the largest single file is roughly a third of
+the free memory. That was so before; a fixed memory makes it a limit one can reach.

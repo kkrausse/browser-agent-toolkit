@@ -19,7 +19,7 @@ use core::sync::atomic::{AtomicU32, Ordering::*};
 const SPINS: u32 = 200;
 
 #[inline]
-fn gate_enter() {
+pub(crate) fn gate_enter() {
     if let Some(t) = thread::current() {
         let d = t.lock_depth.load(Relaxed);
         t.lock_depth.store(d + 1, SeqCst);
@@ -31,7 +31,7 @@ fn gate_enter() {
 }
 
 #[inline]
-fn gate_leave() {
+pub(crate) fn gate_leave() {
     if let Some(t) = thread::current() {
         let d = t.lock_depth.load(Relaxed);
         t.lock_depth.store(d.wrapping_sub(1), Release);
