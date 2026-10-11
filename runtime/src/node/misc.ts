@@ -18,15 +18,24 @@ registerBuiltin('timers', (rt) => {
   return timers
 })
 
+// A terminal is a kernel device (crates/bat-kernel/src/tty.rs); the streams are the ones
+// `process.stdin` / `process.stdout` are made of (node/process.ts).
 registerBuiltin('tty', (rt) => {
-  const fail = (): never => {
-    throw Object.assign(new Error('TTY initialization failed: no terminal is attached to this process'), { code: 'ERR_TTY_INIT_FAILED' })
+  const isatty = (fd: unknown) => {
+    try {
+      return typeof fd === 'number' && rt.kernel.isatty(fd)
+    } catch {
+      return false
+    }
   }
-  void rt
+  const open = (fd: unknown, direction: 'in' | 'out') => {
+    if (!isatty(fd)) throw Object.assign(new Error('TTY initialization failed: the descriptor is not a terminal'), { code: 'ERR_TTY_INIT_FAILED' })
+    return rt.ctl!.ttyStream(fd as number, direction)
+  }
   return {
-    isatty: () => false,
-    ReadStream: function ReadStream() { fail() },
-    WriteStream: function WriteStream() { fail() },
+    isatty,
+    ReadStream: function ReadStream(fd: unknown) { return open(fd, 'in') },
+    WriteStream: function WriteStream(fd: unknown) { return open(fd, 'out') },
   }
 })
 

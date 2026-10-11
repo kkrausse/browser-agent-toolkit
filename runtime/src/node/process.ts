@@ -13,6 +13,13 @@ export const SIGNALS: Record<string, number> = {
 export const SIGNAL_NAMES: Record<number, string> = Object.fromEntries(Object.entries(SIGNALS).map(([k, v]) => [v, k]))
 /** Signals whose default action ends the process. */
 const FATAL = new Set([1, 2, 3, 6, 13, 14, 15, 10, 12])
+const SIGWINCH = 28
+
+// termios (the kernel's 44-byte layout; Linux flag values, crates/bat-pty/src/termios.rs).
+const BRKINT = 0x2, INPCK = 0x10, ISTRIP = 0x20, ICRNL = 0x100, IXON = 0x400
+const CS8 = 0x30
+const ISIG = 0x1, ICANON = 0x2, ECHO = 0x8, IEXTEN = 0x8000
+const CC = 16, VTIME = 5, VMIN = 6
 
 export interface ProcessControl {
   process: any
@@ -32,12 +39,84 @@ export interface ProcessControl {
   writeFd(fd: number, text: string): void
   /** True once `process.stdout`/`stderr` was materialised (so console must go through it). */
   streamFor(fd: 1 | 2): any | undefined
+  /** A stream over a terminal descriptor, as `process.stdin` / `process.stdout` are built (`tty.ReadStream`, `tty.WriteStream`). */
+  ttyStream(fd: number, direction: 'in' | 'out'): any
 }
 
 const encoder = new TextEncoder()
 
-export function createProcess(rt: Runtime, loop: LoopInternals, finish: (code: number) => never): ProcessControl {
+export function createProcess(rt: Runtime, loop: LoopInternals, end: (code: number) => never): ProcessControl {
   const kernel = rt.kernel
+
+  // ---- terminals ----
+  // A descriptor that is an end of a kernel terminal (kernel tty.rs) gets Node's tty surface:
+  // isTTY, raw mode, the window size and 'resize'.
+  const isTty = (fd: number) => {
+    try {
+      return kernel.isatty(fd)
+    } catch {
+      return false
+    }
+  }
+  /** The mode a terminal had before its first `setRawMode(true)`; put back at exit, as Node does. */
+  const cooked = new Map<number, Uint8Array>()
+  function setRawMode(fd: number, raw: boolean) {
+    const saved = cooked.get(fd)
+    if (!raw) {
+      if (saved) kernel.ttySetattr(fd, saved)
+      cooked.delete(fd)
+      return
+    }
+    // What libuv's UV_TTY_MODE_RAW does (not cfmakeraw: OPOST stays on, so "\n" still becomes "\r\n").
+    const termios = kernel.ttyGetattr(fd)
+    if (!saved) cooked.set(fd, termios.slice())
+    const view = new DataView(termios.buffer)
+    view.setUint32(0, view.getUint32(0, true) & ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON), true)
+    view.setUint32(8, view.getUint32(8, true) | CS8, true)
+    view.setUint32(12, view.getUint32(12, true) & ~(ECHO | ICANON | IEXTEN | ISIG), true)
+    termios[CC + VMIN] = 1
+    termios[CC + VTIME] = 0
+    kernel.ttySetattr(fd, termios)
+  }
+  function finish(code: number): never {
+    for (const [fd, termios] of cooked) {
+      try {
+        kernel.ttySetattr(fd, termios)
+      } catch {
+        // the terminal is gone
+      }
+    }
+    cooked.clear()
+    return end(code)
+  }
+  /** Terminal write streams that exist, for 'resize'. */
+  const terminals: { stream: any; refresh(): boolean }[] = []
+  function asTerminalOutput(s: any, fd: number) {
+    let size = { cols: 80, rows: 24 }
+    const refresh = () => {
+      try {
+        const now = kernel.ttyWinsize(fd)
+        const changed = now.cols !== size.cols || now.rows !== size.rows
+        size = now
+        return changed
+      } catch {
+        return false
+      }
+    }
+    refresh()
+    s.isTTY = true
+    s._type = 'tty'
+    Object.defineProperties(s, {
+      columns: { get: () => size.cols, enumerable: true, configurable: true },
+      rows: { get: () => size.rows, enumerable: true, configurable: true },
+    })
+    s.getWindowSize = () => [size.cols, size.rows]
+    s.getColorDepth = (env: Record<string, string | undefined> = proc.env) =>
+      env.COLORTERM === 'truecolor' || env.COLORTERM === '24bit' ? 24 : /256/.test(env.TERM ?? '') ? 8 : 4
+    s.hasColors = (count: unknown = 16, env?: Record<string, string | undefined>) => (typeof count === 'number' ? count : 16) <= 2 ** s.getColorDepth(typeof count === 'object' && count ? count : env)
+    for (const name of ['cursorTo', 'moveCursor', 'clearLine', 'clearScreenDown']) s[name] = (...args: unknown[]) => rt.require('readline')[name](s, ...args)
+    terminals.push({ stream: s, refresh })
+  }
   // Node's own lib reads `process` while it loads, and `process` is an EventEmitter from that lib:
   // the object exists first and becomes an emitter once its identity fields are in place.
   const proc: any = {}
@@ -146,6 +225,7 @@ export function createProcess(rt: Runtime, loop: LoopInternals, finish: (code: n
   }
 
   function signal(sig: number) {
+    if (sig === SIGWINCH) for (const t of terminals) if (t.refresh()) loop.call(() => t.stream.emit('resize'))
     const name = SIGNAL_NAMES[sig]
     if (name && proc.listenerCount(name) > 0) {
       loop.call(() => proc.emit(name, name, sig))
@@ -333,7 +413,7 @@ export function createProcess(rt: Runtime, loop: LoopInternals, finish: (code: n
 
   // ---- stdio, created on first touch ----
   const streams: Record<number, any> = {}
-  function outStream(fd: 1 | 2) {
+  function outStream(fd: number) {
     const { Writable } = rt.require('stream')
     const s = new Writable({
       decodeStrings: false,
@@ -361,13 +441,14 @@ export function createProcess(rt: Runtime, loop: LoopInternals, finish: (code: n
     s.isTTY = false
     s.destroySoon = s.destroy
     s._handle = { fd, setBlocking() {}, getAsyncId: () => 0, ref() {}, unref() {} }
+    if (isTty(fd)) asTerminalOutput(s, fd)
     s.on('error', (e: any) => {
       // A closed pipe on stdout ends most programs quietly.
       if (e?.code !== 'EPIPE') uncaught(e)
     })
     return s
   }
-  function inStream() {
+  function inStream(fd = 0) {
     const { Readable } = rt.require('stream')
     const Buffer = rt.require('buffer').Buffer
     let waiting = false
@@ -375,7 +456,7 @@ export function createProcess(rt: Runtime, loop: LoopInternals, finish: (code: n
     const stop = () => {
       if (waiting) {
         waiting = false
-        loop.offFd(0)
+        loop.offFd(fd)
         loop.unref()
       }
     }
@@ -383,12 +464,12 @@ export function createProcess(rt: Runtime, loop: LoopInternals, finish: (code: n
       while (waiting) {
         let ready: number
         try {
-          ready = kernel.pollFd(0)
+          ready = kernel.pollFd(fd)
         } catch {
           ready = POLLHUP
         }
         if (!(ready & (POLLIN | POLLHUP))) return
-        const n = kernel.readRaw(0, buf)
+        const n = kernel.readRaw(fd, buf)
         if (n > 0) {
           if (!s.push(Buffer.from(buf.slice(0, n)))) stop()
         } else if (n === 0 || n !== -11) {
@@ -403,7 +484,7 @@ export function createProcess(rt: Runtime, loop: LoopInternals, finish: (code: n
         if (!waiting) {
           waiting = true
           loop.ref()
-          loop.onFd(0, POLLIN | POLLHUP, pump)
+          loop.onFd(fd, POLLIN | POLLHUP, pump)
         }
       },
       destroy(err: Error | null, cb: (e?: Error | null) => void) {
@@ -411,10 +492,16 @@ export function createProcess(rt: Runtime, loop: LoopInternals, finish: (code: n
         cb(err)
       },
     })
-    s.fd = 0
-    s.isTTY = false
+    s.fd = fd
+    s.isTTY = isTty(fd)
     s.isRaw = false
-    s.setRawMode = () => s
+    s.setRawMode = (raw: boolean) => {
+      if (s.isTTY) {
+        setRawMode(fd, !!raw)
+        s.isRaw = !!raw
+      }
+      return s
+    }
     s.on('pause', stop)
     s.ref = () => s
     s.unref = () => {
@@ -477,5 +564,6 @@ export function createProcess(rt: Runtime, loop: LoopInternals, finish: (code: n
     },
     writeFd,
     streamFor: (fd) => streams[fd],
+    ttyStream: (fd, direction) => (direction === 'in' ? inStream(fd) : outStream(fd)),
   }
 }
