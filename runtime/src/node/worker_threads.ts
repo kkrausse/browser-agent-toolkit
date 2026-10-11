@@ -2,7 +2,14 @@
 // the process's own event loop, rather than on the browser's: a Node port has
 // `on('message')`, keeps the process alive while it listens, and can be read
 // synchronously (`receiveMessageOnPort`), none of which a browser port does.
-// `Worker` is not provided yet.
+//
+// `Worker`: a worker thread is a process of its own here (another browser
+// Worker with its own Node globals and its own kernel pid), joined to its
+// parent by `child_process.fork`'s channel. So messages are JSON: no
+// transfer lists, no shared memory, no MessagePorts across, and values JSON
+// cannot carry (Map, typed arrays, undefined members) do not arrive as sent.
+// Enough for a worker that is asked things and answers (a parser, a
+// formatter); `workerData` travels the same way.
 import type { Runtime } from '../process/runtime'
 import { registerBuiltin, unsupported } from './registry'
 
@@ -125,18 +132,93 @@ function create(rt: Runtime): any {
     if (!(port instanceof MessagePort)) throw Object.assign(new TypeError('The "port" argument must be a MessagePort instance'), { code: 'ERR_INVALID_ARG_TYPE' })
     return port._queue.length ? { message: port._queue.shift() } : undefined
   }
+  const proc = rt.process
+  // The worker side: this process was started by `new Worker` below.
+  let thread: { threadId: number; workerData: unknown } | undefined
+  if (proc.env.BAT_WORKER_THREAD) {
+    try {
+      thread = JSON.parse(proc.env.BAT_WORKER_THREAD)
+    } catch {
+      // not ours
+    }
+    delete proc.env.BAT_WORKER_THREAD
+  }
+  let parentPort: any = null
+  if (thread) {
+    // Connects the channel (the child side of fork).
+    rt.require('child_process')
+    parentPort = new EventEmitter()
+    parentPort.postMessage = (value: unknown) => void proc.send?.(value === undefined ? null : value)
+    parentPort.close = () => proc.disconnect?.()
+    parentPort.ref = parentPort.unref = () => parentPort
+    parentPort.start = () => {}
+    // As in Node, a worker lives while its parent port has a listener (or anything else is pending).
+    const deliver = (message: unknown) => parentPort.emit('message', message)
+    parentPort.on('newListener', (name: string) => {
+      if (name === 'message' && parentPort.listenerCount('message') === 0) proc.on('message', deliver)
+    })
+    parentPort.on('removeListener', (name: string) => {
+      if (name === 'message' && parentPort.listenerCount('message') === 0) proc.off('message', deliver)
+    })
+    // The parent is gone or called terminate().
+    proc.on('disconnect', () => proc.exit())
+  }
+
+  let nextThread = 1
   class Worker extends EventEmitter {
-    constructor() {
+    threadId: number
+    _child: any
+    _code: number | undefined
+    constructor(filename: unknown, options: any = {}) {
       super()
-      unsupported('worker_threads', 'Worker')
+      const fs = rt.require('fs')
+      this.threadId = nextThread++
+      let file = filename instanceof g.URL ? rt.require('url').fileURLToPath(filename) : String(filename)
+      let scratch: string | undefined
+      if (options.eval) {
+        // Source text: the loader wants a file.
+        scratch = file = `/tmp/.worker-${proc.pid}-${this.threadId}.${options.type === 'module' ? 'mjs' : 'cjs'}`
+        fs.writeFileSync(file, String(filename))
+      }
+      const env = options.env && typeof options.env === 'object' ? options.env : proc.env
+      // stdin is not the parent's: a terminal must not take the worker for its foreground process.
+      this._child = rt.require('child_process').fork(file, options.argv ?? [], {
+        env: { ...env, BAT_WORKER_THREAD: JSON.stringify({ threadId: this.threadId, workerData: options.workerData ?? null }) },
+        execArgv: options.execArgv ?? [],
+        stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
+      })
+      this._child.on('spawn', () => this.emit('online'))
+      this._child.on('message', (message: unknown) => this.emit('message', message))
+      this._child.on('error', (e: Error) => this.emit('error', e))
+      this._child.on('exit', (code: number | null) => {
+        this._code = code ?? 1
+        if (scratch) fs.rmSync(scratch, { force: true })
+        this.emit('exit', this._code)
+      })
+    }
+    postMessage(value: unknown) {
+      if (this._code === undefined && this._child.connected) this._child.send(value === undefined ? null : value)
+    }
+    terminate() {
+      return new Promise<number>((resolve) => {
+        if (this._code !== undefined) return resolve(this._code)
+        this.once('exit', resolve)
+        this._child.kill('SIGKILL')
+      })
+    }
+    ref() {
+      this._child.ref()
+    }
+    unref() {
+      this._child.unref()
     }
   }
   return {
-    isMainThread: true,
+    isMainThread: !thread,
     isInternalThread: false,
-    parentPort: null,
-    workerData: null,
-    threadId: 0,
+    parentPort,
+    workerData: thread?.workerData ?? null,
+    threadId: thread?.threadId ?? 0,
     resourceLimits: {},
     SHARE_ENV: Symbol.for('nodejs.worker_threads.SHARE_ENV'),
     Worker,

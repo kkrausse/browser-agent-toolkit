@@ -48,7 +48,8 @@ registerBuiltin('console', (rt) => {
     Object.assign(this, inst)
   }
   const out = Object.assign(Object.create(null), rt.host.global.console, c)
-  Object.defineProperty(out, 'Console', { value: Console, enumerable: false, configurable: true, writable: true })
+  // Enumerable, as in Node: `import { Console } from 'node:console'` reads the module's own keys.
+  Object.defineProperty(out, 'Console', { value: Console, enumerable: true, configurable: true, writable: true })
   return out
 })
 
