@@ -7,6 +7,7 @@
     "prepare:editor": "bun prepare.ts",
     "build": "bun build.ts",
     "start": "bun server.ts",
+    "publish:pages": "bun publish-pages.ts",
     "editor": "bun run display && bun run prepare:editor && bun run build && bun run start",
     "typecheck": "tsc --noEmit"
   },

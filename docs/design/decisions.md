@@ -1198,3 +1198,7 @@ machine. `examples/terminal-app/build.ts` takes `PUBLIC=1`; the development buil
   except the model's working time, which is labelled. The mock has a script for the same
   prompt, so that one take does not depend on a free model's rate limits; that take is
   labelled as scripted wherever it is shown.
+- **GitHub Pages gets a branch that is replaced, not appended to** (`publish-pages.ts`): the
+  commit is built in a scratch repository from the built directory and pushed with force as
+  `gh-pages`, so this checkout's branches and index are never involved and 55 MB builds do
+  not accumulate. It does nothing without `--yes`.

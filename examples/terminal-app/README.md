@@ -83,6 +83,19 @@ routes. The relay must allow the page: `RELAY_ORIGINS` in the relay's environmen
 page's origin (scheme, host, port; not its path). The files are 55 MB, the largest 47 MB
 (`editor/image-….batimg.gz`).
 
+**On GitHub Pages** (`https://<user>.github.io/<repository>/`): `bun publish-pages.ts
+dist-public --yes` (`bun run publish:pages -- --yes`) pushes the built directory, with a
+`.nojekyll` beside it, to `origin` as the branch `gh-pages`: one commit with no parent,
+forced, so earlier builds do not stay in the branch. Without `--yes` it prints what it would
+push and stops; it refuses a development build, a file of 100 MB or more, and the branches
+`main` and `master`. Served under `/browser-agent-toolkit/` by a local file server, the
+whole demo scenario passed against the mock: the service worker's scope is that directory,
+the workspace's storage is named after the path (`bat/browser-agent-toolkit-editor` in the
+origin's private file system), and the app's `/api` requests, which name the origin's root,
+are answered by the service worker and never sent. Not tried on Pages itself: that the
+`.gz` files arrive without a `Content-Encoding` of the host's (the worker inflates them
+itself and would fail on bytes already inflated).
+
 **What leaves the tab** on a first visit, from one run in Chrome with the network recorded:
 the page's own files; `GET https://opencode.ai/zen/v1/models` (the page, once);
 `GET https://models.opencode.ai/api.json` (the server's catalog); one WebSocket to the relay

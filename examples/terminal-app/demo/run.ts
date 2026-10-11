@@ -6,8 +6,9 @@
 //
 //   bun demo/run.ts --base https://<host>/artifacts/bat-demo-staging/ [--session bat-terminal-demo]
 //                   [--runs 1] [--record out.mp4] [--slow] [--prompt "…"] [--reply-timeout 300]
+//                   [--query "tunnel=0&model=http://127.0.0.1:4311/v1"]   (page parameters for every load)
 //
-//   1. warm: open the page once, so that the browser has its files (not recorded).
+//   1. warm: open the page once, so that the browser has its files, then an empty tab (not recorded).
 //   2. open: `?reset=1`, a fresh workspace; wait for the app in the frame and for the
 //      terminal client's prompt. Recorded from the navigation on, in real time.
 //   3. todos: in the app add "Record a demo GIF" and "Water the plants", tick the second.
@@ -33,6 +34,7 @@ const session = flag('session') ?? 'bat-terminal-demo'
 const runs = Number(flag('runs') ?? 1)
 const record = flag('record')
 const prompt = flag('prompt') ?? 'Give this app a dark theme with a violet accent, and show how many todos are left under the list.'
+const query = flag('query') ?? ''
 const replyTimeout = Number(flag('reply-timeout') ?? 300)
 const scratch = mkdtempSync(join(tmpdir(), 'bat-terminal-demo-'))
 
@@ -54,7 +56,7 @@ async function control(...args: string[]): Promise<string> {
   return out
 }
 
-const settings = { base, prompt, slow: has('slow'), replyTimeout: replyTimeout * 1000 }
+const settings = { base, query, prompt, slow: has('slow'), replyTimeout: replyTimeout * 1000 }
 const prelude = `
 const demo = ${JSON.stringify(settings)};
 const mark = name => (state.marks ??= []).push([name, Date.now()]);
@@ -106,14 +108,16 @@ const steps = {
   warm: `${prelude}
 state.marks = [];
 await page.setViewportSize({ width: 1280, height: 800 });
-await page.goto(demo.base, { waitUntil: 'load' });
+await page.goto(demo.base + (demo.query && '?' + demo.query), { waitUntil: 'load' });
 await ready(180000);
-return { url: page.url(), viewport: page.viewportSize() };`,
+// The recording starts on an empty tab, not on what an earlier run left in the workspace.
+await page.goto('about:blank');
+return { viewport: page.viewportSize() };`,
 
   open: `${prelude}
 mark('start');
 const started = Date.now();
-await page.goto(demo.base + '?reset=1', { waitUntil: 'load' });
+await page.goto(demo.base + '?reset=1' + (demo.query && '&' + demo.query), { waitUntil: 'load' });
 const { t, a } = await ready(120000);
 mark('ready');
 // Survives hot updates, not a reload of the frame.
