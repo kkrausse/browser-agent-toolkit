@@ -95,8 +95,28 @@ runs, two of them with new profiles.
 - **Lifecycle.** A backgrounded tab's workers are suspended; kerneld holds the only image
   handle. Not considered yet (webkit report, section 7).
 - **The keyboard.** The terminal takes input from a focused `contenteditable`; the iOS
-  on-screen keyboard has no ctrl, so `ctrl+p` (the client's command list, and with it the
-  ChatGPT sign-in) needs a hardware keyboard unless the client offers another way in. Typing
-  a prompt and Enter is what the scripted model needs.
+  on-screen keyboard has no ctrl, so `ctrl+p` (the client's command list) needs a hardware
+  keyboard. The client's bundle has the same entries as slash commands (`/connect`,
+  `/models`), which need none; that they work from an iOS keyboard was not tried. Typing a
+  prompt and Enter is all the scripted model needs.
 - **Layout.** At phone width the terminal panel covers the app; **Close** shows the app,
   **OpenCode** brings the terminal back.
+
+## 6. A model on the phone
+
+- **`?mock=1`** needs nothing: no key, relay or sign-in, and no network once the files are in.
+- **As published** (no `?mock`, no `?model`): OpenCode's free hosted model. The phone must
+  reach the internet: `opencode.ai` and `models.opencode.ai` by the tab's own fetch, and
+  `wss://wisp.mercurywork.shop/`, the public Wisp server that carries the model calls. No
+  key. Not run from this origin (it would have been a model conversation); that server
+  accepted an origin it had never seen on 2026-10-11 (decisions, the Wisp entry).
+- **A ChatGPT plan**: `/connect` (or ctrl+p, Connect an integration), OpenAI, sign in with a
+  code; type the code on OpenAI's page in another tab. Calls go to `chatgpt.com` through the
+  same Wisp server. Tried by hand in Chrome on the published page, never on a phone.
+- **A key of your own** is typed in the client (`/connect`), not in the cog's form, which
+  has the relay address and the reset only. Unverified in this build (README, "Your own
+  key"): the provider must answer the tab's preflight, and `api.openai.com` is not among the
+  hosts the public build tunnels.
+- **Another relay**: `?wisp=wss://…` or the cog's field; `?tunnel=wss://…` for a relay of
+  `packages/relay`, whose `RELAY_ORIGINS` must then list the page's origin. No relay or
+  default was changed for this build, and no key is in it.
