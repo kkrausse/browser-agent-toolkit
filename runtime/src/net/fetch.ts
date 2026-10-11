@@ -292,13 +292,35 @@ function createGuestFetch(rt: Runtime): GuestFetch {
         const res = await tunnelled(relay, url, req)
         return { ...res, body: track(res.body) }
       }
-      // The browser owns these headers; sending them is an error or a no-op.
-      const headers = req.headers.filter(([n]) => !/^(host|connection|content-length|transfer-encoding|keep-alive|upgrade|expect)$/i.test(n))
+      // The browser owns these headers; sending them is an error or a no-op (or, for
+      // `user-agent` in WebKit, a preflight: see withoutUserAgent).
+      const headers = req.headers.filter(([n]) => !/^(host|connection|content-length|transfer-encoding|keep-alive|upgrade|expect|user-agent)$/i.test(n))
       const out = await native(isHostAlias(url) ? toPage(url) : url, { method: req.method, headers, body: req.method === "GET" || req.method === "HEAD" ? undefined : (req.body as BodyInit | null), signal: req.signal, redirect: 'manual' })
       return { status: out.status, statusText: out.statusText, headers: headerPairs(out.headers), body: track(out.body), url: url.href }
     } finally {
       loop.unref()
     }
+  }
+
+  /**
+   * For a request the browser sends: without the guest's `user-agent`. Chromium does not
+   * send a script's User-Agent, so nothing there ever depended on it; WebKit does send it,
+   * and since it is not a CORS-safelisted header the request then needs a preflight that
+   * servers of plain documents refuse (models.opencode.ai/api.json: 405, "Load failed").
+   */
+  function withoutUserAgent(input: RequestInfo | URL, init?: RequestInit): [RequestInfo | URL, RequestInit | undefined] {
+    if (init?.headers) {
+      const headers = new Headers(init.headers)
+      if (!headers.has('user-agent')) return [input, init]
+      headers.delete('user-agent')
+      return [input, { ...init, headers }]
+    }
+    if (typeof input === 'object' && !(input instanceof URL) && input.headers.has('user-agent')) {
+      const headers = new Headers(input.headers)
+      headers.delete('user-agent')
+      return [new Request(input, { headers }), init]
+    }
+    return [input, init]
   }
 
   async function guestFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -326,6 +348,7 @@ function createGuestFetch(rt: Runtime): GuestFetch {
       }
       const relay = url && tunnelFor(url)
       if (relay) return await tunnelFetch(relay, url!, input, init)
+      ;[input, init] = withoutUserAgent(input, init)
       let response: Response
       if (url && isHostAlias(url)) {
         // Re-target the request; a Request object is rebuilt because its URL is read-only.
