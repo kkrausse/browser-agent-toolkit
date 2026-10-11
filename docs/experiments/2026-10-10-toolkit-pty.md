@@ -63,6 +63,30 @@ built.
 
 ## Open problems, in order
 
+**Update, later the same day: 1 and 3 are closed.**
+
+- **1 is the client's own behaviour, and the same on wasm-term's host.** [ran] The keys arrive:
+  `hello` is drawn and `\r` is written to the pty 3 to 30 ms after the home screen. The
+  client draws its home screen and takes keys before the agents of its location have come
+  from the server ("Ask anything" on the display at 2312 ms, the agent's name `Build` at
+  2974 ms on a fresh workspace; 2201 and 2545 ms on a reopen), and its `submitInner`
+  (`packages/tui/src/component/prompt/index.tsx`) returns silently when there is no current
+  agent. An Enter sent 2 ms after `Build` appeared submitted, 3 of 3; sent at once, 0 of 3.
+  The page of branch `opencode-2.0.26` (wasm-term's host) drops it the same way (1 of 1).
+  Fixed in the port's bundle, not on the page: `wasm-term/ports/opencode/build/opencode-edits-plugin.ts`
+  makes a submit wait until the agent list is loaded. After: 6 of 6 on `?reset=1`.
+- **3: the display serves the clipboard.** [ran] The client's copies come out as OSC 52
+  (ghostty answers the `Ms` capability query, so the client uses it); ghostty-web's core
+  ignores the sequence, so `wasm-term/web/display.ts` picks it out of the output
+  (`osc52.ts`) and writes the browser's clipboard. Dragging over transcript text: the
+  client shows "Copied to clipboard" and the X clipboard of Chrome's display holds the text.
+  Paste: the example mounts the display with `ctrlVPaste`, so ctrl+v is the browser's paste
+  like ctrl+shift+v, cmd+v and the paste event, and reaches the client as a bracketed paste;
+  ctrl+v and ctrl+shift+v pasted the X clipboard's text into the prompt, two lines included.
+  Not run: cmd+v (no Mac here), Safari and Firefox (they allow a clipboard write only
+  shortly after a user gesture; the mouse release that ends a selection is one), images.
+  OSC 52 queries are not answered: a program cannot read the clipboard.
+
 1. **On a fresh workspace, an Enter in the first half second after the home screen appears
    is not acted on.** `?reset=1`, type `hello` and Enter at once: the prompt stays, the
    client makes no request, client and server both sit idle in their event loops (looked

@@ -1063,3 +1063,22 @@ talking through the page. The terminal is now a feature of the toolkit runtime. 
   script argument it reads all of stdin to end of file and then runs it. On a terminal
   that means typed lines are echoed by the line discipline and run together after ^D
   (checked). A prompt loop is a shell feature, not a terminal one.
+
+## 2026-10-10: the clipboard belongs to the display; one bundle-time edit to the client
+
+- **Copy and paste are the terminal's, not the program host's.** wasm-term's host handed the
+  client the page's clipboard through its shim. The toolkit runtime gives a program no
+  clipboard, and should not grow one for this: a terminal already has both directions.
+  Paste is input (the display's `ctrlVPaste` makes ctrl+v the browser's paste; the client
+  gets a bracketed paste), and a copy is OSC 52 in the output, which the display
+  (`wasm-term/web/osc52.ts`) turns into a clipboard write. The display still knows nothing
+  of the toolkit. OSC 52 queries are ignored, so nothing on the terminal can read the
+  clipboard. Lost against the old bridge: nothing for text; images were never carried.
+- **The client's source gets one edit when it is bundled** (`wasm-term/ports/opencode/build/opencode-edits-plugin.ts`,
+  anchor-checked like the OpenTUI edits; the checkout is not written to). Upstream's prompt
+  drops a submit silently while the location's agents are still loading, which against a
+  server in a tab is the first 0.3 to 0.7 s of the home screen. The submit now waits for
+  the list. Considered and not done: holding typed input on the page until the client is
+  ready (the page would have to tell keys from the terminal's own replies and guess
+  readiness from the screen), and a fixed delay. To drop the edit, remove the plugin from
+  `build-site.ts`; the early Enter is then lost again, as upstream.
