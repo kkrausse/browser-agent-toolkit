@@ -1,0 +1,4 @@
+{
+  "title": "TanStack Start + Effect TODO app",
+  "source": ["src", "vite.config.ts", "tsconfig.json", "package.json"]
+}

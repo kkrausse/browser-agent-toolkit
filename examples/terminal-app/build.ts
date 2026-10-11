@@ -13,7 +13,8 @@
 // 240 MB dependency image is 45 MB (zstd: 32 MB, which Chrome 154 can only decode in its
 // network stack, i.e. with a server that sets `Content-Encoding`).
 //
-//   OUT_DIR     another output directory (default dist/)
+//   BAT_APP     the app the page edits (app.ts; default the TODO example)
+//   OUT_DIR     another output directory (default dist/, or .editor/<app>/dist for another app)
 //   MODEL_URL   the default `?model=` (and its `/diag` collector) of the built page,
 //               for a page that is not published beside its mock
 //   TUNNEL_URL  the default `?tunnel=` of the built page: the WebSocket address of a TCP relay
@@ -28,6 +29,7 @@ import { copyFileSync, createReadStream, createWriteStream, existsSync, mkdirSyn
 import { dirname, extname, join, resolve } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { createGzip } from 'node:zlib'
+import { editedApp } from './app'
 
 const here = import.meta.dirname
 const isPublic = process.env.PUBLIC === '1'
@@ -39,9 +41,11 @@ if (isPublic && process.env.MODEL_URL) throw Error('PUBLIC=1 builds a page with 
 // naming it once Zen no longer lists it (src/main.ts, hostedModel).
 const publicModel = isPublic ? process.env.PUBLIC_MODEL ?? 'ling-3.1-flash-free' : ''
 const modelUrl = process.env.MODEL_URL ?? '', tunnelUrl = process.env.TUNNEL_URL ?? (isPublic ? publicRelay : '')
-const out = resolve(here, process.env.OUT_DIR ?? 'dist')
-for (const [path, how] of [['.display/display.js', 'bun run display'], ['.editor/prepared/manifest.json', 'bun run prepare:editor']] as const) {
-  if (!existsSync(resolve(here, path))) throw Error(`Missing ${path}: run \`${how}\` in examples/terminal-app (or \`bun run terminal\` in the repository root).`)
+const app = editedApp()
+const out = app.dist
+const prepared = app.prepared
+for (const [path, how] of [[resolve(here, '.display/display.js'), 'bun run display'], [join(prepared, 'manifest.json'), 'bun run prepare:editor']] as const) {
+  if (!existsSync(path)) throw Error(`Missing ${path}: run \`${how}\` in examples/terminal-app (or \`bun run terminal\` in the repository root).`)
 }
 
 const walk = (directory: string, prefix = ''): string[] => readdirSync(directory, { withFileTypes: true }).flatMap(entry =>
@@ -49,17 +53,17 @@ const walk = (directory: string, prefix = ''): string[] => readdirSync(directory
 
 // What is copied: published path → source. Not the zstd copies (for a server that negotiates
 // encodings) and not the runtime's test page script.
-const files = new Map<string, string>([['index.html', resolve(here, 'index.html')]])
+const files = new Map<string, string>()
 for (const path of walk(resolve(here, '.display'))) files.set(`display/${path}`, resolve(here, '.display', path))
-for (const path of walk(resolve(here, '.editor/prepared'))) {
+for (const path of walk(prepared)) {
   if (path.endsWith('.zst') || path === 'runtime/bat-harness.js') continue
-  files.set(`editor/${path}`, resolve(here, '.editor/prepared', path))
+  files.set(`editor/${path}`, join(prepared, path))
 }
 // Loaded before the service worker controls anything, or by the browser itself: never compressed.
 const plain = new Set(['index.html', 'editor/runtime/sw.js'])
 const compressible = new Set(['.js', '.wasm', '.json', '.batimg', '.scm'])
 const gzipped: string[] = []
-const kept = new Set<string>()
+const kept = new Set<string>(['index.html'])
 let copied = 0, compressed = 0, reused = 0
 for (const [path, source] of files) {
   const from = statSync(source)
@@ -90,13 +94,16 @@ else if (Array.isArray(keys?.keys) && keys.keys.length) {
   console.warn(`Could not fetch ${keysUrl}: keeping the copy of an earlier build`)
 } else console.warn(`Could not fetch ${keysUrl}: "Sign in with ChatGPT" will fail at its identity check in this build`)
 
+// The page names the app it shows (its title and the frame's label).
+await Bun.write(join(out, 'index.html'), (await Bun.file(resolve(here, 'index.html')).text()).replaceAll('TODO app', app.title))
+
 async function bundle(entry: string, name: string, options: Partial<Parameters<typeof Bun.build>[0]>) {
   const result = await Bun.build({ entrypoints: [resolve(here, entry)], target: 'browser', format: 'esm', sourcemap: 'none', ...options })
   if (!result.success) throw new AggregateError(result.logs, `Building ${entry} failed`)
   await Bun.write(join(out, name), await result.outputs[0]!.text())
   kept.add(name)
 }
-await bundle('src/main.ts', 'main.js', { define: { 'process.env.MODEL_URL': JSON.stringify(modelUrl), 'process.env.TUNNEL_URL': JSON.stringify(tunnelUrl), 'process.env.PUBLIC': JSON.stringify(isPublic ? '1' : ''), 'process.env.PUBLIC_MODEL': JSON.stringify(publicModel) } })
+await bundle('src/main.ts', 'main.js', { define: { 'process.env.MODEL_URL': JSON.stringify(modelUrl), 'process.env.TUNNEL_URL': JSON.stringify(tunnelUrl), 'process.env.PUBLIC': JSON.stringify(isPublic ? '1' : ''), 'process.env.PUBLIC_MODEL': JSON.stringify(publicModel), 'process.env.APP_STORAGE_KEYS': JSON.stringify(JSON.stringify(app.localStorage ?? [])) } })
 await bundle('sw.ts', 'sw.js', { format: 'iife', define: { GZIPPED: JSON.stringify(gzipped) } })
 if (!isPublic) await bundle('client-tap.ts', 'client-tap.js', { target: 'node' })
 

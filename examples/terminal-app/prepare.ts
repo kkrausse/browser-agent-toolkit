@@ -1,5 +1,6 @@
-// The project being edited is the TODO example next door: its dependencies become the guest
-// image and its source is what the agent may edit. Only the output lands here.
+// The project being edited is the TODO example next door, or the app `BAT_APP` names
+// (app.ts): its dependencies become the guest image and its source is what the agent may
+// edit. Only the output lands here.
 //
 // The image's application directory (`/app`) holds both halves of OpenCode 2.0.26: the server
 // (`.runtime/opencode-2.0.26/`, built by ports/opencode/server) and, under `tui/`, the
@@ -13,8 +14,9 @@ import { prepare } from '@kkrausse/browser-agent-toolkit/prepare'
 import { createHash } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import { editedApp } from './app'
 
-const app = resolve(import.meta.dirname, '../todo-app')
+const app = editedApp()
 const built = resolve(import.meta.dirname, '../../.runtime/opencode-2.0.26')
 const server = process.env.BAT_OPENCODE_DIR ?? built
 if (!existsSync(resolve(server, 'application.json'))) throw Error(`No OpenCode 2.0.26 server at ${server}: run \`bun run terminal\` in the repository root (it builds ports/opencode/server), or set BAT_OPENCODE_DIR.`)
@@ -33,18 +35,19 @@ for (const [name, source] of [...Object.keys(described.files).map(name => [name,
   files[name] = described.files[name] ?? { bytes: statSync(source).size, sha256: createHash('sha256').update(readFileSync(source)).digest('hex') }
 }
 writeFileSync(join(openCodeDir, 'application.json'), JSON.stringify({ id: `${described.id}+tui`, files }, null, 2) + '\n')
-const order = resolve(app, 'editor-startup-order.txt')
+const order = app.startupOrder && resolve(app.root, app.startupOrder)
 // This checkout's runtime as built (`bun runtime/build.ts`), as `bun run terminal` passes it: not the copy inside
 // packages/toolkit/dist, which is only as new as the toolkit's last build.
 const runtime = process.env.BAT_RUNTIME_DIR ?? resolve(import.meta.dirname, '../../runtime/dist')
 
 const manifest = await prepare({
-  appRoot: app,
-  outDir: resolve(import.meta.dirname, '.editor/prepared'),
-  source: ['index.html', 'src', 'vite.config.ts', 'tsconfig.json', 'package.json'],
+  appRoot: app.root,
+  outDir: app.prepared,
+  source: app.source,
+  preview: app.preview,
   openCodeDir,
   runtimeDir: existsSync(join(runtime, 'host.js')) ? runtime : undefined,
-  startupModules: 'startup-modules.json',
-  startupOrder: existsSync(order) ? order : undefined,
+  startupModules: app.startupModules,
+  startupOrder: order && existsSync(order) ? order : undefined,
 })
-console.log(`Prepared ${Object.keys(manifest.project).length} project files and image ${manifest.image?.file}`)
+console.log(`Prepared ${app.title} (${app.root}): ${Object.keys(manifest.project).length} project files and image ${manifest.image?.file}`)

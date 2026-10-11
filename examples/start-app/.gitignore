@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.output/
+.tanstack/
+.editor/
+data/
+.browser-editor-cache/

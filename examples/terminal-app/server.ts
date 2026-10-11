@@ -2,11 +2,13 @@
 // static host would not: no headers of its own, no routes, no encodings. `bunx serve dist`
 // or any file shelf does the same; the page's service worker (sw.ts) supplies the rest.
 //
-//   bun server.ts [directory]     PORT (default 4310); the page is `<directory>/index.html`
+//   bun server.ts [directory]     PORT (default 4310); the page is `<directory>/index.html`.
+//                                 Default directory: dist/, or the build of `BAT_APP` (app.ts)
 import { existsSync, statSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
+import { editedApp } from './app'
 
-const root = resolve(process.argv[2] ?? resolve(import.meta.dirname, 'dist'))
+const root = resolve(process.argv[2] ?? editedApp().dist)
 if (!existsSync(root)) throw Error(`No ${root}: run \`bun run build\` in examples/terminal-app (or \`bun run terminal\` in the repository root).`)
 
 const server = Bun.serve({

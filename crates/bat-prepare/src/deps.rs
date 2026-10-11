@@ -863,7 +863,12 @@ pub fn prepare(options: DepsOptions) -> Result<Deps> {
             sub.with.replace("{version}", &version)
         };
         if let Some(existing) = overrides.get(&sub.package) {
-            if existing.as_str() != Some(&value) {
+            // A project may pin a substituted package to the one exact version its lock has:
+            // that is how a tree whose packages ask for two versions of it (TanStack Start
+            // wants lightningcss ^1.33, Tailwind 4.3.3 pins 1.32.0) gets the single version
+            // a root override can stand for. The policy's replacement of that version then
+            // takes the pin's place.
+            if existing.as_str() != Some(&value) && existing.as_str() != Some(&version) {
                 bail!("project override for {} conflicts with the guest policy", sub.package);
             }
         }

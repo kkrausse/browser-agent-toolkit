@@ -1,4 +1,4 @@
-// One tab, three programs, all on the toolkit's runtime (a Web Worker each): the TODO app's Vite
+// One tab, three programs, all on the toolkit's runtime (a Web Worker each): the app's Vite
 // dev server, the OpenCode server, and the real OpenCode terminal client, which
 // runs on a terminal of the runtime's kernel. This page holds the other end of that terminal
 // and joins it to a ghostty-web display in the side panel (bytes both ways, and the size).
@@ -187,8 +187,8 @@ async function main() {
   if (sessionStorage.getItem(resetKey)) {
     sessionStorage.removeItem(resetKey)
     await runtimeModule.resetWorkspace({ manifestUrl })
-    // The TODO app keeps its list in this origin's localStorage (../todo-app/src/App.tsx), not in the workspace.
-    try { localStorage.removeItem('todos') } catch { /* no storage */ }
+    // What the app keeps in this origin's localStorage instead of the workspace (app.ts; the TODO app's list).
+    try { for (const key of JSON.parse(process.env.APP_STORAGE_KEYS || '[]') as string[]) localStorage.removeItem(key) } catch { /* no storage */ }
     // What an earlier build of this page kept for the client (wasm-term's IndexedDB); the client's files are in the workspace now.
     for (const database of await indexedDB.databases()) if (database.name) indexedDB.deleteDatabase(database.name)
   }

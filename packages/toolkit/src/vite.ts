@@ -15,8 +15,9 @@ export function previewBase(): string {
 export interface BrowserEditorOptions {
   /** The app module (relative to the Vite root) whose default export mounts the editor,
    * e.g. `src/editing.tsx`. In the guest it is replaced by a component that renders
-   * nothing, so the preview does not offer an editor inside the editor. */
-  module: string;
+   * nothing, so the preview does not offer an editor inside the editor. Left out by an app
+   * that has no such module: one that another page hosts (examples/terminal-app). */
+  module?: string;
   /** The lazily imported module that pulls in the editor (e.g. `src/editor-panel.tsx`).
    * A host build then lists the chunks only it reaches in `editor-assets.json`, and the
    * server handler (`clientDir`) serves those only to authorized requests. */
@@ -36,8 +37,8 @@ function installed(from: string, name: string): boolean {
 }
 
 /** One Vite plugin for both sides. The application still owns its Vite config. */
-export function browserEditor(options: BrowserEditorOptions): any {
-  let editingModule: string;
+export function browserEditor(options: BrowserEditorOptions = {}): any {
+  let editingModule: string | undefined;
   return {
     name: 'browser-editor', enforce: 'pre' as const,
     config(config: { root?: string }) {
@@ -70,7 +71,7 @@ export function browserEditor(options: BrowserEditorOptions): any {
       server.httpServer?.once('close', () => server.httpServer?.removeListener('upgrade', restore));
     },
     configResolved(config: { root: string; assetsInclude?: (file: string) => boolean }) {
-      editingModule = resolve(config.root, options.module);
+      editingModule = options.module && resolve(config.root, options.module);
       if (!isGuest() || typeof config.assetsInclude !== 'function') return;
       // Vite hashes its config, functions by their source text, to decide whether the
       // dependency-optimizer cache shipped by prepare is still valid. Its own
@@ -89,7 +90,7 @@ export function browserEditor(options: BrowserEditorOptions): any {
       if (isGuest() && id.includes('/.browser-editor-cache/vite/deps/')) return { code, map: { mappings: '' } };
     },
     load(id: string) {
-      if (isGuest() && id.split('?')[0] === editingModule) return 'export default function Editing(){return null}';
+      if (isGuest() && editingModule && id.split('?')[0] === editingModule) return 'export default function Editing(){return null}';
     },
     generateBundle(this: { emitFile(file: { type: 'asset'; fileName: string; source: string }): void }, _: unknown, bundle: Record<string, any>) {
       const privateEntry = options.privateEntry;
