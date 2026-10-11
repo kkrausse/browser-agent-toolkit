@@ -69,7 +69,7 @@ Three separate things, none of which knows the others:
 | --- | --- | --- |
 | the terminal | the runtime's kernel (`crates/bat-kernel/src/tty.rs`, on `crates/bat-pty`) | a pty pair: canonical and raw mode, echo, ^C, window size |
 | the handle | `runtime.spawnTerminal(launch, { cols, rows, onOutput })` | starts a program with the pty as its stdin, stdout and stderr; `write(bytes)`, `resize(size)`, `exited` |
-| the display | `wasm-term/web/display.ts` (ghostty-web), bundled by `wasm-term.ts` into `wasm-term/display.js` | draws bytes, reports typed input and how many cells fit |
+| the display | `wasm-term/web/display.ts` (ghostty-web), bundled by `wasm-term.ts` into `wasm-term/display.js` | draws bytes, reports typed input and how many cells fit; pastes the browser's clipboard as input (ctrl+v, ctrl+shift+v, cmd+v, the paste event) and writes it when the program copies (OSC 52) |
 
 `src/main.ts` joins them in a dozen lines. The client is an ordinary program of the prepared
 image: wasm-term's OpenCode port built for Node (`cd wasm-term/ports/opencode && bun run

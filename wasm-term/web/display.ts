@@ -13,6 +13,7 @@
 // `wasmUrl` is @random/ghostty-web's vendor/ghostty-vt.wasm (third_party/ghostty-web).
 
 import { init, Terminal } from "@random/ghostty-web";
+import { clipboardWrites } from "./osc52";
 
 export interface DisplaySize {
   cols: number;
@@ -34,6 +35,12 @@ export interface DisplayOptions {
   renderer?: "webgl" | "canvas";
   fontSize?: number;
   theme?: { background: string; foreground: string };
+  /** Plain Ctrl+V pastes, as Cmd+V, Ctrl+Shift+V and the browser's paste event always do: the
+   * program gets the clipboard's text as input (bracketed when it asked for that). Default
+   * false: Ctrl+V is a key like any other (0x16), for a program with its own way to the clipboard. */
+  ctrlVPaste?: boolean;
+  /** The program set the clipboard (OSC 52, see osc52.ts). Default: the browser's clipboard, `navigator.clipboard.writeText`. */
+  onClipboard?(text: string): void;
 }
 
 export interface Display {
@@ -65,7 +72,7 @@ export async function mountDisplay(options: DisplayOptions): Promise<Display> {
   await init({ wasmUrl: new URL(options.wasmUrl, location.href).href });
   const terminal = new Terminal({
     rendererType: options.renderer ?? rendererChoice(),
-    ctrlVPaste: false,
+    ctrlVPaste: options.ctrlVPaste ?? false,
     cursorBlink: true,
     copyOnSelect: false,
     scrollback: 5_000,
@@ -102,9 +109,17 @@ export async function mountDisplay(options: DisplayOptions): Promise<Display> {
   observer.observe(container);
   terminal.focus();
 
+  // A program that copies (a selection it drew itself, a "copy" command) says so with OSC 52.
+  const copied = clipboardWrites(options.onClipboard ?? (text => {
+    navigator.clipboard.writeText(text).catch(error => console.warn("terminal display: the clipboard was not written:", error));
+  }));
+
   return {
     terminal,
-    write: data => terminal.write(data),
+    write(data) {
+      if (typeof data !== "string") copied(data);
+      terminal.write(data);
+    },
     size,
     screen() {
       const buffer = terminal.buffer.active;

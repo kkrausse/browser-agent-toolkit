@@ -35,6 +35,7 @@ interface DisplayModule {
     container: HTMLElement
     wasmUrl: string
     fontSize?: number
+    ctrlVPaste?: boolean
     onInput(data: string): void
     onResize(size: TerminalSize): void
   }): Promise<Display>
@@ -213,6 +214,9 @@ async function main() {
     container: document.querySelector<HTMLDivElement>('#terminal')!,
     wasmUrl: assets + 'ghostty-vt.wasm',
     fontSize: 13,
+    // The client has no clipboard of its own in the guest: ctrl+v is the browser's paste, which
+    // reaches it as (bracketed) input. What it copies comes out as OSC 52, which the display serves.
+    ctrlVPaste: true,
     onInput: data => client?.write(data),
     onResize: size => client?.resize(size),
   })
