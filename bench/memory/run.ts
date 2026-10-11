@@ -30,7 +30,6 @@
 //
 // Output: bench/memory/out/<label>.json  { meta, runs[] }
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 const arg = (name: string, fallback?: string) => {
@@ -52,7 +51,9 @@ const todoPort = arg('todo-port', '4871')!, mockPort = arg('mock-port', '4872')!
 const host = arg('host', example === 'todo' ? 'batmem-a.localhost' : 'batmem-b.localhost')!
 const base = example === 'todo' ? `http://${host}:${todoPort}/` : `http://${host}:${termPort}/?model=${encodeURIComponent(`http://127.0.0.1:${mockPort}/v1`)}&diag=0`
 const out = arg('out', join(import.meta.dir, 'out', `${label}.json`))!
-const scratch = mkdtempSync(join(tmpdir(), 'bat-memory-'))
+// Not in /tmp: its quota ran out under the other sessions of this machine during a run.
+mkdirSync(join(import.meta.dir, 'out', '.run'), { recursive: true })
+const scratch = mkdtempSync(join(import.meta.dir, 'out', '.run', 'scratch-'))
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const load = () => readFileSync('/proc/loadavg', 'utf8').split(' ').slice(0, 3).map(Number)
 const log = (...parts: unknown[]) => console.error(`[${new Date().toISOString().slice(11, 19)}]`, ...parts)
