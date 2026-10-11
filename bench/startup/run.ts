@@ -54,21 +54,35 @@ async function waitForLoad() {
 
 // WebKit: `browser-control` is Chromium-only, so the same driver code runs against a
 // Playwright WebKit of this process. The profile must persist (OPFS sync access handles).
+// One browser and profile per variant: ports of one host are one site to WebKit, and two
+// copies of the image in one profile ran into its storage limit ("Failed to write to file").
 const browser = arg('browser', 'chrome')!
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (...args: string[]) => (...args: unknown[]) => Promise<string>
-let webkitPage: { page: unknown; context: { close(): Promise<void> } } | undefined
-async function webkitTarget() {
-  if (webkitPage) return webkitPage
+const webkitPages = new Map<string, { page: unknown; context: { close(): Promise<void> }; profile?: string }>()
+async function webkitTarget(origin: string) {
+  const have = webkitPages.get(origin)
+  if (have) return have
   const { webkit } = await import('playwright')
   const { mkdtempSync } = await import('node:fs')
   const { tmpdir } = await import('node:os')
-  const context = await webkit.launchPersistentContext(arg('profile') ?? mkdtempSync(join(tmpdir(), 'bat-bench-webkit-')), { headless: !flag('headed'), viewport: { width: 1280, height: 800 } })
-  return (webkitPage = { page: context.pages()[0] ?? (await context.newPage()), context })
+  // A profile this run made is removed at the end (each holds a copy of the image; the system temp directory may be memory).
+  const made = arg('profile') ? undefined : mkdtempSync(join(tmpdir(), 'bat-bench-webkit-'))
+  const context = await webkit.launchPersistentContext(made ?? `${arg('profile')}${webkitPages.size ? `-${webkitPages.size}` : ''}`, { headless: !flag('headed'), viewport: { width: 1280, height: 800 } })
+  const target = { page: context.pages()[0] ?? (await context.newPage()), context, profile: made }
+  webkitPages.set(origin, target)
+  return target
+}
+async function closeWebkit() {
+  const { rmSync } = await import('node:fs')
+  for (const { context, profile } of webkitPages.values()) {
+    await context.close().catch(() => {})
+    if (profile) rmSync(profile, { recursive: true, force: true })
+  }
 }
 
-async function execute<T>(code: string): Promise<T> {
+async function execute<T>(code: string, origin: string): Promise<T> {
   if (browser === 'webkit') {
-    const { page, context } = await webkitTarget()
+    const { page, context } = await webkitTarget(origin)
     return JSON.parse(await new AsyncFunction('page', 'context', code)(page, context))
   }
   const text = await $`browser-control execute --json --session ${session} ${code}`.quiet().nothrow().text()
@@ -146,9 +160,9 @@ return JSON.stringify({ length: await page.evaluate(() => window.__batResult.len
 `
 
 async function takeSample(kind: 'fresh' | 'reopen', origin: string): Promise<any> {
-  const { length } = await execute<{ length: number }>(sampleCode(kind, origin))
+  const { length } = await execute<{ length: number }>(sampleCode(kind, origin), origin)
   let text = ''
-  for (let at = 0; at < length; at += 20000) text += await execute<string>(`return JSON.stringify(await page.evaluate((at) => window.__batResult.slice(at, at + 20000), ${at}))`)
+  for (let at = 0; at < length; at += 20000) text += await execute<string>(`return JSON.stringify(await page.evaluate((at) => window.__batResult.slice(at, at + 20000), ${at}))`, origin)
   return JSON.parse(text)
 }
 
@@ -251,4 +265,4 @@ for (const [variant, kinds] of Object.entries(summary)) for (const [kind, s] of 
   for (const [name, v] of Object.entries(s.stages)) if (v) console.log(`  ${name.padEnd(56)} ${String(v.median).padStart(7)}  (${v.min}–${v.max})`)
 }
 console.log(`\n${out}`)
-await webkitPage?.context.close()
+await closeWebkit()
