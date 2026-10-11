@@ -12,7 +12,7 @@ const MESSAGES: Record<string, string> = {
   ENOENT: 'no such file or directory', EEXIST: 'file already exists', ENOTDIR: 'not a directory', EISDIR: 'illegal operation on a directory',
   ENOTEMPTY: 'directory not empty', EACCES: 'permission denied', EPERM: 'operation not permitted', EBADF: 'bad file descriptor',
   EINVAL: 'invalid argument', EXDEV: 'cross-device link not permitted', ELOOP: 'too many symbolic links encountered', EMFILE: 'too many open files',
-  ENAMETOOLONG: 'name too long', EROFS: 'read-only file system', ENOSPC: 'no space left on device', ENOMEM: 'not enough memory', ESPIPE: 'invalid seek', EPIPE: 'broken pipe', EAGAIN: 'resource temporarily unavailable',
+  ENAMETOOLONG: 'name too long', EROFS: 'read-only file system', ENOSPC: 'no space left on device', ESPIPE: 'invalid seek', EPIPE: 'broken pipe', EAGAIN: 'resource temporarily unavailable',
   ENOSYS: 'function not implemented', ENOMEM: 'not enough memory', EIO: 'i/o error', ERANGE: 'result too large', ENOTSUP: 'operation not supported',
 }
 
