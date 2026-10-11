@@ -8,6 +8,7 @@
 //
 //   BAT_OPENCODE_DIR          another server directory (with its application.json)
 //   BAT_OPENCODE_CLIENT_DIR   another client directory (default: ../../ports/opencode/dist/node)
+//   BAT_RUNTIME_DIR           another built runtime (default: ../../runtime/dist)
 import { prepare } from '@kkrausse/browser-agent-toolkit/prepare'
 import { createHash } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
@@ -33,12 +34,16 @@ for (const [name, source] of [...Object.keys(described.files).map(name => [name,
 }
 writeFileSync(join(openCodeDir, 'application.json'), JSON.stringify({ id: `${described.id}+tui`, files }, null, 2) + '\n')
 const order = resolve(app, 'editor-startup-order.txt')
+// This checkout's runtime as built (`bun runtime/build.ts`), as `bun run terminal` passes it: not the copy inside
+// packages/toolkit/dist, which is only as new as the toolkit's last build.
+const runtime = process.env.BAT_RUNTIME_DIR ?? resolve(import.meta.dirname, '../../runtime/dist')
 
 const manifest = await prepare({
   appRoot: app,
   outDir: resolve(import.meta.dirname, '.editor/prepared'),
   source: ['src', 'vite.config.ts', 'react-router.config.ts', 'tsconfig.json', 'package.json'],
   openCodeDir,
+  runtimeDir: existsSync(join(runtime, 'host.js')) ? runtime : undefined,
   startupModules: 'startup-modules.json',
   startupOrder: existsSync(order) ? order : undefined,
 })
