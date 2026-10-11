@@ -12,7 +12,7 @@ const MESSAGES: Record<string, string> = {
   ENOENT: 'no such file or directory', EEXIST: 'file already exists', ENOTDIR: 'not a directory', EISDIR: 'illegal operation on a directory',
   ENOTEMPTY: 'directory not empty', EACCES: 'permission denied', EPERM: 'operation not permitted', EBADF: 'bad file descriptor',
   EINVAL: 'invalid argument', EXDEV: 'cross-device link not permitted', ELOOP: 'too many symbolic links encountered', EMFILE: 'too many open files',
-  ENAMETOOLONG: 'name too long', EROFS: 'read-only file system', ESPIPE: 'invalid seek', EPIPE: 'broken pipe', EAGAIN: 'resource temporarily unavailable',
+  ENAMETOOLONG: 'name too long', EROFS: 'read-only file system', ENOSPC: 'no space left on device', ESPIPE: 'invalid seek', EPIPE: 'broken pipe', EAGAIN: 'resource temporarily unavailable',
   ENOSYS: 'function not implemented', ENOMEM: 'not enough memory', EIO: 'i/o error', ERANGE: 'result too large', ENOTSUP: 'operation not supported',
 }
 
@@ -200,7 +200,7 @@ export function createFs(rt: Runtime): any {
     if ((rc === -2 || rc === -20) && options?.throwIfNoEntry === false) return undefined
     throw errnoError(codeOf(rc), -rc, 'lstat', p)
   }
-  const CODES: Record<number, string> = { 1: 'EPERM', 2: 'ENOENT', 5: 'EIO', 9: 'EBADF', 11: 'EAGAIN', 12: 'ENOMEM', 13: 'EACCES', 17: 'EEXIST', 18: 'EXDEV', 20: 'ENOTDIR', 21: 'EISDIR', 22: 'EINVAL', 24: 'EMFILE', 29: 'ESPIPE', 30: 'EROFS', 32: 'EPIPE', 34: 'ERANGE', 36: 'ENAMETOOLONG', 38: 'ENOSYS', 39: 'ENOTEMPTY', 40: 'ELOOP' }
+  const CODES: Record<number, string> = { 1: 'EPERM', 2: 'ENOENT', 5: 'EIO', 9: 'EBADF', 11: 'EAGAIN', 12: 'ENOMEM', 13: 'EACCES', 17: 'EEXIST', 18: 'EXDEV', 20: 'ENOTDIR', 21: 'EISDIR', 22: 'EINVAL', 24: 'EMFILE', 28: 'ENOSPC', 29: 'ESPIPE', 30: 'EROFS', 32: 'EPIPE', 34: 'ERANGE', 36: 'ENAMETOOLONG', 38: 'ENOSYS', 39: 'ENOTEMPTY', 40: 'ELOOP' }
   const codeOf = (rc: number) => CODES[-rc] ?? `E${-rc}`
   /** Run a kernel call, converting its error. */
   function sys<T>(syscall: string, path: unknown, fn: () => T, dest?: unknown): T {

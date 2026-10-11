@@ -2,7 +2,7 @@
 // (non-blocking), start kerneld. After this the page calls the kernel
 // directly; kerneld is only asked for things that need a worker (OPFS sync
 // handles) or that are its job (spawning).
-import { attachKernel, createKernelMemory } from './attach'
+import { attachKernel, createKernelMemory, type KernelMemoryOptions } from './attach'
 import { createKernel, type Kernel } from './kernel'
 
 export interface BootOptions {
@@ -32,6 +32,10 @@ export interface BootOptions {
   module?: Promise<WebAssembly.Module>
   /** Startup tracing in kerneld (runtime/src/trace.ts). */
   trace?: boolean
+  /** Size of the kernel memory (default 256 MiB, fixed). */
+  kernelMemory?: KernelMemoryOptions
+  /** Limit of the image chunk cache in bytes (default: the kernel's, 32 MiB). */
+  imageCacheBytes?: number
 }
 
 export interface BootedKernel {
@@ -59,9 +63,10 @@ export async function bootKernel(opts: BootOptions): Promise<BootedKernel> {
   const t0 = performance.now()
   const module = await (opts.module ?? WebAssembly.compileStreaming(fetch(opts.wasmUrl)))
   const t1 = performance.now()
-  const memory = createKernelMemory()
+  let memory = createKernelMemory(opts.kernelMemory)
   const inst = await attachKernel({ module, memory, canBlock: false, first: true })
   const kernel = createKernel(inst)
+  if (opts.imageCacheBytes !== undefined) inst.x.bat_image_cache_limit(opts.imageCacheBytes)
   const t2 = performance.now()
 
   const worker = new Worker(opts.kerneldUrl, { type: 'module', name: 'kerneld' })
@@ -103,8 +108,9 @@ export async function bootKernel(opts: BootOptions): Promise<BootedKernel> {
   const t3 = performance.now()
   // Release the one-writer lock promptly on reload/navigation instead of
   // whenever the browser gets around to tearing the old document down.
-  addEventListener('pagehide', () => worker.terminate())
-  return {
+  const onPageHide = () => worker.terminate()
+  addEventListener('pagehide', onPageHide)
+  const booted: BootedKernel = {
     kernel,
     module,
     memory,
@@ -114,6 +120,17 @@ export async function bootKernel(opts: BootOptions): Promise<BootedKernel> {
     imageArrived: (id) => kerneld('imageArrived', { id }),
     restored: init.restored,
     timings: { compileMs: t1 - t0, attachMs: t2 - t1, kerneldMs: t3 - t2 },
-    close: () => worker.terminate(),
+    close() {
+      // kerneld takes the process workers with it. The page then lets go of the memory, so
+      // that a page that stays open after its editor closed does not keep it (the objects
+      // of a closed runtime are still referenced from the application).
+      worker.terminate()
+      removeEventListener('pagehide', onPageHide)
+      for (const p of pending.values()) p.reject(new Error('The runtime is closed'))
+      pending.clear()
+      kernel.release()
+      memory = booted.memory = undefined as unknown as WebAssembly.Memory
+    },
   }
+  return booted
 }

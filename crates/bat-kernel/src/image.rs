@@ -5,15 +5,111 @@ use crate::errno::*;
 use crate::lock::{Mutex, WaitQ};
 use crate::sys;
 use bat_image::Image;
-use core::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering::*};
+use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, AtomicUsize, Ordering::*};
 
 pub const CHUNK_LOG2: u32 = 17;
 pub const CHUNK: usize = 1 << CHUNK_LOG2;
 /// Host return value meaning "this thread has no handle for the image".
 pub const HOST_NO_HANDLE: i32 = -EAGAIN;
 
+// A slot of the chunk cache: one of these, or the address of the chunk's bytes.
 const ABSENT: usize = 0;
 const LOADING: usize = 1;
+/// Being dropped by `evict`, which is waiting for the readers that pinned it.
+const EVICTING: usize = 2;
+
+// Beside each slot, one word: the number of readers copying out of the chunk right now
+// (they pin it, so it is not freed under them), and whether it was read since the clock
+// hand last passed.
+const PIN: u32 = 1;
+const PINS: u32 = 0x7fff_ffff;
+const USED: u32 = 0x8000_0000;
+
+/// The chunk cache of all images together is kept under this many bytes by dropping
+/// chunks that were not read lately (`evict`). A dropped chunk is read from the file again
+/// when it is next wanted. Set by the host with `bat_image_cache_limit`.
+pub const DEFAULT_CACHE_LIMIT: usize = 32 << 20;
+static CACHE_LIMIT: AtomicUsize = AtomicUsize::new(DEFAULT_CACHE_LIMIT);
+static CACHE_BYTES: AtomicUsize = AtomicUsize::new(0);
+static CACHE_PEAK: AtomicUsize = AtomicUsize::new(0);
+static CACHE_LOADS: AtomicU64 = AtomicU64::new(0);
+static CACHE_EVICTIONS: AtomicU64 = AtomicU64::new(0);
+/// Where the clock hand is: image id in the high bits, chunk index in the low 24.
+static HAND: AtomicUsize = AtomicUsize::new(0);
+
+pub fn set_cache_limit(bytes: usize) {
+    CACHE_LIMIT.store(bytes, Relaxed);
+    evict(0);
+}
+/// out: limit, bytes cached, most ever cached, chunks read from the host, chunks dropped.
+pub fn cache_stats(out: &mut [f64; 5]) {
+    out[0] = CACHE_LIMIT.load(Relaxed) as f64;
+    out[1] = CACHE_BYTES.load(Relaxed) as f64;
+    out[2] = CACHE_PEAK.load(Relaxed) as f64;
+    out[3] = CACHE_LOADS.load(Relaxed) as f64;
+    out[4] = CACHE_EVICTIONS.load(Relaxed) as f64;
+}
+
+/// Drop chunks until `incoming` more bytes fit under the limit (`usize::MAX`: drop all
+/// that can be dropped). Second-chance clock over every chunk of every image: a chunk read
+/// since the hand last passed is spared once. Any thread may run this, several at once;
+/// nothing is held while it runs, and it does not wait for anything but a reader's copy.
+pub fn evict(incoming: usize) {
+    let limit = if incoming == usize::MAX { 0 } else { CACHE_LIMIT.load(Relaxed).saturating_sub(incoming) };
+    if CACHE_BYTES.load(Relaxed) <= limit {
+        return;
+    }
+    let total: usize = MOUNTS.iter().map(|m| unsafe { m.load(Acquire).as_ref() }.map_or(0, |m| m.slots.len())).sum();
+    // Two rounds: the first may only clear the marks.
+    for _ in 0..total * 2 + MAX_IMAGES {
+        if CACHE_BYTES.load(Relaxed) <= limit {
+            return;
+        }
+        let at = HAND.load(Relaxed);
+        let (id, ci) = (at >> 24, at & 0xff_ffff);
+        let Some(m) = MOUNTS.get(id).and_then(|m| unsafe { m.load(Acquire).as_ref() }) else {
+            HAND.store(if id + 1 >= MAX_IMAGES { 0 } else { (id + 1) << 24 }, Relaxed);
+            continue;
+        };
+        if ci >= m.slots.len() {
+            HAND.store(if id + 1 >= MAX_IMAGES { 0 } else { (id + 1) << 24 }, Relaxed);
+            continue;
+        }
+        HAND.store(at + 1, Relaxed);
+        let s = m.slots[ci].load(SeqCst);
+        if s <= EVICTING {
+            continue;
+        }
+        let meta = m.meta[ci].load(SeqCst);
+        if meta & USED != 0 {
+            m.meta[ci].fetch_and(!USED, SeqCst);
+            continue;
+        }
+        if meta & PINS != 0 || m.slots[ci].compare_exchange(s, EVICTING, SeqCst, SeqCst).is_err() {
+            continue;
+        }
+        // A reader that pinned before the exchange is copying; one that pins after it sees
+        // EVICTING and lets go. A copy is at most one chunk long.
+        let mut spins = 0u32;
+        while m.meta[ci].load(SeqCst) & PINS != 0 && spins < 1_000_000 {
+            core::hint::spin_loop();
+            spins += 1;
+        }
+        if m.meta[ci].load(SeqCst) & PINS != 0 {
+            // A pin that does not go away (its thread is gone): the chunk stays.
+            m.slots[ci].store(s, SeqCst);
+            m.wq.wake_all();
+            continue;
+        }
+        let len = m.chunk_len(ci);
+        drop(unsafe { Box::from_raw(core::ptr::slice_from_raw_parts_mut(s as *mut u8, len)) });
+        m.slots[ci].store(ABSENT, SeqCst);
+        CACHE_BYTES.fetch_sub(len, Relaxed);
+        m.cached_bytes.fetch_sub(len as u64, Relaxed);
+        CACHE_EVICTIONS.fetch_add(1, Relaxed);
+        m.wq.wake_all();
+    }
+}
 
 pub struct ImageMount {
     pub id: u32,
@@ -21,6 +117,7 @@ pub struct ImageMount {
     pub name: Box<[u8]>,
     pub file_len: u64,
     slots: Box<[AtomicUsize]>,
+    meta: Box<[AtomicU32]>,
     wq: WaitQ,
     pub cached_bytes: AtomicU64,
     pub host_reads: AtomicU64,
@@ -67,6 +164,11 @@ const MAX_IMAGES: usize = 16;
 #[allow(clippy::declare_interior_mutable_const)]
 const NOT_ARRIVING: AtomicU32 = AtomicU32::new(COMPLETE);
 static ARRIVAL: [AtomicU32; MAX_IMAGES] = [NOT_ARRIVING; MAX_IMAGES];
+/// Every mounted image by id, for `evict` (which must not take the VFS lock: reads of an
+/// image happen under it).
+#[allow(clippy::declare_interior_mutable_const)]
+const NO_MOUNT: AtomicPtr<ImageMount> = AtomicPtr::new(core::ptr::null_mut());
+static MOUNTS: [AtomicPtr<ImageMount>; MAX_IMAGES] = [NO_MOUNT; MAX_IMAGES];
 
 pub fn arrival(id: u32) -> u32 {
     ARRIVAL.get(id as usize).map_or(COMPLETE, |a| a.load(Acquire))
@@ -156,18 +258,27 @@ impl ImageMount {
             }
             table[slot as usize] = idx + 1;
         }
-        Ok(Box::leak(Box::new(ImageMount {
+        let meta = (0..n).map(|_| AtomicU32::new(0)).collect::<Vec<_>>().into_boxed_slice();
+        let m = Box::leak(Box::new(ImageMount {
             id,
             image,
             name: name.into(),
             file_len,
             slots,
+            meta,
             wq: WaitQ::new(),
             cached_bytes: AtomicU64::new(0),
             host_reads: AtomicU64::new(0),
             table,
             mask,
-        })))
+        }));
+        // The clock hand keeps a chunk index in 24 bits: images up to 2 TiB.
+        if n < 1 << 24 {
+            if let Some(slot) = MOUNTS.get(id as usize) {
+                slot.store(m, Release);
+            }
+        }
+        Ok(m)
     }
 
     /// Entry whose literal path (relative to the image root) is `rel`.
@@ -196,19 +307,26 @@ impl ImageMount {
     /// While the image is arriving a thread that may block waits here for the chunk;
     /// the slot is never left `LOADING` during that wait, so a thread that is killed
     /// while waiting holds nothing.
-    pub fn load(&self, ci: usize, wait: bool) -> R<*const u8> {
+    pub fn load(&self, ci: usize, wait: bool) -> R<()> {
         let slot = self.slots.get(ci).ok_or(EIO)?;
         loop {
             let s = slot.load(Acquire);
-            if s > LOADING {
-                return Ok(s as *const u8);
+            if s > EVICTING {
+                return Ok(());
             }
             if s == ABSENT {
+                let len = self.chunk_len(ci);
+                // Room first, while this thread holds no slot: under the cache's limit, and
+                // in the kernel memory at all.
+                evict(len);
+                if !crate::mem::can_take(len) {
+                    evict(usize::MAX);
+                }
+                let mut buf = Vec::<u8>::new();
+                crate::mem::reserve(&mut buf, len, ENOMEM)?;
                 if slot.compare_exchange(ABSENT, LOADING, AcqRel, Acquire).is_err() {
                     continue;
                 }
-                let len = self.chunk_len(ci);
-                let mut buf = Vec::<u8>::with_capacity(len);
                 let r = host_read(self.id, (ci as u64) << CHUNK_LOG2, unsafe {
                     core::slice::from_raw_parts_mut(buf.as_mut_ptr(), len)
                 });
@@ -233,11 +351,17 @@ impl ImageMount {
                     Ok(()) => {
                         unsafe { buf.set_len(len) };
                         let p = Box::leak(buf.into_boxed_slice()).as_ptr();
-                        slot.store(p as usize, Release);
+                        self.meta[ci].fetch_or(USED, SeqCst);
+                        slot.store(p as usize, SeqCst);
                         self.cached_bytes.fetch_add(len as u64, Relaxed);
                         self.host_reads.fetch_add(1, Relaxed);
+                        let now = CACHE_BYTES.fetch_add(len, Relaxed) + len;
+                        if now > CACHE_PEAK.load(Relaxed) {
+                            CACHE_PEAK.store(now, Relaxed);
+                        }
+                        CACHE_LOADS.fetch_add(1, Relaxed);
                         self.wq.wake_all();
-                        return Ok(p);
+                        return Ok(());
                     }
                     Err(e) => {
                         slot.store(ABSENT, Release);
@@ -246,25 +370,25 @@ impl ImageMount {
                     }
                 }
             }
-            // Another instance is loading it.
+            // Another instance is loading it, or dropping it.
             if !crate::thread::can_block() {
                 core::hint::spin_loop();
                 continue;
             }
             let seq = self.wq.seq();
-            if slot.load(Acquire) == LOADING {
+            if matches!(slot.load(Acquire), LOADING | EVICTING) {
                 self.wq.wait(seq, 50.0);
             }
         }
     }
 
-    /// Chunk pointer, faulting it in. A thread without a handle asks the
+    /// Have chunk `ci` in the cache. A thread without a handle asks the
     /// supervisor; if it also cannot block (the page) it gets EAGAIN and
     /// retries after `BAT_FAULT_WORD` changes.
-    fn chunk(&self, ci: usize) -> R<*const u8> {
+    fn chunk(&self, ci: usize) -> R<()> {
         let s = self.slots.get(ci).ok_or(EIO)?.load(Acquire);
-        if s > LOADING {
-            return Ok(s as *const u8);
+        if s > EVICTING {
+            return Ok(());
         }
         match self.load(ci, true) {
             Err(EAGAIN) => {}
@@ -278,8 +402,8 @@ impl ImageMount {
         loop {
             let seq = self.wq.seq();
             let s = self.slots[ci].load(Acquire);
-            if s > LOADING {
-                return Ok(s as *const u8);
+            if s > EVICTING {
+                return Ok(());
             }
             match arrival(self.id) {
                 // The supervisor answers "not there yet" without waiting: ask again.
@@ -289,10 +413,41 @@ impl ImageMount {
                     }
                 }
                 _ if waited > 200 => return Err(EIO),
+                // Loaded and dropped again before this thread looked (a cache under
+                // pressure), or the request was lost: ask again now and then.
+                _ if waited % 8 == 7 && s == ABSENT => {
+                    crate::proc::supervisor_request(crate::proc::Work::Fault { image: self.id, chunk: ci as u32 });
+                }
                 _ => {}
             }
             self.wq.wait(seq, 50.0);
             waited += 1;
+        }
+    }
+
+    /// Run `f` on the bytes of chunk `ci`, faulting it in. The chunk is pinned for the
+    /// call so that `evict` does not free it; the kill gate is held for as long, so a
+    /// worker is not terminated with a pin.
+    fn with_chunk(&self, ci: usize, f: impl FnOnce(*const u8)) -> R<()> {
+        let slot = self.slots.get(ci).ok_or(EIO)?;
+        let meta = &self.meta[ci];
+        let mut f = Some(f);
+        loop {
+            crate::lock::gate_enter();
+            meta.fetch_add(PIN, SeqCst);
+            let s = slot.load(SeqCst);
+            if s > EVICTING {
+                (f.take().unwrap())(s as *const u8);
+                if meta.load(Relaxed) & USED == 0 {
+                    meta.fetch_or(USED, SeqCst);
+                }
+            }
+            meta.fetch_sub(PIN, SeqCst);
+            crate::lock::gate_leave();
+            if f.is_none() {
+                return Ok(());
+            }
+            self.chunk(ci)?;
         }
     }
 
@@ -316,8 +471,8 @@ impl ImageMount {
             let ci = (off >> CHUNK_LOG2) as usize;
             let within = (off & (CHUNK as u64 - 1)) as usize;
             let n = (CHUNK - within).min(dst.len() - done);
-            let p = self.chunk(ci)?;
-            unsafe { core::ptr::copy_nonoverlapping(p.add(within), dst.as_mut_ptr().add(done), n) };
+            let to = unsafe { dst.as_mut_ptr().add(done) };
+            self.with_chunk(ci, |p| unsafe { core::ptr::copy_nonoverlapping(p.add(within), to, n) })?;
             done += n;
             off += n as u64;
         }

@@ -20,6 +20,7 @@ mod esm;
 pub mod facts;
 mod lower;
 mod map;
+pub mod narrow;
 
 use std::borrow::Cow;
 use std::cell::RefCell;

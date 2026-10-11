@@ -40,6 +40,13 @@ export interface BootOptions {
    * endpoints are then at `<scope>preview/<port>/`. Default: the runtime's `sw.js` with
    * scope `/preview/`. */
   serviceWorker?: { url: string; scope: string };
+  /** Optional, and a runtime may ignore it. Size of the runtime's kernel memory in 64 KiB
+   * pages; the files the programs write live in it. Default 4,096 pages (256 MiB), of
+   * fixed size (`maximumPages` larger than `pages` makes it growable). */
+  kernelMemory?: { pages?: number; maximumPages?: number };
+  /** Optional, and a runtime may ignore it. Most the runtime keeps in memory of the
+   * dependency image's contents, in bytes (default 32 MiB). */
+  imageCacheBytes?: number;
 }
 
 /** Resolves when the kernel is up, the image is mounted and the persisted overlay is

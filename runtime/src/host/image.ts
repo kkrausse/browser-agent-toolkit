@@ -174,7 +174,21 @@ async function download(a: StoreImageArgs, dir: FileSystemDirectoryHandle, onPro
     if (!res.ok || !res.body) throw new Error(`image download failed: HTTP ${res.status} ${a.url}`)
     const total = a.bytes ?? Number(res.headers.get('content-length') ?? 0)
     const sums = await sumsReady
-    const reader = res.body.getReader()
+    // The bytes go through a handful of block buffers that are used again and again. Made
+    // anew per block (and per chunk the stream hands out) they were 2 × the image of
+    // ArrayBuffers that only a collection frees, and the collector of a worker that is
+    // busy awaiting is in no hurry: several hundred MB on a first open
+    // (docs/experiments/2026-10-11-memory-reduction.md). Where the body is a byte stream
+    // it is read straight into the block; elsewhere a chunk is copied in and dropped.
+    const spare: Uint8Array[] = []
+    const freshBlock = () => spare.pop() ?? new Uint8Array(blockBytes)
+    let byob: ReadableStreamBYOBReader | undefined
+    try {
+      byob = res.body.getReader({ mode: 'byob' })
+    } catch {
+      // not a byte stream in this engine
+    }
+    const reader = byob ? undefined : res.body.getReader()
     let announced = false
     // Verified blocks are written in order; a few digests run ahead of the write.
     let tail: Promise<void> = Promise.resolve()
@@ -196,6 +210,8 @@ async function download(a: StoreImageArgs, dir: FileSystemDirectoryHandle, onPro
           let off = 0
           while (off < block.length) off += handle.write(block.subarray(off), { at: at + off })
           written = at + block.length
+          // Written: the buffer serves a later block. (The digest took its own copy when it was asked for.)
+          if (block.length === blockBytes && spare.length < 8) spare.push(block)
           onProgress({ loaded: written, total })
           if (streaming && readableWhileArriving && !announced && written >= Math.min(a.headBytes ?? 0, a.bytes!)) {
             announced = true
@@ -209,9 +225,16 @@ async function download(a: StoreImageArgs, dir: FileSystemDirectoryHandle, onPro
           inflight--
         })
     }
-    let block = new Uint8Array(blockBytes)
+    let block = freshBlock()
     let fill = 0
     let received = 0
+    const full = async () => {
+      commit(block, received, index++)
+      received += blockBytes
+      block = freshBlock()
+      fill = 0
+      if (inflight >= 4) await tail
+    }
     // Not reading is the pause: the response backs up to the server.
     // (Only where the image is used while it arrives: otherwise the start-up waits for all of it.)
     let pauseAt = streaming && readableWhileArriving && resume && a.firstBytes && a.firstBytes < a.bytes! ? Math.ceil(a.firstBytes / blockBytes) * blockBytes : 0
@@ -221,22 +244,29 @@ async function download(a: StoreImageArgs, dir: FileSystemDirectoryHandle, onPro
         await tail
         await Promise.race([resume, new Promise<void>((resolve) => signal?.addEventListener('abort', () => resolve(), { once: true }))])
       }
-      const { done, value } = await reader.read()
-      if (failed) throw failed
-      if (done) break
-      hasher?.update(value)
-      let at = 0
-      while (at < value.length) {
-        const n = Math.min(value.length - at, blockBytes - fill)
-        block.set(value.subarray(at, at + n), fill)
-        fill += n
-        at += n
-        if (fill === blockBytes) {
-          commit(block, received, index++)
-          received += blockBytes
-          block = new Uint8Array(blockBytes)
-          fill = 0
-          if (inflight >= 4) await tail
+      if (byob) {
+        // Into the rest of the block. The read takes the buffer and gives it back as a new object.
+        const { done, value } = await byob.read(new Uint8Array(block.buffer, fill, blockBytes - fill))
+        if (failed) throw failed
+        if (value) {
+          block = new Uint8Array(value.buffer)
+          hasher?.update(value)
+          fill += value.length
+          if (fill === blockBytes) await full()
+        }
+        if (done) break
+      } else {
+        const { done, value } = await reader!.read()
+        if (failed) throw failed
+        if (done) break
+        hasher?.update(value)
+        let at = 0
+        while (at < value.length) {
+          const n = Math.min(value.length - at, blockBytes - fill)
+          block.set(value.subarray(at, at + n), fill)
+          fill += n
+          at += n
+          if (fill === blockBytes) await full()
         }
       }
       if (a.bytes !== undefined && received + fill > a.bytes) throw new Error(`image download is longer than the ${a.bytes} bytes the manifest says`)

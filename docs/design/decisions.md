@@ -1421,3 +1421,166 @@ Design:
 Not done: other workers reading through snapshots themselves (option 2 of the earlier entry
 for every thread). All reads of the arriving image go through kerneld, 1.6 ms a read
 instead of 0.05 ms; for the seconds a download lasts, that is the cheaper change.
+
+## 2026-10-11: the kernel memory has a fixed size (256 MiB by default) and is never grown
+
+Follows `docs/experiments/2026-10-11-memory-footprint.md` (item 1 of its list) and the
+grow crash of `docs/experiments/2026-10-11-webkit.md` section 9 (branch `webkit-support`).
+Numbers and what was run: `docs/experiments/2026-10-11-memory-reduction.md`.
+
+The problem has two halves. The memory was created with `initial: 64, maximum: 65536`
+pages. (1) WebKit reserves a shared memory's declared maximum as address space when it is
+made, out of a cage of 16 GB on current iOS and 2 GB before spring 2024: 4 GiB is a
+quarter of the first and does not fit the second. (2) The kernel's allocator grew the
+memory 1 MiB at a time, and in JavaScriptCore every grow of a shared memory can crash the
+web process when it meets a worker that is being torn down (`7f8bf72` on `webkit-support`
+made the step 64 MiB, which makes it rare).
+
+Measured before deciding:
+
+- Use: 81.7 MB of kernel memory committed after six turns in the TODO example, 83.1 MB in
+  the terminal example, 57–71 MB of it touched (Chrome; the footprint report). Most of the
+  growth is the image chunk cache, which gets a cap in the next entry.
+- `runtime/harness/webkit/probe-sharedmem.ts`, Playwright's Linux WebKit 2370, the web
+  process read from `/proc`: a shared memory made with `initial = maximum = 4096` pages
+  (256 MiB) took 0.06 ms to make and added 0.4 MiB of resident memory; writing 32 MiB of
+  it added 32 MiB. A grow by 64 MiB of a memory with room under its maximum: 0.02 ms and
+  0.2 MiB. So in this port committed pages cost nothing until they are written, as in
+  Chrome (81.7 MB committed, 57.5 resident there). The process's address space did not
+  move for any of it, 4 GiB maximum included: this port's cage is reserved whole at start
+  (72 GB of address space with an empty page), so the reservation limit of iOS cannot be
+  seen here.
+
+Options:
+
+1. **Lower the maximum, keep growing** (`initial: 64, maximum: N`). Solves (1). Leaves
+   (2): fewer grows with a 64 MiB step, never none, unless the first step covers
+   everything, which is option 2 by another name.
+2. **Fixed size: `initial = maximum = N`, never grown.** Solves (1) and removes (2)
+   instead of reducing it: no `memory.grow` of the shared memory is ever executed. No
+   typed-array view of it ever goes stale either. Costs: N is committed from the start
+   (not resident, by the measurements above, in both engines available here; on iOS that
+   rests on the system charging pages when they are dirtied, which is how it accounts
+   memory but was not run), and N is a hard ceiling that has to be chosen.
+3. **Pre-grow once at boot before any process worker exists**, with a larger maximum left
+   for emergencies. The same as 2 until the emergency, at which point a grow happens
+   exactly when many workers are alive: the case that crashes. The larger maximum also
+   brings (1) back in proportion.
+4. **Keep 4 GiB and make only the step large** (`7f8bf72` alone). Does nothing for (1).
+
+Decision: **2**, with N = **4,096 pages, 256 MiB**, by default.
+
+- Why 256 MiB: about three times the most either example committed with an unbounded
+  image cache, and five times what they need once the cache is capped (figures in the
+  report). It is an eighth of the old 2 GB cage, where 4 GiB could not be reserved at all
+  and WebKit's bug 255103 reports 2 GiB failing; whether 256 MiB can be had there was not
+  run. 512 MiB would be a quarter of that cage, the most one buffer may take under the
+  rule in today's source.
+- The embedder sets it: `kernelMemory: { pages, maximumPages? }` on the runtime's boot
+  options. `maximumPages` larger than `pages` gives a growable memory again (options 1
+  and 3) for an engine without the grow fault; the allocator then grows in 64 MiB steps,
+  falling back to what is needed near the ceiling.
+- The allocator (`crates/bat-kernel/src/alloc.rs`) hands dlmalloc address space from a
+  break that starts at `__heap_base`, inside the memory as created; it used to start at
+  the first grown page, so the rest of the initial 4 MiB was never used. It calls
+  `memory.grow` only when the break passes the memory's size, which a fixed memory never
+  allows.
+- wasi-libc's own `malloc` is linked into the module and gets its memory from `sbrk`,
+  that is `memory.grow`. In a memory that cannot grow it would return null, so the crate
+  defines the C allocation functions over the kernel heap and libc's are not linked.
+- **Exhaustion is an error, not a trap.** What can be large asks first: file contents
+  (write, truncate, copy-up of an image file), image chunks, pipe and socket buffers go
+  through `mem::reserve`, which refuses while less than a reserve (a sixteenth of the
+  memory, at most 16 MiB) would be left, and the call fails with `ENOSPC` (files) or
+  `ENOMEM`. Before a chunk is refused the image cache is emptied. The first refusal, and
+  then every 64th, is logged as an error naming the size, the use and the option. The
+  reserve is what the many small infallible allocations (nodes, paths, records) live on
+  after that. If the heap is exhausted all the same, the allocator logs the same line
+  before Rust's allocation-failure abort; that is still a trap, and with a kernel lock
+  possibly held it is fatal for the runtime, as it was.
+- What else assumed 4 GiB: the module declares its imported memory with a 4 GiB maximum
+  (`--max-memory` in `build.rs`). That is an upper bound on what it accepts, so a smaller
+  memory links; it stays, so that an embedder can still ask for more. Nothing maps an
+  image into the memory: only an image's head (2.5 MB for the TODO example's 240 MB
+  image) and the chunk cache are held, and offsets into the file are 64-bit. No
+  JavaScript grows the memory or reads its maximum.
+
+Merging with `webkit-support`: `7f8bf72` changes the same function in `alloc.rs`. This
+entry's version contains its step and its fallback; take this side.
+
+## 2026-10-11: the image chunk cache has a limit (32 MiB) and drops chunks by a clock
+
+Item 4 of the footprint report: chunks of the dependency image read into the kernel memory
+were never dropped, so the cache was bounded only by the image (240 MB), and it was most
+of what made the kernel memory grow in a session. With a kernel memory of fixed size
+(previous entry) an unbounded cache is also what would fill it.
+
+Measured before choosing (`bench/memory/read-image.cjs` through the harness, a guest reading
+98 MB of image files three times, 892 chunks; n = 2 per cell, load 3; ms per pass):
+
+| limit | Chrome: first pass | later passes | WebKit: first pass | later passes | chunks read in all |
+| --- | --- | --- | --- | --- | --- |
+| none | 150, 154 | 80–104 | 167, 176 | 70–85 | 892 |
+| 64 MiB | 129, 144 | 100–112 | 109, 120 | 67–125 | 2,670 |
+| 32 MiB | 115, 123 | 92–106 | 106, 141 | 116–135 | 2,697 |
+| 16 MiB | 108, 119 | 87–106 | 82, 92 | 61–126 (one 361) | 2,718 |
+| 8 MiB | 105, 111 | 98–108 | 83, 101 | 86–120 | 2,752 |
+
+Reading a dropped chunk again costs about 0.02 ms in Chrome (the reader's own file handle)
+and about 0.05 ms in WebKit (a request to kerneld, which holds the only handle), against
+0.1 ms to copy a cached chunk out to the guest and decode it. A first pass is faster with
+a limit than without one: the cache reuses the same pages instead of touching new ones.
+
+Options: no limit; a limit with least-recently-used order (a list to maintain under a lock
+on every read); a limit with a second-chance clock (one bit per chunk set on a read, a hand
+that sweeps only when something must go); no cache at all (every read through the host:
+for threads without a handle that is a round trip per read, not per chunk).
+
+Decision: **a clock, limit 32 MiB over all images, configurable** (`imageCacheBytes` on the
+boot options, `bat_image_cache_limit`). 32 MiB holds what either example reads to start
+(figures in the report) with the cost of being wrong shown above to be small, so the
+number is not delicate; an embedder short of memory can set 8 MiB at the price in the last
+row. Reads take no lock: a reader pins the chunk for its copy with a counter beside the
+slot, inside the kill gate so a terminated worker leaves no pin; the thread about to load
+a chunk over the limit runs the sweep. A pin that never goes away (not expected) costs
+that one chunk, never a wait.
+
+Correction to the previous entry: pipe and socket buffers do not go through
+`mem::reserve`. They are of fixed size (at most 1 MiB), allocated when the pipe is made,
+and count as small allocations. What asks first is file contents (write, truncate,
+copy-up), image chunks and `bat_alloc` above 64 KiB. Also learned by filling a 64 MiB
+memory (`bench/memory/fill-memory.cjs`, both browsers: `ENOSPC` after 20–24 MiB, the
+runtime carried on): a file is one contiguous buffer that grows by half, so growing it
+needs the old and the new buffer at once and the largest single file is roughly a third of
+the free memory. That was so before; a fixed memory makes it a limit one can reach.
+
+## 2026-10-11: the tunnel also speaks Wisp, and the public build uses a public Wisp server
+
+The public page depended on one deployment of ours (the relay on Deno Deploy). The tunnel only
+needs somebody to carry TCP for a tab, and there is a public protocol for that with public
+servers.
+
+- **A second wire format in the same client, not a second client.** `tunnelRequest` takes
+  `protocol: 'wisp'` (`BAT_FETCH_TUNNEL_PROTOCOL=wisp` in a process's environment): Wisp v1
+  framing around the same queues, TLS engine and HTTP parser. The default and every path of
+  the relay's own format are unchanged.
+- **One stream per WebSocket**, as with the relay, although Wisp multiplexes: a request's
+  failure, abort and cleanup stay those of one socket. Sharing a socket would save a WebSocket
+  handshake per request and is not done.
+- **No reply to a v2 server's INFO.** A CONNECT as the first packet keeps such a server on v1,
+  which is all that is used.
+- **What Wisp lacks**: an answer to CONNECT (TLS starts at once and a refusal arrives as a
+  CLOSE with a reason), and flow control towards the page (received bytes are held in the tab
+  until the body's reader takes them; the relay's format stops the far end instead).
+- **The public build's default is `wss://wisp.mercurywork.shop/`**, which is not ours and
+  publishes no terms. The build names no relay of ours any more: Deno Deploy suspended the
+  account that ran it (403 `USER_SUSPENDED`) the same day, so `TUNNEL_URL` has no default.
+- **Measured on 2026-10-11, Chrome, the public build on `http://127.0.0.1:4391`** (so that
+  server takes a WebSocket from an origin it has never seen): a prompt answered by
+  `ling-3.1-flash-free`, streamed, `HTTP 200 (tunnel via wisp.mercurywork.shop, TLSv1_3
+  TLS13_AES_256_GCM_SHA384)`.
+- **Seen: four HTTP 429 from Zen before that 200**, retried by OpenCode without anything on
+  the page. A second run on the plain TODO app ("change the page heading", done, the frame
+  showed the new heading within 100 s): 4 answers of 200 and 12 of 429. Not explained. The server's address is shared by everybody who uses it, which
+  would do it if Zen's free tier counts per address; there was no working relay of ours left
+  to compare with.

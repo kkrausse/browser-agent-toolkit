@@ -79,7 +79,9 @@ needs `{ module, memory }` posted to it and that function.
 
 1. Instantiate the module with imports (section 11) over the shared memory:
    `WebAssembly.instantiate(module, { env: { memory }, bat, wasi_snapshot_preview1, wasi })`.
-   The memory is created once by the page: `new WebAssembly.Memory({ initial: 64, maximum: 65536, shared: true })`.
+   The memory is created once by the page, at a fixed size (section 19):
+   `new WebAssembly.Memory({ initial: 4096, maximum: 4096, shared: true })`. The creating
+   instance calls `bat_mem_configure(maximumPages)` before anything else.
 2. A fresh instance runs on the module's built-in **boot stack**, shared by all fresh
    instances. Take the boot lock: CAS the `i32` at address `BAT_BOOT_LOCK` (exported global)
    from 0 to 1 (workers may `Atomics.wait` between attempts; the page spins).
@@ -677,3 +679,35 @@ stdio slots (`STDIO_FD`), close the caller's slave fd, keep the master.
   and end of input for readers) are delivered as by `bat_kill` to the terminal's
   *foreground process*: the newest process still alive that was spawned with the slave as
   its stdin. There are no process groups, sessions or job control.
+
+## 19. The memory's size, the image cache limit (2026-10-11)
+
+Decision entries of 2026-10-11 in `decisions.md`; numbers in
+`docs/experiments/2026-10-11-memory-reduction.md`.
+
+- The memory is created with `initial = maximum` (default 4,096 pages, 256 MiB) and is then
+  never grown: `BAT_MEM_GEN` stays 0 and no view goes stale. An embedder may still create it
+  with a larger maximum; the allocator then grows it when its break passes the size, 64 MiB
+  at a time, and what section 1 says about stale views applies.
+- The heap starts at `__heap_base`. wasi-libc's `malloc` is not linked: the module defines
+  `malloc`, `calloc`, `realloc`, `free`, `aligned_alloc`, `posix_memalign` and
+  `malloc_usable_size` over the kernel heap.
+- A full memory: `bat_alloc` returns 0; a write, truncate or copy-up that would not fit
+  returns `-ENOSPC` (28); an image chunk that cannot be held returns `-ENOMEM` to the
+  reader. These refuse while less than a reserve (1/16 of the memory, at most 16 MiB)
+  would remain, after dropping the image cache. The first refusal and every 64th are
+  logged through `host_log` at level 3.
+
+| Export | Returns | Notes |
+| --- | --- | --- |
+| `bat_mem_configure(max_pages)` | – | The memory's declared maximum (the module cannot read it). Once, by the creating instance, before `_initialize`. Without it the kernel assumes 65,536 |
+| `bat_mem_stats(out)` | – | `out`: 8 × `f64`, bytes: memory size, maximum, heap start, heap end (break), in use, peak in use, refusals, grows |
+| `bat_image_cache_limit(bytes: f64)` | – | Limit of the chunk cache over all images (default 32 MiB). Chunks over it are dropped at once |
+| `bat_image_cache_stats(out)` | – | `out`: 5 × `f64`: limit, bytes cached, peak, chunks read from the host, chunks dropped |
+
+The chunk cache: a slot holds `0` absent, `1` loading, `2` being dropped, or the chunk's
+address. Readers pin a chunk for the length of their copy (a counter beside the slot,
+taken inside the kill gate); `evict` is a second-chance clock over all chunks of all
+images, run by whichever thread is about to load a chunk that would pass the limit, and
+it takes no lock. A dropped chunk is read again through the same path as a first read
+(the thread's own handle, or a fault request to the supervisor).

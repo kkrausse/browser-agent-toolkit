@@ -81,7 +81,13 @@ async function bundle(entry: string, out: string, format: 'iife' | 'esm') {
     for (const log of result.logs) console.error(String(log))
     throw new Error(`build failed: ${out}`)
   }
-  const text = `${await result.outputs[0].text()}\n//# sourceURL=bat:///${out}\n`
+  // No character above U+00FF: a browser keeps a script's text with one byte per character
+  // only then, and these scripts are loaded by every process worker. In this code such
+  // characters occur in string and template literals and in comments, where the escape
+  // means the same (a tagged template or an identifier with one would need more care).
+  // (BAT_WIDE_SCRIPTS=1 leaves the text as it is, for comparing the two.)
+  const narrow = (source: string) => process.env.BAT_WIDE_SCRIPTS ? source : source.replace(/[^\x00-\xff]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`)
+  const text = narrow(`${await result.outputs[0].text()}\n//# sourceURL=bat:///${out}\n`)
   writeFileSync(join(dist, out), text)
   console.log(`${out.padEnd(22)} ${(text.length / 1024).toFixed(0).padStart(6)} KiB  ${(performance.now() - t0).toFixed(0)} ms`)
 }

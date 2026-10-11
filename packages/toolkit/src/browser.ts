@@ -1,4 +1,4 @@
-import type { BootRuntime, Launch, RuntimeEndpoint, RuntimeFs, RuntimeHost, RuntimeProcess } from './runtime-host';
+import type { BootOptions, BootRuntime, Launch, RuntimeEndpoint, RuntimeFs, RuntimeHost, RuntimeProcess } from './runtime-host';
 import { decodeSourceFile, parseManifest, toLaunch, workspaceRoot, type EditorManifest, type SourceFile } from './manifest';
 import { agentLaunch, defaultAgent, installAgentConfig, openCode, verifyAgentReady } from './opencode';
 import { createChatController } from './chat/controller';
@@ -101,6 +101,9 @@ export interface OpenEditorOptions {
   signal?: AbortSignal;
   /** Replaces the runtime the manifest names. Development only (see `./fake`). */
   boot?: BootRuntime;
+  /** Memory limits of the runtime, passed to it as they are (see `BootOptions`): the size of
+   * its kernel memory and of its image cache. For a small device, or a large workspace. */
+  runtime?: Pick<BootOptions, 'kernelMemory' | 'imageCacheBytes'>;
 }
 
 export const openedElsewhereMessage = 'This workspace is already open in another tab or window. Close the editor there, then retry.';
@@ -312,7 +315,7 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
     mark('manifest');
     publish({ message: 'Opening local workspace…' });
     const boot = options.boot ?? await loadRuntime(manifest, manifestUrl);
-    try { runtime = await boot({ manifestUrl, manifest, signal: options.signal }); }
+    try { runtime = await boot({ manifestUrl, manifest, signal: options.signal, ...options.runtime }); }
     catch (error) {
       if ((error as { code?: string } | null)?.code !== 'STORAGE_BUSY') throw error;
       log('editor', errorText(error));

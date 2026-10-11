@@ -75,6 +75,7 @@ pub fn emit(images: &[(PathBuf, String)], name: &str, modules: &[String], out_di
         .map(|(path, mount)| Ok((ImageFile::open(path).with_context(|| format!("open {}", path.display()))?, mount.trim_end_matches('/').to_string())))
         .collect::<Result<Vec<_>>>()?;
     let mut text: Vec<u8> = Vec::new();
+    let (mut left, mut escaped) = (0usize, 0usize);
     let mut taken = Vec::new();
     let (mut absent, mut not_modules, mut sloppy) = (0, 0, 0);
     let mut seen = std::collections::HashSet::new();
@@ -128,11 +129,14 @@ pub fn emit(images: &[(PathBuf, String)], name: &str, modules: &[String], out_di
         // Parenthesised: V8 compiles the function with the script instead of on first call.
         text.extend_from_slice(b",(");
         text.extend_from_slice(function_header(facts).as_bytes());
-        text.extend_from_slice(code);
+        text.extend_from_slice(&crate::program::narrowed(code, facts, &mut left, &mut escaped));
         text.extend_from_slice(b"\n})");
         text.extend_from_slice(define_tail(facts).as_bytes());
         text.extend_from_slice(b");\n");
         taken.push(path.clone());
+    }
+    if escaped + left > 0 {
+        eprintln!("[prepare] start-up program {name}: {escaped} characters above U+00FF written as escapes, {left} left");
     }
     if taken.is_empty() {
         return Err(anyhow!("start-up program {name}: none of the {} listed modules can be taken", modules.len()));

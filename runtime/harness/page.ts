@@ -90,6 +90,10 @@ async function start() {
     warmSpare: params.get('spare') !== '0',
     // `?trace`: kerneld posts its marks too; collected in `__batTrace` (runtime/src/trace.ts).
     trace: params.has('trace'),
+    // `?kmem=1024` (pages; `kmax=` for a growable memory), `?cache=16777216` (bytes): the
+    // kernel memory and the image chunk cache, for memory experiments.
+    kernelMemory: params.has('kmem') || params.has('kmax') ? { pages: params.has('kmem') ? Number(params.get('kmem')) : undefined, maximumPages: params.has('kmax') ? Number(params.get('kmax')) : undefined } : undefined,
+    imageCacheBytes: params.has('cache') ? Number(params.get('cache')) : undefined,
   } as any)
   k = boot.kernel
   const t1 = performance.now()

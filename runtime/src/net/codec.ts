@@ -98,9 +98,10 @@ export function getCodec(kernel: Kernel): Codec {
 }
 
 export function createCodec(kernel: Kernel) {
-  const x = kernel.x
+  // `kernel.x` is read at each call, not kept: on the page the kernel lets go of its
+  // instance when the runtime closes (Kernel.release), and this object may outlive it.
   const inst = kernel.inst
-  const evP: number = x.bat_alloc(EV_WORDS * 4 + 64) >>> 0
+  const evP: number = kernel.x.bat_alloc(EV_WORDS * 4 + 64) >>> 0
   if (!evP) throw new Error('kernel: out of memory')
   const outP = evP + EV_WORDS * 4
   const ev = new Uint32Array(EV_WORDS)
@@ -117,7 +118,7 @@ export function createCodec(kernel: Kernel) {
   }
 
   function httpParser(kind: 'request' | 'response', alloc?: (n: number) => Uint8Array): HttpParser {
-    let h: number = x.bat_http_parser_new(kind === 'response' ? 1 : 0) >>> 0
+    let h: number = kernel.x.bat_http_parser_new(kind === 'response' ? 1 : 0) >>> 0
     let busy = false
     return {
       recv(fd, sink, more) {
@@ -125,7 +126,7 @@ export function createCodec(kernel: Kernel) {
         busy = true
         try {
           for (;;) {
-            const n: number = x.bat_http_recv(h, fd, evP, EV_WORDS)
+            const n: number = kernel.x.bat_http_recv(h, fd, evP, EV_WORDS)
             if (n <= 0) {
               if (n < 0) sink.error(-n)
               return false
@@ -195,20 +196,20 @@ export function createCodec(kernel: Kernel) {
         }
       },
       expectNoBody() {
-        if (h) x.bat_http_expect_no_body(h)
+        if (h) kernel.x.bat_http_expect_no_body(h)
       },
       resume(fd, raw) {
-        if (h) x.bat_http_resume(h, fd, raw ? 1 : 0)
+        if (h) kernel.x.bat_http_resume(h, fd, raw ? 1 : 0)
       },
       free() {
-        if (h) x.bat_http_parser_free(h)
+        if (h) kernel.x.bat_http_parser_free(h)
         h = 0
       },
     }
   }
 
   function wsParser(): WsParser {
-    let h: number = x.bat_ws_new() >>> 0
+    let h: number = kernel.x.bat_ws_new() >>> 0
     let busy = false
     return {
       recv(fd, sink, more) {
@@ -216,7 +217,7 @@ export function createCodec(kernel: Kernel) {
         busy = true
         try {
           for (;;) {
-            const n: number = x.bat_ws_recv(h, fd, evP, EV_WORDS)
+            const n: number = kernel.x.bat_ws_recv(h, fd, evP, EV_WORDS)
             if (n <= 0) {
               if (n < 0) sink.error(-n)
               return false
@@ -262,7 +263,7 @@ export function createCodec(kernel: Kernel) {
         }
       },
       free() {
-        if (h) x.bat_ws_free(h)
+        if (h) kernel.x.bat_ws_free(h)
         h = 0
       },
     }
@@ -278,7 +279,7 @@ export function createCodec(kernel: Kernel) {
     let done = from
     const end = bytes.length
     while (done < end) {
-      const cap: number = x.bat_http_reserve(fd, flags, outP)
+      const cap: number = kernel.x.bat_http_reserve(fd, flags, outP)
       if (cap <= 0) {
         if (cap === -EAGAIN || cap === 0) break
         return cap
@@ -289,7 +290,7 @@ export function createCodec(kernel: Kernel) {
       const l1 = Math.min(n, u32[2])
       u8.set(bytes.subarray(done, done + l1), u32[1])
       if (n > l1) u8.set(bytes.subarray(done + l1, done + n), u32[3])
-      const rc: number = x.bat_http_commit(fd, flags, n)
+      const rc: number = kernel.x.bat_http_commit(fd, flags, n)
       if (rc < 0) return rc
       done += n
     }
@@ -301,7 +302,7 @@ export function createCodec(kernel: Kernel) {
     let done = from
     const end = text.length
     while (done < end) {
-      const cap: number = x.bat_http_reserve(fd, 0, outP)
+      const cap: number = kernel.x.bat_http_reserve(fd, 0, outP)
       if (cap <= 0) {
         if (cap === -EAGAIN || cap === 0) break
         return cap
@@ -314,7 +315,7 @@ export function createCodec(kernel: Kernel) {
       for (let i = 0; i < l1; i++) u8[p++] = text.charCodeAt(done + i)
       p = u32[3]
       for (let i = l1; i < n; i++) u8[p++] = text.charCodeAt(done + i)
-      const rc: number = x.bat_http_commit(fd, 0, n)
+      const rc: number = kernel.x.bat_http_commit(fd, 0, n)
       if (rc < 0) return rc
       done += n
     }
@@ -330,21 +331,21 @@ export function createCodec(kernel: Kernel) {
   function wsSend(fd: number, opcode: number, payload: Uint8Array, from: number, first: boolean, mask: boolean): number {
     const left = payload.length - from
     const flags = (first ? opcode : 0) | WS_FIN | (mask ? WS_MASK : 0)
-    const n: number = x.bat_ws_reserve(fd, flags, left, outP)
+    const n: number = kernel.x.bat_ws_reserve(fd, flags, left, outP)
     if (n < 0) return n
     const u8 = inst.u8()
     const u32 = new Uint32Array(u8.buffer, outP, 6)
     const l1 = Math.min(n, u32[3])
     if (l1) u8.set(payload.subarray(from, from + l1), u32[2])
     if (n > l1) u8.set(payload.subarray(from + l1, from + n), u32[4])
-    const rc: number = x.bat_ws_commit(fd, u32[0] + n)
+    const rc: number = kernel.x.bat_ws_commit(fd, u32[0] + n)
     return rc < 0 ? rc : n
   }
 
   function wsAcceptKey(key: string): string {
     const u8 = inst.u8()
     for (let i = 0; i < key.length; i++) u8[evP + i] = key.charCodeAt(i)
-    x.bat_ws_accept_key(evP, key.length, evP + 256)
+    kernel.x.bat_ws_accept_key(evP, key.length, evP + 256)
     let out = ''
     for (let i = 0; i < 28; i++) out += String.fromCharCode(u8[evP + 256 + i])
     return out
@@ -358,18 +359,18 @@ export function createCodec(kernel: Kernel) {
   const READ_CAP = 64 * 1024
   let readP = 0
   function read(fd: number, alloc?: (n: number) => Uint8Array): Uint8Array | number {
-    if (!readP) readP = x.bat_alloc(READ_CAP) >>> 0
-    const n: number = x.bat_read(fd, readP, READ_CAP)
+    if (!readP) readP = kernel.x.bat_alloc(READ_CAP) >>> 0
+    const n: number = kernel.x.bat_read(fd, readP, READ_CAP)
     if (n <= 0) return n
     return copy(readP, n, alloc)
   }
 
   /** Identity of the listener on `port` (0: nothing listens). */
-  const portListener = (port: number): number => x.bat_port_listener(port) >>> 0
+  const portListener = (port: number): number => kernel.x.bat_port_listener(port) >>> 0
 
   /** Resolve when something listens on `port`. Works on any thread. */
   async function waitForListener(port: number, signal?: AbortSignal): Promise<number> {
-    const word = x.BAT_PORTS_WORD.value >>> 2
+    const word = kernel.x.BAT_PORTS_WORD.value >>> 2
     for (;;) {
       signal?.throwIfAborted()
       const i32 = inst.i32()

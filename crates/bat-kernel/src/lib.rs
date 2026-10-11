@@ -8,6 +8,7 @@ pub mod fd;
 pub mod http;
 pub mod image;
 pub mod lock;
+pub mod mem;
 pub mod module_facts;
 pub mod path;
 pub mod persist;
@@ -24,7 +25,7 @@ pub mod ws;
 mod alloc;
 #[cfg(target_arch = "wasm32")]
 #[global_allocator]
-static GLOBAL: alloc::KernelAlloc = alloc::KernelAlloc::new();
+pub(crate) static GLOBAL: alloc::KernelAlloc = alloc::KernelAlloc::new();
 
 /// Run once, by the instance that created the memory, after it has attached.
 /// Creates the root directory and the host process (pid 1) and binds the

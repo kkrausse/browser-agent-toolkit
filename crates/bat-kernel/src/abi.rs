@@ -73,6 +73,14 @@ pub extern "C" fn bat_abi_version() -> u32 {
 }
 #[no_mangle]
 pub extern "C" fn bat_alloc(size: usize) -> *mut u8 {
+    // Null when the memory is full; the binding reports ENOMEM. A large buffer leaves the reserve alone.
+    if size > 65536 && !crate::mem::can_take(size) {
+        crate::image::evict(usize::MAX);
+        if !crate::mem::can_take(size) {
+            crate::mem::refused(size);
+            return core::ptr::null_mut();
+        }
+    }
     unsafe { std::alloc::alloc(std::alloc::Layout::from_size_align_unchecked(size.max(1), 16)) }
 }
 #[no_mangle]
@@ -689,6 +697,35 @@ pub extern "C" fn bat_image_progress(id: u32) {
     }
     crate::image::BAT_FAULT_WORD.fetch_add(1, SeqCst);
     sys::notify(crate::image::BAT_FAULT_WORD.as_ptr(), u32::MAX);
+}
+/// Limit of the image chunk cache in bytes, all images together (0: nothing is kept
+/// beyond the chunk being read). Chunks over it are dropped at once.
+#[no_mangle]
+pub extern "C" fn bat_image_cache_limit(bytes: f64) {
+    crate::image::set_cache_limit(if bytes >= usize::MAX as f64 { usize::MAX } else { bytes.max(0.0) as usize });
+}
+/// out (5 f64): limit, bytes cached, most ever cached, chunks read from the host, chunks dropped.
+#[no_mangle]
+pub unsafe extern "C" fn bat_image_cache_stats(out: *mut f64) {
+    crate::image::cache_stats(&mut *(out as *mut [f64; 5]));
+}
+/// The declared maximum of the kernel memory in pages. Called by the instance that
+/// created the memory, before anything else.
+#[no_mangle]
+pub extern "C" fn bat_mem_configure(max_pages: u32) {
+    #[cfg(target_arch = "wasm32")]
+    crate::alloc::set_max_pages(max_pages);
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = max_pages;
+}
+/// out (8 f64, bytes): size of the memory, its maximum, start of the heap, end of what the
+/// heap has taken, bytes in use, most ever in use, allocations refused, grows.
+#[no_mangle]
+pub unsafe extern "C" fn bat_mem_stats(out: *mut f64) {
+    #[cfg(target_arch = "wasm32")]
+    crate::alloc::stats(&mut *(out as *mut [f64; 8]));
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = out;
 }
 /// Record every positioned image read from now on (0 stops and forgets).
 #[no_mangle]
