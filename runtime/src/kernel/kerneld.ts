@@ -62,9 +62,29 @@ const stats = { spawns: 0, kills: 0, faults: 0, journalFrames: 0, journalBytes: 
 
 // ---- process workers ----
 
-function createProcessWorker(programs: string[] = []): Promise<Proc> {
+/**
+ * Set once a process worker has come up without the service worker that controls this one.
+ * Seen in WebKit (27.2): of several workers created at once from one URL, only the one whose
+ * script load reached the service worker is controlled; the others share that load and get
+ * no controller, so nothing they ask for later (`importScripts` of the Node lib, a program
+ * script) passes through the service worker. Where the page's files exist only behind it
+ * (examples/terminal-app ships them gzipped and inflates them there) those requests are 404s
+ * and the process dies. From then on every worker gets a URL of its own, so no two loads
+ * are shared.
+ */
+let ownWorkerUrls = false
+let workerSeq = 0
+function processWorkerUrl(): string {
+  if (!ownWorkerUrls) return cfg.processWorkerUrl
+  // Before the fragment, which carries the worker's configuration.
+  const at = cfg.processWorkerUrl.indexOf('#')
+  const [url, hash] = at < 0 ? [cfg.processWorkerUrl, ''] : [cfg.processWorkerUrl.slice(0, at), cfg.processWorkerUrl.slice(at)]
+  return `${url}${url.includes('?') ? '&' : '?'}worker=${++workerSeq}${hash}`
+}
+
+function createProcessWorker(programs: string[] = [], attempt = 0): Promise<Proc> {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(cfg.processWorkerUrl, { type: cfg.processWorkerType ?? 'module', name: 'bat-process' })
+    const worker = new Worker(processWorkerUrl(), { type: cfg.processWorkerType ?? 'module', name: 'bat-process' })
     const proc: Proc = { worker, thread: 0, pid: 0 }
     worker.onmessage = (e) => {
       const m = e.data
@@ -72,6 +92,13 @@ function createProcessWorker(programs: string[] = []): Promise<Proc> {
         proc.thread = m.thread
         trace('worker.ready', { thread: m.thread })
         resolve(proc)
+      } else if (m.type === 'uncontrolled') {
+        // Sent before the worker attached to the kernel: nothing to reap.
+        worker.terminate()
+        ownWorkerUrls = true
+        trace('worker.uncontrolled', { attempt })
+        if (attempt < 3) resolve(createProcessWorker(programs, attempt + 1))
+        else reject(new Error('process worker: not controlled by the page\'s service worker'))
       } else if (m.type === 'exited') {
         retire(proc, 0)
       } else if (m.type === 'error') {
@@ -87,7 +114,8 @@ function createProcessWorker(programs: string[] = []): Promise<Proc> {
         retire(proc, 0)
       } else reject(new Error(e.message))
     }
-    worker.postMessage({ type: 'attach', module: cfg.module, memory: cfg.memory, namespace: cfg.namespace, images: cfg.images, programs })
+    // `controlled`: this worker is, so the ones it creates must be (see ownWorkerUrls).
+    worker.postMessage({ type: 'attach', module: cfg.module, memory: cfg.memory, namespace: cfg.namespace, images: cfg.images, programs, controlled: !!(navigator as any).serviceWorker?.controller })
   })
 }
 function addSpare(programs: string[] = []) {

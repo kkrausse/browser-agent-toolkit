@@ -23,6 +23,11 @@
 // Prints one JSON line per run and exits 1 if any run failed. `--record` captures the run as
 // mp4 (1280x800, CDP) with the step marks beside it (`<out>.marks.json`) for `demo/gif.ts`;
 // with `--runs` over 1 the files are `<out>-1.mp4`, …. `--slow` types and pauses like a person.
+//
+// `--webkit` runs the same steps in Playwright's WebKit instead (`browser-control` is
+// Chromium-only): headless unless `--headed`, a profile directory that persists for the
+// invocation (`--profile DIR` to choose it; WebKit refuses OPFS sync access handles in an
+// ephemeral context), no `--record`. `--shot out.png` saves the page at the end of each run.
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { loadavg, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -37,9 +42,27 @@ const prompt = flag('prompt') ?? 'Give this app a dark theme with a violet accen
 const query = flag('query') ?? ''
 const replyTimeout = Number(flag('reply-timeout') ?? 300)
 const scratch = mkdtempSync(join(tmpdir(), 'bat-terminal-demo-'))
+const inWebKit = has('webkit')
+if (inWebKit && record) throw Error('--record needs Chrome: leave out --webkit')
+
+/** `--webkit`: one page of a persistent WebKit context, and the `state` the steps share. */
+const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (...args: string[]) => (...args: unknown[]) => Promise<any>
+const local = inWebKit
+  ? await (async () => {
+      const { webkit } = await import('playwright')
+      const context = await webkit.launchPersistentContext(flag('profile') ?? mkdtempSync(join(tmpdir(), 'bat-terminal-webkit-')), { headless: !has('headed'), viewport: { width: 1280, height: 800 } })
+      const problems: string[] = []
+      const page = context.pages()[0] ?? (await context.newPage())
+      page.on('pageerror', e => problems.push(`pageerror: ${String(e).slice(0, 300)}`))
+      page.on('crash', () => problems.push('the page crashed'))
+      page.on('console', m => { if (m.type() === 'error') problems.push(`console: ${m.text().slice(0, 300)}`) })
+      return { context, page, state: {} as Record<string, unknown>, problems }
+    })()
+  : undefined
 
 /** Run one Playwright snippet in the session's tab. `page` and a persistent `state` are in scope. */
 async function execute(name: string, body: string): Promise<any> {
+  if (local) return new AsyncFunction('page', 'state', body)(local.page, local.state)
   const file = join(scratch, `${name}.js`)
   writeFileSync(file, body)
   const child = Bun.spawn(['browser-control', 'execute', '--json', '--session', session, '--file', file], { stdout: 'pipe', stderr: 'pipe' })
@@ -247,12 +270,16 @@ async function once(index: number): Promise<RunResult> {
       writeFileSync(`${result.recording}.marks.json`, JSON.stringify({ startedAt: info.startedAt ?? info.recording?.startedAt, marks: result.marks ?? [], info, result: { ...result, marks: undefined } }, null, 2))
     } catch { /* the recorder's own sidecar still exists */ }
   }
+  if (local) {
+    if (flag('shot')) await local.page.screenshot({ path: resolve(runs > 1 ? flag('shot')!.replace(/(\.\w+)$/, `-${index + 1}$1`) : flag('shot')!) }).catch(() => {})
+    if (local.problems.length) (result as RunResult & { problems?: string[] }).problems = local.problems.splice(0)
+  }
   result.load.push(...loadavg().slice(0, 1).map(n => Math.round(n * 100) / 100))
   return result
 }
 
 // Creating a session that exists fails; that is the common case.
-await control('session', 'new', session).catch(() => {})
+if (!local) await control('session', 'new', session).catch(() => {})
 let failures = 0
 for (let i = 0; i < runs; i++) {
   const result = await once(i)
@@ -260,4 +287,5 @@ for (let i = 0; i < runs; i++) {
   console.log(JSON.stringify({ run: i + 1, ...result, marks: undefined }))
 }
 console.log(`${runs - failures}/${runs} passed`)
+await local?.context.close().catch(() => {})
 process.exit(failures ? 1 : 0)

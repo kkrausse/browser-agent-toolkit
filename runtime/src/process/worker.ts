@@ -378,6 +378,13 @@ host.addEventListener('message', (async (e: MessageEvent) => {
   try {
     if (m.type === 'attach') {
       e.stopImmediatePropagation()
+      // The worker that made this one is controlled by a service worker and this one is not
+      // (kerneld.ts, ownWorkerUrls): say so before touching the kernel, and be replaced.
+      const serviceWorker = (g.navigator as any)?.serviceWorker
+      if (m.controlled && serviceWorker && !serviceWorker.controller) {
+        host.postMessage({ type: 'uncontrolled' })
+        return
+      }
       namespace = m.namespace
       for (const name of m.images ?? []) preopenImage(namespace, name)
       inst = await attachKernel({
