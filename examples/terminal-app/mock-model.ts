@@ -16,6 +16,13 @@
 //                        appends a dark, violet theme to the stylesheet and adds a count of
 //                        the todos left under the list (three edits), with a pause before
 //                        each step as if it thought; ends SCRIPTED-THEME-DONE
+//   … and "theme-color" with MOCK_TODO=fullstack (examples/todo-fullstack, where the page is
+//                        src/home.tsx): the same, plus the two edits that left the preview's
+//                        input dead on 2026-10-11
+//                        (docs/experiments/2026-10-11-preview-input-dead-after-edit-handoff.md):
+//                        a <meta name="theme-color"> in src/root.tsx, the root route that
+//                        renders <html>, and a rule in src/editor-panel.css. They come after
+//                        the other three, or before them with "theme-color first"
 //   starts "run `…`"     calls the shell tool with the command between the backquotes (the
 //                        page's configuration does not allow it, so the client asks first)
 //                        and repeats its output; ends SCRIPTED-SHELL-DONE
@@ -31,8 +38,12 @@ interface Tool { name: string; properties: string[] }
 interface Turn { model: string; user: string; results: string[]; tools: Tool[] }
 interface Step { text: string; call?: { name: string; arguments: string }; pauseMs?: number }
 
-const file = '/workspace/src/App.tsx'
-const plain = 'Hello from the scripted model. This reply is streamed in small pieces by a mock on another origin that this tab fetched directly; no model was called and no tokens were spent. Ask me to change the heading (for example: set the heading to "Tasks") and I will read and edit src/App.tsx in this tab. SCRIPTED-PLAIN-DONE'
+// MOCK_TODO=fullstack: the scripts edit examples/todo-fullstack (React Router, src/home.tsx)
+// instead of the plain TODO app (src/App.tsx).
+const fullstack = process.env.MOCK_TODO === 'fullstack'
+const page = fullstack ? 'src/home.tsx' : 'src/App.tsx'
+const file = `/workspace/${page}`
+const plain = `Hello from the scripted model. This reply is streamed in small pieces by a mock on another origin that this tab fetched directly; no model was called and no tokens were spent. Ask me to change the heading (for example: set the heading to "Tasks") and I will read and edit ${page} in this tab. SCRIPTED-PLAIN-DONE`
 
 // The theme script: what it reads and the three edits it makes, each an exact replacement in
 // the TODO app's source as it is shipped. The rules are appended, since the stylesheet's
@@ -51,22 +62,36 @@ button { background: var(--accent); color: white; border-color: var(--accent); c
 li { padding: .6rem .8rem; background: #1f1b2e; border: 1px solid #3b3357; border-radius: .5rem; }
 .left { color: #a78bfa; }`
 const titleLine = "  const [title, setTitle] = useState('')\n"
+const errorLine = '  const error = todos.error ?? add.error ?? complete.error ?? remove.error\n'
 const listEnd = '      </ul>\n    </main>'
 const baseEdits: { file: string; say: string; before: string; after: string }[] = [
   { file: sheet, say: 'The stylesheet is small and plain. I will add a dark palette with a violet accent after its last rule.', before: lastRule, after: theme },
-  { file, say: 'Now the count. First a value for the todos that are not done.', before: titleLine, after: `${titleLine}  const left = todos.filter((todo) => !todo.completed).length\n` },
+  fullstack
+    ? { file, say: 'Now the count. First a value for the todos that are not done.', before: errorLine, after: `${errorLine}  const left = todos.data?.filter((todo) => !todo.completed).length ?? 0\n` }
+    : { file, say: 'Now the count. First a value for the todos that are not done.', before: titleLine, after: `${titleLine}  const left = todos.filter((todo) => !todo.completed).length\n` },
   { file, say: 'And a line under the list that shows it.', before: listEnd, after: `      </ul>\n      <p className="left">{left} {left === 1 ? 'todo' : 'todos'} left</p>\n    </main>` },
+]
+
+// The root-layout variant, full-stack app only: what one real model also did, and what broke the preview.
+const root = '/workspace/src/root.tsx', panelSheet = '/workspace/src/editor-panel.css'
+const viewport = '        <meta name="viewport" content="width=device-width, initial-scale=1" />\n'
+const panelRule = '.todo-editor-panel summary{cursor:pointer}'
+const rootEdits: typeof baseEdits = [
+  { file: root, say: 'The browser chrome should match: a theme-color in the document head.', before: viewport, after: `${viewport}        <meta name="theme-color" content="#14121c" />\n` },
+  { file: panelSheet, say: 'And the editor panel gets the accent.', before: panelRule, after: `${panelRule}\n.todo-editor-panel>header{border-color:#8b5cf6}` },
 ]
 
 function themeStep(turn: Turn, offered: string): Step {
   const done = turn.results.length, pauseMs = 1200
+  const withRoot = fullstack && /theme-color/i.test(turn.user)
+  const themeEdits = !withRoot ? baseEdits : /theme-color first/i.test(turn.user) ? [...rootEdits, ...baseEdits] : [...baseEdits, ...rootEdits]
   const reads = [[sheet, 'I will look at the stylesheet first.'], [file, 'Then the page that draws the list.']] as const
   if (done < reads.length) {
     const [path, text] = reads[done]!
     const read = call(turn, 'read', { filePath: path, file_path: path, path })
     return read ? { text, call: read, pauseMs } : { text: `The theme script needs the read tool ${offered}.` }
   }
-  const change = baseEdits[done - reads.length]
+  const change = themeEdits[done - reads.length]
   if (!change) return { text: 'Done. The app is dark with a violet accent, and the number of todos left is shown under the list. The preview beside this panel updated by itself. SCRIPTED-THEME-DONE', pauseMs }
   const edit = call(turn, 'edit', { filePath: change.file, file_path: change.file, path: change.file, oldString: change.before, old_string: change.before, newString: change.after, new_string: change.after })
   return edit ? { text: change.say, call: edit, pauseMs: 2200 } : { text: `The theme script needs the edit tool ${offered}.` }
@@ -112,11 +137,11 @@ function next(turn: Turn): Step {
   if (!/\bheading\b/i.test(turn.user)) return { text: plain }
   if (turn.results.length === 0) {
     const read = call(turn, 'read', { filePath: file, file_path: file, path: file })
-    return read ? { text: 'I will read `src/App.tsx` to find the heading.', call: read } : { text: `The heading script needs the read tool ${offered}.` }
+    return read ? { text: `I will read \`${page}\` to find the heading.`, call: read } : { text: `The heading script needs the read tool ${offered}.` }
   }
   if (turn.results.length === 1) {
     const old = /<h1>([^<]*)<\/h1>/.exec(turn.results[0]!)?.[1]
-    if (old === undefined) return { text: `I could not find an <h1> in src/App.tsx. The read tool returned: ${turn.results[0]!.slice(0, 300)}` }
+    if (old === undefined) return { text: `I could not find an <h1> in ${page}. The read tool returned: ${turn.results[0]!.slice(0, 300)}` }
     const wanted = /"([^"\n]+)"/.exec(turn.user)?.[1] ?? `${old} (edited in the tab)`
     const before = `<h1>${old}</h1>`, after = `<h1>${wanted}</h1>`
     const edit = call(turn, 'edit', { filePath: file, file_path: file, path: file, oldString: before, old_string: before, newString: after, new_string: after })
