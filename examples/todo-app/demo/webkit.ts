@@ -5,7 +5,7 @@
 //   PORT=4311 bun ../terminal-app/mock-model.ts
 //   EDITOR_MODEL_API_KEY=not-a-key EDITOR_MODEL_BASE_URL=http://127.0.0.1:4311/v1 PORT=3000 bun run editor
 //   bun demo/webkit.ts [--base http://127.0.0.1:3000] [--runs 1] [--profile DIR] [--headed]
-//                      [--keep-workspace] [--no-prompt] [--shot out.png]
+//                      [--keep-workspace] [--no-prompt] [--shot out.png] [--trace]
 //
 // Per run: reset the workspace (unless --keep-workspace), add two todos, tick one, "Open
 // editor", wait for the app in the preview and for the chat; send the dark-theme prompt and
@@ -62,9 +62,39 @@ const app = (page: Page) => page.evaluate(() => {
   return { background: luminance(doc.body) ?? luminance(doc.documentElement) ?? 1, left: left ? Number(left[1]) : null, text: text.slice(0, 600), sameDocument: win.__demoDocument === true }
 })
 
+// Where a hot update gets to, for a run that loses one. Installed in the preview frame once
+// it is open: the Vite client's own events (a message it has started to handle), a second
+// socket to the dev server (a message that crossed the bridge at all), and the fetches of the
+// two edited files. Read back with `traced`, together with the dev server's own lines.
+const trace = async () => {
+  const win = (document.querySelector('.todo-editor-preview iframe') as HTMLIFrameElement).contentWindow as any
+  const log: unknown[][] = (win.__demoTrace = [])
+  const brief = (p: any) => p?.updates ? p.updates.map((u: any) => `${u.type} ${u.path} ${u.timestamp}`).join(', ') : p?.route ? `route ${p.route.id}` : p?.type === 'custom' ? `${p.event}` : p?.type ?? ''
+  const client = (win.performance.getEntriesByType('resource') as PerformanceEntry[]).map((e) => e.name).find((n) => /@vite\/client$/.test(n))
+  if (!client) { log.push([Date.now(), 'no @vite/client in the frame']); return }
+  const { createHotContext } = await win.eval(`import(${JSON.stringify(client)})`)
+  const hot = createHotContext('/__demo-trace')
+  for (const event of ['vite:beforeUpdate', 'vite:afterUpdate', 'vite:beforeFullReload', 'vite:error', 'vite:invalidate', 'vite:ws:connect', 'vite:ws:disconnect', 'react-router:hmr']) hot.on(event, (p: unknown) => log.push([Date.now(), event, brief(p)]))
+  new win.PerformanceObserver((list: PerformanceObserverEntryList) => {
+    for (const e of list.getEntries()) if (/home\.tsx|style\.css/.test(e.name)) log.push([Date.now(), 'fetched', e.name.slice(e.name.lastIndexOf('/') + 1), `${Math.round(e.duration)} ms`])
+  }).observe({ type: 'resource' })
+  const token = /const wsToken = "([^"]+)"/.exec(await (await win.fetch(client)).text())?.[1]
+  const url = new URL(`..?token=${token}`, client)
+  url.protocol = 'ws:'
+  const socket = new win.WebSocket(url.href, 'vite-hmr')
+  win.__demoTraceSocket = socket
+  socket.onmessage = (e: MessageEvent) => { let p: any; try { p = JSON.parse(e.data) } catch { p = { type: 'unparsed' } } log.push([Date.now(), 'socket', p.type, brief(p)]) }
+  socket.onclose = (e: CloseEvent) => log.push([Date.now(), 'socket closed', e.code])
+}
+const traced = (page: Page, since: number) => page.evaluate((since) => {
+  const win = (document.querySelector('.todo-editor-preview iframe') as HTMLIFrameElement | null)?.contentWindow as any
+  const activity = (document.querySelector('.todo-editor-panel details pre')?.textContent ?? '').split('\n').filter((line) => /\[preview\]/.test(line)).slice(-12)
+  return { now: Date.now() - since, page: ((win?.__demoTrace ?? []) as [number, ...unknown[]][]).map(([at, ...rest]) => [at - since, ...rest]), activity }
+}, since).catch((e) => String(e))
+
 async function once(): Promise<Record<string, unknown>> {
   const result: Record<string, unknown> = { pass: false, load: loadavg().map((n) => Math.round(n * 100) / 100) }
-  let step = 'home'
+  let step = 'home', promptSent = 0
   problems.length = 0
   try {
     await page.goto(`${base}/`, { waitUntil: 'load' })
@@ -111,6 +141,7 @@ async function once(): Promise<Record<string, unknown>> {
     if (!before || before.background < 0.5) throw Error(`The app does not start light: ${JSON.stringify(before)}`)
     // Survives hot updates, not a reload of the frame.
     await page.evaluate(() => { ((document.querySelector('.todo-editor-preview iframe') as HTMLIFrameElement).contentWindow as any).__demoDocument = true })
+    await page.evaluate(trace).catch((e) => problems.push(`trace: ${String(e).slice(0, 200)}`))
 
     if (!has('no-prompt')) {
       step = 'prompt'
@@ -119,6 +150,7 @@ async function once(): Promise<Record<string, unknown>> {
       await page.keyboard.type(prompt)
       await page.keyboard.press('Enter')
       const sent = Date.now()
+      promptSent = sent
       let busy = false
       for (;;) {
         s = await panel(page)
@@ -172,6 +204,8 @@ async function once(): Promise<Record<string, unknown>> {
       return out
     }).catch((e) => String(e))
   }
+  // Times in `trace` are milliseconds after the prompt was sent.
+  if (promptSent && (!result.pass || has('trace'))) result.trace = await traced(page, promptSent)
   if (flag('shot')) await page.screenshot({ path: flag('shot')! }).catch(() => {})
   result.problems = [...new Set(problems)].slice(0, 12)
   return result
