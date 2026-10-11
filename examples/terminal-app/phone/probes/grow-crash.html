@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shared-memory grow crash</title><link rel="stylesheet" href="page.css"></head>
+<body>
+<h1>Shared-memory grow against worker teardown</h1>
+<p class="warn"><b>This may crash the tab.</b> That is the point: in Playwright's WebKit 27.2 the "race" run kills the web process within about a second (a JavaScriptCore fault when a shared <code>WebAssembly.Memory</code> grows while a worker holding instances of it is torn down; report section 9.1). Safari may answer with "A problem repeatedly occurred" or a blank reloaded page. If it does, open this page again: it says that the previous run never finished.</p>
+<p>The demo itself no longer grows its memory, so a crash here does not mean the demo will crash; it says whether this Safari has the fault.</p>
+<p><button id="control">Control: same workers, no grow (should always finish)</button><button id="race" class="danger">Race: grow + terminate, 20 rounds (may crash the tab)</button></p>
+<p><button id="copy">Copy all</button> <a href="../">back</a></p>
+<textarea id="manual" readonly hidden></textarea>
+<pre id="out"></pre>
+<script type="module">
+import { begin, end, isolated, out, text } from './common.js'
+// runtime/harness/webkit/grow-crash/index.html, with the memory's maximum lowered until this browser grants one.
+async function go(rounds, variant) {
+  const state = { rounds: 0, terminated: 0 }
+  for (let r = 0; r < rounds; r++) {
+    let memory, granted
+    for (const maximum of [65536, 16384, 4096]) { try { memory = new WebAssembly.Memory({ initial: 1, maximum, shared: true }); granted = maximum; break } catch (e) { if (r === 0) out(`  a shared memory with maximum ${maximum / 16} MiB was refused: ${text(e)}`) } }
+    if (!memory) throw Error('no shared memory could be made')
+    if (r === 0) out(`  memory: 1 page, maximum ${granted / 16} MiB`)
+    const grower = variant === 'nogrow' ? null : new Worker('grow-worker.js')
+    grower?.postMessage({ memory, grow: true })
+    const t0 = performance.now()
+    while (performance.now() - t0 < 1500) {
+      const ws = []
+      for (let i = 0; i < 4; i++) {
+        const w = new Worker('grow-worker.js')
+        ws.push(new Promise(res => { w.onmessage = () => setTimeout(() => { w.terminate(); state.terminated++; res() }, Math.random() * 3); w.onerror = e => { out(`  worker error: ${e.message}`); res() } }))
+        w.postMessage({ memory })
+      }
+      await Promise.all(ws)
+    }
+    grower?.terminate()
+    state.rounds++
+    out(`  round ${state.rounds} of ${rounds}: ${state.terminated} workers terminated so far, memory now ${memory.buffer.byteLength / 65536} pages`)
+  }
+  return state
+}
+let ready = false
+try { await isolated(); ready = true; out('Ready. Press a button.') } catch (error) { out(`STOPPED: ${text(error)}`) }
+for (const [id, variant, rounds] of [['#control', 'nogrow', 5], ['#race', 'race', 20]]) {
+  document.querySelector(id).addEventListener('click', async () => {
+    if (!ready) return
+    for (const b of document.querySelectorAll('button:not(#copy)')) b.disabled = true
+    out(''); out(`${variant === 'race' ? 'RACE' : 'CONTROL'} started ${new Date().toISOString()}, ${rounds} rounds of 1.5 s`)
+    begin(variant)
+    try { const s = await go(rounds, variant); out(`FINISHED WITHOUT A CRASH: ${JSON.stringify(s)}`) } catch (error) { out(`STOPPED: ${text(error)}`) }
+    end()
+    for (const b of document.querySelectorAll('button:not(#copy)')) b.disabled = false
+  })
+}
+</script>
+</body></html>

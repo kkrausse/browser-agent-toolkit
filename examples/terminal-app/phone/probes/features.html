@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feature probe</title><link rel="stylesheet" href="page.css"></head>
+<body>
+<h1>Feature probe</h1>
+<p>Which of the platform features the runtime needs this browser has (the questions of <code>runtime/harness/webkit/probe.ts</code>, as a page). It runs by itself; nothing here should be able to crash the tab until you press a button.</p>
+<p><button id="copy">Copy all</button> <a href="../">back</a></p>
+<p><button id="m512">Shared memory: 512 MiB</button><button id="m1g">1 GiB</button><button id="m4g" class="danger">64 pages growable to 4 GiB (the old kernel memory; may be refused)</button><button id="touch" class="danger">256 MiB and write 128 MiB of it (may get the tab killed)</button></p>
+<textarea id="manual" readonly hidden></textarea>
+<pre id="out"></pre>
+<script type="module">
+import { begin, end, isolated, out, text } from './common.js'
+const ask = message => new Promise(resolve => {
+  const worker = new Worker('features-worker.js')
+  const timer = setTimeout(() => { out('  (no answer from the worker in 15 s)'); worker.terminate(); resolve() }, 15000)
+  worker.onmessage = e => { if (e.data.done) { clearTimeout(timer); worker.terminate(); resolve() } else out(`${e.data.name}: ${e.data.value}`) }
+  worker.onerror = e => { clearTimeout(timer); out(`worker error: ${e.message}`); resolve() }
+  worker.postMessage(message)
+})
+const memory = async (label, pages, maximum, touch) => { begin(label); out(`… ${label}`); await ask({ memory: { pages, maximum, touch }, label: '  result' }); end() }
+try {
+  await isolated()
+  out(`SharedArrayBuffer: ${typeof SharedArrayBuffer}`)
+  out(`Web Locks: ${!!navigator.locks}`)
+  out(`DecompressionStream gzip: ${(() => { try { new DecompressionStream('gzip'); return 'ok' } catch (e) { return text(e) } })()}; zstd: ${(() => { try { new DecompressionStream('zstd'); return 'ok' } catch { return 'no (the build ships gzip)' } })()}`)
+  out(`BroadcastChannel: ${typeof BroadcastChannel}; WebAssembly.compileStreaming: ${typeof WebAssembly.compileStreaming}; module workers: asked below`)
+  try { new Worker('data:text/javascript,', { type: 'module' }).terminate(); out('module worker: constructed') } catch (e) { out(`module worker: ${text(e)}`) }
+  await navigator.storage?.estimate?.().then(e => out(`storage.estimate: usage ${(e.usage / 1048576).toFixed(1)} MiB, quota ${(e.quota / 1048576).toFixed(1)} MiB`), e => out(`storage.estimate: ${text(e)}`))
+  await navigator.storage?.persisted?.().then(p => out(`storage.persisted: ${p}`), () => {})
+  out(`deviceMemory: ${navigator.deviceMemory ?? 'not told'}; cores: ${navigator.hardwareConcurrency}; viewport ${innerWidth}x${innerHeight} @${devicePixelRatio}`)
+  out('')
+  await ask({})
+  out('')
+  // What the demo asks for at boot: created whole, never grown.
+  await memory('shared memory, 256 MiB fixed (what the demo makes)', 4096, 4096)
+  await memory('shared memory, 128 MiB fixed (demo with ?kmem=128)', 2048, 2048)
+  out('')
+  out('DONE. The buttons above try larger memories; each prints its result here.')
+} catch (error) { out(`STOPPED: ${text(error)}`) }
+const on = (id, run) => document.querySelector(id).addEventListener('click', run)
+on('#m512', () => memory('shared memory, 512 MiB fixed', 8192, 8192))
+on('#m1g', () => memory('shared memory, 1 GiB fixed', 16384, 16384))
+on('#m4g', () => memory('shared memory, 4 MiB growable to 4 GiB', 64, 65536))
+on('#touch', () => memory('shared memory, 256 MiB fixed, 128 MiB written', 4096, 4096, 128))
+</script>
+</body></html>

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Preload reuse</title><link rel="stylesheet" href="page.css"></head>
+<body>
+<h1>Does this browser reuse a preloaded module without asking?</h1>
+<p>A frame preloads and imports <code>m.js</code>, whose text changes at every load. A load is "unasked" if the server (here: this page's service worker) got no request for <code>m.js</code>, and "stale" if the frame ran an earlier load's module. Playwright's WebKit 27.2 is stale in about half of the loads of the first two variants and never with <code>Vary: *</code>, which is why the preview's service worker sends that header (report section 10). This is <code>runtime/harness/webkit/preload-reuse/run.ts</code> as a page: the service worker stands in for its server, and each load is a new frame, not a navigation of the tab, so a zero here is weaker evidence than that script's.</p>
+<p><button id="run">Run (4 variants, 30 loads each, about 20 s)</button> <button id="copy">Copy all</button> <a href="../">back</a></p>
+<textarea id="manual" readonly hidden></textarea>
+<pre id="out"></pre>
+<script type="module">
+import { begin, end, isolated, out, text } from './common.js'
+const loads = Number(new URLSearchParams(location.search).get('loads') ?? 30)
+const json = url => fetch(url, { cache: 'no-store' }).then(r => r.json())
+async function variant(name) {
+  const result = { variant: name, loads, unasked: 0, stale: 0, workerRestarts: 0 }
+  let born
+  for (let load = 1; load <= loads; load++) {
+    const before = await json(`preload/${name}/load?n=${load}`)
+    if (born !== undefined && before.born !== born) result.workerRestarts++
+    born = before.born
+    const frame = document.createElement('iframe')
+    frame.style.cssText = 'width:1px;height:1px;border:0;position:absolute'
+    frame.src = `preload/${name}/frame/`
+    document.body.append(frame)
+    const ran = await new Promise(resolve => { const t0 = Date.now(); const poll = () => { const v = frame.contentWindow?.ran; if (v !== undefined) resolve(v); else if (Date.now() - t0 > 8000) resolve('timeout'); else setTimeout(poll, 10) }; poll() })
+    const after = await json(`preload/${name}/stats`)
+    if (after.born === born && after.asked === before.asked) result.unasked++
+    if (ran !== load) result.stale++
+    frame.remove()
+    await new Promise(r => setTimeout(r, 100))
+  }
+  out(JSON.stringify(result))
+  return result
+}
+let ready = false
+try { await isolated(); ready = true; out('Ready. Press Run.') } catch (error) { out(`STOPPED: ${text(error)}`) }
+document.querySelector('#run').addEventListener('click', async event => {
+  if (!ready) return
+  event.target.disabled = true
+  begin('preload-reuse'); out('')
+  try {
+    const r = {}
+    for (const name of ['no-cache', 'no-store', 'no-link', 'vary-star']) r[name] = await variant(name)
+    const broken = r['vary-star'].stale > 0 || r['no-link'].stale > 0, gone = r['no-cache'].stale === 0 && r['no-store'].stale === 0
+    out(broken ? 'RESULT: a variant that must never be stale was (Vary: * does not protect here)' : gone ? 'RESULT: no variant was stale. As a page this browser does not show the reuse.' : 'RESULT: as in Playwright WebKit: plain variants reuse an earlier module, Vary: * and no-link never do.')
+  } catch (error) { out(`STOPPED: ${text(error)}`) }
+  end(); event.target.disabled = false
+})
+</script>
+</body></html>

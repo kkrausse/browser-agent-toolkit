@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>browser-agent-toolkit · WebKit try</title><link rel="stylesheet" href="probes/page.css">
+<style>li { margin: 10px 0; } small { color: #8a8980; display: block; } code { font-size: 12px; }</style></head>
+<body>
+<h1>browser-agent-toolkit · first try in Safari</h1>
+<p>Branch <code>webkit-try</code>, built __BUILT__ from <code>__COMMIT__</code>. Every page has its readout on the page and a <b>Copy all</b> button: paste that back.</p>
+<h1>The demo</h1>
+<ul>
+<li><a href="demo/?mock=1&reset=1"><b>Demo with the scripted model</b> (start here)</a><small>No network, key or relay after the first download (about 45 MB). A fresh workspace each time this link is used. In the terminal type <code>hello</code>, then <code>set the heading to "Tasks"</code>.</small></li>
+<li><a href="demo/?mock=1">The same, keeping the workspace</a><small>A reopen: nothing is downloaded again, the edits are kept.</small></li>
+<li><a href="demo/?mock=1&reset=1&kmem=128">Scripted model, kernel memory 128 MiB</a><small>If the first link fails with "this browser refused a shared memory of 256 MiB".</small></li>
+<li><a href="demo/?reset=1">Demo as published: OpenCode's free hosted model through the public Wisp relay</a><small>Needs the phone to reach the internet (opencode.ai, wss://wisp.mercurywork.shop). ChatGPT plan: ctrl+p, Connect an integration, OpenAI, sign in with a code.</small></li>
+</ul>
+<p>The diagnostics panel is at the bottom of the demo and folds into a "Diagnostics" button once the terminal is up. If the tab dies, open the same link again: the panel shows what the previous load had reached.</p>
+<h1>Probes</h1>
+<ul>
+<li><a href="probes/features.html">Feature probe</a><small>What the runtime needs: isolation, OPFS sync handles, shared memory at 256 MiB, and so on. Safe.</small></li>
+<li><a href="probes/preload-reuse.html">Preload reuse</a><small>Does Safari run an earlier document's preloaded module without a request. Safe.</small></li>
+<li><a href="probes/grow-crash.html">Shared-memory grow crash</a><small><b>This may crash the tab.</b> Whether this Safari has the JavaScriptCore fault the kernel memory was made fixed-size to avoid.</small></li>
+</ul>
+</body></html>
