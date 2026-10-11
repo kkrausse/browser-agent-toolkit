@@ -21,6 +21,14 @@ export async function opfsDir(namespace: string, ...parts: string[]): Promise<Fi
   return dir
 }
 
+/**
+ * Rename `handle`, a file in `dir`. The two-argument form of `move` is the one both engines
+ * have: WebKit has no `move(name)` and answers it with "Not enough arguments".
+ */
+export function renameIn(dir: FileSystemDirectoryHandle, handle: FileSystemFileHandle, name: string): Promise<void> {
+  return (handle as any).move(dir, name)
+}
+
 export async function imageExists(namespace: string, name: string): Promise<number | undefined> {
   const dir = await opfsDir(namespace, 'images')
   try {
@@ -108,7 +116,7 @@ export async function storeImage(
   } finally {
     handle.close()
   }
-  await (tmp as any).move(name)
+  await renameIn(dir, tmp, name)
   return { bytes, ms: performance.now() - t0 }
 }
 

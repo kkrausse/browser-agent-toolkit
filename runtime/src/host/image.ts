@@ -19,7 +19,7 @@
 // workers hold it open (which they do when it was mounted early), so a
 // finished download is marked by `<name>.partial.ok` and renamed by the next
 // open, before anyone holds it.
-import { opfsDir, type SyncHandle } from '../kernel/opfs'
+import { opfsDir, renameIn, type SyncHandle } from '../kernel/opfs'
 
 export interface StoreImageArgs {
   namespace: string
@@ -128,7 +128,7 @@ export async function storeImage(a: StoreImageArgs, onProgress: (p: StoreImagePr
       const size = await sizeOf(dir, tmpName)
       if (size !== undefined && (a.bytes === undefined || size === a.bytes)) {
         try {
-          await ((await dir.getFileHandle(tmpName)) as any).move(a.name)
+          await renameIn(dir, await dir.getFileHandle(tmpName), a.name)
           await dir.removeEntry(markOf(a.name)).catch(() => {})
           return cached(a.name, size)
         } catch {
@@ -246,7 +246,7 @@ async function download(a: StoreImageArgs, dir: FileSystemDirectoryHandle, onPro
     // session and the next open renames it.
     if (!announced) {
       try {
-        await (tmp as any).move(a.name)
+        await renameIn(dir, tmp, a.name)
         await dir.removeEntry(markOf(a.name)).catch(() => {})
         file = a.name
       } catch {
