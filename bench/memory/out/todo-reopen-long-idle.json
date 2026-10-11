@@ -1,0 +1,7287 @@
+{
+ "meta": {
+  "label": "todo-reopen-long-idle",
+  "example": "todo",
+  "kind": "reopen",
+  "base": "http://batmem-a.localhost:4871/",
+  "idleSeconds": 600,
+  "queryObjects": true,
+  "startedAt": "2026-10-11T16:43:18.613Z",
+  "chrome": "Google Chrome 154.0.8037.97",
+  "kernel": "Linux 7.0.0-38-generic",
+  "cores": 12,
+  "memory": "MemTotal: 63628224 kB; MemAvailable: 32353532 kB; SwapTotal: 8388604 kB; SwapFree: 22144 kB",
+  "git": "ff2a573",
+  "units": "process figures in kB (smaps_rollup, smaps, status); browser figures in bytes",
+  "finishedAt": "2026-10-11T16:58:53.766Z",
+  "loadAtEnd": [
+   3.25,
+   3.11,
+   4.98
+  ]
+ },
+ "runs": [
+  {
+   "index": 1,
+   "example": "todo",
+   "kind": "reopen",
+   "startedAt": "2026-10-11T16:44:14.197Z",
+   "points": [
+    {
+     "name": "loaded",
+     "peakSincePreviousPoint": {
+      "rss": 160128,
+      "pss": 36338
+     },
+     "pre": {
+      "at": 1791737072171,
+      "load": [
+       7.05,
+       7.77,
+       7.89
+      ],
+      "main": {
+       "rss": 147376,
+       "pss": 25797,
+       "pssAnon": 21726,
+       "pssFile": 2504,
+       "pssShmem": 1566,
+       "privateDirty": 22180,
+       "swap": 10272,
+       "hwm": 148096,
+       "threads": 19,
+       "threadNames": {
+        "chrome": 1,
+        "PerfettoTrace": 1,
+        "ThreadPoolServi": 1,
+        "ThreadPoolForeg": 10,
+        "ThreadPoolPrese": 1,
+        "ThreadPoolAudio": 1,
+        "Chrome_ChildIOT": 1,
+        "Compositor": 1,
+        "ThreadPoolSingl": 1,
+        "HangWatcher": 1
+       },
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 12396,
+         "pss": 12376,
+         "swap": 160,
+         "size": 54789056,
+         "maps": 109
+        },
+        "[anon:v8]": {
+         "rss": 1948,
+         "pss": 1948,
+         "swap": 0,
+         "size": 18350920,
+         "maps": 8
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 5132,
+         "pss": 5132,
+         "swap": 0,
+         "size": 1442840576,
+         "maps": 35
+        },
+        "file: chrome binary": {
+         "rss": 115240,
+         "pss": 2751,
+         "swap": 8768,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1148,
+         "pss": 1000,
+         "swap": 108,
+         "size": 211236,
+         "maps": 77
+        },
+        "shm: shared-memory-region": {
+         "rss": 2680,
+         "pss": 1566,
+         "swap": 0,
+         "size": 9272,
+         "maps": 28
+        },
+        "file: other": {
+         "rss": 7956,
+         "pss": 113,
+         "swap": 1208,
+         "size": 109928,
+         "maps": 420
+        },
+        "[anon:absl]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 704,
+         "pss": 704,
+         "swap": 0,
+         "size": 2097152,
+         "maps": 20
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 196,
+         "maps": 5
+        }
+       },
+       "wasmMemories": []
+      }
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/",
+        "identity": {
+         "argv": null,
+         "name": "",
+         "pid": null,
+         "title": null
+        },
+        "heap": {
+         "backingStorageSize": 946686,
+         "embedderHeapUsedSize": 2037800,
+         "totalSize": 6881280,
+         "usedSize": 4001256
+        },
+        "memories": [],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 910472,
+         "embedderHeapUsedSize": 540480,
+         "totalSize": 4521984,
+         "usedSize": 3569592
+        }
+       }
+      ],
+      "errors": [],
+      "metrics": {
+       "Documents": 2,
+       "Frames": 2,
+       "JSEventListeners": 176,
+       "Nodes": 90,
+       "Resources": 16,
+       "WorkerGlobalScopes": 0,
+       "ArrayBufferContents": 1,
+       "JSHeapUsedSize": 4001256,
+       "JSHeapTotalSize": 6881280
+      },
+      "page": {
+       "isolated": true,
+       "performanceMemory": {
+        "used": 4952594,
+        "total": 7827966,
+        "limit": 4395630592
+       },
+       "storage": {
+        "quota": 15536843301,
+        "usage": 4799425061,
+        "usageDetails": {
+         "fileSystem": 4799406865,
+         "serviceWorkerRegistrations": 18196
+        }
+       },
+       "serviceWorkers": [
+        {
+         "scope": "/preview/",
+         "state": "activated"
+        }
+       ],
+       "frames": []
+      },
+      "opfs": {
+       "bat": {
+        "kind": "directory",
+        "bytes": 249426601,
+        "files": 5,
+        "locked": 0
+       }
+      },
+      "userAgentSpecificMemory": {
+       "bytes": 4562569,
+       "breakdown": [
+        {
+         "bytes": 3277294,
+         "types": [
+          "Shared"
+         ],
+         "attribution": []
+        },
+        {
+         "bytes": 40520,
+         "types": [
+          "DOM"
+         ],
+         "attribution": []
+        },
+        {
+         "bytes": 1244755,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "Window",
+           "url": "/"
+          }
+         ]
+        }
+       ]
+      }
+     },
+     "post": {
+      "at": 1791737090417,
+      "load": [
+       6.57,
+       7.62,
+       7.84
+      ],
+      "main": {
+       "rss": 149864,
+       "pss": 24354,
+       "pssAnon": 20029,
+       "pssFile": 2691,
+       "pssShmem": 1632,
+       "privateDirty": 20536,
+       "swap": 10264,
+       "hwm": 152672,
+       "threads": 20,
+       "threadNames": {
+        "chrome": 1,
+        "PerfettoTrace": 1,
+        "ThreadPoolServi": 1,
+        "ThreadPoolForeg": 11,
+        "ThreadPoolPrese": 1,
+        "ThreadPoolAudio": 1,
+        "Chrome_ChildIOT": 1,
+        "Compositor": 1,
+        "ThreadPoolSingl": 1,
+        "HangWatcher": 1
+       },
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 12428,
+         "pss": 12408,
+         "swap": 160,
+         "size": 54789056,
+         "maps": 115
+        },
+        "[anon:v8]": {
+         "rss": 1848,
+         "pss": 1848,
+         "swap": 0,
+         "size": 18350920,
+         "maps": 8
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 3484,
+         "pss": 3484,
+         "swap": 0,
+         "size": 1442840576,
+         "maps": 41
+        },
+        "file: chrome binary": {
+         "rss": 119352,
+         "pss": 2940,
+         "swap": 8760,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1164,
+         "pss": 1016,
+         "swap": 108,
+         "size": 219432,
+         "maps": 79
+        },
+        "shm: shared-memory-region": {
+         "rss": 2756,
+         "pss": 1632,
+         "swap": 0,
+         "size": 9288,
+         "maps": 29
+        },
+        "file: other": {
+         "rss": 7956,
+         "pss": 113,
+         "swap": 1208,
+         "size": 109928,
+         "maps": 420
+        },
+        "[anon:absl]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 704,
+         "pss": 704,
+         "swap": 0,
+         "size": 2097152,
+         "maps": 20
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 196,
+         "maps": 5
+        }
+       },
+       "wasmMemories": []
+      }
+     }
+    },
+    {
+     "name": "open",
+     "peakSincePreviousPoint": {
+      "rss": 581720,
+      "pss": 443092
+     },
+     "pre": {
+      "at": 1791737105463,
+      "load": [
+       7.16,
+       7.72,
+       7.87
+      ],
+      "main": {
+       "rss": 563836,
+       "pss": 426240,
+       "pssAnon": 418931,
+       "pssFile": 3446,
+       "pssShmem": 3862,
+       "privateDirty": 420308,
+       "swap": 10236,
+       "hwm": 570384,
+       "threads": 28,
+       "threadNames": {
+        "chrome": 1,
+        "PerfettoTrace": 1,
+        "ThreadPoolServi": 1,
+        "ThreadPoolForeg": 13,
+        "ThreadPoolPrese": 1,
+        "ThreadPoolAudio": 1,
+        "Chrome_ChildIOT": 1,
+        "Compositor": 1,
+        "ThreadPoolSingl": 2,
+        "HangWatcher": 1,
+        "DedicatedWorker": 5
+       },
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 184204,
+         "pss": 184184,
+         "swap": 160,
+         "size": 54793152,
+         "maps": 738
+        },
+        "[anon:v8]": {
+         "rss": 31388,
+         "pss": 31388,
+         "swap": 0,
+         "size": 18369376,
+         "maps": 59
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 138724,
+         "pss": 138724,
+         "swap": 0,
+         "size": 1442738560,
+         "maps": 92
+        },
+        "[anon:v8-sandbox] wasm memories": {
+         "rss": 56792,
+         "pss": 56792,
+         "swap": 0,
+         "size": 97920,
+         "maps": 12
+        },
+        "file: chrome binary": {
+         "rss": 128592,
+         "pss": 3485,
+         "swap": 8736,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1652,
+         "pss": 1504,
+         "swap": 104,
+         "size": 285000,
+         "maps": 95
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 5760,
+         "pss": 5760,
+         "swap": 0,
+         "size": 11927552,
+         "maps": 111
+        },
+        "file: other": {
+         "rss": 10200,
+         "pss": 325,
+         "swap": 1208,
+         "size": 110424,
+         "maps": 422
+        },
+        "shm: shared-memory-region": {
+         "rss": 6344,
+         "pss": 3862,
+         "swap": 0,
+         "size": 13240,
+         "maps": 44
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 196,
+         "maps": 5
+        }
+       },
+       "wasmMemories": [
+        {
+         "committedKb": 42880,
+         "rssKb": 35812,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 13440,
+         "rssKb": 12416,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 11584,
+         "rssKb": 2248,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 8896,
+         "rssKb": 452,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 8448,
+         "rssKb": 196,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 4416,
+         "rssKb": 2188,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 3008,
+         "rssKb": 1748,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 2048,
+         "rssKb": 812,
+         "swapKb": 0,
+         "reservedKb": 1262485504
+        },
+        {
+         "committedKb": 1728,
+         "rssKb": 676,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 1344,
+         "rssKb": 200,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 64,
+         "rssKb": 20,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 64,
+         "rssKb": 24,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        }
+       ]
+      },
+      "sw": {
+       "rss": 137540,
+       "pss": 32659,
+       "pssAnon": 29702,
+       "pssFile": 2185,
+       "pssShmem": 770,
+       "privateDirty": 30092,
+       "swap": 16588,
+       "hwm": 248004,
+       "threads": 22,
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 16420,
+         "pss": 16408,
+         "swap": 5120,
+         "size": 54789056,
+         "maps": 437
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 9756,
+         "pss": 9756,
+         "swap": 156,
+         "size": 1442840576,
+         "maps": 37
+        },
+        "[anon:v8]": {
+         "rss": 1356,
+         "pss": 1356,
+         "swap": 0,
+         "size": 18350080,
+         "maps": 9
+        },
+        "file: chrome binary": {
+         "rss": 102648,
+         "pss": 2437,
+         "swap": 8852,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1008,
+         "pss": 856,
+         "swap": 256,
+         "size": 235824,
+         "maps": 83
+        },
+        "shm: shared-memory-region": {
+         "rss": 1152,
+         "pss": 770,
+         "swap": 540,
+         "size": 7472,
+         "maps": 21
+        },
+        "file: other": {
+         "rss": 4164,
+         "pss": 23,
+         "swap": 1212,
+         "size": 107912,
+         "maps": 416
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 932,
+         "pss": 932,
+         "swap": 348,
+         "size": 4063232,
+         "maps": 41
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 88,
+         "pss": 80,
+         "swap": 76,
+         "size": 196,
+         "maps": 5
+        }
+       }
+      }
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/",
+        "identity": {
+         "argv": null,
+         "name": "",
+         "pid": null,
+         "title": null
+        },
+        "heap": {
+         "backingStorageSize": 3918922,
+         "embedderHeapUsedSize": 1781616,
+         "totalSize": 10768384,
+         "usedSize": 9610988
+        },
+        "memories": [
+         {
+          "bytes": 43909120,
+          "shared": true
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 3911771,
+         "embedderHeapUsedSize": 1297408,
+         "totalSize": 10768384,
+         "usedSize": 9508076
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-netd.js",
+        "identity": {
+         "argv": null,
+         "name": "bat-netd",
+         "pid": null,
+         "title": null
+        },
+        "heap": {
+         "backingStorageSize": 3076786,
+         "embedderHeapUsedSize": 773712,
+         "totalSize": 2621440,
+         "usedSize": 1148056
+        },
+        "memories": [
+         {
+          "bytes": 43909120,
+          "shared": true
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 81157,
+         "embedderHeapUsedSize": 22296,
+         "totalSize": 1572864,
+         "usedSize": 621336
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-kerneld.js",
+        "identity": {
+         "argv": null,
+         "name": "kerneld",
+         "pid": null,
+         "title": null
+        },
+        "heap": {
+         "backingStorageSize": 49146,
+         "embedderHeapUsedSize": 773712,
+         "totalSize": 2097152,
+         "usedSize": 626616
+        },
+        "memories": [
+         {
+          "bytes": 43909120,
+          "shared": true
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 48146,
+         "embedderHeapUsedSize": 28792,
+         "totalSize": 1572864,
+         "usedSize": 452352
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-process.js",
+        "identity": {
+         "argv": [
+          "/usr/local/bin/node",
+          "/workspace/node_modules/vite/bin/vite.js",
+          "--configLoader",
+          "native",
+          "--host"
+         ],
+         "name": "",
+         "pid": 4,
+         "title": "node"
+        },
+        "heap": {
+         "backingStorageSize": 25206045,
+         "embedderHeapUsedSize": 625672,
+         "totalSize": 58908672,
+         "usedSize": 31534676
+        },
+        "memories": [
+         {
+          "bytes": 43909120,
+          "shared": true
+         },
+         {
+          "bytes": 1769472,
+          "shared": false
+         },
+         {
+          "bytes": 1376256,
+          "shared": false
+         },
+         {
+          "bytes": 9109504,
+          "shared": false
+         },
+         {
+          "bytes": 4521984,
+          "shared": false
+         },
+         {
+          "bytes": 65536,
+          "shared": false
+         },
+         {
+          "bytes": 65536,
+          "shared": false
+         },
+         {
+          "bytes": 3080192,
+          "shared": false
+         },
+         {
+          "bytes": 8650752,
+          "shared": false
+         }
+        ],
+        "modules": [
+         {
+          "exports": 21,
+          "imports": 0
+         },
+         {
+          "exports": 11,
+          "imports": 7
+         },
+         {
+          "exports": 14,
+          "imports": 17
+         },
+         {
+          "exports": 21,
+          "imports": 0
+         },
+         {
+          "exports": 5,
+          "imports": 0
+         },
+         {
+          "exports": 21,
+          "imports": 0
+         },
+         {
+          "exports": 137,
+          "imports": 11
+         },
+         {
+          "exports": 74,
+          "imports": 18
+         },
+         {
+          "exports": 5,
+          "imports": 0
+         },
+         {
+          "exports": 26,
+          "imports": 0
+         },
+         {
+          "exports": 6,
+          "imports": 23
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 10141851,
+         "embedderHeapUsedSize": 48664,
+         "totalSize": 21712896,
+         "usedSize": 20387020
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-process.js",
+        "identity": {
+         "argv": [
+          "/usr/local/bin/node",
+          "/app/server.js"
+         ],
+         "name": "",
+         "pid": 5,
+         "title": "node"
+        },
+        "heap": {
+         "backingStorageSize": 35221162,
+         "embedderHeapUsedSize": 689720,
+         "totalSize": 75767808,
+         "usedSize": 57071204
+        },
+        "memories": [
+         {
+          "bytes": 11862016,
+          "shared": false
+         },
+         {
+          "bytes": 43909120,
+          "shared": true
+         },
+         {
+          "bytes": 2097152,
+          "shared": false
+         },
+         {
+          "bytes": 13762560,
+          "shared": false
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         },
+         {
+          "exports": 74,
+          "imports": 18
+         },
+         {
+          "exports": 5,
+          "imports": 0
+         },
+         {
+          "exports": 26,
+          "imports": 0
+         },
+         {
+          "exports": 6,
+          "imports": 23
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 28783899,
+         "embedderHeapUsedSize": 31880,
+         "totalSize": 45621248,
+         "usedSize": 44058232
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-process.js",
+        "identity": {
+         "argv": [
+          "node"
+         ],
+         "name": "",
+         "pid": 0,
+         "title": "node"
+        },
+        "heap": {
+         "backingStorageSize": 1055564,
+         "embedderHeapUsedSize": 903040,
+         "totalSize": 2883584,
+         "usedSize": 1712504
+        },
+        "memories": [
+         {
+          "bytes": 43909120,
+          "shared": true
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         },
+         {
+          "exports": 74,
+          "imports": 18
+         },
+         {
+          "exports": 6,
+          "imports": 23
+         },
+         {
+          "exports": 5,
+          "imports": 0
+         },
+         {
+          "exports": 26,
+          "imports": 0
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 1055491,
+         "embedderHeapUsedSize": 27392,
+         "totalSize": 2359296,
+         "usedSize": 1205696
+        }
+       }
+      ],
+      "errors": [],
+      "metrics": {
+       "Documents": 2,
+       "Frames": 2,
+       "JSEventListeners": 358,
+       "Nodes": 265,
+       "Resources": 30,
+       "WorkerGlobalScopes": 5,
+       "ArrayBufferContents": 854,
+       "JSHeapUsedSize": 9610988,
+       "JSHeapTotalSize": 10768384
+      },
+      "page": {
+       "isolated": true,
+       "performanceMemory": {
+        "used": 13535290,
+        "total": 14609482,
+        "limit": 4395630592
+       },
+       "storage": {
+        "quota": 15537891877,
+        "usage": 4800473637,
+        "usageDetails": {
+         "fileSystem": 4800455441,
+         "serviceWorkerRegistrations": 18196
+        }
+       },
+       "serviceWorkers": [
+        {
+         "scope": "/preview/",
+         "state": "activated"
+        }
+       ],
+       "frames": [
+        "/preview/5173/"
+       ]
+      },
+      "opfs": {
+       "bat": {
+        "kind": "directory",
+        "bytes": 249438578,
+        "files": 5,
+        "locked": 0
+       }
+      },
+      "userAgentSpecificMemory": {
+       "bytes": 508673140,
+       "breakdown": [
+        {
+         "bytes": 173275184,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-process.js"
+          }
+         ]
+        },
+        {
+         "bytes": 1093418,
+         "types": [
+          "Shared"
+         ],
+         "attribution": []
+        },
+        {
+         "bytes": 7976300,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "Window",
+           "url": "/preview/5173/"
+          }
+         ]
+        },
+        {
+         "bytes": 116035910,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-process.js"
+          }
+         ]
+        },
+        {
+         "bytes": 49504378,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "Window",
+           "url": "/"
+          }
+         ]
+        },
+        {
+         "bytes": 68973194,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-kerneld.js"
+          }
+         ]
+        },
+        {
+         "bytes": 47137199,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-process.js"
+          }
+         ]
+        },
+        {
+         "bytes": 44608149,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-netd.js"
+          }
+         ]
+        },
+        {
+         "bytes": 69408,
+         "types": [
+          "DOM"
+         ],
+         "attribution": []
+        }
+       ]
+      }
+     },
+     "post": {
+      "at": 1791737129760,
+      "load": [
+       6.31,
+       7.47,
+       7.78
+      ],
+      "main": {
+       "rss": 448820,
+       "pss": 310844,
+       "pssAnon": 303462,
+       "pssFile": 3460,
+       "pssShmem": 3920,
+       "privateDirty": 304892,
+       "swap": 10236,
+       "hwm": 570384,
+       "threads": 28,
+       "threadNames": {
+        "chrome": 1,
+        "PerfettoTrace": 1,
+        "ThreadPoolServi": 1,
+        "ThreadPoolForeg": 12,
+        "ThreadPoolPrese": 1,
+        "ThreadPoolAudio": 1,
+        "Chrome_ChildIOT": 1,
+        "Compositor": 1,
+        "ThreadPoolSingl": 2,
+        "HangWatcher": 1,
+        "DedicatedWorker": 5,
+        "MemoryInfra": 1
+       },
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 148728,
+         "pss": 148712,
+         "swap": 160,
+         "size": 54799296,
+         "maps": 845
+        },
+        "[anon:v8]": {
+         "rss": 29212,
+         "pss": 29212,
+         "swap": 0,
+         "size": 18369376,
+         "maps": 61
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 60812,
+         "pss": 60812,
+         "swap": 0,
+         "size": 1442732416,
+         "maps": 141
+        },
+        "[anon:v8-sandbox] wasm memories": {
+         "rss": 56792,
+         "pss": 56792,
+         "swap": 0,
+         "size": 97920,
+         "maps": 12
+        },
+        "file: chrome binary": {
+         "rss": 128856,
+         "pss": 3498,
+         "swap": 8736,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1680,
+         "pss": 1532,
+         "swap": 104,
+         "size": 293196,
+         "maps": 97
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 5824,
+         "pss": 5824,
+         "swap": 0,
+         "size": 11927552,
+         "maps": 114
+        },
+        "file: other": {
+         "rss": 10328,
+         "pss": 326,
+         "swap": 1208,
+         "size": 110424,
+         "maps": 422
+        },
+        "shm: shared-memory-region": {
+         "rss": 6408,
+         "pss": 3920,
+         "swap": 0,
+         "size": 13256,
+         "maps": 45
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 196,
+         "maps": 5
+        }
+       },
+       "wasmMemories": [
+        {
+         "committedKb": 42880,
+         "rssKb": 35812,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 13440,
+         "rssKb": 12416,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 11584,
+         "rssKb": 2248,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 8896,
+         "rssKb": 452,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 8448,
+         "rssKb": 196,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 4416,
+         "rssKb": 2188,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 3008,
+         "rssKb": 1748,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 2048,
+         "rssKb": 812,
+         "swapKb": 0,
+         "reservedKb": 1262485504
+        },
+        {
+         "committedKb": 1728,
+         "rssKb": 676,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 1344,
+         "rssKb": 200,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 64,
+         "rssKb": 20,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 64,
+         "rssKb": 24,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        }
+       ]
+      },
+      "sw": {
+       "rss": 138980,
+       "pss": 34099,
+       "pssAnon": 31142,
+       "pssFile": 2185,
+       "pssShmem": 770,
+       "privateDirty": 31532,
+       "swap": 16588,
+       "hwm": 248004,
+       "threads": 22,
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 17592,
+         "pss": 17580,
+         "swap": 5120,
+         "size": 54789056,
+         "maps": 437
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 10024,
+         "pss": 10024,
+         "swap": 156,
+         "size": 1442840576,
+         "maps": 37
+        },
+        "[anon:v8]": {
+         "rss": 1356,
+         "pss": 1356,
+         "swap": 0,
+         "size": 18350080,
+         "maps": 9
+        },
+        "file: chrome binary": {
+         "rss": 102648,
+         "pss": 2436,
+         "swap": 8852,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1008,
+         "pss": 856,
+         "swap": 256,
+         "size": 235824,
+         "maps": 83
+        },
+        "shm: shared-memory-region": {
+         "rss": 1152,
+         "pss": 770,
+         "swap": 540,
+         "size": 7472,
+         "maps": 21
+        },
+        "file: other": {
+         "rss": 4164,
+         "pss": 23,
+         "swap": 1212,
+         "size": 107912,
+         "maps": 416
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 932,
+         "pss": 932,
+         "swap": 348,
+         "size": 4063232,
+         "maps": 41
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 88,
+         "pss": 80,
+         "swap": 76,
+         "size": 196,
+         "maps": 5
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "turn1",
+     "peakSincePreviousPoint": {
+      "rss": 504732,
+      "pss": 360204
+     },
+     "pre": {
+      "at": 1791737137974,
+      "load": [
+       5.71,
+       7.3,
+       7.72
+      ],
+      "main": {
+       "rss": 487292,
+       "pss": 344498,
+       "pssAnon": 335929,
+       "pssFile": 3922,
+       "pssShmem": 4646,
+       "privateDirty": 337424,
+       "swap": 10224,
+       "hwm": 570384,
+       "threads": 28,
+       "threadNames": {
+        "chrome": 1,
+        "PerfettoTrace": 1,
+        "ThreadPoolServi": 1,
+        "ThreadPoolForeg": 12,
+        "ThreadPoolPrese": 1,
+        "ThreadPoolAudio": 1,
+        "Chrome_ChildIOT": 1,
+        "Compositor": 1,
+        "ThreadPoolSingl": 2,
+        "HangWatcher": 1,
+        "DedicatedWorker": 5,
+        "MemoryInfra": 1
+       },
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 152532,
+         "pss": 152516,
+         "swap": 160,
+         "size": 54799296,
+         "maps": 857
+        },
+        "[anon:v8]": {
+         "rss": 38740,
+         "pss": 38740,
+         "swap": 0,
+         "size": 18369376,
+         "maps": 49
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 79476,
+         "pss": 79476,
+         "swap": 0,
+         "size": 1442732416,
+         "maps": 85
+        },
+        "[anon:v8-sandbox] wasm memories": {
+         "rss": 56792,
+         "pss": 56792,
+         "swap": 0,
+         "size": 97920,
+         "maps": 12
+        },
+        "file: chrome binary": {
+         "rss": 131180,
+         "pss": 3817,
+         "swap": 8724,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1700,
+         "pss": 1552,
+         "swap": 104,
+         "size": 293196,
+         "maps": 97
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 6272,
+         "pss": 6272,
+         "swap": 0,
+         "size": 11927552,
+         "maps": 115
+        },
+        "file: other": {
+         "rss": 12628,
+         "pss": 470,
+         "swap": 1208,
+         "size": 110760,
+         "maps": 423
+        },
+        "shm: shared-memory-region": {
+         "rss": 7792,
+         "pss": 4646,
+         "swap": 0,
+         "size": 14828,
+         "maps": 53
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 196,
+         "maps": 5
+        }
+       },
+       "wasmMemories": [
+        {
+         "committedKb": 42880,
+         "rssKb": 35812,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 13440,
+         "rssKb": 12416,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 11584,
+         "rssKb": 2248,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 8896,
+         "rssKb": 452,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 8448,
+         "rssKb": 196,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 4416,
+         "rssKb": 2188,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 3008,
+         "rssKb": 1748,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 2048,
+         "rssKb": 812,
+         "swapKb": 0,
+         "reservedKb": 1262485504
+        },
+        {
+         "committedKb": 1728,
+         "rssKb": 676,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 1344,
+         "rssKb": 200,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 64,
+         "rssKb": 20,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 64,
+         "rssKb": 24,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        }
+       ]
+      },
+      "sw": {
+       "rss": 140288,
+       "pss": 35401,
+       "pssAnon": 32450,
+       "pssFile": 2179,
+       "pssShmem": 770,
+       "privateDirty": 32840,
+       "swap": 16588,
+       "hwm": 248004,
+       "threads": 22,
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 17244,
+         "pss": 17232,
+         "swap": 5120,
+         "size": 54789056,
+         "maps": 437
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 11680,
+         "pss": 11680,
+         "swap": 156,
+         "size": 1442840576,
+         "maps": 35
+        },
+        "[anon:v8]": {
+         "rss": 1356,
+         "pss": 1356,
+         "swap": 0,
+         "size": 18350080,
+         "maps": 9
+        },
+        "file: chrome binary": {
+         "rss": 102648,
+         "pss": 2431,
+         "swap": 8852,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1008,
+         "pss": 856,
+         "swap": 256,
+         "size": 235824,
+         "maps": 83
+        },
+        "shm: shared-memory-region": {
+         "rss": 1152,
+         "pss": 770,
+         "swap": 540,
+         "size": 7472,
+         "maps": 21
+        },
+        "file: other": {
+         "rss": 4164,
+         "pss": 23,
+         "swap": 1212,
+         "size": 107912,
+         "maps": 416
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 932,
+         "pss": 932,
+         "swap": 348,
+         "size": 4063232,
+         "maps": 41
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 88,
+         "pss": 80,
+         "swap": 76,
+         "size": 196,
+         "maps": 5
+        }
+       }
+      }
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/",
+        "identity": {
+         "argv": null,
+         "name": "",
+         "pid": null,
+         "title": null
+        },
+        "heap": {
+         "backingStorageSize": 4041408,
+         "embedderHeapUsedSize": 3847728,
+         "totalSize": 15224832,
+         "usedSize": 11986636
+        },
+        "memories": [
+         {
+          "bytes": 43909120,
+          "shared": true
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 3937026,
+         "embedderHeapUsedSize": 1552232,
+         "totalSize": 11816960,
+         "usedSize": 10672620
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-netd.js",
+        "identity": {
+         "argv": null,
+         "name": "bat-netd",
+         "pid": null,
+         "title": null
+        },
+        "heap": {
+         "backingStorageSize": 81363,
+         "embedderHeapUsedSize": 237208,
+         "totalSize": 1572864,
+         "usedSize": 636388
+        },
+        "memories": [
+         {
+          "bytes": 43909120,
+          "shared": true
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 81157,
+         "embedderHeapUsedSize": 20320,
+         "totalSize": 1572864,
+         "usedSize": 635300
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-kerneld.js",
+        "identity": {
+         "argv": null,
+         "name": "kerneld",
+         "pid": null,
+         "title": null
+        },
+        "heap": {
+         "backingStorageSize": 48321,
+         "embedderHeapUsedSize": 149912,
+         "totalSize": 1835008,
+         "usedSize": 536584
+        },
+        "memories": [
+         {
+          "bytes": 43909120,
+          "shared": true
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 48146,
+         "embedderHeapUsedSize": 28792,
+         "totalSize": 1572864,
+         "usedSize": 457848
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-process.js",
+        "identity": {
+         "argv": [
+          "/usr/local/bin/node",
+          "/workspace/node_modules/vite/bin/vite.js",
+          "--configLoader",
+          "native",
+          "--host"
+         ],
+         "name": "",
+         "pid": 4,
+         "title": "node"
+        },
+        "heap": {
+         "backingStorageSize": 10391484,
+         "embedderHeapUsedSize": 3915000,
+         "totalSize": 28528640,
+         "usedSize": 22899240
+        },
+        "memories": [
+         {
+          "bytes": 43909120,
+          "shared": true
+         },
+         {
+          "bytes": 1769472,
+          "shared": false
+         },
+         {
+          "bytes": 3080192,
+          "shared": false
+         },
+         {
+          "bytes": 1376256,
+          "shared": false
+         },
+         {
+          "bytes": 9109504,
+          "shared": false
+         },
+         {
+          "bytes": 4521984,
+          "shared": false
+         },
+         {
+          "bytes": 65536,
+          "shared": false
+         },
+         {
+          "bytes": 65536,
+          "shared": false
+         },
+         {
+          "bytes": 8650752,
+          "shared": false
+         }
+        ],
+        "modules": [
+         {
+          "exports": 11,
+          "imports": 7
+         },
+         {
+          "exports": 21,
+          "imports": 0
+         },
+         {
+          "exports": 21,
+          "imports": 0
+         },
+         {
+          "exports": 14,
+          "imports": 17
+         },
+         {
+          "exports": 137,
+          "imports": 11
+         },
+         {
+          "exports": 74,
+          "imports": 18
+         },
+         {
+          "exports": 5,
+          "imports": 0
+         },
+         {
+          "exports": 26,
+          "imports": 0
+         },
+         {
+          "exports": 6,
+          "imports": 23
+         },
+         {
+          "exports": 21,
+          "imports": 0
+         },
+         {
+          "exports": 5,
+          "imports": 0
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 10138821,
+         "embedderHeapUsedSize": 48856,
+         "totalSize": 21975040,
+         "usedSize": 20706772
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-process.js",
+        "identity": {
+         "argv": [
+          "/usr/local/bin/node",
+          "/app/server.js"
+         ],
+         "name": "",
+         "pid": 5,
+         "title": "node"
+        },
+        "heap": {
+         "backingStorageSize": 29021542,
+         "embedderHeapUsedSize": 698064,
+         "totalSize": 59514880,
+         "usedSize": 50362052
+        },
+        "memories": [
+         {
+          "bytes": 11862016,
+          "shared": false
+         },
+         {
+          "bytes": 13762560,
+          "shared": false
+         },
+         {
+          "bytes": 43909120,
+          "shared": true
+         },
+         {
+          "bytes": 2097152,
+          "shared": false
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         },
+         {
+          "exports": 74,
+          "imports": 18
+         },
+         {
+          "exports": 5,
+          "imports": 0
+         },
+         {
+          "exports": 26,
+          "imports": 0
+         },
+         {
+          "exports": 6,
+          "imports": 23
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 28784305,
+         "embedderHeapUsedSize": 35048,
+         "totalSize": 48766976,
+         "usedSize": 47415024
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-process.js",
+        "identity": {
+         "argv": [
+          "node"
+         ],
+         "name": "",
+         "pid": 0,
+         "title": "node"
+        },
+        "heap": {
+         "backingStorageSize": 1055491,
+         "embedderHeapUsedSize": 27392,
+         "totalSize": 2359296,
+         "usedSize": 1207492
+        },
+        "memories": [
+         {
+          "bytes": 43909120,
+          "shared": true
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         },
+         {
+          "exports": 74,
+          "imports": 18
+         },
+         {
+          "exports": 6,
+          "imports": 23
+         },
+         {
+          "exports": 5,
+          "imports": 0
+         },
+         {
+          "exports": 26,
+          "imports": 0
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 1055491,
+         "embedderHeapUsedSize": 27392,
+         "totalSize": 2359296,
+         "usedSize": 1205720
+        }
+       }
+      ],
+      "errors": [],
+      "metrics": {
+       "Documents": 2,
+       "Frames": 2,
+       "JSEventListeners": 653,
+       "Nodes": 421,
+       "Resources": 32,
+       "WorkerGlobalScopes": 5,
+       "ArrayBufferContents": 717,
+       "JSHeapUsedSize": 11986636,
+       "JSHeapTotalSize": 15224832
+      },
+      "page": {
+       "isolated": true,
+       "performanceMemory": {
+        "used": 16032548,
+        "total": 19266240,
+        "limit": 4395630592
+       },
+       "storage": {
+        "quota": 15537891877,
+        "usage": 4800473637,
+        "usageDetails": {
+         "fileSystem": 4800455441,
+         "serviceWorkerRegistrations": 18196
+        }
+       },
+       "serviceWorkers": [
+        {
+         "scope": "/preview/",
+         "state": "activated"
+        }
+       ],
+       "frames": [
+        "/preview/5173/"
+       ]
+      },
+      "opfs": {
+       "bat": {
+        "kind": "directory",
+        "bytes": 250143166,
+        "files": 5,
+        "locked": 0
+       }
+      },
+      "userAgentSpecificMemory": {
+       "bytes": 510844004,
+       "breakdown": [
+        {
+         "bytes": 50288224,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "Window",
+           "url": "/"
+          }
+         ]
+        },
+        {
+         "bytes": 44622105,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-netd.js"
+          }
+         ]
+        },
+        {
+         "bytes": 746279,
+         "types": [
+          "Shared"
+         ],
+         "attribution": []
+        },
+        {
+         "bytes": 8778013,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "Window",
+           "url": "/preview/5173/"
+          }
+         ]
+        },
+        {
+         "bytes": 81008,
+         "types": [
+          "DOM"
+         ],
+         "attribution": []
+        },
+        {
+         "bytes": 68979182,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-kerneld.js"
+          }
+         ]
+        },
+        {
+         "bytes": 47117755,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-process.js"
+          }
+         ]
+        },
+        {
+         "bytes": 113554050,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-process.js"
+          }
+         ]
+        },
+        {
+         "bytes": 176677388,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-process.js"
+          }
+         ]
+        }
+       ]
+      }
+     },
+     "post": {
+      "at": 1791737160111,
+      "load": [
+       5.1,
+       7.07,
+       7.64
+      ],
+      "main": {
+       "rss": 460424,
+       "pss": 317509,
+       "pssAnon": 308929,
+       "pssFile": 3929,
+       "pssShmem": 4650,
+       "privateDirty": 310428,
+       "swap": 10224,
+       "hwm": 570384,
+       "threads": 28,
+       "threadNames": {
+        "chrome": 1,
+        "PerfettoTrace": 1,
+        "ThreadPoolServi": 1,
+        "ThreadPoolForeg": 12,
+        "ThreadPoolPrese": 1,
+        "ThreadPoolAudio": 1,
+        "Chrome_ChildIOT": 1,
+        "Compositor": 1,
+        "ThreadPoolSingl": 2,
+        "HangWatcher": 1,
+        "DedicatedWorker": 5,
+        "MemoryInfra": 1
+       },
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 148620,
+         "pss": 148604,
+         "swap": 160,
+         "size": 54799296,
+         "maps": 869
+        },
+        "[anon:v8]": {
+         "rss": 33444,
+         "pss": 33444,
+         "swap": 0,
+         "size": 18369376,
+         "maps": 61
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 62188,
+         "pss": 62188,
+         "swap": 0,
+         "size": 1442732416,
+         "maps": 141
+        },
+        "[anon:v8-sandbox] wasm memories": {
+         "rss": 56792,
+         "pss": 56792,
+         "swap": 0,
+         "size": 97920,
+         "maps": 12
+        },
+        "file: chrome binary": {
+         "rss": 131308,
+         "pss": 3824,
+         "swap": 8724,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1708,
+         "pss": 1560,
+         "swap": 104,
+         "size": 293196,
+         "maps": 97
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 5760,
+         "pss": 5760,
+         "swap": 0,
+         "size": 11927552,
+         "maps": 117
+        },
+        "file: other": {
+         "rss": 12628,
+         "pss": 470,
+         "swap": 1208,
+         "size": 110760,
+         "maps": 423
+        },
+        "shm: shared-memory-region": {
+         "rss": 7796,
+         "pss": 4650,
+         "swap": 0,
+         "size": 14828,
+         "maps": 53
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 196,
+         "maps": 5
+        }
+       },
+       "wasmMemories": [
+        {
+         "committedKb": 42880,
+         "rssKb": 35812,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 13440,
+         "rssKb": 12416,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 11584,
+         "rssKb": 2248,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 8896,
+         "rssKb": 452,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 8448,
+         "rssKb": 196,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 4416,
+         "rssKb": 2188,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 3008,
+         "rssKb": 1748,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 2048,
+         "rssKb": 812,
+         "swapKb": 0,
+         "reservedKb": 1262485504
+        },
+        {
+         "committedKb": 1728,
+         "rssKb": 676,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 1344,
+         "rssKb": 200,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 64,
+         "rssKb": 20,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 64,
+         "rssKb": 24,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        }
+       ]
+      },
+      "sw": {
+       "rss": 140196,
+       "pss": 35309,
+       "pssAnon": 32358,
+       "pssFile": 2179,
+       "pssShmem": 770,
+       "privateDirty": 32748,
+       "swap": 16588,
+       "hwm": 248004,
+       "threads": 22,
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 16600,
+         "pss": 16588,
+         "swap": 5120,
+         "size": 54789056,
+         "maps": 437
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 12232,
+         "pss": 12232,
+         "swap": 156,
+         "size": 1442840576,
+         "maps": 35
+        },
+        "[anon:v8]": {
+         "rss": 1356,
+         "pss": 1356,
+         "swap": 0,
+         "size": 18350080,
+         "maps": 9
+        },
+        "file: chrome binary": {
+         "rss": 102648,
+         "pss": 2431,
+         "swap": 8852,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1008,
+         "pss": 856,
+         "swap": 256,
+         "size": 235824,
+         "maps": 83
+        },
+        "shm: shared-memory-region": {
+         "rss": 1152,
+         "pss": 770,
+         "swap": 540,
+         "size": 7472,
+         "maps": 21
+        },
+        "file: other": {
+         "rss": 4164,
+         "pss": 23,
+         "swap": 1212,
+         "size": 107912,
+         "maps": 416
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 932,
+         "pss": 932,
+         "swap": 348,
+         "size": 4063232,
+         "maps": 41
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 88,
+         "pss": 80,
+         "swap": 76,
+         "size": 196,
+         "maps": 5
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "turns",
+     "peakSincePreviousPoint": {
+      "rss": 583320,
+      "pss": 439110
+     },
+     "pre": {
+      "at": 1791737200817,
+      "load": [
+       5.41,
+       6.91,
+       7.56
+      ],
+      "main": {
+       "rss": 572920,
+       "pss": 428710,
+       "pssAnon": 418905,
+       "pssFile": 4652,
+       "pssShmem": 5152,
+       "privateDirty": 420392,
+       "swap": 10224,
+       "hwm": 572920,
+       "threads": 29,
+       "threadNames": {
+        "chrome": 1,
+        "PerfettoTrace": 1,
+        "ThreadPoolServi": 1,
+        "ThreadPoolForeg": 13,
+        "ThreadPoolPrese": 1,
+        "ThreadPoolAudio": 1,
+        "Chrome_ChildIOT": 1,
+        "Compositor": 1,
+        "ThreadPoolSingl": 2,
+        "HangWatcher": 1,
+        "DedicatedWorker": 5,
+        "MemoryInfra": 1
+       },
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 160176,
+         "pss": 160160,
+         "swap": 160,
+         "size": 54799296,
+         "maps": 895
+        },
+        "[anon:v8]": {
+         "rss": 51500,
+         "pss": 51500,
+         "swap": 0,
+         "size": 18369376,
+         "maps": 49
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 119728,
+         "pss": 119728,
+         "swap": 0,
+         "size": 1442691648,
+         "maps": 71
+        },
+        "[anon:v8-sandbox] wasm memories": {
+         "rss": 79068,
+         "pss": 79068,
+         "swap": 0,
+         "size": 138688,
+         "maps": 12
+        },
+        "file: chrome binary": {
+         "rss": 132396,
+         "pss": 4130,
+         "swap": 8724,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1744,
+         "pss": 1596,
+         "swap": 104,
+         "size": 293196,
+         "maps": 97
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 6272,
+         "pss": 6272,
+         "swap": 0,
+         "size": 11927552,
+         "maps": 119
+        },
+        "file: other": {
+         "rss": 13044,
+         "pss": 886,
+         "swap": 1208,
+         "size": 111204,
+         "maps": 424
+        },
+        "shm: shared-memory-region": {
+         "rss": 8812,
+         "pss": 5152,
+         "swap": 0,
+         "size": 15596,
+         "maps": 56
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 196,
+         "maps": 5
+        }
+       },
+       "wasmMemories": [
+        {
+         "committedKb": 83648,
+         "rssKb": 58084,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 13440,
+         "rssKb": 12416,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 11584,
+         "rssKb": 2248,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 8896,
+         "rssKb": 452,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 8448,
+         "rssKb": 196,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 4416,
+         "rssKb": 2188,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 3008,
+         "rssKb": 1748,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 2048,
+         "rssKb": 812,
+         "swapKb": 0,
+         "reservedKb": 1262485504
+        },
+        {
+         "committedKb": 1728,
+         "rssKb": 676,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 1344,
+         "rssKb": 200,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 64,
+         "rssKb": 24,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 64,
+         "rssKb": 24,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        }
+       ]
+      },
+      "sw": {
+       "rss": 139056,
+       "pss": 34186,
+       "pssAnon": 31218,
+       "pssFile": 2196,
+       "pssShmem": 770,
+       "privateDirty": 31608,
+       "swap": 16588,
+       "hwm": 248004,
+       "threads": 22,
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 17244,
+         "pss": 17232,
+         "swap": 5120,
+         "size": 54789056,
+         "maps": 437
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 10428,
+         "pss": 10428,
+         "swap": 156,
+         "size": 1442840576,
+         "maps": 55
+        },
+        "[anon:v8]": {
+         "rss": 1440,
+         "pss": 1440,
+         "swap": 0,
+         "size": 18350080,
+         "maps": 9
+        },
+        "file: chrome binary": {
+         "rss": 102648,
+         "pss": 2448,
+         "swap": 8852,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1008,
+         "pss": 856,
+         "swap": 256,
+         "size": 235824,
+         "maps": 83
+        },
+        "shm: shared-memory-region": {
+         "rss": 1152,
+         "pss": 770,
+         "swap": 540,
+         "size": 7472,
+         "maps": 21
+        },
+        "file: other": {
+         "rss": 4164,
+         "pss": 23,
+         "swap": 1212,
+         "size": 107912,
+         "maps": 416
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 868,
+         "pss": 868,
+         "swap": 348,
+         "size": 4063232,
+         "maps": 40
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 88,
+         "pss": 80,
+         "swap": 76,
+         "size": 196,
+         "maps": 5
+        }
+       }
+      }
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/",
+        "identity": {
+         "argv": null,
+         "name": "",
+         "pid": null,
+         "title": null
+        },
+        "heap": {
+         "backingStorageSize": 4182757,
+         "embedderHeapUsedSize": 2509960,
+         "totalSize": 19681280,
+         "usedSize": 14144656
+        },
+        "memories": [
+         {
+          "bytes": 85655552,
+          "shared": true
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 4065642,
+         "embedderHeapUsedSize": 2129496,
+         "totalSize": 13389824,
+         "usedSize": 11970648
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-netd.js",
+        "identity": {
+         "argv": null,
+         "name": "bat-netd",
+         "pid": null,
+         "title": null
+        },
+        "heap": {
+         "backingStorageSize": 362473,
+         "embedderHeapUsedSize": 693424,
+         "totalSize": 1835008,
+         "usedSize": 939920
+        },
+        "memories": [
+         {
+          "bytes": 85655552,
+          "shared": true
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 81157,
+         "embedderHeapUsedSize": 21008,
+         "totalSize": 1572864,
+         "usedSize": 635756
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-kerneld.js",
+        "identity": {
+         "argv": null,
+         "name": "kerneld",
+         "pid": null,
+         "title": null
+        },
+        "heap": {
+         "backingStorageSize": 48191,
+         "embedderHeapUsedSize": 146832,
+         "totalSize": 1572864,
+         "usedSize": 451664
+        },
+        "memories": [
+         {
+          "bytes": 85655552,
+          "shared": true
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 48152,
+         "embedderHeapUsedSize": 27600,
+         "totalSize": 1572864,
+         "usedSize": 459996
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-process.js",
+        "identity": {
+         "argv": [
+          "/usr/local/bin/node",
+          "/workspace/node_modules/vite/bin/vite.js",
+          "--configLoader",
+          "native",
+          "--host"
+         ],
+         "name": "",
+         "pid": 4,
+         "title": "node"
+        },
+        "heap": {
+         "backingStorageSize": 10397093,
+         "embedderHeapUsedSize": 6871344,
+         "totalSize": 40230912,
+         "usedSize": 29972028
+        },
+        "memories": [
+         {
+          "bytes": 1376256,
+          "shared": false
+         },
+         {
+          "bytes": 9109504,
+          "shared": false
+         },
+         {
+          "bytes": 4521984,
+          "shared": false
+         },
+         {
+          "bytes": 65536,
+          "shared": false
+         },
+         {
+          "bytes": 65536,
+          "shared": false
+         },
+         {
+          "bytes": 1769472,
+          "shared": false
+         },
+         {
+          "bytes": 8650752,
+          "shared": false
+         },
+         {
+          "bytes": 85655552,
+          "shared": true
+         },
+         {
+          "bytes": 3080192,
+          "shared": false
+         }
+        ],
+        "modules": [
+         {
+          "exports": 11,
+          "imports": 7
+         },
+         {
+          "exports": 21,
+          "imports": 0
+         },
+         {
+          "exports": 137,
+          "imports": 11
+         },
+         {
+          "exports": 74,
+          "imports": 18
+         },
+         {
+          "exports": 5,
+          "imports": 0
+         },
+         {
+          "exports": 26,
+          "imports": 0
+         },
+         {
+          "exports": 6,
+          "imports": 23
+         },
+         {
+          "exports": 21,
+          "imports": 0
+         },
+         {
+          "exports": 5,
+          "imports": 0
+         },
+         {
+          "exports": 21,
+          "imports": 0
+         },
+         {
+          "exports": 14,
+          "imports": 17
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 10140296,
+         "embedderHeapUsedSize": 48856,
+         "totalSize": 22405120,
+         "usedSize": 21300952
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-process.js",
+        "identity": {
+         "argv": [
+          "/usr/local/bin/node",
+          "/app/server.js"
+         ],
+         "name": "",
+         "pid": 5,
+         "title": "node"
+        },
+        "heap": {
+         "backingStorageSize": 29526792,
+         "embedderHeapUsedSize": 1450560,
+         "totalSize": 87564288,
+         "usedSize": 61288984
+        },
+        "memories": [
+         {
+          "bytes": 85655552,
+          "shared": true
+         },
+         {
+          "bytes": 2097152,
+          "shared": false
+         },
+         {
+          "bytes": 11862016,
+          "shared": false
+         },
+         {
+          "bytes": 13762560,
+          "shared": false
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         },
+         {
+          "exports": 74,
+          "imports": 18
+         },
+         {
+          "exports": 5,
+          "imports": 0
+         },
+         {
+          "exports": 26,
+          "imports": 0
+         },
+         {
+          "exports": 6,
+          "imports": 23
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 28784305,
+         "embedderHeapUsedSize": 43880,
+         "totalSize": 50077696,
+         "usedSize": 48631612
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-process.js",
+        "identity": {
+         "argv": [
+          "node"
+         ],
+         "name": "",
+         "pid": 0,
+         "title": "node"
+        },
+        "heap": {
+         "backingStorageSize": 1055491,
+         "embedderHeapUsedSize": 27392,
+         "totalSize": 2359296,
+         "usedSize": 1207516
+        },
+        "memories": [
+         {
+          "bytes": 85655552,
+          "shared": true
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         },
+         {
+          "exports": 74,
+          "imports": 18
+         },
+         {
+          "exports": 6,
+          "imports": 23
+         },
+         {
+          "exports": 5,
+          "imports": 0
+         },
+         {
+          "exports": 26,
+          "imports": 0
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 1055491,
+         "embedderHeapUsedSize": 27392,
+         "totalSize": 2359296,
+         "usedSize": 1205804
+        }
+       }
+      ],
+      "errors": [],
+      "metrics": {
+       "Documents": 2,
+       "Frames": 2,
+       "JSEventListeners": 441,
+       "Nodes": 845,
+       "Resources": 28,
+       "WorkerGlobalScopes": 5,
+       "ArrayBufferContents": 943,
+       "JSHeapUsedSize": 14144656,
+       "JSHeapTotalSize": 19681280
+      },
+      "page": {
+       "isolated": true,
+       "performanceMemory": {
+        "used": 18331917,
+        "total": 23864037,
+        "limit": 4395630592
+       },
+       "storage": {
+        "quota": 15553317423,
+        "usage": 4815899183,
+        "usageDetails": {
+         "fileSystem": 4815880987,
+         "serviceWorkerRegistrations": 18196
+        }
+       },
+       "serviceWorkers": [
+        {
+         "scope": "/preview/",
+         "state": "activated"
+        }
+       ],
+       "frames": [
+        "/preview/5173/"
+       ]
+      },
+      "opfs": {
+       "bat": {
+        "kind": "directory",
+        "bytes": 261706419,
+        "files": 5,
+        "locked": 0
+       }
+      },
+      "userAgentSpecificMemory": {
+       "bytes": 725693610,
+       "breakdown": [
+        {
+         "bytes": 47117779,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-process.js"
+          }
+         ]
+        },
+        {
+         "bytes": 110728316,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-kerneld.js"
+          }
+         ]
+        },
+        {
+         "bytes": 9542130,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "Window",
+           "url": "/preview/5173/"
+          }
+         ]
+        },
+        {
+         "bytes": 219993320,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-process.js"
+          }
+         ]
+        },
+        {
+         "bytes": 128760,
+         "types": [
+          "DOM"
+         ],
+         "attribution": []
+        },
+        {
+         "bytes": 156120879,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-process.js"
+          }
+         ]
+        },
+        {
+         "bytes": 130279785,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-netd.js"
+          }
+         ]
+        },
+        {
+         "bytes": 849261,
+         "types": [
+          "Shared"
+         ],
+         "attribution": []
+        },
+        {
+         "bytes": 50933380,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "Window",
+           "url": "/"
+          }
+         ]
+        }
+       ]
+      }
+     },
+     "post": {
+      "at": 1791737225842,
+      "load": [
+       5.1,
+       6.71,
+       7.48
+      ],
+      "main": {
+       "rss": 496264,
+       "pss": 352054,
+       "pssAnon": 342249,
+       "pssFile": 4652,
+       "pssShmem": 5152,
+       "privateDirty": 343736,
+       "swap": 10224,
+       "hwm": 571656,
+       "threads": 28,
+       "threadNames": {
+        "chrome": 1,
+        "PerfettoTrace": 1,
+        "ThreadPoolServi": 1,
+        "ThreadPoolForeg": 12,
+        "ThreadPoolPrese": 1,
+        "ThreadPoolAudio": 1,
+        "Chrome_ChildIOT": 1,
+        "Compositor": 1,
+        "ThreadPoolSingl": 2,
+        "HangWatcher": 1,
+        "DedicatedWorker": 5,
+        "MemoryInfra": 1
+       },
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 153496,
+         "pss": 153480,
+         "swap": 160,
+         "size": 54799296,
+         "maps": 895
+        },
+        "[anon:v8]": {
+         "rss": 38904,
+         "pss": 38904,
+         "swap": 0,
+         "size": 18369376,
+         "maps": 73
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 62540,
+         "pss": 62540,
+         "swap": 0,
+         "size": 1442691648,
+         "maps": 153
+        },
+        "[anon:v8-sandbox] wasm memories": {
+         "rss": 79068,
+         "pss": 79068,
+         "swap": 0,
+         "size": 138688,
+         "maps": 12
+        },
+        "file: chrome binary": {
+         "rss": 132396,
+         "pss": 4130,
+         "swap": 8724,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1744,
+         "pss": 1596,
+         "swap": 104,
+         "size": 293196,
+         "maps": 97
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 6080,
+         "pss": 6080,
+         "swap": 0,
+         "size": 11927552,
+         "maps": 119
+        },
+        "file: other": {
+         "rss": 13044,
+         "pss": 886,
+         "swap": 1208,
+         "size": 111204,
+         "maps": 424
+        },
+        "shm: shared-memory-region": {
+         "rss": 8812,
+         "pss": 5152,
+         "swap": 0,
+         "size": 15596,
+         "maps": 56
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 196,
+         "maps": 5
+        }
+       },
+       "wasmMemories": [
+        {
+         "committedKb": 83648,
+         "rssKb": 58084,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 13440,
+         "rssKb": 12416,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 11584,
+         "rssKb": 2248,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 8896,
+         "rssKb": 452,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 8448,
+         "rssKb": 196,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 4416,
+         "rssKb": 2188,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 3008,
+         "rssKb": 1748,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 2048,
+         "rssKb": 812,
+         "swapKb": 0,
+         "reservedKb": 1262485504
+        },
+        {
+         "committedKb": 1728,
+         "rssKb": 676,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 1344,
+         "rssKb": 200,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 64,
+         "rssKb": 24,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 64,
+         "rssKb": 24,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        }
+       ]
+      },
+      "sw": {
+       "rss": 134900,
+       "pss": 30030,
+       "pssAnon": 27062,
+       "pssFile": 2196,
+       "pssShmem": 770,
+       "privateDirty": 27452,
+       "swap": 16588,
+       "hwm": 248004,
+       "threads": 22,
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 17384,
+         "pss": 17372,
+         "swap": 5120,
+         "size": 54789056,
+         "maps": 437
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 6132,
+         "pss": 6132,
+         "swap": 156,
+         "size": 1442840576,
+         "maps": 57
+        },
+        "[anon:v8]": {
+         "rss": 1440,
+         "pss": 1440,
+         "swap": 0,
+         "size": 18350080,
+         "maps": 9
+        },
+        "file: chrome binary": {
+         "rss": 102648,
+         "pss": 2448,
+         "swap": 8852,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1008,
+         "pss": 856,
+         "swap": 256,
+         "size": 235824,
+         "maps": 83
+        },
+        "shm: shared-memory-region": {
+         "rss": 1152,
+         "pss": 770,
+         "swap": 540,
+         "size": 7472,
+         "maps": 21
+        },
+        "file: other": {
+         "rss": 4164,
+         "pss": 23,
+         "swap": 1212,
+         "size": 107912,
+         "maps": 416
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 868,
+         "pss": 868,
+         "swap": 348,
+         "size": 4063232,
+         "maps": 40
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 88,
+         "pss": 80,
+         "swap": 76,
+         "size": 196,
+         "maps": 5
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "idle",
+     "peakSincePreviousPoint": {
+      "rss": 583736,
+      "pss": 439082
+     },
+     "pre": {
+      "at": 1791737826911,
+      "load": [
+       1.86,
+       2.96,
+       5.17
+      ],
+      "main": {
+       "rss": 522296,
+       "pss": 377642,
+       "pssAnon": 367773,
+       "pssFile": 4704,
+       "pssShmem": 5164,
+       "privateDirty": 369288,
+       "swap": 10224,
+       "hwm": 589724,
+       "threads": 27,
+       "threadNames": {
+        "chrome": 1,
+        "PerfettoTrace": 1,
+        "ThreadPoolServi": 1,
+        "ThreadPoolForeg": 11,
+        "ThreadPoolPrese": 1,
+        "ThreadPoolAudio": 1,
+        "Chrome_ChildIOT": 1,
+        "Compositor": 1,
+        "ThreadPoolSingl": 2,
+        "HangWatcher": 1,
+        "DedicatedWorker": 5,
+        "MemoryInfra": 1
+       },
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 171080,
+         "pss": 171064,
+         "swap": 160,
+         "size": 54817728,
+         "maps": 922
+        },
+        "[anon:v8]": {
+         "rss": 38804,
+         "pss": 38804,
+         "swap": 0,
+         "size": 18369376,
+         "maps": 67
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 63168,
+         "pss": 63168,
+         "swap": 0,
+         "size": 1442666176,
+         "maps": 144
+        },
+        "[anon:v8-sandbox] wasm memories": {
+         "rss": 86028,
+         "pss": 86028,
+         "swap": 0,
+         "size": 145728,
+         "maps": 12
+        },
+        "file: chrome binary": {
+         "rss": 132908,
+         "pss": 4175,
+         "swap": 8724,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1748,
+         "pss": 1600,
+         "swap": 104,
+         "size": 293196,
+         "maps": 97
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 6528,
+         "pss": 6528,
+         "swap": 0,
+         "size": 11927552,
+         "maps": 121
+        },
+        "file: other": {
+         "rss": 13044,
+         "pss": 893,
+         "swap": 1208,
+         "size": 111204,
+         "maps": 424
+        },
+        "shm: shared-memory-region": {
+         "rss": 8808,
+         "pss": 5164,
+         "swap": 0,
+         "size": 15564,
+         "maps": 55
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 196,
+         "maps": 5
+        }
+       },
+       "wasmMemories": [
+        {
+         "committedKb": 83648,
+         "rssKb": 58084,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 19392,
+         "rssKb": 18352,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 11584,
+         "rssKb": 2248,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 8896,
+         "rssKb": 452,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 8448,
+         "rssKb": 196,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 4416,
+         "rssKb": 2188,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 3136,
+         "rssKb": 1836,
+         "swapKb": 0,
+         "reservedKb": 1262485504
+        },
+        {
+         "committedKb": 3008,
+         "rssKb": 1748,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 1728,
+         "rssKb": 676,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 1344,
+         "rssKb": 200,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 64,
+         "rssKb": 24,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 64,
+         "rssKb": 24,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        }
+       ]
+      },
+      "sw": {
+       "rss": 141376,
+       "pss": 36507,
+       "pssAnon": 33538,
+       "pssFile": 2197,
+       "pssShmem": 770,
+       "privateDirty": 33928,
+       "swap": 16588,
+       "hwm": 248004,
+       "threads": 22,
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 19972,
+         "pss": 19960,
+         "swap": 5120,
+         "size": 54789056,
+         "maps": 449
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 10020,
+         "pss": 10020,
+         "swap": 156,
+         "size": 1442840576,
+         "maps": 49
+        },
+        "[anon:v8]": {
+         "rss": 1440,
+         "pss": 1440,
+         "swap": 0,
+         "size": 18350080,
+         "maps": 9
+        },
+        "file: chrome binary": {
+         "rss": 102648,
+         "pss": 2448,
+         "swap": 8852,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1008,
+         "pss": 856,
+         "swap": 256,
+         "size": 235824,
+         "maps": 83
+        },
+        "shm: shared-memory-region": {
+         "rss": 1152,
+         "pss": 770,
+         "swap": 540,
+         "size": 7472,
+         "maps": 21
+        },
+        "file: other": {
+         "rss": 4164,
+         "pss": 23,
+         "swap": 1212,
+         "size": 107912,
+         "maps": 416
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 868,
+         "pss": 868,
+         "swap": 348,
+         "size": 4063232,
+         "maps": 40
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 88,
+         "pss": 80,
+         "swap": 76,
+         "size": 196,
+         "maps": 5
+        }
+       }
+      }
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/",
+        "identity": {
+         "argv": null,
+         "name": "",
+         "pid": null,
+         "title": null
+        },
+        "heap": {
+         "backingStorageSize": 4067233,
+         "embedderHeapUsedSize": 3302456,
+         "totalSize": 13651968,
+         "usedSize": 12438584
+        },
+        "memories": [
+         {
+          "bytes": 85655552,
+          "shared": true
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 4065903,
+         "embedderHeapUsedSize": 1982288,
+         "totalSize": 12603392,
+         "usedSize": 11475916
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-netd.js",
+        "identity": {
+         "argv": null,
+         "name": "bat-netd",
+         "pid": null,
+         "title": null
+        },
+        "heap": {
+         "backingStorageSize": 81465,
+         "embedderHeapUsedSize": 563504,
+         "totalSize": 1572864,
+         "usedSize": 655748
+        },
+        "memories": [
+         {
+          "bytes": 85655552,
+          "shared": true
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 81157,
+         "embedderHeapUsedSize": 21008,
+         "totalSize": 1572864,
+         "usedSize": 631608
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-kerneld.js",
+        "identity": {
+         "argv": null,
+         "name": "kerneld",
+         "pid": null,
+         "title": null
+        },
+        "heap": {
+         "backingStorageSize": 48159,
+         "embedderHeapUsedSize": 27600,
+         "totalSize": 2097152,
+         "usedSize": 789328
+        },
+        "memories": [
+         {
+          "bytes": 85655552,
+          "shared": true
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 48141,
+         "embedderHeapUsedSize": 27600,
+         "totalSize": 1572864,
+         "usedSize": 451368
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-process.js",
+        "identity": {
+         "argv": [
+          "/usr/local/bin/node",
+          "/workspace/node_modules/vite/bin/vite.js",
+          "--configLoader",
+          "native",
+          "--host"
+         ],
+         "name": "",
+         "pid": 4,
+         "title": "node"
+        },
+        "heap": {
+         "backingStorageSize": 10140311,
+         "embedderHeapUsedSize": 378328,
+         "totalSize": 22405120,
+         "usedSize": 21370384
+        },
+        "memories": [
+         {
+          "bytes": 1376256,
+          "shared": false
+         },
+         {
+          "bytes": 9109504,
+          "shared": false
+         },
+         {
+          "bytes": 4521984,
+          "shared": false
+         },
+         {
+          "bytes": 65536,
+          "shared": false
+         },
+         {
+          "bytes": 65536,
+          "shared": false
+         },
+         {
+          "bytes": 1769472,
+          "shared": false
+         },
+         {
+          "bytes": 8650752,
+          "shared": false
+         },
+         {
+          "bytes": 85655552,
+          "shared": true
+         },
+         {
+          "bytes": 3080192,
+          "shared": false
+         }
+        ],
+        "modules": [
+         {
+          "exports": 11,
+          "imports": 7
+         },
+         {
+          "exports": 21,
+          "imports": 0
+         },
+         {
+          "exports": 137,
+          "imports": 11
+         },
+         {
+          "exports": 74,
+          "imports": 18
+         },
+         {
+          "exports": 5,
+          "imports": 0
+         },
+         {
+          "exports": 26,
+          "imports": 0
+         },
+         {
+          "exports": 6,
+          "imports": 23
+         },
+         {
+          "exports": 21,
+          "imports": 0
+         },
+         {
+          "exports": 5,
+          "imports": 0
+         },
+         {
+          "exports": 21,
+          "imports": 0
+         },
+         {
+          "exports": 14,
+          "imports": 17
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 10140021,
+         "embedderHeapUsedSize": 48856,
+         "totalSize": 21618688,
+         "usedSize": 20258392
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-process.js",
+        "identity": {
+         "argv": [
+          "/usr/local/bin/node",
+          "/app/server.js"
+         ],
+         "name": "",
+         "pid": 5,
+         "title": "node"
+        },
+        "heap": {
+         "backingStorageSize": 28784511,
+         "embedderHeapUsedSize": 953712,
+         "totalSize": 48484352,
+         "usedSize": 46784852
+        },
+        "memories": [
+         {
+          "bytes": 85655552,
+          "shared": true
+         },
+         {
+          "bytes": 19857408,
+          "shared": false
+         },
+         {
+          "bytes": 11862016,
+          "shared": false
+         },
+         {
+          "bytes": 3211264,
+          "shared": false
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         },
+         {
+          "exports": 74,
+          "imports": 18
+         },
+         {
+          "exports": 5,
+          "imports": 0
+         },
+         {
+          "exports": 26,
+          "imports": 0
+         },
+         {
+          "exports": 6,
+          "imports": 23
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 28784205,
+         "embedderHeapUsedSize": 41144,
+         "totalSize": 47697920,
+         "usedSize": 46587416
+        }
+       },
+       {
+        "kind": "worker",
+        "url": "/editor/runtime/bat-process.js",
+        "identity": {
+         "argv": [
+          "node"
+         ],
+         "name": "",
+         "pid": 0,
+         "title": "node"
+        },
+        "heap": {
+         "backingStorageSize": 1055491,
+         "embedderHeapUsedSize": 27392,
+         "totalSize": 2359296,
+         "usedSize": 1207600
+        },
+        "memories": [
+         {
+          "bytes": 85655552,
+          "shared": true
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         },
+         {
+          "exports": 74,
+          "imports": 18
+         },
+         {
+          "exports": 6,
+          "imports": 23
+         },
+         {
+          "exports": 5,
+          "imports": 0
+         },
+         {
+          "exports": 26,
+          "imports": 0
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 1055457,
+         "embedderHeapUsedSize": 27392,
+         "totalSize": 2359296,
+         "usedSize": 1094960
+        }
+       }
+      ],
+      "errors": [],
+      "metrics": {
+       "Documents": 2,
+       "Frames": 2,
+       "JSEventListeners": 390,
+       "Nodes": 845,
+       "Resources": 25,
+       "WorkerGlobalScopes": 5,
+       "ArrayBufferContents": 234,
+       "JSHeapUsedSize": 12438584,
+       "JSHeapTotalSize": 13651968
+      },
+      "page": {
+       "isolated": true,
+       "performanceMemory": {
+        "used": 16514877,
+        "total": 17412001,
+        "limit": 4395630592
+       },
+       "storage": {
+        "quota": 15553317423,
+        "usage": 4815899183,
+        "usageDetails": {
+         "fileSystem": 4815880987,
+         "serviceWorkerRegistrations": 18196
+        }
+       },
+       "serviceWorkers": [
+        {
+         "scope": "/preview/",
+         "state": "activated"
+        }
+       ],
+       "frames": [
+        "/preview/5173/"
+       ]
+      },
+      "opfs": {
+       "bat": {
+        "kind": "directory",
+        "bytes": 261706419,
+        "files": 5,
+        "locked": 0
+       }
+      },
+      "userAgentSpecificMemory": {
+       "bytes": 854894226,
+       "breakdown": [
+        {
+         "bytes": 9537593,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "Window",
+           "url": "/preview/5173/"
+          }
+         ]
+        },
+        {
+         "bytes": 92205092,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "Window",
+           "url": "/"
+          }
+         ]
+        },
+        {
+         "bytes": 622096,
+         "types": [
+          "Shared"
+         ],
+         "attribution": []
+        },
+        {
+         "bytes": 132669413,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-process.js"
+          }
+         ]
+        },
+        {
+         "bytes": 224501072,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-process.js"
+          }
+         ]
+        },
+        {
+         "bytes": 130268333,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-netd.js"
+          }
+         ]
+        },
+        {
+         "bytes": 154237566,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-process.js"
+          }
+         ]
+        },
+        {
+         "bytes": 128760,
+         "types": [
+          "DOM"
+         ],
+         "attribution": []
+        },
+        {
+         "bytes": 110724301,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "DedicatedWorkerGlobalScope",
+           "url": "/editor/runtime/bat-kerneld.js"
+          }
+         ]
+        }
+       ]
+      }
+     },
+     "post": {
+      "at": 1791737851764,
+      "load": [
+       2.38,
+       2.99,
+       5.13
+      ],
+      "main": {
+       "rss": 517996,
+       "pss": 373326,
+       "pssAnon": 363633,
+       "pssFile": 4704,
+       "pssShmem": 4988,
+       "privateDirty": 364956,
+       "swap": 10224,
+       "hwm": 589724,
+       "threads": 27,
+       "threadNames": {
+        "chrome": 1,
+        "PerfettoTrace": 1,
+        "ThreadPoolServi": 1,
+        "ThreadPoolForeg": 11,
+        "ThreadPoolPrese": 1,
+        "ThreadPoolAudio": 1,
+        "Chrome_ChildIOT": 1,
+        "Compositor": 1,
+        "ThreadPoolSingl": 2,
+        "HangWatcher": 1,
+        "DedicatedWorker": 5,
+        "MemoryInfra": 1
+       },
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 171872,
+         "pss": 171856,
+         "swap": 160,
+         "size": 54817728,
+         "maps": 922
+        },
+        "[anon:v8]": {
+         "rss": 36416,
+         "pss": 36416,
+         "swap": 0,
+         "size": 18369376,
+         "maps": 71
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 60816,
+         "pss": 60816,
+         "swap": 0,
+         "size": 1442666176,
+         "maps": 140
+        },
+        "[anon:v8-sandbox] wasm memories": {
+         "rss": 86028,
+         "pss": 86028,
+         "swap": 0,
+         "size": 145728,
+         "maps": 12
+        },
+        "file: chrome binary": {
+         "rss": 132908,
+         "pss": 4175,
+         "swap": 8724,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1748,
+         "pss": 1600,
+         "swap": 104,
+         "size": 293196,
+         "maps": 97
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 6336,
+         "pss": 6336,
+         "swap": 0,
+         "size": 11927552,
+         "maps": 121
+        },
+        "file: other": {
+         "rss": 13044,
+         "pss": 893,
+         "swap": 1208,
+         "size": 111204,
+         "maps": 424
+        },
+        "shm: shared-memory-region": {
+         "rss": 8648,
+         "pss": 4988,
+         "swap": 0,
+         "size": 15092,
+         "maps": 53
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 196,
+         "maps": 5
+        }
+       },
+       "wasmMemories": [
+        {
+         "committedKb": 83648,
+         "rssKb": 58084,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 19392,
+         "rssKb": 18352,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 11584,
+         "rssKb": 2248,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 8896,
+         "rssKb": 452,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 8448,
+         "rssKb": 196,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 4416,
+         "rssKb": 2188,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 3136,
+         "rssKb": 1836,
+         "swapKb": 0,
+         "reservedKb": 1262485504
+        },
+        {
+         "committedKb": 3008,
+         "rssKb": 1748,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 1728,
+         "rssKb": 676,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 1344,
+         "rssKb": 200,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 64,
+         "rssKb": 24,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        },
+        {
+         "committedKb": 64,
+         "rssKb": 24,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        }
+       ]
+      },
+      "sw": {
+       "rss": 141652,
+       "pss": 36783,
+       "pssAnon": 33814,
+       "pssFile": 2197,
+       "pssShmem": 770,
+       "privateDirty": 34204,
+       "swap": 16588,
+       "hwm": 248004,
+       "threads": 22,
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 19720,
+         "pss": 19708,
+         "swap": 5120,
+         "size": 54789056,
+         "maps": 449
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 10548,
+         "pss": 10548,
+         "swap": 156,
+         "size": 1442840576,
+         "maps": 45
+        },
+        "[anon:v8]": {
+         "rss": 1440,
+         "pss": 1440,
+         "swap": 0,
+         "size": 18350080,
+         "maps": 9
+        },
+        "file: chrome binary": {
+         "rss": 102648,
+         "pss": 2448,
+         "swap": 8852,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1008,
+         "pss": 856,
+         "swap": 256,
+         "size": 235824,
+         "maps": 83
+        },
+        "shm: shared-memory-region": {
+         "rss": 1152,
+         "pss": 770,
+         "swap": 540,
+         "size": 7472,
+         "maps": 21
+        },
+        "file: other": {
+         "rss": 4164,
+         "pss": 23,
+         "swap": 1212,
+         "size": 107912,
+         "maps": 416
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 868,
+         "pss": 868,
+         "swap": 348,
+         "size": 4063232,
+         "maps": 40
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 88,
+         "pss": 80,
+         "swap": 76,
+         "size": 196,
+         "maps": 5
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "exited",
+     "peakSincePreviousPoint": {
+      "rss": 528220,
+      "pss": 383550
+     },
+     "pre": {
+      "at": 1791737858361,
+      "load": [
+       2.55,
+       3.01,
+       5.11
+      ],
+      "main": {
+       "rss": 314324,
+       "pss": 171958,
+       "pssAnon": 165481,
+       "pssFile": 4734,
+       "pssShmem": 1742,
+       "privateDirty": 166048,
+       "swap": 10224,
+       "hwm": 589724,
+       "threads": 22,
+       "threadNames": {
+        "chrome": 1,
+        "PerfettoTrace": 1,
+        "ThreadPoolServi": 1,
+        "ThreadPoolForeg": 11,
+        "ThreadPoolPrese": 1,
+        "ThreadPoolAudio": 1,
+        "Chrome_ChildIOT": 1,
+        "Compositor": 1,
+        "ThreadPoolSingl": 2,
+        "HangWatcher": 1,
+        "MemoryInfra": 1
+       },
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 36780,
+         "pss": 36764,
+         "swap": 160,
+         "size": 54817728,
+         "maps": 778
+        },
+        "[anon:v8]": {
+         "rss": 13452,
+         "pss": 13452,
+         "swap": 0,
+         "size": 18350924,
+         "maps": 47
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 53744,
+         "pss": 53744,
+         "swap": 0,
+         "size": 1442728256,
+         "maps": 115
+        },
+        "[anon:v8-sandbox] wasm memories": {
+         "rss": 58084,
+         "pss": 58084,
+         "swap": 0,
+         "size": 83648,
+         "maps": 1
+        },
+        "file: chrome binary": {
+         "rss": 133252,
+         "pss": 4207,
+         "swap": 8724,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1468,
+         "pss": 1320,
+         "swap": 104,
+         "size": 268608,
+         "maps": 91
+        },
+        "file: other": {
+         "rss": 12916,
+         "pss": 891,
+         "swap": 1208,
+         "size": 110708,
+         "maps": 422
+        },
+        "shm: shared-memory-region": {
+         "rss": 2912,
+         "pss": 1742,
+         "swap": 0,
+         "size": 8912,
+         "maps": 27
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 1536,
+         "pss": 1536,
+         "swap": 0,
+         "size": 2097152,
+         "maps": 22
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 196,
+         "maps": 5
+        }
+       },
+       "wasmMemories": [
+        {
+         "committedKb": 83648,
+         "rssKb": 58084,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        }
+       ]
+      },
+      "sw": {
+       "rss": 144092,
+       "pss": 39221,
+       "pssAnon": 36254,
+       "pssFile": 2195,
+       "pssShmem": 770,
+       "privateDirty": 36644,
+       "swap": 16588,
+       "hwm": 248004,
+       "threads": 22,
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 21668,
+         "pss": 21656,
+         "swap": 5120,
+         "size": 54789056,
+         "maps": 449
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 11040,
+         "pss": 11040,
+         "swap": 156,
+         "size": 1442840576,
+         "maps": 43
+        },
+        "[anon:v8]": {
+         "rss": 1440,
+         "pss": 1440,
+         "swap": 0,
+         "size": 18350080,
+         "maps": 9
+        },
+        "file: chrome binary": {
+         "rss": 102648,
+         "pss": 2445,
+         "swap": 8852,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1008,
+         "pss": 856,
+         "swap": 256,
+         "size": 235824,
+         "maps": 83
+        },
+        "shm: shared-memory-region": {
+         "rss": 1152,
+         "pss": 770,
+         "swap": 540,
+         "size": 7472,
+         "maps": 21
+        },
+        "file: other": {
+         "rss": 4164,
+         "pss": 23,
+         "swap": 1212,
+         "size": 107912,
+         "maps": 416
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 868,
+         "pss": 868,
+         "swap": 348,
+         "size": 4063232,
+         "maps": 40
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 88,
+         "pss": 80,
+         "swap": 76,
+         "size": 196,
+         "maps": 5
+        }
+       }
+      }
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/",
+        "identity": {
+         "argv": null,
+         "name": "",
+         "pid": null,
+         "title": null
+        },
+        "heap": {
+         "backingStorageSize": 4067734,
+         "embedderHeapUsedSize": 2509872,
+         "totalSize": 15290368,
+         "usedSize": 12906732
+        },
+        "memories": [
+         {
+          "bytes": 85655552,
+          "shared": true
+         }
+        ],
+        "modules": [
+         {
+          "exports": 137,
+          "imports": 11
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 934836,
+         "embedderHeapUsedSize": 1154656,
+         "totalSize": 7733248,
+         "usedSize": 6801148
+        }
+       }
+      ],
+      "errors": [],
+      "metrics": {
+       "Documents": 4,
+       "Frames": 3,
+       "JSEventListeners": 422,
+       "Nodes": 861,
+       "Resources": 1,
+       "WorkerGlobalScopes": 0,
+       "ArrayBufferContents": 7,
+       "JSHeapUsedSize": 12906732,
+       "JSHeapTotalSize": 15290368
+      },
+      "page": {
+       "isolated": true,
+       "performanceMemory": {
+        "used": 16978890,
+        "total": 19358102,
+        "limit": 4395630592
+       },
+       "storage": {
+        "quota": 15549251075,
+        "usage": 4811832835,
+        "usageDetails": {
+         "fileSystem": 4811814639,
+         "serviceWorkerRegistrations": 18196
+        }
+       },
+       "serviceWorkers": [
+        {
+         "scope": "/preview/",
+         "state": "activated"
+        }
+       ],
+       "frames": []
+      },
+      "opfs": {
+       "bat": {
+        "kind": "directory",
+        "bytes": 261834375,
+        "files": 5,
+        "locked": 0
+       }
+      },
+      "userAgentSpecificMemory": {
+       "bytes": 93166637,
+       "breakdown": [
+        {
+         "bytes": 673146,
+         "types": [
+          "Shared"
+         ],
+         "attribution": []
+        },
+        {
+         "bytes": 114560,
+         "types": [
+          "DOM"
+         ],
+         "attribution": []
+        },
+        {
+         "bytes": 92378931,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "Window",
+           "url": "/"
+          }
+         ]
+        }
+       ]
+      }
+     },
+     "post": {
+      "at": 1791737872393,
+      "load": [
+       2.69,
+       3.02,
+       5.09
+      ],
+      "main": {
+       "rss": 256024,
+       "pss": 113614,
+       "pssAnon": 107133,
+       "pssFile": 4736,
+       "pssShmem": 1744,
+       "privateDirty": 107704,
+       "swap": 10224,
+       "hwm": 589724,
+       "threads": 22,
+       "threadNames": {
+        "chrome": 1,
+        "PerfettoTrace": 1,
+        "ThreadPoolServi": 1,
+        "ThreadPoolForeg": 11,
+        "ThreadPoolPrese": 1,
+        "ThreadPoolAudio": 1,
+        "Chrome_ChildIOT": 1,
+        "Compositor": 1,
+        "ThreadPoolSingl": 2,
+        "HangWatcher": 1,
+        "MemoryInfra": 1
+       },
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 32108,
+         "pss": 32092,
+         "swap": 160,
+         "size": 54817728,
+         "maps": 778
+        },
+        "[anon:v8]": {
+         "rss": 9228,
+         "pss": 9228,
+         "swap": 0,
+         "size": 18350924,
+         "maps": 51
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 4740,
+         "pss": 4740,
+         "swap": 0,
+         "size": 1442728256,
+         "maps": 65
+        },
+        "[anon:v8-sandbox] wasm memories": {
+         "rss": 58084,
+         "pss": 58084,
+         "swap": 0,
+         "size": 83648,
+         "maps": 1
+        },
+        "file: chrome binary": {
+         "rss": 133300,
+         "pss": 4209,
+         "swap": 8724,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1468,
+         "pss": 1320,
+         "swap": 104,
+         "size": 268608,
+         "maps": 91
+        },
+        "file: other": {
+         "rss": 12916,
+         "pss": 891,
+         "swap": 1208,
+         "size": 110708,
+         "maps": 422
+        },
+        "shm: shared-memory-region": {
+         "rss": 2912,
+         "pss": 1744,
+         "swap": 0,
+         "size": 8912,
+         "maps": 27
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 1088,
+         "pss": 1088,
+         "swap": 0,
+         "size": 2097152,
+         "maps": 25
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 196,
+         "maps": 5
+        }
+       },
+       "wasmMemories": [
+        {
+         "committedKb": 83648,
+         "rssKb": 58084,
+         "swapKb": 0,
+         "reservedKb": 8388608
+        }
+       ]
+      },
+      "sw": {
+       "rss": 142848,
+       "pss": 37977,
+       "pssAnon": 35010,
+       "pssFile": 2195,
+       "pssShmem": 770,
+       "privateDirty": 35400,
+       "swap": 16588,
+       "hwm": 248004,
+       "threads": 22,
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 19932,
+         "pss": 19920,
+         "swap": 5120,
+         "size": 54789056,
+         "maps": 449
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 11532,
+         "pss": 11532,
+         "swap": 156,
+         "size": 1442840576,
+         "maps": 41
+        },
+        "[anon:v8]": {
+         "rss": 1440,
+         "pss": 1440,
+         "swap": 0,
+         "size": 18350080,
+         "maps": 9
+        },
+        "file: chrome binary": {
+         "rss": 102648,
+         "pss": 2445,
+         "swap": 8852,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1008,
+         "pss": 856,
+         "swap": 256,
+         "size": 235824,
+         "maps": 83
+        },
+        "shm: shared-memory-region": {
+         "rss": 1152,
+         "pss": 770,
+         "swap": 540,
+         "size": 7472,
+         "maps": 21
+        },
+        "file: other": {
+         "rss": 4164,
+         "pss": 23,
+         "swap": 1212,
+         "size": 107912,
+         "maps": 416
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 868,
+         "pss": 868,
+         "swap": 348,
+         "size": 4063232,
+         "maps": 40
+        },
+        "[anon:absl]": {
+         "rss": 12,
+         "pss": 12,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 88,
+         "pss": 80,
+         "swap": 76,
+         "size": 196,
+         "maps": 5
+        }
+       }
+      }
+     }
+    }
+   ],
+   "light": [
+    {
+     "secondsIdle": 30,
+     "load": [
+      6.08,
+      6.76,
+      7.47
+     ],
+     "main": {
+      "rss": 493964,
+      "pss": 349770,
+      "pssAnon": 339981,
+      "pssFile": 4652,
+      "pssShmem": 5136,
+      "privateDirty": 341468,
+      "swap": 10224,
+      "hwm": 571656,
+      "threads": 28
+     },
+     "sw": {
+      "rss": 135288,
+      "pss": 30418,
+      "pssAnon": 27450,
+      "pssFile": 2197,
+      "pssShmem": 770,
+      "privateDirty": 27840,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 13440,
+       "rssKb": 12416,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 2048,
+       "rssKb": 812,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 60,
+     "load": [
+      4.93,
+      6.42,
+      7.33
+     ],
+     "main": {
+      "rss": 493968,
+      "pss": 349774,
+      "pssAnon": 339985,
+      "pssFile": 4652,
+      "pssShmem": 5136,
+      "privateDirty": 341472,
+      "swap": 10224,
+      "hwm": 571656,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 133864,
+      "pss": 28994,
+      "pssAnon": 26026,
+      "pssFile": 2197,
+      "pssShmem": 770,
+      "privateDirty": 26416,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 13440,
+       "rssKb": 12416,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 2048,
+       "rssKb": 812,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 90,
+     "load": [
+      4.66,
+      6.22,
+      7.23
+     ],
+     "main": {
+      "rss": 494280,
+      "pss": 350101,
+      "pssAnon": 340297,
+      "pssFile": 4667,
+      "pssShmem": 5136,
+      "privateDirty": 341784,
+      "swap": 10224,
+      "hwm": 571656,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 142304,
+      "pss": 37435,
+      "pssAnon": 34466,
+      "pssFile": 2197,
+      "pssShmem": 770,
+      "privateDirty": 34856,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 13440,
+       "rssKb": 12416,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 2048,
+       "rssKb": 812,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 120,
+     "load": [
+      4.28,
+      5.99,
+      7.12
+     ],
+     "main": {
+      "rss": 494940,
+      "pss": 350754,
+      "pssAnon": 340957,
+      "pssFile": 4660,
+      "pssShmem": 5136,
+      "privateDirty": 342444,
+      "swap": 10224,
+      "hwm": 571656,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 142404,
+      "pss": 37534,
+      "pssAnon": 34566,
+      "pssFile": 2197,
+      "pssShmem": 770,
+      "privateDirty": 34956,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 13440,
+       "rssKb": 12416,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 2048,
+       "rssKb": 812,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 150,
+     "load": [
+      4.13,
+      5.78,
+      7.02
+     ],
+     "main": {
+      "rss": 495204,
+      "pss": 351018,
+      "pssAnon": 341205,
+      "pssFile": 4660,
+      "pssShmem": 5152,
+      "privateDirty": 342708,
+      "swap": 10224,
+      "hwm": 571656,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 142616,
+      "pss": 37746,
+      "pssAnon": 34778,
+      "pssFile": 2197,
+      "pssShmem": 770,
+      "privateDirty": 35168,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 13440,
+       "rssKb": 12416,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 2048,
+       "rssKb": 812,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 180,
+     "load": [
+      3.56,
+      5.48,
+      6.88
+     ],
+     "main": {
+      "rss": 509604,
+      "pss": 364947,
+      "pssAnon": 355093,
+      "pssFile": 4701,
+      "pssShmem": 5152,
+      "privateDirty": 356596,
+      "swap": 10224,
+      "hwm": 589724,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 142916,
+      "pss": 38046,
+      "pssAnon": 35078,
+      "pssFile": 2197,
+      "pssShmem": 770,
+      "privateDirty": 35468,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 19392,
+       "rssKb": 18352,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3136,
+       "rssKb": 1836,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 210,
+     "load": [
+      3.13,
+      5.2,
+      6.74
+     ],
+     "main": {
+      "rss": 509712,
+      "pss": 365055,
+      "pssAnon": 355201,
+      "pssFile": 4701,
+      "pssShmem": 5152,
+      "privateDirty": 356704,
+      "swap": 10224,
+      "hwm": 589724,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 140792,
+      "pss": 35922,
+      "pssAnon": 32954,
+      "pssFile": 2197,
+      "pssShmem": 770,
+      "privateDirty": 33344,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 19392,
+       "rssKb": 18352,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3136,
+       "rssKb": 1836,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 240,
+     "load": [
+      3.11,
+      5,
+      6.62
+     ],
+     "main": {
+      "rss": 509992,
+      "pss": 365335,
+      "pssAnon": 355481,
+      "pssFile": 4701,
+      "pssShmem": 5152,
+      "privateDirty": 356984,
+      "swap": 10224,
+      "hwm": 589724,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 140540,
+      "pss": 35670,
+      "pssAnon": 32702,
+      "pssFile": 2197,
+      "pssShmem": 770,
+      "privateDirty": 33092,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 19392,
+       "rssKb": 18352,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3136,
+       "rssKb": 1836,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 270,
+     "load": [
+      2.87,
+      4.76,
+      6.49
+     ],
+     "main": {
+      "rss": 510572,
+      "pss": 365915,
+      "pssAnon": 356061,
+      "pssFile": 4701,
+      "pssShmem": 5152,
+      "privateDirty": 357564,
+      "swap": 10224,
+      "hwm": 589724,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 139452,
+      "pss": 34582,
+      "pssAnon": 31614,
+      "pssFile": 2197,
+      "pssShmem": 770,
+      "privateDirty": 32004,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 19392,
+       "rssKb": 18352,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3136,
+       "rssKb": 1836,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 300,
+     "load": [
+      2.56,
+      4.51,
+      6.35
+     ],
+     "main": {
+      "rss": 511100,
+      "pss": 366443,
+      "pssAnon": 356589,
+      "pssFile": 4701,
+      "pssShmem": 5152,
+      "privateDirty": 358092,
+      "swap": 10224,
+      "hwm": 589724,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 139964,
+      "pss": 35094,
+      "pssAnon": 32126,
+      "pssFile": 2197,
+      "pssShmem": 770,
+      "privateDirty": 32516,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 19392,
+       "rssKb": 18352,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3136,
+       "rssKb": 1836,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 330,
+     "load": [
+      2.44,
+      4.3,
+      6.22
+     ],
+     "main": {
+      "rss": 511264,
+      "pss": 366607,
+      "pssAnon": 356753,
+      "pssFile": 4701,
+      "pssShmem": 5152,
+      "privateDirty": 358256,
+      "swap": 10224,
+      "hwm": 589724,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 140356,
+      "pss": 35486,
+      "pssAnon": 32518,
+      "pssFile": 2197,
+      "pssShmem": 770,
+      "privateDirty": 32908,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 19392,
+       "rssKb": 18352,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3136,
+       "rssKb": 1836,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 360,
+     "load": [
+      2.46,
+      4.14,
+      6.11
+     ],
+     "main": {
+      "rss": 511512,
+      "pss": 366851,
+      "pssAnon": 357001,
+      "pssFile": 4697,
+      "pssShmem": 5152,
+      "privateDirty": 358504,
+      "swap": 10224,
+      "hwm": 589724,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 141512,
+      "pss": 36642,
+      "pssAnon": 33674,
+      "pssFile": 2196,
+      "pssShmem": 770,
+      "privateDirty": 34064,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 19392,
+       "rssKb": 18352,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3136,
+       "rssKb": 1836,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 390,
+     "load": [
+      2.74,
+      4.04,
+      6.01
+     ],
+     "main": {
+      "rss": 511736,
+      "pss": 367075,
+      "pssAnon": 357225,
+      "pssFile": 4697,
+      "pssShmem": 5152,
+      "privateDirty": 358728,
+      "swap": 10224,
+      "hwm": 589724,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 141724,
+      "pss": 36854,
+      "pssAnon": 33886,
+      "pssFile": 2196,
+      "pssShmem": 770,
+      "privateDirty": 34276,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 19392,
+       "rssKb": 18352,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3136,
+       "rssKb": 1836,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 420,
+     "load": [
+      2.62,
+      3.9,
+      5.9
+     ],
+     "main": {
+      "rss": 512120,
+      "pss": 367459,
+      "pssAnon": 357605,
+      "pssFile": 4697,
+      "pssShmem": 5156,
+      "privateDirty": 359112,
+      "swap": 10224,
+      "hwm": 589724,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 142004,
+      "pss": 37134,
+      "pssAnon": 34166,
+      "pssFile": 2197,
+      "pssShmem": 770,
+      "privateDirty": 34556,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 19392,
+       "rssKb": 18352,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3136,
+       "rssKb": 1836,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 450,
+     "load": [
+      2.27,
+      3.7,
+      5.77
+     ],
+     "main": {
+      "rss": 512276,
+      "pss": 367622,
+      "pssAnon": 357761,
+      "pssFile": 4704,
+      "pssShmem": 5156,
+      "privateDirty": 359268,
+      "swap": 10224,
+      "hwm": 589724,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 142404,
+      "pss": 37535,
+      "pssAnon": 34566,
+      "pssFile": 2197,
+      "pssShmem": 770,
+      "privateDirty": 34956,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 19392,
+       "rssKb": 18352,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3136,
+       "rssKb": 1836,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 480,
+     "load": [
+      2.09,
+      3.52,
+      5.64
+     ],
+     "main": {
+      "rss": 520828,
+      "pss": 376174,
+      "pssAnon": 366305,
+      "pssFile": 4704,
+      "pssShmem": 5164,
+      "privateDirty": 367820,
+      "swap": 10224,
+      "hwm": 589724,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 142868,
+      "pss": 37999,
+      "pssAnon": 35030,
+      "pssFile": 2197,
+      "pssShmem": 770,
+      "privateDirty": 35420,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 19392,
+       "rssKb": 18352,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3136,
+       "rssKb": 1836,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 510,
+     "load": [
+      1.91,
+      3.34,
+      5.51
+     ],
+     "main": {
+      "rss": 520960,
+      "pss": 376306,
+      "pssAnon": 366437,
+      "pssFile": 4704,
+      "pssShmem": 5164,
+      "privateDirty": 367952,
+      "swap": 10224,
+      "hwm": 589724,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 143272,
+      "pss": 38403,
+      "pssAnon": 35434,
+      "pssFile": 2197,
+      "pssShmem": 770,
+      "privateDirty": 35824,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 19392,
+       "rssKb": 18352,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3136,
+       "rssKb": 1836,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 540,
+     "load": [
+      1.91,
+      3.21,
+      5.4
+     ],
+     "main": {
+      "rss": 521308,
+      "pss": 376654,
+      "pssAnon": 366785,
+      "pssFile": 4704,
+      "pssShmem": 5164,
+      "privateDirty": 368300,
+      "swap": 10224,
+      "hwm": 589724,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 143688,
+      "pss": 38819,
+      "pssAnon": 35850,
+      "pssFile": 2197,
+      "pssShmem": 770,
+      "privateDirty": 36240,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 19392,
+       "rssKb": 18352,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3136,
+       "rssKb": 1836,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 570,
+     "load": [
+      1.79,
+      3.06,
+      5.28
+     ],
+     "main": {
+      "rss": 521756,
+      "pss": 377102,
+      "pssAnon": 367233,
+      "pssFile": 4704,
+      "pssShmem": 5164,
+      "privateDirty": 368748,
+      "swap": 10224,
+      "hwm": 589724,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 144100,
+      "pss": 39231,
+      "pssAnon": 36262,
+      "pssFile": 2197,
+      "pssShmem": 770,
+      "privateDirty": 36652,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 19392,
+       "rssKb": 18352,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3136,
+       "rssKb": 1836,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    },
+    {
+     "secondsIdle": 600,
+     "load": [
+      1.86,
+      2.96,
+      5.17
+     ],
+     "main": {
+      "rss": 522296,
+      "pss": 377642,
+      "pssAnon": 367773,
+      "pssFile": 4704,
+      "pssShmem": 5164,
+      "privateDirty": 369288,
+      "swap": 10224,
+      "hwm": 589724,
+      "threads": 27
+     },
+     "sw": {
+      "rss": 141376,
+      "pss": 36507,
+      "pssAnon": 33538,
+      "pssFile": 2197,
+      "pssShmem": 770,
+      "privateDirty": 33928,
+      "swap": 16588,
+      "hwm": 248004,
+      "threads": 22
+     },
+     "wasmMemories": [
+      {
+       "committedKb": 83648,
+       "rssKb": 58084,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 19392,
+       "rssKb": 18352,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 11584,
+       "rssKb": 2248,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8896,
+       "rssKb": 452,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 8448,
+       "rssKb": 196,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 4416,
+       "rssKb": 2188,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 3136,
+       "rssKb": 1836,
+       "swapKb": 0,
+       "reservedKb": 1262485504
+      },
+      {
+       "committedKb": 3008,
+       "rssKb": 1748,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1728,
+       "rssKb": 676,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 1344,
+       "rssKb": 200,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      },
+      {
+       "committedKb": 64,
+       "rssKb": 24,
+       "swapKb": 0,
+       "reservedKb": 8388608
+      }
+     ]
+    }
+   ],
+   "events": [],
+   "mainPid": 916605,
+   "open": {
+    "openMs": 1426,
+    "timings": {
+     "manifest": 7,
+     "boot": 53,
+     "source": 57,
+     "preview.spawn": 61,
+     "agent.spawn": 61,
+     "preview.listening": 469,
+     "agent.listening": 656,
+     "preview.ready": 915,
+     "agent.ready": 1245,
+     "preview.visible": 1264,
+     "chat.ready": 1292
+    }
+   },
+   "swInMainRenderer": false,
+   "swPid": 27620,
+   "turn1": {
+    "replyMs": 3501,
+    "heading": "Memory A",
+    "tools": 2,
+    "assistants": 3
+   },
+   "turns": [
+    {
+     "replyMs": 3200,
+     "heading": "Memory A",
+     "tools": 0,
+     "assistants": 4
+    },
+    {
+     "replyMs": 15767,
+     "heading": "Memory A",
+     "tools": 5,
+     "assistants": 10
+    },
+    {
+     "replyMs": 3345,
+     "heading": "Memory B",
+     "tools": 2,
+     "assistants": 13
+    },
+    {
+     "replyMs": 3349,
+     "heading": "Memory C",
+     "tools": 2,
+     "assistants": 16
+    },
+    {
+     "replyMs": 3199,
+     "heading": "Memory C",
+     "tools": 0,
+     "assistants": 17
+    }
+   ],
+   "processesGoneAfterClose": {
+    "main": true,
+    "sw": false
+   }
+  }
+ ]
+}
