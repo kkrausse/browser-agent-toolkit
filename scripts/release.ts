@@ -10,7 +10,8 @@
 //     except the app's own npm packages.
 //   kkrausse-browser-agent-toolkit-react-<version>-<commit>.tgz
 //     the React components and their stylesheet (`packages/react`), for an app that uses
-//     them. It depends on the toolkit package by version: the app installs both.
+//     them. The toolkit package is its peer, by version: the app installs both tarballs.
+//     (As a plain dependency the package manager would look for it in the registry.)
 //   kkrausse-browser-agent-prepare-<platform>-<arch>-<version>-<commit>.tgz
 //     the `bat-prepare` executable for the machine this script runs on. `prepare()` resolves
 //     `@kkrausse/browser-agent-prepare-<platform>-<arch>` for the machine it runs on; on any
@@ -105,10 +106,14 @@ cpSync(reactDist, join(reactStage, 'dist'), { recursive: true })
 for (const name of ['README.md', 'NOTICES.md', 'LICENSE.marked', 'LICENSE.shadcn']) cpSync(join(root, 'packages/react', name), join(reactStage, name))
 writeFileSync(join(reactStage, 'BUILD-PROVENANCE.json'), provenance({ 'dist/index.js': sha256(join(reactStage, 'dist/index.js')), 'dist/styles.css': sha256(join(reactStage, 'dist/styles.css')) }))
 const { devDependencies: _reactDev, scripts: _reactScripts, ...reactManifest } = react
-// In the repository the toolkit is a workspace member; outside it, the package of this version.
+// In the repository the toolkit is a workspace dependency. Outside it, it is the tarball
+// above, which the app installs by `file:` path: a peer is satisfied by that install,
+// where a dependency on the version would be fetched from the registry.
+const { [toolkit.name as string]: _workspace, ...reactDependencies } = react.dependencies
 writeFileSync(join(reactStage, 'package.json'), JSON.stringify({
   ...reactManifest, files: [...react.files, 'BUILD-PROVENANCE.json'],
-  dependencies: { ...react.dependencies, [toolkit.name]: toolkit.version },
+  dependencies: reactDependencies,
+  peerDependencies: { [toolkit.name]: toolkit.version, ...react.peerDependencies },
 }, null, 2) + '\n')
 const reactArchive = pack(reactStage, 'kkrausse-browser-agent-toolkit-react')
 

@@ -18,7 +18,9 @@ function Editor() {
 }
 ```
 
-Install it beside the toolkit; `react` and `react-dom` (18 or later) are peers.
+Install it beside the toolkit; `react` and `react-dom` (18 or later) are peers. (From
+the release tarballs the toolkit is a peer too, satisfied by the app's `file:` install of
+it; see "Releasing" in the toolkit's README.)
 
 | Export | What |
 | --- | --- |

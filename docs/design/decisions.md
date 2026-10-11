@@ -1159,5 +1159,8 @@ installed all of them.
   those globs. `examples/todo-app/startup-modules.json` records only the toolkit's
   `dist/vite.js`, whose path did not change, so it was not recorded again.
 - **Release:** `scripts/release.ts` stages a third tarball,
-  `kkrausse-browser-agent-toolkit-react-<version>-<commit>.tgz`, with the workspace
-  dependency on the toolkit rewritten to the version. The two packages share one version.
+  `kkrausse-browser-agent-toolkit-react-<version>-<commit>.tgz`. In it the workspace
+  dependency on the toolkit becomes a peer dependency on the version: as a plain
+  dependency `bun install` asked the registry for it (404) in an app that has both
+  tarballs by `file:` path; as a peer the app's install of the toolkit tarball satisfies
+  it. The two packages share one version.
