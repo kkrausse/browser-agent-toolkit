@@ -26,10 +26,13 @@ bun examples/terminal-app/mock-model.ts
 client shows the read and the edit, the file changes in the tab's filesystem and the app
 hot-reloads. ``run `echo hi` `` makes the mock call the shell tool, which runs without a
 permission dialog: this page's configuration allows every tool (the agent's reach is the tab). Page parameters: `?model=<base URL>`, `?modelId=<id>` (default `scripted`),
-`?reset=1` (forget this browser's workspace and the client's saved state first),
+`?reset=1` (forget this browser's workspace, the client's saved state and the TODO list first),
 `?diag=<url>` (where the page posts its diagnostics; `0` turns them off; [the public build](#the-public-build) posts none without it),
 `?clientLog=debug` (the client logs every level to `/tmp/opencode-client/tui.log` in the guest),
-`?tunnel=<wss URL>` (a TCP relay for [the hosts a tab cannot read](#the-tunnel); `0` for none).
+`?tunnel=<wss URL>` (a TCP relay for [the hosts a tab cannot read](#the-tunnel); `0` for none),
+`?wisp=<wss URL>` ([a Wisp server](#a-wisp-server-instead) in that relay's place; `0` for none).
+The cog in the panel's header is a form for `?wisp=` (applying it reloads the page at the address
+that says the same) with a button for `?reset=1`; beside it, a link to the source.
 
 After a setup, `bun run editor` in this directory repeats only the example's own steps
 (`display`, `prepare:editor`, `build` into `dist/`, `start`); set `BAT_PREPARE` when `bat-prepare` is not
@@ -42,11 +45,11 @@ in `target/release` of this checkout.
 MODEL_URL=https://<mock host>:4311/v1 OUT_DIR=dist-published bun run build
 ```
 
-`dist/` is everything a visitor needs and nothing else (57 MB, of which the dependency image
-is 45 MB): copy it to a file shelf and open its URL. `MODEL_URL` is the built page's default
+`dist/` is everything a visitor needs and nothing else (45 MB, of which the dependency image
+is 37 MB): copy it to a file shelf and open its URL. `MODEL_URL` is the built page's default
 `?model=` and, at `/diag` of the same host, its diagnostics collector; without it the default
 is port 4311 of the page's own host, which only suits a page served beside its mock.
-`TUNNEL_URL=wss://<relay>/tcp` is the built page's default `?tunnel=`.
+`TUNNEL_URL=wss://<relay>/tcp` is the built page's default `?tunnel=`, `WISP_URL` its default `?wisp=`.
 
 ### The public build
 
@@ -63,9 +66,9 @@ sign-in. What differs from the development build, all of it decided when the pag
 | --- | --- | --- |
 | model | `?model=`, else `MODEL_URL`, else the mock on port 4311 of the page's host | none named: the OpenCode server's own `opencode` provider, OpenCode Zen with the key `public`, which has the models that cost nothing and needs no sign-in. `?model=` still names an endpoint |
 | first model | `?modelId=`, default `scripted` | `PUBLIC_MODEL` of the build (default `ling-3.1-flash-free`), for as long as `https://opencode.ai/zen/v1/models` lists it; then the server's choice. `?modelId=<id>` names another hosted one |
-| tunnel | `TUNNEL_URL`, else none; carries `api.openai.com`, OpenAI's keys document and `opencode.ai` | `TUNNEL_URL`, else `wss://bat-relay-2.kevonavin.deno.net/tcp` (`packages/relay/tcp-relay-deno.ts` on Deno Deploy); carries `opencode.ai` only |
+| tunnel | `WISP_URL`, else `TUNNEL_URL`, else none; carries `api.openai.com`, `chatgpt.com`, OpenAI's keys document and `opencode.ai` | `WISP_URL`, else the public Wisp server `wss://wisp.mercurywork.shop/`; with `?wisp=0`, `TUNNEL_URL`, else none; carries `opencode.ai` and `chatgpt.com` (a ChatGPT plan signed in with the client's device code) |
 | diagnostics | posted to the collector unless `?diag=0` | nothing is sent unless the address has `?diag=<url>` |
-| ChatGPT sign-in | the bar and the client's preload module (`client-tap.js`) | neither is installed; `client-tap.js` and `openai-jwks.json` are not shipped |
+| ChatGPT sign-in | the bar and the client's preload module (`client-tap.js`), or [a device code](#with-a-device-code) | [a device code](#with-a-device-code) only: the bar is not installed, `client-tap.js` and `openai-jwks.json` are not shipped |
 | the page says | title: model and tunnel | title: `free model from OpenCode Zen · relay <host>`; a two-line footer under the panel: what runs in the tab, whose model it is, what the relay carries, a link to the source |
 
 **Why a first model is named.** With no credentials and no `model` in its configuration,
@@ -90,9 +93,10 @@ forced, so earlier builds do not stay in the branch. Without `--yes` it prints w
 push and stops; it refuses a development build, a file of 100 MB or more, and the branches
 `main` and `master`. Served under `/browser-agent-toolkit/` by a local file server, the
 whole demo scenario passed against the mock: the service worker's scope is that directory,
-the workspace's storage is named after the path (`bat/browser-agent-toolkit-editor` in the
-origin's private file system), and the app's `/api` requests, which name the origin's root,
-are answered by the service worker and never sent. Not tried on Pages itself: that the
+and the workspace's storage is named after the path (`bat/browser-agent-toolkit-editor` in
+the origin's private file system). (That run was of the app that still had a backend; the
+app's list is now in the origin's `localStorage`, key `todos`, which every page of the origin
+shares.) Not tried on Pages itself: that the
 `.gz` files arrive without a `Content-Encoding` of the host's (the worker inflates them
 itself and would fail on bytes already inflated).
 
@@ -129,14 +133,11 @@ bun demo/run.ts --base http://127.0.0.1:4310/ --slow --record /tmp/take.mp4
 bun demo/gif.ts /tmp/take.mp4 /tmp/take.gif
 ```
 
-The mock has a second take of that prompt for a regression check: with "theme-color" in the
-prompt it also edits `src/root.tsx` (a `<meta>` in the document head) and
-`src/editor-panel.css`, the edits after which the preview once stopped taking input
-(`docs/experiments/2026-10-11-preview-input-dead-after-edit-handoff.md`). It must pass too:
-
-```sh
-bun demo/run.ts --base http://127.0.0.1:4310/ --prompt "Give this app a dark theme with a violet accent and a theme-color, and show how many todos are left under the list."
-```
+The mock's script reads `src/style.css` and `src/App.tsx` and makes three edits to them. (It
+had a second take, "theme-color", which also edited the React Router root route that rendered
+`<html>`: the edits after which the preview once stopped taking input,
+`docs/experiments/2026-10-11-preview-input-dead-after-edit-handoff.md`. The app has no such
+route any more, its document head is `index.html`, and the take went with it.)
 
 The README's GIF (`docs/media/terminal-demo.gif`) is the scripted take cut once more: its first
 5 s dropped and the whole of it at 2.2x, labelled:
@@ -155,7 +156,6 @@ What a server used to do is done in the tab:
 | --- | --- |
 | send COOP/COEP | the page's service worker (`sw.ts`, `dist/sw.js`) adds them to what it serves; `src/isolate.ts` registers it and reloads once, after which `crossOriginIsolated` is true |
 | serve the preview's service worker with `Service-Worker-Allowed: /` | the same worker runs the runtime's (`importScripts`); its scope is the page's directory and the preview is at `<directory>/preview/<port>/` |
-| serve the TODO app's `/api` | `todo-api.ts`, the app's tRPC router bundled into one file, runs as a third guest program on port 3001; the service worker hands the frame's `/api/…` requests to it (`setGuestPaths`). The list is a file in the workspace |
 | pick a compressed copy by `Accept-Encoding` | the build ships big files only as `<name>.gz`; the worker answers `<name>` by inflating that as it arrives (`DecompressionStream`) |
 
 Every URL is relative to the page, so the directory works at `/` and at
@@ -193,7 +193,6 @@ page relay), which this page ran the client on before, is on the branch `wasm-te
 | page ↔ terminal client | bytes over the pty (`spawnTerminal`): keys in, drawing out, the window size |
 | OpenCode server → model | the runtime hands any non-guest URL to the browser's `fetch`, so the request goes from the tab straight to `?model=`. A loopback endpoint (the mock) is named in `BAT_HOST_LOOPBACK_PORTS`, since loopback otherwise means a guest listener |
 | OpenCode server → `api.openai.com` | with a tunnel configured, not the browser's fetch: the runtime's own TLS and HTTP/1.1 over a WebSocket to a TCP relay ([below](#the-tunnel)) |
-| app in the frame → `/api` | the service worker, to the guest program on port 3001 (`setGuestPaths`) |
 
 `src/opencode.ts` starts and configures the OpenCode server itself, against the runtime
 contract, instead of the toolkit's `openEditor`, which always sets up the page server's model
@@ -256,6 +255,18 @@ read, because they are answered without `Access-Control-Allow-Origin`:
 (`openai-jwks.json`, `BAT_FETCH_MAP`; when OpenAI rotates them the check fails with "invalid ID
 token" until the page is built again), the sign-in completes, and every model call fails.
 
+### With a device code
+
+The client's other OpenAI sign-in (same menu: ctrl+p, "Connect an integration", OpenAI) shows a
+code to type on OpenAI's page in another tab. Nothing is redirected to the tab, so it needs no
+bar and no pasted address, and it is the sign-in the public build has. Its model calls go to
+`https://chatgpt.com/backend-api/codex/responses`, which answers without CORS headers (the
+browser's fetch was blocked on the published page), so `chatgpt.com` is one of the hosts carried
+by [the tunnel](#the-tunnel) in both builds. Tried by hand on the published page on 2026-10-11,
+through the public Wisp server: the sign-in completed and the plan's model answered. One
+account, one browser; nothing automated checks it. The token is kept as below: plain text in
+this browser's storage for the page.
+
 ### The tunnel
 
 `?tunnel=wss://<relay>/tcp` (or the build's `TUNNEL_URL`) names a TCP relay:
@@ -288,6 +299,25 @@ title and the log say which relay is in use.
   first, is answered as a plain GET, logs "session websocket connect failed; using http" and
   posts; that warning is expected with every OpenAI prompt.
 - **Roots** change only with a new `bat_tls.wasm` (`runtime/src/net/tls/native/build.sh`).
+
+#### A Wisp server instead
+
+`?wisp=wss://<server>/` (or the build's `WISP_URL`) names a [Wisp](https://github.com/MercuryWorkshop/wisp-protocol)
+server to carry the same connections: a public protocol for TCP streams over a WebSocket, with
+stock servers in several languages and public instances that are nobody's of this project. TLS
+and HTTP are the same code in the tab, so such a server sees what the relay above sees and no
+more. The differences are in what it promises:
+
+- **Whose it is.** The public build's default, `wss://wisp.mercurywork.shop/`, is Mercury
+  Workshop's. It publishes no terms; it may throttle, refuse this page's origin one day, or go
+  away. `?wisp=<another>` names another server, `?tunnel=` a relay as above; the build has no
+  relay of its own to fall back to.
+- **Its allowlists are its own.** The page tunnels only the hosts it names, but nothing on the
+  server ties it to this page or to those hosts.
+- **No flow control towards the page** in Wisp v1: what the server sends faster than the
+  response's reader takes is held in the tab.
+- An address with `?wisp=` or `?tunnel=` comes before either built default; with both, the
+  Wisp server is used.
 
 The tokens are a row of the server's database, `/workspace/.server/data/opencode.sqlite`, in
 plain text: in this browser's storage for this page (OPFS), kept across reloads, removed by

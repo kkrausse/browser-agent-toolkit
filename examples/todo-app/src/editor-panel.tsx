@@ -6,7 +6,6 @@ export { resetWorkspace, preloadEditor } from '@kkrausse/browser-agent-toolkit/b
 import '@kkrausse/browser-agent-toolkit-react/styles.css'
 import './editor-panel.css'
 
-const hostPaths = ['/api']
 // The app is showing once its form is usable, not merely when the frame has loaded.
 const isPreviewReady = (frame: HTMLIFrameElement) => !!frame.contentDocument?.querySelector('main input#title:not(:disabled)')
 
@@ -42,7 +41,7 @@ function Opened({ boot, onExit }: { boot?: BootRuntime; onExit(): void }) {
   const shown = [...editorSteps, ...Object.keys(timings).filter(name => !(editorSteps as readonly string[]).includes(name))]
   return <div className="todo-editor">
     <div className="todo-editor-preview">
-      {editor && <EditorPreview editor={editor} hostPaths={hostPaths} isReady={isPreviewReady} />}
+      {editor && <EditorPreview editor={editor} isReady={isPreviewReady} />}
       {!timings['preview.visible'] && <p>{snapshot.status === 'failed' ? 'The preview is not running.' : 'Opening preview…'}</p>}
     </div>
     <aside className="todo-editor-panel" aria-label="Browser editor">

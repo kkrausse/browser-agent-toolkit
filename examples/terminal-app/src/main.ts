@@ -1,5 +1,5 @@
-// One tab, four programs, all on the toolkit's runtime (a Web Worker each): the TODO app's Vite
-// dev server, its backend, the OpenCode server, and the real OpenCode terminal client, which
+// One tab, three programs, all on the toolkit's runtime (a Web Worker each): the TODO app's Vite
+// dev server, the OpenCode server, and the real OpenCode terminal client, which
 // runs on a terminal of the runtime's kernel. This page holds the other end of that terminal
 // and joins it to a ghostty-web display in the side panel (bytes both ways, and the size).
 //
@@ -10,7 +10,6 @@
 //                                       no server of this page is involved
 //   OpenCode server → api.openai.com    (a ChatGPT sign-in) the runtime's own TLS and HTTP through
 //                                       a TCP relay, `?tunnel=`, which carries ciphertext only
-//   app in the frame → its `/api`       a third guest program (todo-api.ts), through the service worker
 //
 // The page is a directory of static files: every URL is relative to the page, and the
 // service worker (sw.ts) gives the responses the headers a server would have sent.
@@ -20,12 +19,15 @@
 //                        `?model=`: which hosted free model to start on, default the build's PUBLIC_MODEL)
 //   ?tunnel=<wss URL>    a TCP relay (packages/relay/tcp-relay-main.ts) for the hosts that answer without CORS headers.
 //                        Default: the build's TUNNEL_URL, else none; `0` for none
+//   ?wisp=<wss URL>      a Wisp server (anybody's: the protocol is public) to carry those hosts instead of that relay.
+//                        Default: the build's WISP_URL, else none; `0` for none, which leaves `?tunnel=`. A `?wisp=` or
+//                        `?tunnel=` in the address comes before either built default
 //   ?diag=<url>          where the page posts its diagnostics (diag.ts); `0` for nowhere
 //
 // The public build (`PUBLIC=1 bun run build`, a page for strangers) differs: with no `?model=`
 // the server has no provider of this page's and uses OpenCode's own hosted free models
-// (opencode.ai/zen, no key), which it reaches through the tunnel; only opencode.ai is
-// tunnelled; nothing is posted anywhere without `?diag=<url>`; the ChatGPT sign-in bar is off.
+// (opencode.ai/zen, no key), which it reaches through the tunnel; opencode.ai and
+// chatgpt.com (a ChatGPT plan signed in with a code) are tunnelled; nothing is posted anywhere without `?diag=<url>`; the ChatGPT sign-in bar is off.
 //   ?clientLog=debug     the client logs every level to its file in the guest (/tmp/opencode-client/tui.log)
 //   ?reset=1             first forget this browser's workspace (source edits, sessions) and the client's saved state
 import { installDerived, installSource, type BootRuntime, type EditorManifest, type RuntimeHost, type RuntimeProcess, type RuntimeTerminal, type TerminalSize } from '@kkrausse/browser-agent-toolkit/browser'
@@ -66,8 +68,6 @@ const here = new URL('.', document.baseURI).href
 const assets = new URL('display/', here).href
 const manifestUrl = new URL('editor/manifest.json', here).href
 const workerUrl = new URL('sw.js', here).href
-/** The TODO app's own backend, as a guest program: where it is written and where it listens. */
-const api = { script: '/tmp/todo-api.mjs', port: 3001, store: `${workspace}/.server/todos.json` }
 // Set when the page is built (`MODEL_URL=… bun run build`), for a page published away from its mock.
 const builtModel = process.env.MODEL_URL || undefined
 const builtTunnel = process.env.TUNNEL_URL || undefined
@@ -82,8 +82,10 @@ const openAiKeys = 'https://auth.openai.com/.well-known/jwks.json'
 // answers carry no CORS headers, and the keys above. The token exchange at auth.openai.com
 // allows any origin and stays with the browser's fetch. OpenCode's own hosted models
 // (opencode.ai/zen), which the server calls with no sign-in, refuse a browser's preflight (404).
-// The public build carries the last one alone: its relay allows nothing else.
-const tunnelled = isPublic ? ['opencode.ai'] : ['api.openai.com', 'https://auth.openai.com/.well-known/', 'opencode.ai']
+// A ChatGPT plan signed in with a device code (the client's own "login with code", which needs
+// no bar of this page) is called at chatgpt.com/backend-api/codex/responses, also without CORS
+// headers. The public build carries the last two: its sign-in bar is off, the code one is not.
+const tunnelled = isPublic ? ['chatgpt.com', 'opencode.ai'] : ['api.openai.com', 'chatgpt.com', 'https://auth.openai.com/.well-known/', 'opencode.ai']
 
 const params = new URLSearchParams(location.search)
 // `?reset=1` is taken out of the address at once and remembered for this start only: the page
@@ -114,8 +116,11 @@ async function hostedModel(): Promise<string | undefined> {
   return undefined
 }
 
-const givenTunnel = params.get('tunnel') ?? builtTunnel
-const tunnel = givenTunnel && givenTunnel !== '0' && /^wss?:$/.test(URL.parse(givenTunnel)?.protocol ?? '') ? { url: givenTunnel, to: tunnelled } : undefined
+const relayAddress = (given: string | null | undefined) => given && given !== '0' && /^wss?:$/.test(URL.parse(given)?.protocol ?? '') ? given : undefined
+// The address's own choice first, then the build's; of two, the Wisp server.
+const wispUrl = relayAddress(params.get('wisp')) ?? (params.get('wisp') === '0' || relayAddress(params.get('tunnel')) ? undefined : relayAddress(process.env.WISP_URL))
+const tunnelUrl = wispUrl ?? relayAddress(params.get('tunnel') ?? builtTunnel)
+const tunnel = tunnelUrl ? { url: tunnelUrl, protocol: wispUrl ? 'wisp' as const : 'relay' as const, to: tunnelled } : undefined
 
 const status = document.querySelector<HTMLPreElement>('#status')!
 const frame = document.querySelector<HTMLIFrameElement>('#app')!
@@ -124,6 +129,34 @@ const diag = installDiag(params, isPublic ? null : builtModel && new URL('/diag'
 const say = (text: string, error = false) => { status.textContent = text; status.classList.toggle('error', error); diag.event(error ? 'failed' : 'stage', text) }
 window.batTerminal = { log: [], model }
 document.querySelector('#title')!.textContent = `OpenCode · ${model ? `model ${model.id} at ${new URL(model.baseURL).host}` : 'free model from OpenCode Zen'}${tunnel ? ` · ${isPublic ? 'relay' : 'tunnel'} ${new URL(tunnel.url).host}` : ''}`
+// The cog: the page's relay as a form. Applying it is a reload at the address that says
+// the same, so a setting is in the address and nowhere else.
+{
+  const cog = document.querySelector<HTMLButtonElement>('#cog')!, form = document.querySelector<HTMLFormElement>('#settings')!
+  // Which model is OpenCode's own business (its model picker); the relay is this page's.
+  const fields = ['wisp'] as const
+  const defaults: Record<(typeof fields)[number], string> = { wisp: relayAddress(process.env.WISP_URL) ?? '' }
+  const input = (name: string) => form.elements.namedItem(name) as HTMLInputElement
+  for (const name of fields) {
+    input(name).value = params.get(name) ?? ''
+    if (defaults[name]) input(name).placeholder = defaults[name]
+  }
+  const show = (open: boolean) => { form.hidden = !open; cog.setAttribute('aria-expanded', String(open)) }
+  const reload = (change: (next: URLSearchParams) => void) => {
+    const next = new URLSearchParams(location.search)
+    next.delete('reset')
+    change(next)
+    location.search = next.toString()
+  }
+  cog.addEventListener('click', () => show(form.hidden))
+  form.addEventListener('keydown', (event) => { if (event.key === 'Escape') { show(false); cog.focus() } })
+  document.addEventListener('pointerdown', (event) => { if (!form.hidden && !form.contains(event.target as Node) && !cog.contains(event.target as Node)) show(false) })
+  form.addEventListener('submit', (event) => {
+    event.preventDefault()
+    reload((next) => { for (const name of fields) { const value = input(name).value.trim(); if (value) next.set(name, value); else next.delete(name) } })
+  })
+  input('reset').addEventListener('click', () => reload((next) => next.set('reset', '1')))
+}
 // What the public page says about itself; it names the free model, so not with a `?model=` of the visitor's.
 document.querySelector<HTMLElement>('#about')!.hidden = !isPublic || !!model
 const panel = installPanel({ onOpen: () => window.batTerminal.terminal?.display.focus() })
@@ -179,7 +212,7 @@ async function main() {
   }
   // The public build ships no tap: the sign-in it serves needs hosts its relay does not carry.
   const hosted = model ? undefined : hostedModel()
-  const apiScript = script('todo-api.js'), tapScript = isPublic ? undefined : script('client-tap.js')
+  const tapScript = isPublic ? undefined : script('client-tap.js')
 
   say('Loading…')
   const response = await fetch(manifestUrl, { cache: 'no-store' })
@@ -187,22 +220,44 @@ async function main() {
   const manifest = await response.json() as EditorManifest
   if (!manifest.launch.agent) throw Error('The prepared directory has no OpenCode server')
   const runtimeModule = await import(new URL(manifest.runtime?.entry ?? 'runtime/host.js', manifestUrl).href) as { bootRuntime: BootRuntime; resetWorkspace(options: { manifestUrl: string }): Promise<void> }
-  if (sessionStorage.getItem(resetKey)) {
-    sessionStorage.removeItem(resetKey)
+  const startOver = async () => {
     await runtimeModule.resetWorkspace({ manifestUrl })
+    // The TODO app keeps its list in this origin's localStorage (../todo-app/src/App.tsx), not in the workspace.
+    try { localStorage.removeItem('todos') } catch { /* no storage */ }
     // What an earlier build of this page kept for the client (wasm-term's IndexedDB); the client's files are in the workspace now.
     for (const database of await indexedDB.databases()) if (database.name) indexedDB.deleteDatabase(database.name)
+  }
+  if (sessionStorage.getItem(resetKey)) {
+    sessionStorage.removeItem(resetKey)
+    await startOver()
   }
   const { bootRuntime } = runtimeModule
   say('Opening the workspace in this browser…')
   const lifetime = new AbortController()
   // One worker for the whole directory: it is at the page's level, so no server has to allow its scope.
-  const runtime = await bootRuntime({ manifestUrl, manifest, signal: lifetime.signal, serviceWorker: { url: workerUrl, scope: here } }).catch(error => {
+  const boot = () => bootRuntime({ manifestUrl, manifest, signal: lifetime.signal, serviceWorker: { url: workerUrl, scope: here } }).catch(error => {
     throw (error as { code?: string })?.code === 'STORAGE_BUSY' ? Error('This workspace is already open in another tab or window.') : error
   })
+  let runtime = await boot()
+  let source = await installSource(runtime.fs, manifest.project)
+  // A workspace owns its source once installed, so one kept from a build of this page with
+  // other dependencies cannot start on this build's image (the app that had React Router and
+  // tRPC, against an image without them: Vite exits and the frame stays empty). The prepared
+  // package.json stands for the dependencies and is written into the workspace beside the
+  // source; a workspace that has another one, or none, starts over. The note is in the
+  // workspace and not in localStorage so that it cannot say more than the workspace holds.
+  const packageNote = '/workspace/.server/prepared-package.json'
+  const packageNow = JSON.stringify(manifest.project['/package.json'] ?? '')
+  if (source.preserved && await runtime.fs.readFile(packageNote).then(bytes => new TextDecoder().decode(bytes), () => '') !== packageNow) {
+    log('[page] the workspace in this browser is from a build with other dependencies: starting from a fresh one')
+    await runtime.close()
+    await startOver()
+    runtime = await boot()
+    source = await installSource(runtime.fs, manifest.project)
+  }
+  if (!source.preserved) await runtime.fs.writeFile(packageNote, new TextEncoder().encode(packageNow))
   window.batTerminal.runtime = runtime
-  window.addEventListener('pagehide', () => void runtime.close().catch(() => {}))
-  const source = await installSource(runtime.fs, manifest.project)
+  window.addEventListener('pagehide', () => void window.batTerminal.runtime?.close().catch(() => {}))
   log(`[page] ${source.preserved ? 'kept the workspace already in this browser' : `installed ${source.installed} source files`}`)
   await installDerived(runtime.fs, manifest, manifestUrl)
   const hostedId = await hosted
@@ -212,27 +267,22 @@ async function main() {
   // The page watches for a sign-in that waits on a loopback redirect (signin.ts).
   await installClient(runtime.fs, tapScript && { script: await tapScript, exchange: watchSignIn(() => window.batTerminal.runtime, log) })
   if (model) log(`[page] model endpoint: ${model.baseURL} (model ${model.id}), fetched by this tab directly`)
-  else log(`[page] model: OpenCode's hosted free models (opencode.ai/zen), no key, starting on ${hostedId ?? "the server's choice"}${tunnel ? '' : '; they need a relay (?tunnel=) and there is none'}`)
-  if (tunnel) log(`[page] tunnel: ${tunnel.to.join(', ')} through the relay at ${new URL(tunnel.url).host}, with TLS in this tab`)
+  else log(`[page] model: OpenCode's hosted free models (opencode.ai/zen), no key, starting on ${hostedId ?? "the server's choice"}${tunnel ? '' : '; they need a relay (?wisp= or ?tunnel=) and there is none'}`)
+  if (tunnel) log(`[page] tunnel: ${tunnel.to.join(', ')} through the ${tunnel.protocol === 'wisp' ? 'Wisp server' : 'relay'} at ${new URL(tunnel.url).host}, with TLS in this tab`)
 
   // Both programs start at once; each is its own Worker.
   say('Starting the app and the OpenCode server…')
   const preview = manifest.launch.preview, agent = manifest.launch.agent
   const app = runtime.endpoint(preview.port), server = runtime.endpoint(agent.port)
-  // The app calls `/api` as on its own server; here that server is a guest program too.
-  runtime.setGuestPaths!(preview.port, { '/api': api.port })
-  await runtime.fs.writeFile(api.script, await apiScript)
   // A fresh credential per start; it stays in this page and the guest.
   const password = crypto.randomUUID() + crypto.randomUUID()
   const authorization = 'Basic ' + btoa('opencode:' + password)
-  const [appProcess, serverProcess, apiProcess] = await Promise.all([
+  const [appProcess, serverProcess] = await Promise.all([
     // The dev server's base is the frame's path, which depends on where this page is served.
     runtime.spawn(toLaunch(preview, { BROWSER_AGENT_PORT: String(preview.port), BROWSER_AGENT_BASE: new URL(app.url).pathname })),
     runtime.spawn(serverLaunch(agent, password, model, tunnel ? { tunnel } : isPublic ? {} : { fetchMap: { [openAiKeys]: new URL('openai-jwks.json', here).href } })),
-    runtime.spawn({ argv: ['node', api.script], cwd: workspace, env: { PATH: '/bin', PORT: String(api.port), TODO_STORE: api.store }, programs: [] }),
   ])
   follow('app', appProcess, false)
-  follow('api', apiProcess, true)
   follow('opencode', serverProcess, true)
   const appUp = app.ready(lifetime.signal).then(() => { frame.src = app.url })
   const serverUp = server.ready(lifetime.signal).then(() => serverHealthy(server, authorization, lifetime.signal))

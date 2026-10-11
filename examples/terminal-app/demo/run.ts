@@ -63,7 +63,7 @@ const mark = name => (state.marks ??= []).push([name, Date.now()]);
 const pause = ms => page.waitForTimeout(demo.slow ? ms : Math.min(ms, 100));
 const keys = { delay: demo.slow ? 40 : 0 };
 const frame = page.frameLocator('#app');
-const sources = ['/workspace/src/style.css', '/workspace/src/home.tsx'];
+const sources = ['/workspace/src/style.css', '/workspace/src/App.tsx'];
 // The page's own view of itself: the terminal's screen as text, its log, the agent's files.
 const terminal = () => page.evaluate(async sources => {
   const bat = window.batTerminal, decoder = new TextDecoder();
@@ -222,7 +222,7 @@ async function once(index: number): Promise<RunResult> {
     step = 'prompt'
     const reply = await execute('prompt', steps.prompt)
     Object.assign(result, { model: reply.model, replyMs: reply.replyMs, changed: reply.changed, rateLimited: reply.rateLimited, otherFailures: reply.otherFailures, screen: reply.screen })
-    check(reply.changed.length, `the agent finished without changing ${JSON.stringify(['src/style.css', 'src/home.tsx'])}`)
+    check(reply.changed.length, `the agent finished without changing ${JSON.stringify(['src/style.css', 'src/App.tsx'])}`)
     step = 'hot update'
     check(reply.after, 'the app is gone from the frame')
     check(reply.after.sameDocument, 'the frame was reloaded instead of hot-updated')

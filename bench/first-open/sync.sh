@@ -14,8 +14,8 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 tree=$root/target-gaps/${TREE:-tree}
 mkdir -p "$tree"
 excludes=(--exclude '/target-*' --exclude '/target' --exclude '.git' --exclude '.editor'
-  --exclude '/runtime/dist' --exclude '/packages/toolkit/dist' --exclude '/packages/react/dist' --exclude '/examples/todo-app/build'
-  --exclude '/examples/todo-app/.react-router' --exclude '/bench/startup/out' --exclude '/bench/first-open/out')
+  --exclude '/runtime/dist' --exclude '/packages/toolkit/dist' --exclude '/packages/react/dist' --exclude '/examples/todo-app/dist'
+  --exclude '/bench/startup/out' --exclude '/bench/first-open/out')
 if [ -n "${REF:-}" ]; then
   # A committed state (for A/B runs): tracked files of $REF, plus the untracked inputs a build needs.
   stage=$(mktemp -d)
