@@ -3,11 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "wasm-term": "bun wasm-term.ts",
+    "display": "bun display.ts",
     "prepare:editor": "bun prepare.ts",
     "build": "bun build.ts",
     "start": "bun server.ts",
-    "editor": "bun run wasm-term && bun run prepare:editor && bun run build && bun run start",
+    "editor": "bun run display && bun run prepare:editor && bun run build && bun run start",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

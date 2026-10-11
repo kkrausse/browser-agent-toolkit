@@ -138,19 +138,23 @@ The ranked list of known gaps is in the
 | `crates/bat-tools/` | Wasm backends for esbuild-shaped transforms and Tailwind's scanner |
 | `runtime/` | TypeScript: kernel bindings, process worker, loader, Node built-ins, SQLite, page host, service worker; `harness/` runs guest scripts in Chrome |
 | `packages/toolkit/` | `@kkrausse/browser-agent-toolkit`: prepare, server, browser, react, vite |
+| `packages/terminal/` | a terminal display for a page (ghostty-web, with the snapshot it wraps): bytes in, input and size out |
+| `packages/relay/` | the TCP relay behind the runtime's tunnel (`?tunnel=` of the terminal example) |
+| `ports/opencode/` | the OpenCode 2.0.26 terminal client built as a Node program for the runtime (OpenTUI's core as Wasm), and the 2.0.26 server bundle (`server/`) |
 | `packages/guest-shims/` | packages laid over native-tool packages in the guest (esbuild, lightningcss, Tailwind oxide) |
 | `examples/todo-app/` | React Router + Bun/tRPC TODO app with the editor; `demo/` drives and records the scenario |
+| `examples/terminal-app/` | the same app with the OpenCode terminal client beside it, on a terminal of the runtime's kernel |
 | `bench/` | the drivers behind the numbers in `docs/experiments/` |
 | `third_party/` | Node's `lib/` and the notices |
 | `docs/design/`, `docs/experiments/` | design, decisions, formats; measurements and reports |
 
 ## wasm-term
 
-[`wasm-term/`](wasm-term/README.md) is a separate project kept in this repository: real
-terminal clients (the OpenCode and codex TUIs) running in a browser tab on an emulated
-machine with a pty. It has its own README, build, checks and `third_party/`, and is in
-neither the Cargo workspace nor the bun workspaces, so nothing above builds or tests it. It
-builds its shell from `crates/bat-sh`, and `examples/terminal-app` embeds its OpenCode client.
+wasm-term (real terminal clients, the OpenCode and codex TUIs, in a browser tab on an emulated
+machine of its own with a pty) is not in this tree: it lives on the branch `wasm-term`, with
+its host, guests, dev pages, mock backend and the Codex port. What the toolkit took from it is
+here under other names: `crates/bat-pty`, `packages/terminal`, `packages/relay` and
+`ports/opencode`.
 
 ## Prerequisites
 

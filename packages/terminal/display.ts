@@ -1,7 +1,7 @@
 // The terminal display by itself: a ghostty-web terminal that fills an element and follows its
 // size. It takes bytes to draw and reports what was typed and how many cells fit; it knows
-// nothing about what runs behind it (wasm-term's machine in embed.ts, a pty of the toolkit
-// runtime in examples/terminal-app, a WebSocket, a test).
+// nothing about what runs behind it (a pty of the toolkit runtime in examples/terminal-app, a
+// WebSocket, a test).
 //
 //   const display = await mountDisplay({
 //     container, wasmUrl: "/assets/ghostty-vt.wasm",
@@ -10,9 +10,9 @@
 //   });
 //   program.onOutput = bytes => display.write(bytes);
 //
-// `wasmUrl` is @random/ghostty-web's vendor/ghostty-vt.wasm (third_party/ghostty-web).
+// `wasmUrl` is ghostty-web's terminal core, ghostty-web/vendor/ghostty-vt.wasm here.
 
-import { init, Terminal } from "@random/ghostty-web";
+import { init, Terminal } from "./ghostty-web/src/index.ts";
 import { clipboardWrites } from "./osc52";
 
 export interface DisplaySize {

@@ -1,0 +1,13 @@
+{
+  "name": "@kkrausse/browser-agent-relay",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun tcp-relay-main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.0",
+    "typescript": "^5.9.3"
+  }
+}

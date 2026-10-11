@@ -2,5 +2,5 @@
 name = "bat-pty"
 version = "0.1.0"
 edition = "2021"
-description = "PTY pair + N_TTY-style line discipline: plain Rust, no dependencies, unit-tested natively. The toolkit kernel's terminal device and wasm-term's kernel are both built on it"
+description = "PTY pair + N_TTY-style line discipline: plain Rust, no dependencies, unit-tested natively. The toolkit kernel's terminal device is built on it; written for wasm-term's kernel (branch wasm-term)"
 publish = false

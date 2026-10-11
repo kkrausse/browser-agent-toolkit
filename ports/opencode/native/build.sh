@@ -4,7 +4,7 @@
 #   usage: native/build.sh [ReleaseFast|ReleaseSmall|Debug]
 set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-ROOT=$(CDPATH= cd -- "$HERE/../../.." && pwd)
+ROOT=$(CDPATH= cd -- "$HERE/.." && pwd)
 OPENTUI="$ROOT/vendor/opentui"
 NATIVE="$OPENTUI/packages/native"
 ZIG_DIR="$ROOT/vendor/tools/zig-x86_64-linux-0.16.0"

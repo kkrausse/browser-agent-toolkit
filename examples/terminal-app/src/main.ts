@@ -17,7 +17,7 @@
 //
 //   ?model=<base URL>    an OpenAI Responses API. Default: the build's MODEL_URL, else this host, port 4311 (mock-model.ts)
 //   ?modelId=<id>        the model id sent in requests. Default `scripted`
-//   ?tunnel=<wss URL>    a TCP relay (wasm-term/web/tcp-relay-main.ts) for the hosts that answer without CORS headers.
+//   ?tunnel=<wss URL>    a TCP relay (packages/relay/tcp-relay-main.ts) for the hosts that answer without CORS headers.
 //                        Default: the build's TUNNEL_URL, else none; `0` for none
 //   ?clientLog=debug     the client logs every level to its file in the guest (/tmp/opencode-client/tui.log)
 //   ?reset=1             first forget this browser's workspace (source edits, sessions) and the client's saved state
@@ -29,7 +29,7 @@ import { installServerConfig, serverHealthy, serverLaunch, toLaunch, workspace, 
 import { installPanel } from './panel'
 import { watchSignIn } from './signin'
 
-/** What `wasm-term/display.js` exports (wasm-term's `web/display.ts`, bundled by `wasm-term.ts`): the terminal display alone. */
+/** What `display/display.js` exports (`packages/terminal/display.ts`, bundled by `display.ts` here): the terminal display alone. */
 interface DisplayModule {
   mountDisplay(options: {
     container: HTMLElement
@@ -56,7 +56,7 @@ declare global { interface Window { batTerminal: { runtime?: RuntimeHost; termin
 
 // Everything is beside the page, wherever that is served.
 const here = new URL('.', document.baseURI).href
-const assets = new URL('wasm-term/', here).href
+const assets = new URL('display/', here).href
 const manifestUrl = new URL('editor/manifest.json', here).href
 const workerUrl = new URL('sw.js', here).href
 /** The TODO app's own backend, as a guest program: where it is written and where it listens. */
@@ -179,7 +179,7 @@ async function main() {
   await installDerived(runtime.fs, manifest, manifestUrl)
   await installServerConfig(runtime.fs, model)
   if (!runtime.spawnTerminal) throw Error('This runtime has no terminals (spawnTerminal)')
-  if (!await runtime.fs.stat(clientEntry).then(() => true, () => false)) throw Error(`The prepared image has no OpenCode client (${clientEntry}): build wasm-term/ports/opencode for Node and prepare again`)
+  if (!await runtime.fs.stat(clientEntry).then(() => true, () => false)) throw Error(`The prepared image has no OpenCode client (${clientEntry}): build ports/opencode for Node and prepare again`)
   // The page watches for a sign-in that waits on a loopback redirect (signin.ts).
   await installClient(runtime.fs, await tapScript, watchSignIn(() => window.batTerminal.runtime, log))
   log(`[page] model endpoint: ${model.baseURL} (model ${model.id}), fetched by this tab directly`)

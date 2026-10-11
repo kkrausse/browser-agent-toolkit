@@ -16,7 +16,7 @@ import type { BunPlugin } from "bun"
 import path from "node:path"
 
 const HERE = path.resolve(import.meta.dir, "..")
-export const OPENTUI_ROOT = path.resolve(HERE, "../../vendor/opentui")
+export const OPENTUI_ROOT = path.resolve(HERE, "vendor/opentui")
 export const WASM_FFI_GLOBAL = "__wasmTermOpentuiFfi"
 
 interface Edit {

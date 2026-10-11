@@ -124,7 +124,24 @@ of each `wasm/` workspace.
 The zstd copy of an image that `bat-prepare` writes is decoded by the browser's network
 stack (`Content-Encoding: zstd`); no decoder is shipped.
 
+## ghostty-web (`packages/terminal/ghostty-web/`)
+
+A snapshot of the package `ghostty-web` of the repository `random` (same author), MIT,
+Copyright (c) 2025 Coder, Copyright (c) 2026 kkrausse (`ghostty-web/LICENSE`); its
+`vendor/ghostty-vt.wasm` and `vendor/headers/` are the unmodified upstream Ghostty release
+artifact and C headers, MIT, Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors
+(`ghostty-web/vendor/LICENSE`). Source commit and how to refresh: `packages/terminal/README.md`.
+
 ## Not in this tree, fetched at setup or install time
+
+- **OpenCode 2.0.26 and OpenTUI 0.5.17 sources** (`ports/opencode/vendor/`, gitignored):
+  cloned from `anomalyco/opencode` (tag `v2.0.26`) and `anomalyco/opentui` (tag `v0.5.17`),
+  both MIT, by `ports/opencode/setup-vendor.sh`, and bundled into the terminal client
+  (`ports/opencode/dist/node/`, in a prepared image at `/app/tui/`) with their npm
+  dependencies under their own licenses. `ports/opencode/native/opentui-native-wasm.patch`
+  is a patch to OpenTUI's sources; the edits in `ports/opencode/build/*-plugin.ts` quote
+  the lines of OpenTUI and OpenCode they replace. The 2.0.26 server
+  (`ports/opencode/server`) is bundled from the published `@opencode/server` packages.
 
 - **OpenCode 2.0.3 server** (`server.js` and three tree-sitter `.wasm` files): downloaded by
   `scripts/setup.ts` from a checksummed release asset into the gitignored `.runtime/`, and

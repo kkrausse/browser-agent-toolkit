@@ -1,6 +1,6 @@
 // The side panel's shell: open and close, and a grip on its left edge to drag it wider or
 // narrower. Its width is a CSS variable, so the terminal inside simply sees its container
-// change size (wasm-term refits and sends the program a new window size).
+// change size (the display refits and the program gets a new window size).
 
 const widthKey = 'terminal-panel-width', openKey = 'terminal-panel-open'
 const stored = (key: string) => { try { return localStorage.getItem(key) } catch { return null } }

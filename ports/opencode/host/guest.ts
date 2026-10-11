@@ -6,7 +6,7 @@
 //
 // Everything this guest loads sits next to it (see build/build-site.ts):
 //   guest.js  tui.js  opentui.wasm  parser.worker.js  tree-sitter.wasm  assets/
-import type { JsGuestContext } from "../../../host/node/runtime"
+import type { JsGuestContext } from "../../../wasm-term/host/node/runtime"
 import { bootOpentuiWasm } from "../src/boot"
 import { ASSET_BASE_GLOBAL } from "../src/shims/opentui-runtime-assets"
 import type { WasmTermClipboard } from "../src/shims/host-clipboard"

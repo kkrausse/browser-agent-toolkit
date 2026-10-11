@@ -18,12 +18,12 @@
 import path from "node:path"
 import { cpSync, mkdirSync } from "node:fs"
 import type { BunPlugin } from "bun"
-import { nodeShimsPlugin } from "../../../host/node/bun-plugin"
+import { nodeShimsPlugin } from "../../../wasm-term/host/node/bun-plugin"
 import { opentuiWasmPlugin, OPENTUI_ROOT } from "./opentui-wasm-plugin"
 import { opencodeEditsPlugin } from "./opencode-edits-plugin"
 
 const HERE = path.resolve(import.meta.dir, "..")
-const OPENCODE_ROOT = path.resolve(HERE, "../../vendor/opencode")
+const OPENCODE_ROOT = path.resolve(HERE, "vendor/opencode")
 const TUI = path.join(OPENCODE_ROOT, "packages/tui")
 const args = process.argv.slice(2)
 const target = (args.find((arg) => arg.startsWith("--target="))?.slice(9) ?? "bun") as "bun" | "browser" | "node"

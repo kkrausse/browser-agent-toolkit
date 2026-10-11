@@ -6,7 +6,7 @@
 //   todo-api.js             the TODO app's backend, a guest program
 //   openai-jwks.json        a copy of OpenAI's public signing keys, for a page without a tunnel (see below)
 //   client-tap.js           a preload module of the OpenCode client (the sign-in bar's source)
-//   wasm-term/              the terminal display and its core (from `bun run wasm-term`)
+//   display/                the terminal display and its core (from `bun run display`)
 //   editor/                 the prepared runtime, image (with the OpenCode server and client) and manifest (from `bun run prepare:editor`)
 //
 // Big compressible files are shipped once, gzip-compressed (`<name>.gz`, no `<name>`); the
@@ -26,7 +26,7 @@ import { createGzip } from 'node:zlib'
 
 const here = import.meta.dirname
 const out = resolve(here, process.env.OUT_DIR ?? 'dist')
-for (const [path, how] of [['.wasm-term/display.js', 'bun run wasm-term'], ['.editor/prepared/manifest.json', 'bun run prepare:editor']] as const) {
+for (const [path, how] of [['.display/display.js', 'bun run display'], ['.editor/prepared/manifest.json', 'bun run prepare:editor']] as const) {
   if (!existsSync(resolve(here, path))) throw Error(`Missing ${path}: run \`${how}\` in examples/terminal-app (or \`bun run terminal\` in the repository root).`)
 }
 
@@ -36,7 +36,7 @@ const walk = (directory: string, prefix = ''): string[] => readdirSync(directory
 // What is copied: published path → source. Not the zstd copies (for a server that negotiates
 // encodings) and not the runtime's test page script.
 const files = new Map<string, string>([['index.html', resolve(here, 'index.html')]])
-for (const path of walk(resolve(here, '.wasm-term'))) files.set(`wasm-term/${path}`, resolve(here, '.wasm-term', path))
+for (const path of walk(resolve(here, '.display'))) files.set(`display/${path}`, resolve(here, '.display', path))
 for (const path of walk(resolve(here, '.editor/prepared'))) {
   if (path.endsWith('.zst') || path === 'runtime/bat-harness.js') continue
   files.set(`editor/${path}`, resolve(here, '.editor/prepared', path))

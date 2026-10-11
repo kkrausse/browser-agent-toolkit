@@ -17,7 +17,7 @@
 //                        and repeats its output; ends SCRIPTED-SHELL-DONE
 //   anything else        a paragraph of streamed text; ends SCRIPTED-PLAIN-DONE
 //
-// wasm-term's mock-llm (`?model=http://<host>:4791/v1&modelId=mock-model`) has more scripts,
+// wasm-term's mock-llm (branch `wasm-term`; `?model=http://<host>:4791/v1&modelId=mock-model`) has more scripts,
 // but its file scenarios write files of its own sample project, none that this preview shows.
 
 import { appendFile } from 'node:fs/promises'

@@ -1,7 +1,7 @@
 // How the wasm-term dev page (../../../web) offers this port: which directory
 // to serve, which settings the launcher asks for, what survives a reload.
 import { join } from "node:path"
-import type { JsGuest } from "../../../web/guests"
+import type { JsGuest } from "../../../wasm-term/web/guests"
 
 export const opencodeGuest: JsGuest = {
   name: "opencode",

@@ -2,12 +2,12 @@
 // image and its source is what the agent may edit. Only the output lands here.
 //
 // The image's application directory (`/app`) holds both halves of OpenCode 2.0.26: the server
-// (`.runtime/opencode-2.0.26/`, built by scripts/opencode-server) and, under `tui/`, the
-// terminal client (wasm-term's OpenCode port built for Node, `bun run build:tui:node` in
-// wasm-term/ports/opencode). They are put together in `.editor/application/`.
+// (`.runtime/opencode-2.0.26/`, built by ports/opencode/server) and, under `tui/`, the
+// terminal client (the OpenCode port built for Node, `bun run build:tui:node` in
+// ports/opencode). They are put together in `.editor/application/`.
 //
-//   BAT_OPENCODE_DIR   another server directory (with its application.json)
-//   WASM_TERM_DIR      another wasm-term directory (default: ../../wasm-term)
+//   BAT_OPENCODE_DIR          another server directory (with its application.json)
+//   BAT_OPENCODE_CLIENT_DIR   another client directory (default: ../../ports/opencode/dist/node)
 import { prepare } from '@kkrausse/browser-agent-toolkit/prepare'
 import { createHash } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
@@ -16,9 +16,9 @@ import { dirname, join, resolve } from 'node:path'
 const app = resolve(import.meta.dirname, '../todo-app')
 const built = resolve(import.meta.dirname, '../../.runtime/opencode-2.0.26')
 const server = process.env.BAT_OPENCODE_DIR ?? built
-if (!existsSync(resolve(server, 'application.json'))) throw Error(`No OpenCode 2.0.26 server at ${server}: run \`bun run terminal\` in the repository root (it builds scripts/opencode-server), or set BAT_OPENCODE_DIR.`)
-const client = resolve(process.env.WASM_TERM_DIR ?? join(import.meta.dirname, '../../wasm-term'), 'ports/opencode/dist/node')
-if (!existsSync(join(client, 'main.js')) || !existsSync(join(client, 'opentui.wasm'))) throw Error(`No OpenCode client for Node at ${client}: in wasm-term/ports/opencode run \`bun run build:native\` and \`bun run build:tui:node\` (see its NOTES.md), or set WASM_TERM_DIR.`)
+if (!existsSync(resolve(server, 'application.json'))) throw Error(`No OpenCode 2.0.26 server at ${server}: run \`bun run terminal\` in the repository root (it builds ports/opencode/server), or set BAT_OPENCODE_DIR.`)
+const client = resolve(process.env.BAT_OPENCODE_CLIENT_DIR ?? join(import.meta.dirname, '../../ports/opencode/dist/node'))
+if (!existsSync(join(client, 'main.js')) || !existsSync(join(client, 'opentui.wasm'))) throw Error(`No OpenCode client for Node at ${client}: in ports/opencode run \`bun run build:native\` and \`bun run build:tui:node\` (see its README.md), or set BAT_OPENCODE_CLIENT_DIR.`)
 
 const walk = (directory: string, prefix = ''): string[] => readdirSync(directory, { withFileTypes: true }).flatMap(entry =>
   entry.isDirectory() ? walk(join(directory, entry.name), `${prefix}${entry.name}/`) : [`${prefix}${entry.name}`])

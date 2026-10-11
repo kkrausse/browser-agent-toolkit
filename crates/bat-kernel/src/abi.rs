@@ -349,7 +349,7 @@ pub unsafe extern "C" fn bat_tty_open(cols: u32, rows: u32, out: *mut i32) -> i3
 pub extern "C" fn bat_isatty(fd: i32) -> i32 {
     ret(proc::cur().and_then(|p| p.fd(fd)).map(|f| f.tty().is_ok() as i32))
 }
-/// `buf`: 44 bytes, the termios layout of wasm-term/docs/abi.md (Linux flag values).
+/// `buf`: 44 bytes, the termios layout of `bat-pty`'s `Termios::to_bytes` (Linux flag values; docs/design/kernel-abi.md section 18).
 #[no_mangle]
 pub unsafe extern "C" fn bat_tty_getattr(fd: i32, buf: *mut u8) -> i32 {
     ret(proc::cur().and_then(|p| p.fd(fd)).and_then(|f| {

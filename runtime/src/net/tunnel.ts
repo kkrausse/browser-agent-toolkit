@@ -13,7 +13,7 @@
 //   HTTP/1.1, here              one request per connection (`connection: close`), streamed
 //                               both ways; content-length, chunked and until-close bodies
 //
-// The relay's wire format (wasm-term/web/tcp-relay.ts), both directions:
+// The relay's wire format (packages/relay/tcp-relay.ts), both directions:
 //   binary frame   bytes of the stream
 //   text frame     JSON: relay -> page  {"t":"open"} | {"t":"ack","bytes":n} | {"t":"end"}
 //                                       | {"t":"error","code":c,"message":m} (then it closes)

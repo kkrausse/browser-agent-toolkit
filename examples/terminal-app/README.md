@@ -32,7 +32,7 @@ permission dialog: this page's configuration allows every tool (the agent's reac
 `?tunnel=<wss URL>` (a TCP relay for [the hosts a tab cannot read](#the-tunnel); `0` for none).
 
 After a setup, `bun run editor` in this directory repeats only the example's own steps
-(`wasm-term`, `prepare:editor`, `build` into `dist/`, `start`); set `BAT_PREPARE` when `bat-prepare` is not
+(`display`, `prepare:editor`, `build` into `dist/`, `start`); set `BAT_PREPARE` when `bat-prepare` is not
 in `target/release` of this checkout.
 
 ## Publishing it
@@ -69,20 +69,20 @@ Three separate things, none of which knows the others:
 | --- | --- | --- |
 | the terminal | the runtime's kernel (`crates/bat-kernel/src/tty.rs`, on `crates/bat-pty`) | a pty pair: canonical and raw mode, echo, ^C, window size |
 | the handle | `runtime.spawnTerminal(launch, { cols, rows, onOutput })` | starts a program with the pty as its stdin, stdout and stderr; `write(bytes)`, `resize(size)`, `exited` |
-| the display | `wasm-term/web/display.ts` (ghostty-web), bundled by `wasm-term.ts` into `wasm-term/display.js` | draws bytes, reports typed input and how many cells fit; pastes the browser's clipboard as input (ctrl+v, ctrl+shift+v, cmd+v, the paste event) and writes it when the program copies (OSC 52) |
+| the display | `packages/terminal/display.ts` (ghostty-web), bundled by `display.ts` here into `display/display.js` | draws bytes, reports typed input and how many cells fit; pastes the browser's clipboard as input (ctrl+v, ctrl+shift+v, cmd+v, the paste event) and writes it when the program copies (OSC 52) |
 
 `src/main.ts` joins them in a dozen lines. The client is an ordinary program of the prepared
-image: wasm-term's OpenCode port built for Node (`cd wasm-term/ports/opencode && bun run
-build:native && bun run build:tui:node`, see its NOTES.md for the checkouts that needs), which
+image: the OpenCode port built for Node (`cd ports/opencode && bun run build:native && bun run
+build:tui:node`, see its README.md for the checkouts that needs), which
 `prepare.ts` puts under `/app/tui/` beside the server. `process.stdout.isTTY`, raw mode,
 `columns`/`rows` and `resize` are the runtime's Node stand-ins over the kernel's terminal;
 OpenTUI's tree-sitter worker is a `node:worker_threads` worker (here: a second process). The
 client's settings, prompt history and open tabs are files under `/home/user` in the workspace's
 storage, so a reload keeps them and `?reset=1` forgets them.
 
-wasm-term's program host (its own pty machine, shim and page relay) is not used here any more.
-`WASM_TERM_DIR` names another `wasm-term` directory for the display and the client build
-(default `../../wasm-term`).
+`BAT_OPENCODE_CLIENT_DIR` names another built client directory (default
+`../../ports/opencode/dist/node`). wasm-term's program host (its own pty machine, shim and
+page relay), which this page ran the client on before, is on the branch `wasm-term`.
 
 ## How the pieces talk
 
@@ -99,7 +99,7 @@ contract, instead of the toolkit's `openEditor`, which always sets up the page s
 proxy, its header plugin and catalog.
 
 **Versions.** Client and server are both 2.0.26. The server is bundled from the published
-`@opencode/server` packages by `scripts/opencode-server` (pinned by its `bun.lock`) into
+`@opencode/server` packages by `ports/opencode/server` (pinned by its `bun.lock`) into
 `.runtime/opencode-2.0.26/`; `bun run terminal` builds it when it is missing, and `prepare.ts`
 names that directory. The directory carries an `application.json`, which is what makes
 `bat-prepare` take it in place of the 2.0.3 artefact its policy pins (the TODO example and its
@@ -158,12 +158,12 @@ token" until the page is built again), the sign-in completes, and every model ca
 ### The tunnel
 
 `?tunnel=wss://<relay>/tcp` (or the build's `TUNNEL_URL`) names a TCP relay:
-[`wasm-term/web/tcp-relay-main.ts`](../../wasm-term/web/tcp-relay-main.ts), a program of its
+[`packages/relay/tcp-relay-main.ts`](../../packages/relay/tcp-relay-main.ts), a program of its
 own that carries one TCP connection per WebSocket and never looks at the bytes.
 
 ```sh
 # on a machine the browser can reach over https (the page is https, so the relay is wss)
-cd wasm-term/web && RELAY_ORIGINS='https://<page origin> https://<another>' PORT=4799 bun tcp-relay-main.ts
+cd packages/relay && RELAY_ORIGINS='https://<page origin> https://<another>' PORT=4799 bun tcp-relay-main.ts
 ```
 
 With it, the server's requests to `api.openai.com` and for the keys document are made by the

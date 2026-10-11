@@ -19,7 +19,7 @@ const here = import.meta.dirname
 const lock = Bun.JSONC.parse(await Bun.file(join(here, 'bun.lock')).text()) as { packages: Record<string, unknown[]> }
 const version = String(lock.packages['@opencode/server']?.[0]).replace('@opencode/server@', '')
 if (!/^\d+\.\d+\.\d+$/.test(version)) throw Error('bun.lock names no @opencode/server version')
-const out = resolve(process.argv[2] ?? join(here, `../../.runtime/opencode-${version}`))
+const out = resolve(process.argv[2] ?? join(here, `../../../.runtime/opencode-${version}`))
 rmSync(out, { recursive: true, force: true })
 mkdirSync(out, { recursive: true })
 

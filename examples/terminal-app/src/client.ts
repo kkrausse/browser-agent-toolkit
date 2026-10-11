@@ -1,5 +1,5 @@
 // The OpenCode terminal client's start: an ordinary program of the prepared image
-// (`/app/tui/main.js`, wasm-term's OpenCode port built for Node), run by the runtime on a
+// (`/app/tui/main.js`, the OpenCode port of ports/opencode built for Node), run by the runtime on a
 // terminal of its kernel. It reaches the server at `http://127.0.0.1:<port>`, which in the guest
 // is the server's own listener, with the server's real credential.
 import type { Launch, RuntimeFs } from '@kkrausse/browser-agent-toolkit/browser'

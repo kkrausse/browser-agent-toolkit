@@ -2,7 +2,7 @@
 //!
 //! Flag bits and `c_cc` indexes use the Linux (asm-generic) values so code
 //! written against `libc::termios` constants ports 1:1. The wire layout
-//! (`Termios::to_bytes`) is the guest ABI documented in `docs/abi.md`.
+//! (`Termios::to_bytes`) is the guest ABI (`docs/design/kernel-abi.md`, section 18).
 
 // c_iflag
 pub const IGNBRK: u32 = 0o000001;

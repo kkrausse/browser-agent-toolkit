@@ -14,7 +14,7 @@
 //   2. OpenCode server artefact → .runtime/opencode-2.0.3/ ($BAT_OPENCODE_DIR overrides;
 //      downloaded from the checksummed release asset). The terminal example runs the
 //      server its terminal client was built for instead: 2.0.26, bundled here from the
-//      published packages (scripts/opencode-server) into .runtime/opencode-2.0.26/
+//      published packages (ports/opencode/server) into .runtime/opencode-2.0.26/
 //   3. kernel.wasm, bat_modules.wasm, bat_node_native.wasm, bat_sh.wasm, the bat-prepare CLI
 //   4. runtime bundles → runtime/dist/
 //   5. the toolkit package → packages/toolkit/dist/
@@ -73,9 +73,9 @@ async function openCodeDir(): Promise<string> {
   return local
 }
 
-/** The server version of the terminal example, built from the published packages pinned in scripts/opencode-server/bun.lock. */
+/** The server version of the terminal example, built from the published packages pinned in ports/opencode/server/bun.lock. */
 async function builtOpenCodeDir(): Promise<string> {
-  const recipe = join(root, 'scripts/opencode-server')
+  const recipe = join(root, 'ports/opencode/server')
   const lock = Bun.JSONC.parse(await Bun.file(join(recipe, 'bun.lock')).text()) as { packages: Record<string, unknown[]> }
   const local = join(root, '.runtime', String(lock.packages['@opencode/server']![0]).replace('@opencode/server@', 'opencode-'))
   // The directory describes itself once a build has finished (application.json is written last).

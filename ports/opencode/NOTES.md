@@ -1,5 +1,15 @@
 # opencode TUI in the browser
 
+> **Where this is now (2026-10-10).** This directory was `wasm-term/ports/opencode`. It is
+> `ports/opencode`, and what is built from it is the Node program (`bun run build:tui:node`,
+> [README.md](README.md)), which the toolkit runtime runs on its kernel's terminal. The rest
+> of what these notes describe (the client as a guest of wasm-term's machine in a Web Worker,
+> `host/guest.ts`, `web/guest.ts`, the browser-target build `build:tui`, the dev page, the mock
+> backend, `web/verify`) is on the branch `wasm-term`; paths below that leave this directory
+> (`../../host`, `../../web`, `../../mock-llm`, `../../docs`) and `wasm-term/vendor` are that
+> branch's. The checkouts are now `vendor/` here (`setup-vendor.sh`). The findings about the
+> client, OpenTUI's core and the Wasm FFI hold for the Node build unchanged.
+
 Target: opencode v2.0.26 (`anomalyco/opencode`, tag `v2.0.26`, commit `9b4ec571`), which pins
 OpenTUI 0.5.17 (`anomalyco/opentui`, tag `v0.5.17`, commit `6f0efd33`).
 

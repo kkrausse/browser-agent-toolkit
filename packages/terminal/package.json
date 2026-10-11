@@ -1,0 +1,16 @@
+{
+  "name": "@kkrausse/browser-agent-terminal",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./display.ts",
+    "./ghostty-vt.wasm": "./ghostty-web/vendor/ghostty-vt.wasm"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.0",
+    "typescript": "^5.9.3"
+  }
+}

@@ -3,9 +3,9 @@
 // needs a scratch filesystem (a cache for fetched grammars and queries), so
 // it gets a private in-memory one; nothing here touches the machine.
 import { Buffer } from "node:buffer"
-import { createNodeFs } from "../../../host/node/fs"
-import { installNodeGlobals } from "../../../host/node/globals"
-import { createVfs } from "../../../host/vfs"
+import { createNodeFs } from "../../../wasm-term/host/node/fs"
+import { installNodeGlobals } from "../../../wasm-term/host/node/globals"
+import { createVfs } from "../../../wasm-term/host/vfs"
 
 const globals = globalThis as Record<string, any>
 // No `versions.node`: web-tree-sitter must take its browser path (fetch + instantiateStreaming).
