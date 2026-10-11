@@ -8,12 +8,15 @@
 // reach the listener, though (`runtime.endpoint(port).fetch`): the user pastes the address the
 // browser ended on and the page makes that request.
 //
-// The page learns of an attempt from the client's own requests, which all pass through it:
-// the answer to `POST /api/integration/<id>/connect/oauth` carries the sign-in URL, and the
-// client then polls `GET …/connect/oauth/<attempt>` until it is no longer pending.
+// The page learns of an attempt from the client's own requests: the answer to
+// `POST /api/integration/<id>/connect/oauth` carries the sign-in URL, and the client then polls
+// `GET …/connect/oauth/<attempt>` until it is no longer pending. The client talks to the server
+// inside the runtime, not through this page, so those exchanges are reported from the client's
+// process by a preload module the page gives it (client-tap.ts, src/client.ts).
 import type { RuntimeHost } from '@kkrausse/browser-agent-toolkit/browser'
 
-export type ServerFetch = (path: string, init: { method: string; headers: [string, string][]; body: Uint8Array | null; signal: AbortSignal }) => Promise<Response>
+/** One request of the client under `/api/integration/<id>/connect/oauth` and its JSON answer. */
+export interface SignInExchange { method: string; path: string; status: number; body?: unknown }
 
 interface Pending { attempt: string; url: string; port: number; path: string }
 
@@ -21,8 +24,8 @@ const loopback = /^(127(\.\d+){3}|localhost|\[::1\])$/
 const start = /^\/api\/integration\/[^/]+\/connect\/oauth$/
 const status = /^\/api\/integration\/[^/]+\/connect\/oauth\/([^/]+)$/
 
-/** Wraps the client's path to the server; shows `#signin` while a loopback sign-in is pending. */
-export function watchSignIn(fetch: ServerFetch, runtime: () => RuntimeHost | undefined, log: (line: string) => void): ServerFetch {
+/** Returns what to call with each exchange; shows `#signin` while a loopback sign-in is pending. */
+export function watchSignIn(runtime: () => RuntimeHost | undefined, log: (line: string) => void): (exchange: SignInExchange) => void {
   const bar = document.querySelector<HTMLFormElement>('#signin')!
   const link = bar.querySelector<HTMLAnchorElement>('a')!, input = bar.querySelector<HTMLInputElement>('input')!, note = bar.querySelector<HTMLElement>('output')!
   let pending: Pending | undefined
@@ -68,12 +71,11 @@ export function watchSignIn(fetch: ServerFetch, runtime: () => RuntimeHost | und
     })
   })
 
-  return async (path, init) => {
-    const response = await fetch(path, init)
-    const route = path.split('?')[0]!
+  return ({ method, path, status: code, body }) => {
+    const route = path.split('?')[0]!, ok = code >= 200 && code < 300
     try {
-      if (init.method === 'POST' && start.test(route) && response.ok) {
-        const data = (await response.clone().json() as { data?: { attemptID?: string; url?: string } }).data
+      if (method === 'POST' && start.test(route) && ok) {
+        const data = (body as { data?: { attemptID?: string; url?: string } } | undefined)?.data
         const redirect = data?.url && URL.canParse(data.url) ? new URL(data.url).searchParams.get('redirect_uri') : null
         const to = redirect && URL.canParse(redirect) ? new URL(redirect) : undefined
         if (data?.attemptID && to && to.protocol === 'http:' && loopback.test(to.hostname)) {
@@ -82,11 +84,10 @@ export function watchSignIn(fetch: ServerFetch, runtime: () => RuntimeHost | und
         }
       } else if (pending && status.exec(route)?.[1] === pending.attempt) {
         // Cancelled by the client, or the client's poll says it is over.
-        const state = init.method === 'DELETE' ? 'cancelled' : init.method === 'GET' && response.ok ? (await response.clone().json() as { data?: { status?: string; message?: string } }).data : undefined
+        const state = method === 'DELETE' ? 'cancelled' : method === 'GET' && ok ? (body as { data?: { status?: string; message?: string } } | undefined)?.data : undefined
         const over = typeof state === 'string' ? state : state?.status && state.status !== 'pending' ? `${state.status}${state.message ? `: ${state.message}` : ''}` : undefined
         if (over) { log(`[page] sign-in ${over}`); show(undefined, over.startsWith('failed') || over === 'expired' ? over : undefined) }
       }
     } catch { /* not what was expected: the client deals with it */ }
-    return response
   }
 }

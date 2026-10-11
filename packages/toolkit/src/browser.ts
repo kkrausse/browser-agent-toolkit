@@ -5,7 +5,7 @@ import { createChatController } from './chat/controller';
 import type { ChatController } from './chat/types';
 import { exportSessions, importSessions, type SessionBundle } from './sessions';
 
-export type { BootRuntime, RuntimeHost, RuntimeFs, RuntimeEndpoint, RuntimeProcess, Launch } from './runtime-host';
+export type { BootRuntime, RuntimeHost, RuntimeFs, RuntimeEndpoint, RuntimeProcess, RuntimeTerminal, TerminalOptions, TerminalSize, Launch } from './runtime-host';
 export type { EditorManifest, LaunchDescription } from './manifest';
 export type { SessionBundle } from './sessions';
 export { captureSource, unpackSource, managedNames, type CaptureSourceOptions, type SourceArchive, type SourceLimits } from './source-archive';

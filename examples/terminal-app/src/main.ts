@@ -1,10 +1,11 @@
-// One tab, three programs. The TODO app's Vite dev server and the OpenCode server run in
-// Web Workers on the toolkit's runtime; the real OpenCode terminal client runs in another
-// Worker on wasm-term's pty machine and draws into a ghostty-web terminal in the side panel.
+// One tab, four programs, all on the toolkit's runtime (a Web Worker each): the TODO app's Vite
+// dev server, its backend, the OpenCode server, and the real OpenCode terminal client, which
+// runs on a terminal of the runtime's kernel. This page holds the other end of that terminal
+// and joins it to a ghostty-web display in the side panel (bytes both ways, and the size).
 //
 // Who talks to whom:
-//   terminal client → OpenCode server   through this page (wasm-term relays the client's
-//                                       fetches here; `endpoint(port).fetch` reaches the server)
+//   terminal client → OpenCode server   `http://127.0.0.1:<port>` in the guest: a socket of the
+//                                       runtime's kernel; this page is not in between
 //   OpenCode server → model             a plain cross-origin fetch from the tab to `?model=`;
 //                                       no server of this page is involved
 //   OpenCode server → api.openai.com    (a ChatGPT sign-in) the runtime's own TLS and HTTP through
@@ -18,39 +19,40 @@
 //   ?modelId=<id>        the model id sent in requests. Default `scripted`
 //   ?tunnel=<wss URL>    a TCP relay (wasm-term/web/tcp-relay-main.ts) for the hosts that answer without CORS headers.
 //                        Default: the build's TUNNEL_URL, else none; `0` for none
+//   ?clientLog=debug     the client logs every level to its file in the guest (/tmp/opencode-client/tui.log)
 //   ?reset=1             first forget this browser's workspace (source edits, sessions) and the client's saved state
-import { installDerived, installSource, type BootRuntime, type EditorManifest, type RuntimeHost, type RuntimeProcess } from '@kkrausse/browser-agent-toolkit/browser'
+import { installDerived, installSource, type BootRuntime, type EditorManifest, type RuntimeHost, type RuntimeProcess, type RuntimeTerminal, type TerminalSize } from '@kkrausse/browser-agent-toolkit/browser'
+import { clientEntry, clientLaunch, clientLog, installClient } from './client'
 import { installDiag } from './diag'
 import { isolate } from './isolate'
 import { installServerConfig, serverHealthy, serverLaunch, toLaunch, workspace, type ModelEndpoint } from './opencode'
 import { installPanel } from './panel'
 import { watchSignIn } from './signin'
 
-/** What `/wasm-term/embed.js` exports (wasm-term's `web/embed.ts`, bundled by `wasm-term.ts`). */
-interface WasmTerm {
-  mountTerminal(options: {
+/** What `wasm-term/display.js` exports (wasm-term's `web/display.ts`, bundled by `wasm-term.ts`): the terminal display alone. */
+interface DisplayModule {
+  mountDisplay(options: {
     container: HTMLElement
-    assets: string
-    guest: string
-    env?: Record<string, string>
+    wasmUrl: string
     fontSize?: number
-    persist?: { namespace: string; roots: string[]; exclude?: string[] }
-    pageFetch?: {
-      prefixes: string[]
-      fetch(url: string, init: { method: string; headers: [string, string][]; body: Uint8Array | null; signal: AbortSignal }): Promise<Response>
-    }
-  }): Promise<Mounted>
+    onInput(data: string): void
+    onResize(size: TerminalSize): void
+  }): Promise<Display>
 }
+interface Display {
+  write(data: Uint8Array | string): void
+  size(): Required<TerminalSize>
+  screen(): string[]
+  focus(): void
+}
+/** The side panel's terminal: the display, the client's process, and the screen as text (for checks and diagnostics). */
 interface Mounted {
-  terminal: { cols: number; rows: number; focus(): void }
-  program: { write(data: string): void }
+  display: Display
+  client: RuntimeTerminal
   screen(): string[]
 }
 declare global { interface Window { batTerminal: { runtime?: RuntimeHost; terminal?: Mounted; model?: ModelEndpoint; log: string[] } } }
 
-// The address the client is given. Nothing listens there: requests under it are relayed to
-// this page (wasm-term's page-fetch), which hands them to the OpenCode server in the tab.
-const inTabServer = 'http://opencode.in-tab'
 // Everything is beside the page, wherever that is served.
 const here = new URL('.', document.baseURI).href
 const assets = new URL('wasm-term/', here).href
@@ -96,7 +98,7 @@ const diag = installDiag(params, builtModel && new URL('/diag', builtModel).href
 const say = (text: string, error = false) => { status.textContent = text; status.classList.toggle('error', error); diag.event(error ? 'failed' : 'stage', text) }
 window.batTerminal = { log: [], model }
 document.querySelector('#title')!.textContent = `OpenCode · model ${model.id} at ${new URL(model.baseURL).host}${tunnel ? ` · tunnel ${new URL(tunnel.url).host}` : ''}`
-const panel = installPanel({ onOpen: () => window.batTerminal.terminal?.terminal.focus() })
+const panel = installPanel({ onOpen: () => window.batTerminal.terminal?.display.focus() })
 // Ctrl+Tab and Ctrl+Shift+Tab switch browser tabs. The terminal would take them (and cancel
 // the browser's handling) like any other key, so they are kept from it here.
 for (const type of ['keydown', 'keyup'] as const) {
@@ -134,15 +136,20 @@ function follow(name: string, process: RuntimeProcess, show: boolean) {
 async function main() {
   // Returns only in an isolated page that the service worker controls (it reloads once to get there).
   await isolate(workerUrl, here, (kind, data) => diag.event(kind, data))
-  // The terminal's code loads while the runtime boots. A variable, so the bundler leaves the import alone.
-  const embed = assets + 'embed.js'
-  const wasmTerm = import(embed) as Promise<WasmTerm>
-  void wasmTerm.catch(() => {})
-  const apiScript = fetch(new URL('todo-api.js', here)).then(async response => {
-    if (!response.ok) throw Error(`todo-api.js answered HTTP ${response.status}`)
-    return new Uint8Array(await response.arrayBuffer())
-  })
-  void apiScript.catch(() => {})
+  // The display's code loads while the runtime boots. A variable, so the bundler leaves the import alone.
+  const displayUrl = assets + 'display.js'
+  const displayModule = import(displayUrl) as Promise<DisplayModule>
+  void displayModule.catch(() => {})
+  // Guest programs that are files of this page: fetched while the runtime boots.
+  const script = (name: string) => {
+    const bytes = fetch(new URL(name, here)).then(async response => {
+      if (!response.ok) throw Error(`${name} answered HTTP ${response.status}`)
+      return new Uint8Array(await response.arrayBuffer())
+    })
+    void bytes.catch(() => {})
+    return bytes
+  }
+  const apiScript = script('todo-api.js'), tapScript = script('client-tap.js')
 
   say('Loading…')
   const response = await fetch(manifestUrl, { cache: 'no-store' })
@@ -153,7 +160,7 @@ async function main() {
   if (sessionStorage.getItem(resetKey)) {
     sessionStorage.removeItem(resetKey)
     await runtimeModule.resetWorkspace({ manifestUrl })
-    // The terminal client's files (wasm-term keeps them in IndexedDB); this origin has no other database.
+    // What an earlier build of this page kept for the client (wasm-term's IndexedDB); the client's files are in the workspace now.
     for (const database of await indexedDB.databases()) if (database.name) indexedDB.deleteDatabase(database.name)
   }
   const { bootRuntime } = runtimeModule
@@ -169,6 +176,10 @@ async function main() {
   log(`[page] ${source.preserved ? 'kept the workspace already in this browser' : `installed ${source.installed} source files`}`)
   await installDerived(runtime.fs, manifest, manifestUrl)
   await installServerConfig(runtime.fs, model)
+  if (!runtime.spawnTerminal) throw Error('This runtime has no terminals (spawnTerminal)')
+  if (!await runtime.fs.stat(clientEntry).then(() => true, () => false)) throw Error(`The prepared image has no OpenCode client (${clientEntry}): build wasm-term/ports/opencode for Node and prepare again`)
+  // The page watches for a sign-in that waits on a loopback redirect (signin.ts).
+  await installClient(runtime.fs, await tapScript, watchSignIn(() => window.batTerminal.runtime, log))
   log(`[page] model endpoint: ${model.baseURL} (model ${model.id}), fetched by this tab directly`)
   if (tunnel) log(`[page] tunnel: ${tunnel.to.join(', ')} through the relay at ${new URL(tunnel.url).host}, with TLS in this tab`)
 
@@ -196,36 +207,28 @@ async function main() {
   void Promise.allSettled([appUp, serverUp]).then(() => runtime.started?.())
   await serverUp
 
-  // Client and server are the same version; only the server's credential is added here.
-  // The page also watches for a sign-in that waits on a loopback redirect (signin.ts).
-  const toServer = watchSignIn((path, init) => server.fetch(path, {
-    method: init.method,
-    headers: [...init.headers.filter(([name]) => name.toLowerCase() !== 'authorization'), ['authorization', authorization]],
-    body: init.body as BodyInit | null,
-    signal: init.signal,
-  }), () => window.batTerminal.runtime, log)
-  const { mountTerminal } = await wasmTerm
-  window.batTerminal.terminal = await mountTerminal({
+  // Client and server are the same version. The display is mounted first: the client starts at its size.
+  let client: RuntimeTerminal | undefined
+  const display = await (await displayModule).mountDisplay({
     container: document.querySelector<HTMLDivElement>('#terminal')!,
-    assets,
-    guest: 'opencode',
+    wasmUrl: assets + 'ghostty-vt.wasm',
     fontSize: 13,
-    env: {
-      OPENCODE_SERVER_URL: inTabServer,
-      // The client insists on Basic auth; the page replaces what it sends with the real credential.
-      OPENCODE_SERVER_PASSWORD: 'in-tab',
-      OPENCODE_DIRECTORY: workspace,
-    },
-    // The client's own settings, prompt history and open tabs (IndexedDB), as on wasm-term's page.
-    persist: { namespace: 'opencode', roots: ['/home/user/.config/opencode', '/home/user/.local/state/opencode'], exclude: ['/locks/'] },
-    pageFetch: {
-      prefixes: [inTabServer],
-      fetch: (url, init) => {
-        const target = new URL(url)
-        return toServer(target.pathname + target.search, init)
-      },
-    },
+    onInput: data => client?.write(data),
+    onResize: size => client?.resize(size),
   })
+  const started = performance.now()
+  const launch = clientLaunch(agent.port, password)
+  // `?clientLog=debug`: the client logs every level to its file, not only warnings and errors.
+  if (params.get('clientLog') === 'debug') launch.env = { ...launch.env, OPENCODE_TUI_DEBUG: '1' }
+  client = await runtime.spawnTerminal(launch, { ...display.size(), onOutput: data => display.write(data) })
+  log(`[page] OpenCode client started on a terminal of the runtime (pid ${client.pid}, ${display.size().cols}x${display.size().rows})`)
+  void client.exited.then(exit => {
+    log(`[client] exited (code ${exit.code}, signal ${exit.signal ?? 'none'}) after ${Math.round(performance.now() - started)} ms`)
+    // Its stderr was the terminal; what it logged to its file says why it ended.
+    void runtime.fs.readFile(clientLog).then(bytes => { for (const line of new TextDecoder().decode(bytes).trim().split('\n').slice(-20)) if (line) log(`[client log] ${line.slice(0, 600)}`) }, () => {})
+    display.write(`\r\n\x1b[0m\x1b[2m[process ended: ${exit.signal ? `killed by ${exit.signal}` : `exit code ${exit.code}`}]\x1b[0m\r\n`)
+  })
+  window.batTerminal.terminal = { display, client, screen: display.screen }
   status.remove()
   diag.event('stage', 'terminal mounted')
   diag.watchScreen(() => window.batTerminal.terminal!.screen())

@@ -5,8 +5,9 @@
 //   sw.js                   its service worker (isolation headers, inflating, the preview)
 //   todo-api.js             the TODO app's backend, a guest program
 //   openai-jwks.json        a copy of OpenAI's public signing keys, for a page without a tunnel (see below)
-//   wasm-term/              the terminal half (from `bun run wasm-term`)
-//   editor/                 the prepared runtime, image and manifest (from `bun run prepare:editor`)
+//   client-tap.js           a preload module of the OpenCode client (the sign-in bar's source)
+//   wasm-term/              the terminal display and its core (from `bun run wasm-term`)
+//   editor/                 the prepared runtime, image (with the OpenCode server and client) and manifest (from `bun run prepare:editor`)
 //
 // Big compressible files are shipped once, gzip-compressed (`<name>.gz`, no `<name>`); the
 // service worker inflates them. gzip because it is what `DecompressionStream` has: the
@@ -25,7 +26,7 @@ import { createGzip } from 'node:zlib'
 
 const here = import.meta.dirname
 const out = resolve(here, process.env.OUT_DIR ?? 'dist')
-for (const [path, how] of [['.wasm-term/embed.js', 'bun run wasm-term'], ['.editor/prepared/manifest.json', 'bun run prepare:editor']] as const) {
+for (const [path, how] of [['.wasm-term/display.js', 'bun run wasm-term'], ['.editor/prepared/manifest.json', 'bun run prepare:editor']] as const) {
   if (!existsSync(resolve(here, path))) throw Error(`Missing ${path}: run \`${how}\` in examples/terminal-app (or \`bun run terminal\` in the repository root).`)
 }
 
@@ -83,6 +84,7 @@ async function bundle(entry: string, name: string, options: Partial<Parameters<t
 await bundle('src/main.ts', 'main.js', { define: { 'process.env.MODEL_URL': JSON.stringify(process.env.MODEL_URL ?? ''), 'process.env.TUNNEL_URL': JSON.stringify(process.env.TUNNEL_URL ?? '') } })
 await bundle('sw.ts', 'sw.js', { format: 'iife', define: { GZIPPED: JSON.stringify(gzipped) } })
 await bundle('todo-api.ts', 'todo-api.js', { target: 'node' })
+await bundle('client-tap.ts', 'client-tap.js', { target: 'node' })
 
 for (const path of walk(out)) if (!kept.has(path)) rmSync(join(out, path))
 const bytes = [...kept].reduce((sum, path) => sum + statSync(join(out, path)).size, 0)
