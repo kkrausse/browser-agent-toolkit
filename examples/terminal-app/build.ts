@@ -3,7 +3,6 @@
 //
 //   index.html, main.js     the page
 //   sw.js                   its service worker (isolation headers, inflating, the preview)
-//   todo-api.js             the TODO app's backend, a guest program
 //   openai-jwks.json        a copy of OpenAI's public signing keys, for a page without a tunnel (see below; not in the public build)
 //   client-tap.js           a preload module of the OpenCode client (the sign-in bar's source; not in the public build)
 //   display/                the terminal display and its core (from `bun run display`)
@@ -99,7 +98,6 @@ async function bundle(entry: string, name: string, options: Partial<Parameters<t
 }
 await bundle('src/main.ts', 'main.js', { define: { 'process.env.MODEL_URL': JSON.stringify(modelUrl), 'process.env.TUNNEL_URL': JSON.stringify(tunnelUrl), 'process.env.PUBLIC': JSON.stringify(isPublic ? '1' : ''), 'process.env.PUBLIC_MODEL': JSON.stringify(publicModel) } })
 await bundle('sw.ts', 'sw.js', { format: 'iife', define: { GZIPPED: JSON.stringify(gzipped) } })
-await bundle('todo-api.ts', 'todo-api.js', { target: 'node' })
 if (!isPublic) await bundle('client-tap.ts', 'client-tap.js', { target: 'node' })
 
 for (const path of walk(out)) if (!kept.has(path)) rmSync(join(out, path))

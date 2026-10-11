@@ -1,5 +1,5 @@
-// One tab, four programs, all on the toolkit's runtime (a Web Worker each): the TODO app's Vite
-// dev server, its backend, the OpenCode server, and the real OpenCode terminal client, which
+// One tab, three programs, all on the toolkit's runtime (a Web Worker each): the TODO app's Vite
+// dev server, the OpenCode server, and the real OpenCode terminal client, which
 // runs on a terminal of the runtime's kernel. This page holds the other end of that terminal
 // and joins it to a ghostty-web display in the side panel (bytes both ways, and the size).
 //
@@ -10,7 +10,6 @@
 //                                       no server of this page is involved
 //   OpenCode server → api.openai.com    (a ChatGPT sign-in) the runtime's own TLS and HTTP through
 //                                       a TCP relay, `?tunnel=`, which carries ciphertext only
-//   app in the frame → its `/api`       a third guest program (todo-api.ts), through the service worker
 //
 // The page is a directory of static files: every URL is relative to the page, and the
 // service worker (sw.ts) gives the responses the headers a server would have sent.
@@ -66,8 +65,6 @@ const here = new URL('.', document.baseURI).href
 const assets = new URL('display/', here).href
 const manifestUrl = new URL('editor/manifest.json', here).href
 const workerUrl = new URL('sw.js', here).href
-/** The TODO app's own backend, as a guest program: where it is written and where it listens. */
-const api = { script: '/tmp/todo-api.mjs', port: 3001, store: `${workspace}/.server/todos.json` }
 // Set when the page is built (`MODEL_URL=… bun run build`), for a page published away from its mock.
 const builtModel = process.env.MODEL_URL || undefined
 const builtTunnel = process.env.TUNNEL_URL || undefined
@@ -179,7 +176,7 @@ async function main() {
   }
   // The public build ships no tap: the sign-in it serves needs hosts its relay does not carry.
   const hosted = model ? undefined : hostedModel()
-  const apiScript = script('todo-api.js'), tapScript = isPublic ? undefined : script('client-tap.js')
+  const tapScript = isPublic ? undefined : script('client-tap.js')
 
   say('Loading…')
   const response = await fetch(manifestUrl, { cache: 'no-store' })
@@ -190,6 +187,8 @@ async function main() {
   if (sessionStorage.getItem(resetKey)) {
     sessionStorage.removeItem(resetKey)
     await runtimeModule.resetWorkspace({ manifestUrl })
+    // The TODO app keeps its list in this origin's localStorage (../todo-app/src/App.tsx), not in the workspace.
+    try { localStorage.removeItem('todos') } catch { /* no storage */ }
     // What an earlier build of this page kept for the client (wasm-term's IndexedDB); the client's files are in the workspace now.
     for (const database of await indexedDB.databases()) if (database.name) indexedDB.deleteDatabase(database.name)
   }
@@ -219,20 +218,15 @@ async function main() {
   say('Starting the app and the OpenCode server…')
   const preview = manifest.launch.preview, agent = manifest.launch.agent
   const app = runtime.endpoint(preview.port), server = runtime.endpoint(agent.port)
-  // The app calls `/api` as on its own server; here that server is a guest program too.
-  runtime.setGuestPaths!(preview.port, { '/api': api.port })
-  await runtime.fs.writeFile(api.script, await apiScript)
   // A fresh credential per start; it stays in this page and the guest.
   const password = crypto.randomUUID() + crypto.randomUUID()
   const authorization = 'Basic ' + btoa('opencode:' + password)
-  const [appProcess, serverProcess, apiProcess] = await Promise.all([
+  const [appProcess, serverProcess] = await Promise.all([
     // The dev server's base is the frame's path, which depends on where this page is served.
     runtime.spawn(toLaunch(preview, { BROWSER_AGENT_PORT: String(preview.port), BROWSER_AGENT_BASE: new URL(app.url).pathname })),
     runtime.spawn(serverLaunch(agent, password, model, tunnel ? { tunnel } : isPublic ? {} : { fetchMap: { [openAiKeys]: new URL('openai-jwks.json', here).href } })),
-    runtime.spawn({ argv: ['node', api.script], cwd: workspace, env: { PATH: '/bin', PORT: String(api.port), TODO_STORE: api.store }, programs: [] }),
   ])
   follow('app', appProcess, false)
-  follow('api', apiProcess, true)
   follow('opencode', serverProcess, true)
   const appUp = app.ready(lifetime.signal).then(() => { frame.src = app.url })
   const serverUp = server.ready(lifetime.signal).then(() => serverHealthy(server, authorization, lifetime.signal))

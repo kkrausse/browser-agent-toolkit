@@ -26,7 +26,7 @@ bun examples/terminal-app/mock-model.ts
 client shows the read and the edit, the file changes in the tab's filesystem and the app
 hot-reloads. ``run `echo hi` `` makes the mock call the shell tool, which runs without a
 permission dialog: this page's configuration allows every tool (the agent's reach is the tab). Page parameters: `?model=<base URL>`, `?modelId=<id>` (default `scripted`),
-`?reset=1` (forget this browser's workspace and the client's saved state first),
+`?reset=1` (forget this browser's workspace, the client's saved state and the TODO list first),
 `?diag=<url>` (where the page posts its diagnostics; `0` turns them off; [the public build](#the-public-build) posts none without it),
 `?clientLog=debug` (the client logs every level to `/tmp/opencode-client/tui.log` in the guest),
 `?tunnel=<wss URL>` (a TCP relay for [the hosts a tab cannot read](#the-tunnel); `0` for none).
@@ -42,8 +42,8 @@ in `target/release` of this checkout.
 MODEL_URL=https://<mock host>:4311/v1 OUT_DIR=dist-published bun run build
 ```
 
-`dist/` is everything a visitor needs and nothing else (57 MB, of which the dependency image
-is 45 MB): copy it to a file shelf and open its URL. `MODEL_URL` is the built page's default
+`dist/` is everything a visitor needs and nothing else (45 MB, of which the dependency image
+is 37 MB): copy it to a file shelf and open its URL. `MODEL_URL` is the built page's default
 `?model=` and, at `/diag` of the same host, its diagnostics collector; without it the default
 is port 4311 of the page's own host, which only suits a page served beside its mock.
 `TUNNEL_URL=wss://<relay>/tcp` is the built page's default `?tunnel=`.
@@ -90,9 +90,10 @@ forced, so earlier builds do not stay in the branch. Without `--yes` it prints w
 push and stops; it refuses a development build, a file of 100 MB or more, and the branches
 `main` and `master`. Served under `/browser-agent-toolkit/` by a local file server, the
 whole demo scenario passed against the mock: the service worker's scope is that directory,
-the workspace's storage is named after the path (`bat/browser-agent-toolkit-editor` in the
-origin's private file system), and the app's `/api` requests, which name the origin's root,
-are answered by the service worker and never sent. Not tried on Pages itself: that the
+and the workspace's storage is named after the path (`bat/browser-agent-toolkit-editor` in
+the origin's private file system). (That run was of the app that still had a backend; the
+app's list is now in the origin's `localStorage`, key `todos`, which every page of the origin
+shares.) Not tried on Pages itself: that the
 `.gz` files arrive without a `Content-Encoding` of the host's (the worker inflates them
 itself and would fail on bytes already inflated).
 
@@ -129,14 +130,11 @@ bun demo/run.ts --base http://127.0.0.1:4310/ --slow --record /tmp/take.mp4
 bun demo/gif.ts /tmp/take.mp4 /tmp/take.gif
 ```
 
-The mock has a second take of that prompt for a regression check: with "theme-color" in the
-prompt it also edits `src/root.tsx` (a `<meta>` in the document head) and
-`src/editor-panel.css`, the edits after which the preview once stopped taking input
-(`docs/experiments/2026-10-11-preview-input-dead-after-edit-handoff.md`). It must pass too:
-
-```sh
-bun demo/run.ts --base http://127.0.0.1:4310/ --prompt "Give this app a dark theme with a violet accent and a theme-color, and show how many todos are left under the list."
-```
+The mock's script reads `src/style.css` and `src/App.tsx` and makes three edits to them. (It
+had a second take, "theme-color", which also edited the React Router root route that rendered
+`<html>`: the edits after which the preview once stopped taking input,
+`docs/experiments/2026-10-11-preview-input-dead-after-edit-handoff.md`. The app has no such
+route any more, its document head is `index.html`, and the take went with it.)
 
 The README's GIF (`docs/media/terminal-demo.gif`) is the scripted take cut once more: its first
 5 s dropped and the whole of it at 2.2x, labelled:
@@ -155,7 +153,6 @@ What a server used to do is done in the tab:
 | --- | --- |
 | send COOP/COEP | the page's service worker (`sw.ts`, `dist/sw.js`) adds them to what it serves; `src/isolate.ts` registers it and reloads once, after which `crossOriginIsolated` is true |
 | serve the preview's service worker with `Service-Worker-Allowed: /` | the same worker runs the runtime's (`importScripts`); its scope is the page's directory and the preview is at `<directory>/preview/<port>/` |
-| serve the TODO app's `/api` | `todo-api.ts`, the app's tRPC router bundled into one file, runs as a third guest program on port 3001; the service worker hands the frame's `/api/…` requests to it (`setGuestPaths`). The list is a file in the workspace |
 | pick a compressed copy by `Accept-Encoding` | the build ships big files only as `<name>.gz`; the worker answers `<name>` by inflating that as it arrives (`DecompressionStream`) |
 
 Every URL is relative to the page, so the directory works at `/` and at
@@ -193,7 +190,6 @@ page relay), which this page ran the client on before, is on the branch `wasm-te
 | page ↔ terminal client | bytes over the pty (`spawnTerminal`): keys in, drawing out, the window size |
 | OpenCode server → model | the runtime hands any non-guest URL to the browser's `fetch`, so the request goes from the tab straight to `?model=`. A loopback endpoint (the mock) is named in `BAT_HOST_LOOPBACK_PORTS`, since loopback otherwise means a guest listener |
 | OpenCode server → `api.openai.com` | with a tunnel configured, not the browser's fetch: the runtime's own TLS and HTTP/1.1 over a WebSocket to a TCP relay ([below](#the-tunnel)) |
-| app in the frame → `/api` | the service worker, to the guest program on port 3001 (`setGuestPaths`) |
 
 `src/opencode.ts` starts and configures the OpenCode server itself, against the runtime
 contract, instead of the toolkit's `openEditor`, which always sets up the page server's model

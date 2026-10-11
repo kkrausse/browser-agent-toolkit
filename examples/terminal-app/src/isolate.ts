@@ -10,7 +10,7 @@ export async function isolate(workerUrl: string, scope: string, note: (kind: str
   const registration = await navigator.serviceWorker.register(workerUrl, { scope, updateViaCache: 'none' })
   // An earlier build registered the runtime's worker by itself, at `<scope>preview/`. A browser
   // that still has it gives the preview frame to that worker, which no page talks to any more:
-  // the frame never loads and its `/api` requests miss the guest. Only this worker serves here.
+  // the frame never loads. Only this worker serves here.
   for (const other of await navigator.serviceWorker.getRegistrations()) {
     if (other.scope !== registration.scope && other.scope.startsWith(registration.scope)) {
       note('stage', `removing an older service worker at ${other.scope}`)
