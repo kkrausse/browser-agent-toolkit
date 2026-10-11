@@ -1324,3 +1324,21 @@ servers.
   showed the new heading within 100 s): 4 answers of 200 and 12 of 429. Not explained. The server's address is shared by everybody who uses it, which
   would do it if Zen's free tier counts per address; there was no working relay of ours left
   to compare with.
+
+## 2026-10-11: a guest's answers reach the page with `Vary: *`
+
+- **Why**: WebKit takes a module that an earlier document preloaded
+  (`<link rel="modulepreload">`) from its memory cache without a request, whatever
+  `Cache-Control` said. A preview opened again in the same tab process ran the previous dev
+  server's entry modules, and the new server, never asked for them, sent no hot update: 17 of
+  83 runs of the React Router TODO scenario in Playwright's WebKit, 0 of 40 after
+  (`docs/experiments/2026-10-11-webkit.md`, section 10).
+- **What**: the preview service worker sets `Vary: *` on every guest response without
+  `max-age`, `s-maxage` or `immutable`. Responses that state a lifetime are untouched.
+- **Rejected**: `Cache-Control: no-store` (measured: no effect on this reuse); removing
+  preload links from the guest's HTML (the app can add them again from script, and it changes
+  the app's document); a per-start prefix in the preview URL (changes Vite's `base`, which
+  the prepared optimizer cache is keyed on).
+- **Cost**: no memory-cache answer for those responses in any browser. Not measured.
+- `runtime/harness/webkit/preload-reuse/run.ts` shows the browser behaviour alone and fails
+  when it is gone, which is when to take the header out.

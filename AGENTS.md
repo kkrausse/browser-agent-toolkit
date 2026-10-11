@@ -42,3 +42,10 @@
   `examples/terminal-app/demo/run.ts --webkit` is the terminal example's scenario there.
   `runtime/harness/webkit/grow-crash/` crashes WebKit without the runtime (a shared-memory grow
   against worker teardown, report section 9.1): the reason the kernel heap grows in 64 MiB steps.
+  `runtime/harness/webkit/preload-reuse/run.ts` shows WebKit running an earlier document's
+  preloaded module without a request (report section 10): the reason the preview service worker
+  sends `Vary: *`.
+- `examples/todo-fullstack` is the React Router + tRPC TODO example that `examples/todo-app` was
+  before it became a plain React app: kept as the full-stack test target, with the same
+  `demo/run.ts` and `demo/webkit.ts`. The scripted model edits it when started with
+  `MOCK_TODO=fullstack`. It has no root script: `bun run editor` in its directory, own `PORT`.
