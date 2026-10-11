@@ -73,6 +73,22 @@ export interface RuntimeProcess {
   closeStdin(): void
   kill(signal?: 'SIGTERM' | 'SIGKILL'): void
 }
+export interface TerminalSize {
+  cols: number
+  rows: number
+  xpixel?: number
+  ypixel?: number
+}
+export interface TerminalOptions extends TerminalSize {
+  onOutput(data: Uint8Array): void
+}
+export interface RuntimeTerminal {
+  readonly pid: number
+  readonly exited: Promise<{ code: number | null; signal: string | null }>
+  write(data: Uint8Array | string): void
+  resize(size: TerminalSize): void
+  kill(signal?: 'SIGTERM' | 'SIGKILL'): void
+}
 export interface RuntimeEndpoint {
   readonly url: string
   fetch(path: string, init?: RequestInit): Promise<Response>
@@ -82,6 +98,7 @@ export interface RuntimeHost {
   readonly fs: RuntimeFs
   readonly hostOrigin: string
   spawn(launch: Launch): Promise<RuntimeProcess>
+  spawnTerminal(launch: Launch, terminal: TerminalOptions): Promise<RuntimeTerminal>
   endpoint(port: number): RuntimeEndpoint
   setHostPaths(port: number, prefixes: readonly string[]): void
   /** Root-absolute prefixes (`/api`) that the frame of `port` requests, each answered by a guest listener. */
@@ -593,11 +610,109 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
     })
   }
 
+  const exitOf = (status: number): { code: number | null; signal: string | null } => {
+    const signal = ({ [128 + 9]: 'SIGKILL', [128 + 15]: 'SIGTERM', [128 + 2]: 'SIGINT', [128 + 1]: 'SIGHUP' } as Record<number, string>)[status]
+    return signal ? { code: null, signal } : { code: status, signal: null }
+  }
+  // Start-up program scripts the process loads before its entry (process/worker.ts).
+  const launchEnv = (launch: Launch) => (launch.programs?.length ? { ...launch.env, BAT_PROGRAMS: launch.programs.join(',') } : (launch.env ?? {}))
+
+  /** A program on a kernel terminal (crates/bat-kernel/src/tty.rs): this page holds the master end. */
+  async function spawnTerminal(launch: Launch, terminal: TerminalOptions): Promise<RuntimeTerminal> {
+    live()
+    if (!launch.argv?.length) throw new Error('spawnTerminal: empty argv')
+    const { master, slave } = kernel.ttyOpen(terminal.cols, terminal.rows)
+    let child: { pid: number }
+    try {
+      kernel.ttyResize(master, terminal.cols, terminal.rows, terminal.xpixel, terminal.ypixel)
+      child = kernel.spawn({ exec: launch.argv[0], argv: launch.argv, env: launchEnv(launch), cwd: launch.cwd ?? '/', stdio: [{ fd: slave }, { fd: slave }, { fd: slave }] })
+    } catch (e) {
+      kernel.close(master)
+      kernel.close(slave)
+      throw e
+    }
+    // The program holds the slave now; when its last descriptor closes, the master reads end of file.
+    kernel.close(slave)
+    kernel.setNonblock(master, true)
+    let open = true
+    let drained!: () => void
+    const eof = new Promise<void>((resolve) => (drained = resolve))
+    const close = () => {
+      if (!open) return
+      open = false
+      reactor.off(master)
+      try {
+        kernel.close(master)
+      } catch {
+        // already closed
+      }
+      drained()
+    }
+    const buf = new Uint8Array(65536)
+    const pump = () => {
+      while (open) {
+        const n = kernel.readRaw(master, buf)
+        if (n > 0) {
+          try {
+            terminal.onOutput(buf.slice(0, n))
+          } catch (e) {
+            console.error(e)
+          }
+        } else {
+          if (n !== -EAGAIN) close()
+          break
+        }
+      }
+    }
+    reactor.on(master, 1 | 16, pump)
+    lifetime.signal.addEventListener('abort', close, { once: true })
+    let gone = false
+    const exited = new Promise<{ code: number | null; signal: string | null }>((resolve) => {
+      reactor.onChild(child.pid, (status) => {
+        gone = true
+        terminals.delete(child.pid)
+        try {
+          kernel.waitpid(child.pid, true)
+        } catch {
+          // already reaped
+        }
+        // A child of the program may still hold the terminal: do not wait for it longer than a moment.
+        void Promise.race([eof, new Promise((r) => setTimeout(r, 200))]).then(() => {
+          close()
+          resolve(exitOf(status))
+        })
+      })
+    })
+    const handle: RuntimeTerminal = {
+      pid: child.pid,
+      exited,
+      write(data) {
+        if (!open) return
+        const bytes = typeof data === 'string' ? encoder.encode(data) : data
+        // A master write never blocks: the line discipline takes everything.
+        for (let off = 0; off < bytes.length; off += 32768) kernel.write(master, bytes.subarray(off, off + 32768))
+      },
+      resize(size) {
+        if (open) kernel.ttyResize(master, size.cols, size.rows, size.xpixel, size.ypixel)
+      },
+      kill(signal = 'SIGTERM') {
+        if (gone) return
+        try {
+          kernel.kill(child.pid, signal === 'SIGKILL' ? 9 : 15)
+        } catch {
+          // already gone
+        }
+      },
+    }
+    terminals.set(child.pid, handle)
+    return handle
+  }
+  const terminals = new Map<number, RuntimeTerminal>()
+
   async function spawn(launch: Launch): Promise<RuntimeProcess> {
     live()
     if (!launch.argv?.length) throw new Error('spawn: empty argv')
-    // Start-up program scripts the process loads before its entry (process/worker.ts).
-    const env = launch.programs?.length ? { ...launch.env, BAT_PROGRAMS: launch.programs.join(',') } : (launch.env ?? {})
+    const env = launchEnv(launch)
     const child = kernel.spawn({ exec: launch.argv[0], argv: launch.argv, env, cwd: launch.cwd ?? '/', stdio: ['pipe', 'pipe', 'pipe'] })
     const [stdinFd, stdoutFd, stderrFd] = child.stdio
     kernel.setNonblock(stdinFd, true)
@@ -632,10 +747,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
         } catch {
           // already reaped
         }
-        if (status === 128 + 9) resolve({ code: null, signal: 'SIGKILL' })
-        else if (status === 128 + 15) resolve({ code: null, signal: 'SIGTERM' })
-        else if (status === 128 + 2) resolve({ code: null, signal: 'SIGINT' })
-        else resolve({ code: status, signal: null })
+        resolve(exitOf(status))
       })
     })
     const proc: RuntimeProcess = {
@@ -666,6 +778,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
     fs,
     hostOrigin: `${location.protocol}//${HOST_ALIAS}${location.port ? `:${location.port}` : ''}`,
     spawn,
+    spawnTerminal,
     endpoint,
     setHostPaths(port, prefixes) {
       hostPaths[port] = [...prefixes]
@@ -686,7 +799,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
     },
     close() {
       return (closing ??= (async () => {
-        const running = [...processes.values()]
+        const running = [...processes.values(), ...terminals.values()]
         for (const p of running) p.kill('SIGKILL')
         await Promise.race([Promise.all(running.map((p) => p.exited)), new Promise((r) => setTimeout(r, 2000))])
         await kernel.flush().catch(() => {})

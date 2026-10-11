@@ -81,6 +81,30 @@ export interface RuntimeProcess {
   kill(signal?: 'SIGTERM' | 'SIGKILL'): void;
 }
 
+/** The size of a terminal in cells and, when known, in pixels (programs that draw images ask). */
+export interface TerminalSize { cols: number; rows: number; xpixel?: number; ypixel?: number }
+
+/** A program running on a terminal: the page holds the terminal emulator's end of a pty.
+ * Everything is bytes: what the user types goes in with `write`, what to draw comes out of
+ * `onOutput`. The line discipline between them is the kernel's (echo, ^C, raw mode when
+ * the program asks for it). */
+export interface RuntimeTerminal {
+  readonly pid: number;
+  /** Resolves once, when the program is gone and its last output was delivered. Never rejects. */
+  readonly exited: Promise<{ code: number | null; signal: string | null }>;
+  /** Bytes typed at the terminal (a string is encoded as UTF-8). */
+  write(data: Uint8Array | string): void;
+  /** The program sees the new size and gets SIGWINCH. */
+  resize(size: TerminalSize): void;
+  /** Default `SIGTERM`. Killing an exited program is a no-op. */
+  kill(signal?: 'SIGTERM' | 'SIGKILL'): void;
+}
+
+export interface TerminalOptions extends TerminalSize {
+  /** Called with each chunk the program wrote, in order, from the first byte. The chunk is the listener's to keep. */
+  onOutput(data: Uint8Array): void;
+}
+
 export interface RuntimeEndpoint {
   /** Same-origin URL prefix that reaches the guest listener from a browser frame, ending
    * in `/` (`https://app.example/preview/5173/`; below the page's own directory when the
@@ -107,6 +131,10 @@ export interface RuntimeHost {
   readonly hostOrigin: string;
   /** Resolves when the process exists (pid assigned), not when it is listening. */
   spawn(launch: Launch): Promise<RuntimeProcess>;
+  /** Optional. Like `spawn`, with a terminal as the program's stdin, stdout and stderr:
+   * `process.stdout.isTTY` is true in it, raw mode and the window size work. Set `TERM`
+   * in `launch.env`. */
+  spawnTerminal?(launch: Launch, terminal: TerminalOptions): Promise<RuntimeTerminal>;
   /** Cheap and synchronous; may be called before anything listens on `port`. Calling it
    * twice for one port returns equivalent endpoints. */
   endpoint(port: number): RuntimeEndpoint;
