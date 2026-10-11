@@ -201,7 +201,8 @@ async function download(a: StoreImageArgs, dir: FileSystemDirectoryHandle, onPro
     let fill = 0
     let received = 0
     // Not reading is the pause: the response backs up to the server.
-    let pauseAt = streaming && resume && a.firstBytes && a.firstBytes < a.bytes! ? Math.ceil(a.firstBytes / blockBytes) * blockBytes : 0
+    // (Only where the image is used while it arrives: elsewhere the start-up waits for all of it.)
+    let pauseAt = streaming && readableWhileArriving && resume && a.firstBytes && a.firstBytes < a.bytes! ? Math.ceil(a.firstBytes / blockBytes) * blockBytes : 0
     for (;;) {
       if (pauseAt && received >= pauseAt) {
         pauseAt = 0
