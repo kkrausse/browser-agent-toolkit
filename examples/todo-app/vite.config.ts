@@ -1,23 +1,22 @@
-import { reactRouter } from '@react-router/dev/vite'
+import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { browserEditor, isGuest } from '@kkrausse/browser-agent-toolkit/vite'
-import tsconfigPaths from 'vite-tsconfig-paths'
 import { defineConfig } from 'vite'
 
-// The preview in the browser guest. React Router leaves Vite's dependency scan without
-// entries, so the application's client dependencies would turn up at the first page load:
-// a second optimizer run and a reload of the frame on every fresh open. Name the ones the
-// client imports. Guest only: the host's dev server and build are as they were.
-const guestOptimizeDeps = isGuest()
-  ? { include: ['@tanstack/react-query', '@trpc/react-query', '@trpc/tanstack-react-query', '@trpc/client'] }
-  : undefined
-const api = `http://127.0.0.1:${process.env.API_PORT ?? 3001}`
+const server = `http://127.0.0.1:${process.env.API_PORT ?? 3001}`
 
 export default defineConfig({
   resolve: { dedupe: ['react', 'react-dom'] },
-  optimizeDeps: guestOptimizeDeps,
+  // In the editor's preview the panel is never loaded (see browserEditor below), but Vite's
+  // dependency scan reads the files as they are and would prebundle its packages: 2 MB of
+  // optimizer cache that prepare ships for nothing.
+  optimizeDeps: isGuest() ? { exclude: ['@kkrausse/browser-agent-toolkit', '@kkrausse/browser-agent-toolkit-react'] } : undefined,
   plugins: [
-    tailwindcss(), reactRouter(), tsconfigPaths(),
+    tailwindcss(),
+    // The preview's optimizer cache is outside node_modules (that tree is the read-only
+    // image), so it is named here too: Babel would otherwise go over the optimized
+    // react-dom, 1.1 MB, at every start.
+    react({ exclude: [/\/node_modules\//, /\/\.browser-editor-cache\//] }),
     // In the guest `src/editing.tsx` renders nothing; on the host the chunks only
     // `src/editor-panel.tsx` reaches are listed for the server to keep private.
     browserEditor({ module: 'src/editing.tsx', privateEntry: 'src/editor-panel.tsx' }),
@@ -25,7 +24,7 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    proxy: { '/api': api, '/editor': api, '/editing-policy': api },
+    proxy: { '/editor': server, '/editing-policy': server },
     headers: { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp' },
   },
 })

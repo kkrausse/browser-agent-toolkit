@@ -1,15 +1,10 @@
-import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
-import { appRouter } from '@/server/trpcRouter'
-import type { Todo } from '@/schema/todo'
-import { createStaticHandler } from '@/server/staticFiles'
 import { createEditorHandler, readModelCatalog } from '@kkrausse/browser-agent-toolkit/server'
-import { authorizeEditing } from '@/server/editing'
 import { resolve } from 'node:path'
+import { createStaticHandler } from './static-files'
 
 const isProduction = process.env.NODE_ENV === 'production'
 const useBuild = isProduction || !!process.env.SERVE_BUILD
 const port = Number(process.env.PORT) || (useBuild ? 3000 : 3001)
-const todos = new Map<string, Todo>()
 // Bun loads the gitignored .env.local in this directory; the key never leaves the server.
 const modelKey = process.env.EDITOR_MODEL_API_KEY
 const needsKey = 'Chat needs a model key: put EDITOR_MODEL_API_KEY=<key> in examples/todo-app/.env.local and restart the server. The editor, files and preview work without it.'
@@ -18,7 +13,7 @@ const modelCatalogPath = process.env.MODEL_CATALOG ?? (modelKey ? resolve(import
 
 const editor = createEditorHandler({
   preparedDir: '.editor/prepared',
-  clientDir: useBuild ? 'build/client' : undefined,
+  clientDir: useBuild ? 'dist' : undefined,
   // Optional public catalog file ({models, defaultModel}); never a key. An
   // unreadable or invalid file stops the server here instead of at first use.
   modelCatalog: modelCatalogPath ? await readModelCatalog(modelCatalogPath) : undefined,
@@ -35,13 +30,20 @@ const fakeHost = process.env.EDITOR_FAKE_HOST === '1'
   ? await (await import('./fake-host')).createTodoFakeHost(`http://127.0.0.1:${port}`)
   : undefined
 
+/** The todo app is an editor demo: editing is always on. The server listens on loopback
+ * only (reach it remotely through e.g. `tailscale serve`); refuse cross-site requests. */
+function authorizeEditing(request: Request) {
+  const origin = request.headers.get('origin')
+  // A TLS-terminating proxy changes scheme and port, so compare hostnames.
+  return !origin || new URL(origin).hostname === new URL(request.url).hostname
+}
+
 const forbidden = () => new Response('Editing is not authorized', { status: 403, headers: { 'Cache-Control': 'no-store' } })
 const withHeaders = (response: Response) => {
   for (const [key, value] of Object.entries(editor.headers)) response.headers.set(key, value)
   return response
 }
-const app = createStaticHandler('build/client')
-const api = (request: Request) => fetchRequestHandler({ endpoint: '/api', req: request, router: appRouter, createContext: ({ req }) => ({ req, todos }) })
+const app = createStaticHandler('dist')
 
 const server = Bun.serve({
   hostname: '127.0.0.1',
@@ -61,7 +63,6 @@ const server = Bun.serve({
       return editor.fetch(request)
     }
     if (path === '/editing-policy') return Response.json({ allowed: authorizeEditing(request), fakeHost: !!fakeHost }, { headers: { 'Cache-Control': 'no-store' } })
-    if (path.startsWith('/api/')) return withHeaders(await api(request))
     return useBuild ? withHeaders(await app(request)) : new Response('Not found', { status: 404 })
   },
 })

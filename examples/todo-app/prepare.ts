@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 // What the agent may edit. Everything else the guest sees comes from the dependency image.
-const source = ['src', 'vite.config.ts', 'react-router.config.ts', 'tsconfig.json', 'package.json']
+const source = ['index.html', 'src', 'vite.config.ts', 'tsconfig.json', 'package.json']
 
 // The pinned OpenCode server: $BAT_OPENCODE_DIR, else where the repository's `bun run setup` puts it.
 const fetched = resolve(import.meta.dirname, '../../.runtime/opencode-2.0.3')
