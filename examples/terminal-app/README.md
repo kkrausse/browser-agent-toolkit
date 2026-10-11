@@ -27,7 +27,7 @@ client shows the read and the edit, the file changes in the tab's filesystem and
 hot-reloads. ``run `echo hi` `` makes the mock call the shell tool, which runs without a
 permission dialog: this page's configuration allows every tool (the agent's reach is the tab). Page parameters: `?model=<base URL>`, `?modelId=<id>` (default `scripted`),
 `?reset=1` (forget this browser's workspace and the client's saved state first),
-`?diag=<url>` (where the page posts its diagnostics; `0` turns them off),
+`?diag=<url>` (where the page posts its diagnostics; `0` turns them off; [the public build](#the-public-build) posts none without it),
 `?clientLog=debug` (the client logs every level to `/tmp/opencode-client/tui.log` in the guest),
 `?tunnel=<wss URL>` (a TCP relay for [the hosts a tab cannot read](#the-tunnel); `0` for none).
 
@@ -47,6 +47,77 @@ is 45 MB): copy it to a file shelf and open its URL. `MODEL_URL` is the built pa
 `?model=` and, at `/diag` of the same host, its diagnostics collector; without it the default
 is port 4311 of the page's own host, which only suits a page served beside its mock.
 `TUNNEL_URL=wss://<relay>/tcp` is the built page's default `?tunnel=`.
+
+### The public build
+
+```sh
+# in examples/terminal-app, after a setup
+PUBLIC=1 OUT_DIR=dist-public bun run build
+```
+
+A page for people who have none of this machine's services: no mock, no collector, no
+sign-in. What differs from the development build, all of it decided when the page is built
+(`process.env.PUBLIC` in `src/main.ts`):
+
+| | Development build | Public build |
+| --- | --- | --- |
+| model | `?model=`, else `MODEL_URL`, else the mock on port 4311 of the page's host | none named: the OpenCode server's own `opencode` provider, OpenCode Zen with the key `public`, which has the models that cost nothing and needs no sign-in. `?model=` still names an endpoint |
+| first model | `?modelId=`, default `scripted` | `PUBLIC_MODEL` of the build (default `ling-3.1-flash-free`), for as long as `https://opencode.ai/zen/v1/models` lists it; then the server's choice. `?modelId=<id>` names another hosted one |
+| tunnel | `TUNNEL_URL`, else none; carries `api.openai.com`, OpenAI's keys document and `opencode.ai` | `TUNNEL_URL`, else `wss://bat-relay-2.kevonavin.deno.net/tcp` (`packages/relay/tcp-relay-deno.ts` on Deno Deploy); carries `opencode.ai` only |
+| diagnostics | posted to the collector unless `?diag=0` | nothing is sent unless the address has `?diag=<url>` |
+| ChatGPT sign-in | the bar and the client's preload module (`client-tap.js`) | neither is installed; `client-tap.js` and `openai-jwks.json` are not shipped |
+| the page says | title: model and tunnel | title: `free model from OpenCode Zen · relay <host>`; a two-line footer under the panel: what runs in the tab, whose model it is, what the relay carries, a link to the source |
+
+**Why a first model is named.** With no credentials and no `model` in its configuration,
+OpenCode 2.0.26 starts on the most recently released enabled model of its catalog
+(`models.opencode.ai/api.json`, which a tab can read; `Model.default` in
+`packages/core/src/model.ts`), and without a key only Zen's free models are enabled. On
+2026-10-10 that was `exo-free`, which Zen answered with HTTP 410, "Model exo-free has been
+deprecated", while both the catalog and Zen's model list still had it: a visitor's first
+prompt failed. `ling-3.1-flash-free` answered. The page drops the name when Zen's list no
+longer has it, which covers a removal but not another model in the state `exo-free` is in;
+then build again with another `PUBLIC_MODEL` (empty leaves the choice to the server).
+
+**What a host needs.** Plain static files at any path, https, nothing else: no headers, no
+routes. The relay must allow the page: `RELAY_ORIGINS` in the relay's environment lists the
+page's origin (scheme, host, port; not its path). The files are 55 MB, the largest 47 MB
+(`editor/image-….batimg.gz`).
+
+**What leaves the tab** on a first visit, from one run in Chrome with the network recorded:
+the page's own files; `GET https://opencode.ai/zen/v1/models` (the page, once);
+`GET https://models.opencode.ai/api.json` (the server's catalog); one WebSocket to the relay
+per model request; and `GET https://github.com/tree-sitter/…/tree-sitter-css.wasm` when
+the client first highlights a stylesheet. Zen's free models answer HTTP 429 in bursts;
+OpenCode waits and tries again by itself, and the client shows that it is retrying.
+
+**Your own key** (ctrl+p, "Connect an integration") is not something this build sets up, and
+none was tried. A provider called from the tab must answer the preflight for the headers
+OpenCode sends. Preflights only, asked with `curl` on 2026-10-10 with the header list of
+"What a model endpoint must allow", no key, no real request, so **unverified**: OpenAI
+(`api.openai.com`, with an API key), Google (`generativelanguage.googleapis.com`), Groq,
+DeepSeek and xAI answered with the headers allowed; OpenRouter and Mistral answered with a
+header list that has no `x-opencode-*`; Anthropic answered 400. A key typed there is kept
+like the sign-in tokens [below](#the-tunnel): plain text in this browser's storage for the page.
+
+### The demo video
+
+`demo/run.ts` drives a served page in Chrome (`browser-control`) through one scenario and
+checks each step: a fresh workspace, two todos added in the app, one prompt typed into the
+terminal ("Give this app a dark theme with a violet accent, and show how many todos are left
+under the list."), the agent's edits, the app dark without a reload of its frame, a third
+todo added and one ticked. `--record out.mp4 --slow` records it; `demo/gif.ts` cuts the
+recording to a GIF (or an mp4) in which only the model's working time is sped up, labelled.
+
+```sh
+# the public build on its shelf: one conversation with the free model per run
+bun demo/run.ts --base https://<host>/<path>/ --slow --record /tmp/take.mp4
+# a development build beside the mock, whose "dark theme" script answers that prompt
+bun demo/run.ts --base http://127.0.0.1:4310/ --slow --record /tmp/take.mp4
+bun demo/gif.ts /tmp/take.mp4 /tmp/take.gif
+```
+
+With the mock the model's words and its choice of tool calls are scripted; the tools, the
+edits and the hot update are the real ones.
 
 What a server used to do is done in the tab:
 

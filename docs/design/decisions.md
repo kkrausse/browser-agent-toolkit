@@ -1166,3 +1166,35 @@ installed all of them.
   as an optional peer it installs and both packages import. The peer is required in fact;
   "optional" only keeps the package manager from fetching it. The two packages share one
   version.
+
+## 2026-10-10: the terminal example has a public build (`PUBLIC=1`)
+
+A page that strangers can open cannot default to a mock, a collector or a relay of this
+machine. `examples/terminal-app/build.ts` takes `PUBLIC=1`; the development build is unchanged.
+
+- **One flag at build time, not a second page.** `process.env.PUBLIC` is a constant of the
+  bundle and `src/main.ts` branches on it in six places. The sign-in code, the diagnostics
+  and `?model=` stay in the bundle and are gated: `?model=` and `?diag=<url>` still work,
+  which is how the public build was tried against the mock.
+- **No provider of ours.** Without `?model=` the server's configuration names no provider.
+  OpenCode's own `opencode` provider then runs with the key `public` and the free models.
+- **A first model is named after all** (`PUBLIC_MODEL`, default `ling-3.1-flash-free`).
+  Leaving it to OpenCode was the first choice, since that follows their free list. It was
+  tried and failed: the default is the newest free model of the catalog, `exo-free` that
+  day, and Zen answered it with HTTP 410 "deprecated". The page uses the name only while
+  `opencode.ai/zen/v1/models` lists it, then falls back to OpenCode's choice. Probing which
+  model answers was not done: Zen refuses its free tier to anything but OpenCode
+  ("OpenCode's free tier can only be used from within OpenCode"), and a probe of the page's
+  own would have to pose as it.
+- **The relay default is the Deno Deploy one and only `opencode.ai` is tunnelled.** The relay
+  carries nothing else, so naming OpenAI's hosts would only produce failures that say "relay".
+- **Diagnostics are opt-in by address** (`?diag=<url>`): `installDiag` takes `null` for "no
+  collector was built in" and then sends nothing.
+- **The ChatGPT sign-in is not installed**: no preload module in the client's command, no
+  watcher, no keys copy. The flow needs `api.openai.com` through a relay.
+- **The page says what it is in a footer** under the panel (hidden in the development build
+  and with `?model=`), not in a dialog: three plain statements and a link.
+- **The demo recorder** (`examples/terminal-app/demo/`) follows the TODO example's: real time
+  except the model's working time, which is labelled. The mock has a script for the same
+  prompt, so that one take does not depend on a free model's rate limits; that take is
+  labelled as scripted wherever it is shown.
