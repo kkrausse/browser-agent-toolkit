@@ -1,14 +1,24 @@
 {
-  "include": ["*.ts"],
+  "include": [
+    "*.ts"
+  ],
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2023"],
-    "types": ["bun"],
+    "lib": [
+      "ES2023"
+    ],
+    "types": [
+      "bun"
+    ],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
     "allowImportingTsExtensions": true
-  }
+  },
+  "exclude": [
+    "tcp-relay-deno.ts",
+    "tcp-relay-deno-probe.ts"
+  ]
 }

@@ -14,15 +14,18 @@ cd packages/relay && RELAY_ORIGINS='https://<page origin> https://<another>' POR
 `TCP_RELAY_ALLOW`, `HOST`, `PORT`); `tcp-relay.ts` has the wire format, the allowlist and every
 limit. No dependencies.
 
-On Deno (`deno/main.ts`, the same relay behind `Deno.serve`; `RELAY_HOSTS` defaults to
+On Deno (`tcp-relay-deno.ts`, the same relay behind `Deno.serve`; `RELAY_HOSTS` defaults to
 `opencode.ai` there):
 
 ```sh
-RELAY_ORIGINS='https://<page origin>' deno run --allow-net --allow-env --allow-sys deno/main.ts
+RELAY_ORIGINS='https://<page origin>' deno run --allow-net --allow-env --allow-sys tcp-relay-deno.ts
 ```
 
-`deno/probe.ts` answers whether a host can run the relay at all: it needs a raw TCP connection
-to port 443 that the platform does not wrap in its own TLS.
+On Deno Deploy: an app whose entry point is `tcp-relay-deno.ts` (with `tcp-relay.ts` beside it,
+at the root of what is uploaded; an entry point in a subdirectory failed its build), and
+`RELAY_ORIGINS` in its environment. `tcp-relay-deno-probe.ts` answers whether a host can run
+the relay at all: it needs a raw TCP connection to port 443 that the platform does not wrap in
+its own TLS. Deno Deploy allows it (probed 2026-10-11).
 
 Both files came from wasm-term's dev server (`wasm-term/web/`, now only on the branch
 `wasm-term`), which mounted the same relay at `/proxy/tcp`. Comments in `tcp-relay.ts` that

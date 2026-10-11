@@ -39,7 +39,6 @@
 
 import { lookup } from "node:dns/promises";
 import { connect, createServer, isIP, type Socket } from "node:net";
-import type { ServerWebSocket } from "bun";
 
 const WINDOW = 256 * 1024;
 
@@ -70,7 +69,11 @@ export interface TcpTunnel {
   refusal?: { code: string; message: string };
 }
 
-type Ws = ServerWebSocket<TcpTunnel>;
+/** What the relay asks of its WebSocket: Bun's server socket and a standard WebSocket (Deno) both have it. */
+export interface Ws {
+  send(data: string | Uint8Array): unknown;
+  close(code?: number, reason?: string): void;
+}
 
 export interface TcpRelayOptions {
   /** Hosts allowed on port 443 (the HTTP relay's https hosts). */
