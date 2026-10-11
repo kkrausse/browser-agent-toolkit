@@ -124,7 +124,7 @@ const decoder = new TextDecoder()
 export type Kernel = ReturnType<typeof createKernel>
 
 export function createKernel(inst: KernelInstance) {
-  const x = inst.x
+  let x = inst.x
   const scratch: number = x.bat_alloc(SCRATCH) >>> 0
   if (!scratch) throw new Error('kernel: out of memory')
   let u8 = inst.u8()
@@ -796,6 +796,22 @@ export function createKernel(inst: KernelInstance) {
     const d = outP >>> 3
     return { entries: f64[d], fileLen: f64[d + 1], cachedBytes: f64[d + 2], hostReads: f64[d + 3] }
   }
+  /** The image chunk cache, all images together (bytes; chunks are 128 KiB). */
+  function imageCacheStats(): { limit: number; bytes: number; peakBytes: number; loads: number; evictions: number } {
+    sync()
+    x.bat_image_cache_stats(outP)
+    const d = outP >>> 3
+    return { limit: f64[d], bytes: f64[d + 1], peakBytes: f64[d + 2], loads: f64[d + 3], evictions: f64[d + 4] }
+  }
+  /** The kernel memory (bytes): its size and declared maximum, what the heap has taken of
+   * it, what is allocated now and the most that ever was, and how many allocations were
+   * refused for want of room. */
+  function memoryStats(): { size: number; maximum: number; heapStart: number; heapEnd: number; inUse: number; peakInUse: number; refused: number; grows: number } {
+    sync()
+    x.bat_mem_stats(outP)
+    const d = outP >>> 3
+    return { size: f64[d], maximum: f64[d + 1], heapStart: f64[d + 2], heapEnd: f64[d + 3], inUse: f64[d + 4], peakInUse: f64[d + 5], refused: f64[d + 6], grows: f64[d + 7] }
+  }
   /** Copy of an in-head section of an image (program scripts list, meta), or undefined. */
   function imageSection(id: number, section: number): Uint8Array | undefined {
     sync()
@@ -851,9 +867,19 @@ export function createKernel(inst: KernelInstance) {
     }
   }
 
-  return {
+  /** Let go of the kernel memory (see `KernelInstance.release`). Every call fails afterwards. */
+  function release(): void {
+    inst.release()
+    x = self.x = inst.x
+    u8 = inst.u8()
+    i32 = inst.i32()
+    f64 = new Float64Array(u8.buffer)
+    u32 = new Uint32Array(u8.buffer)
+  }
+  const self = {
     inst,
     x,
+    release,
     stat, tryStat, statRaw, st, kindOf, readFile, readFileInto, tryReadFile, readModule, readText, writeFile, mkdir, rmdir, unlink, rename,
     symlink, link, readlink, realpath, chmod, utimes, truncate, readdir,
     open, close, read, readRaw, write, writeRaw, seek, fstat, ftruncate, fsetmeta, setNonblock, dup, fdPath, pipe,
@@ -861,7 +887,8 @@ export function createKernel(inst: KernelInstance) {
     ttyOpen, isatty, ttyGetattr, ttySetattr, ttyWinsize, ttyResize,
     subscribe, pollFd, poll, takeEvents, runEvents, watchAdd, watchRemove, watchRead,
     getpid, getppid, chdir, getcwd, spawn, procInfo, exit, waitpid, kill, sigTake, procList,
-    imageNames, imageStats, imageSection,
+    imageNames, imageStats, imageSection, imageCacheStats, memoryStats,
     flush, flushSync, overlayGeneration, retrying,
   }
+  return self
 }

@@ -47,6 +47,13 @@ export interface BootOptions {
    * directory's `sw.js` with scope `/preview/`. */
   serviceWorker?: boolean | { url: string; scope: string }
   trace?: boolean
+  /** Size of the kernel memory in 64 KiB pages: everything the kernel holds (the files the
+   * programs write, pipes, the image index and chunk cache). Default `{ pages: 4096 }`,
+   * 256 MiB of fixed size. A write that does not fit fails with ENOSPC. */
+  kernelMemory?: { pages?: number; maximumPages?: number }
+  /** Most the kernel keeps of the images' contents in memory, in bytes (default 32 MiB).
+   * What is dropped is read from the stored image again when it is next wanted. */
+  imageCacheBytes?: number
 }
 export interface FileStat {
   isFile: boolean
@@ -303,6 +310,16 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
   const programs: Record<string, string> = {}
   for (const p of manifest.programs ?? []) programs[p.name] = prepared(p.file)
   const spareHints = Object.values(manifest.launch ?? {}).map((launch) => (launch?.programs ?? []).filter((name) => programs[name]))
+  // For a measuring script: the two memory limits from localStorage, where the page gives none.
+  const stored = (key: string): number | undefined => {
+    try {
+      const value = localStorage.getItem(key)
+      return value === null || !Number.isFinite(Number(value)) ? undefined : Number(value)
+    } catch {
+      return undefined
+    }
+  }
+  const kernelPages = stored('bat-kernel-memory-pages')
   let booted: BootedKernel
   try {
     booted = await bootKernel({
@@ -328,6 +345,8 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
       spareHints,
       images: images.map((i) => i.file),
       trace: tracing,
+      kernelMemory: options.kernelMemory ?? (kernelPages === undefined ? undefined : { pages: kernelPages }),
+      imageCacheBytes: options.imageCacheBytes ?? stored('bat-image-cache-bytes'),
     } as Parameters<typeof bootKernel>[0])
   } catch (e) {
     cancelDownloads()
@@ -343,8 +362,13 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
 
   const lifetime = new AbortController()
   let closing: Promise<void> | undefined
+  // Listeners on objects that outlive the runtime (the window, the caller's signal, the
+  // service worker registration) go with it: each would keep the kernel memory reachable.
+  const outside = new AbortController()
   const teardown = () => {
     lifetime.abort(new Error('The runtime is closed'))
+    outside.abort()
+    for (const name of ['__batKernel', '__batImageTrace', '__batMemory']) delete (globalThis as any)[name]
     booted.close()
     netdWorker.terminate()
   }
@@ -359,6 +383,12 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
     }
     // For a start-up order (`bat-prepare order`): every image read from the first one on.
     if (imageTrace) booted.kernel.x.bat_image_trace(1)
+    // For a measuring script (bench/memory): the kernel memory and the image cache, in bytes.
+    try {
+      if (localStorage.getItem('bat-memory-stats') === '1') (globalThis as any).__batMemory = () => ({ kernel: booted.kernel.memoryStats(), imageCache: booted.kernel.imageCacheStats() })
+    } catch {
+      // storage unavailable
+    }
     timings.mount = 0
     for (const [index, store] of stores.entries()) {
       const usable = await Promise.race([store.ready, aborted])
@@ -478,7 +508,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
         })
       // The frame must not navigate before a worker controls the scope: wait for activation here.
       serviceWorker = await activated(registration.installing ?? registration.waiting ?? registration.active!)
-      navigator.serviceWorker.addEventListener('message', onWorkerMessage)
+      navigator.serviceWorker.addEventListener('message', onWorkerMessage, { signal: outside.signal })
       navigator.serviceWorker.startMessages()
       sendPort(serviceWorker)
       registration.addEventListener('updatefound', () => {
@@ -490,7 +520,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
             sendPort(worker)
           }, () => {})
         }
-      })
+      }, { signal: outside.signal })
     } catch (e) {
       teardown()
       throw new Error(`The preview service worker could not be registered: ${(e as Error).message}`, { cause: e })
@@ -816,13 +846,13 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
     timings,
     kernel,
   }
-  options.signal?.addEventListener('abort', () => void host.close(), { once: true })
+  options.signal?.addEventListener('abort', () => void host.close(), { once: true, signal: outside.signal })
   if (options.signal?.aborted) {
     await host.close()
     throw options.signal.reason
   }
   // Leaving the page releases the workspace for the next tab at once.
-  addEventListener('pagehide', () => toWorker({ t: 'bat-closed' }))
+  addEventListener('pagehide', () => toWorker({ t: 'bat-closed' }), { signal: outside.signal })
   timings.total = performance.now() - t0
   trace('boot.done')
   timed('done')

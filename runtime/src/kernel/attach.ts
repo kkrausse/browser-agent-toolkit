@@ -16,7 +16,17 @@ export interface KernelInstance {
   dv(): DataView
   /** Host-side hooks the kernel calls; replaceable per worker. */
   host: KernelHost
+  /** Let go of the memory: afterwards `x` throws and the views are empty. For the page,
+   * whose objects outlive a closed runtime; the memory itself goes when no thread holds it. */
+  release(): void
 }
+
+/** What `x` is after `release()`. */
+export const closedExports: Record<string, any> = new Proxy({}, {
+  get() {
+    throw new Error('The runtime is closed')
+  },
+})
 
 export interface KernelHost {
   /** Read `len` bytes at `offset` of image `image` into `dst`. Returns bytes read or -errno. */
@@ -35,16 +45,45 @@ export interface AttachOptions {
   host?: Partial<KernelHost>
 }
 
-export const KERNEL_PAGES_INITIAL = 64
+/** Size of the kernel memory in 64 KiB pages. */
+export interface KernelMemoryOptions {
+  /** Pages the memory is created with. Default 4,096 (256 MiB). Everything the kernel
+   * holds lives in it: the files programs write, pipes, the image index and chunk cache. */
+  pages?: number
+  /** Declared maximum. Default: `pages`, a memory of fixed size that is never grown. Larger:
+   * the kernel grows it when it is full (in WebKit a grow of a shared memory can crash the
+   * tab, and its maximum is reserved as address space when it is made). At most 65,536. */
+  maximumPages?: number
+}
 
-export function createKernelMemory(): WebAssembly.Memory {
-  return new WebAssembly.Memory({ initial: KERNEL_PAGES_INITIAL, maximum: 65536, shared: true })
+/** 256 MiB: docs/design/decisions.md, "the kernel memory has a fixed size". */
+export const KERNEL_PAGES_DEFAULT = 4096
+
+/** A memory does not tell its declared maximum, and the kernel has to know it. */
+const declaredMaximum = new WeakMap<WebAssembly.Memory, number>()
+
+export function createKernelMemory(options: KernelMemoryOptions = {}): WebAssembly.Memory {
+  const whole = (value: number | undefined, fallback: number) => (Number.isFinite(value) ? Math.floor(value as number) : fallback)
+  const initial = Math.min(65536, Math.max(64, whole(options.pages, KERNEL_PAGES_DEFAULT)))
+  const maximum = Math.min(65536, Math.max(initial, whole(options.maximumPages, initial)))
+  try {
+    const memory = new WebAssembly.Memory({ initial, maximum, shared: true })
+    declaredMaximum.set(memory, maximum)
+    return memory
+  } catch (cause) {
+    const mib = (pages: number) => `${pages / 16} MiB`
+    throw new Error(
+      `kernel: this browser refused a shared memory of ${mib(initial)}${maximum > initial ? ` (maximum ${mib(maximum)})` : ''}: ${(cause as Error)?.message ?? cause}. A smaller one can be asked for with the boot option kernelMemory.pages.`,
+      { cause },
+    )
+  }
 }
 
 const decoder = new TextDecoder()
 
 export async function attachKernel(opts: AttachOptions): Promise<KernelInstance> {
-  const { memory, module, canBlock } = opts
+  const { module, canBlock } = opts
+  let memory = opts.memory
   let u8 = new Uint8Array(memory.buffer)
   let i32 = new Int32Array(memory.buffer)
   let dv = new DataView(memory.buffer)
@@ -145,6 +184,8 @@ export async function attachKernel(opts: AttachOptions): Promise<KernelInstance>
   memGenIdx = x.BAT_MEM_GEN.value >>> 2
 
   if (opts.first) {
+    // Before the first allocation: the heap's ceiling.
+    x.bat_mem_configure(declaredMaximum.get(memory) ?? memory.buffer.byteLength / 65536)
     x._initialize?.()
   }
   // Until this instance has its own stack it runs on the module's boot stack,
@@ -167,7 +208,7 @@ export async function attachKernel(opts: AttachOptions): Promise<KernelInstance>
   const tid = x.bat_thread_start(thread, canBlock ? 1 : 0)
   if (opts.first) x.bat_kernel_init()
 
-  return {
+  const inst: KernelInstance = {
     x,
     memory,
     module,
@@ -178,5 +219,18 @@ export async function attachKernel(opts: AttachOptions): Promise<KernelInstance>
     u8: () => (fresh(), u8),
     i32: () => (fresh(), i32),
     dv: () => (fresh(), dv),
+    release() {
+      // Every reference this binding has to the memory, its buffer and the instance. (The
+      // imports above keep `memory` only through this variable.)
+      memGenIdx = -1
+      const none = new ArrayBuffer(8)
+      u8 = new Uint8Array(none)
+      i32 = new Int32Array(none)
+      dv = new DataView(none)
+      memory = undefined as unknown as WebAssembly.Memory
+      inst.x = closedExports
+      inst.memory = undefined as unknown as WebAssembly.Memory
+    },
   }
+  return inst
 }
