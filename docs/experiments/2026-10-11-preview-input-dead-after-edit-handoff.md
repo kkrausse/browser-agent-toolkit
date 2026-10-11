@@ -109,3 +109,52 @@ be the same family:
 `gh-pages` or change the Deno relay without the user's word. The free model is rate-limited
 (13 HTTP 429s and 3 min 14 s for this run): reproduce with the mock, and use the real model
 only for a final check.
+
+## Resolution (2026-10-11)
+
+Reproduced, explained and fixed on this branch. The hypothesis above was wrong about the
+mechanism (events reach React; its event delegation is intact) and right about the trigger.
+
+**Cause, in the example app, the same under a native `vite dev`:** `src/root.tsx` rendered
+`<link rel="preload" href={cssUrl} as="style">` in `<head>`.
+
+1. Vite's client, on a CSS update of a directly requested stylesheet (`css-update`), takes any
+   `<link>` whose href contains the file's path, inserts a clone with a new `?t=` after it and
+   removes the original. That swaps the React-owned preload link for a node React does not
+   know. Any edit under `src/` does this, since Tailwind regenerates `style.css` from the
+   sources. Nothing shows: this is the state every passing run was in.
+2. An edit of `root.tsx` that adds an element to `<head>` above the link shifts its unkeyed
+   children, so React deletes the link's fiber: `commitDeletionEffectsOnFiber`, tag 26
+   (hoistable), `stateNode.parentNode.removeChild(stateNode)` with `parentNode` null.
+   `TypeError: Cannot read properties of null (reading 'removeChild')` is thrown in the commit.
+3. No commit of that root completes afterwards. Renders still run (after typing, the
+   work-in-progress `Home` fiber held the new title; the current one held `''`), nothing
+   reaches the DOM. Typing, Enter, checkboxes and Delete are all dead: a ticked checkbox
+   changes in the DOM only, no request is sent, the counter stays.
+
+**Evidence.** Scripted repro in the tab (the mock's "theme-color" variant, see
+`examples/terminal-app/README.md`): fails at step 5 every time before the fix, with the
+`<meta name="theme-color">` absent from the frame's head although `root.tsx` had it. Native
+(`react-router dev` of `examples/todo-app`, no toolkit): adding the `<meta>` to `root.tsx` by
+hand gives the same dead input, with the TypeError above in the console right after
+`[vite] css hot updated: /src/style.css`.
+
+**Fix.** The link is gone from `root.tsx`, with the `?url` import. It was unused: development
+gets the styles from the import (and React Router's inlined critical CSS), a build gets
+`<link rel="stylesheet">` from `<Links />` (checked in `build/client/index.html`).
+
+**Checked after the fix:** in the tab against the mock, the unchanged scenario, the
+"theme-color" one and "theme-color first" (root.tsx edited before the stylesheet) all pass,
+same document, the `<meta>` present in the frame. Natively the five edits by hand: same
+document, no console error, "Ship it" added.
+
+**Not done:** the published demo still serves the old source; it needs a new prepare, build
+and publish to get this. A real-model run was not made. The class remains: an edit that makes
+React throw in a commit leaves a preview that looks alive, and neither the page nor
+`demo/run.ts` notices. A reload recovers it (checked natively: after the reload typing and
+Delete work; the root.tsx edit alone, with no other edit before it, is enough to break it). The three reports under "Related"
+are not explained by this.
+
+A native dev server that was already running when `root.tsx` lost the `?url` import reloads
+the page on the next stylesheet edit (the orphaned `style.css?url` module has no importer);
+a restarted one hot-updates as before.

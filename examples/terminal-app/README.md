@@ -129,6 +129,15 @@ bun demo/run.ts --base http://127.0.0.1:4310/ --slow --record /tmp/take.mp4
 bun demo/gif.ts /tmp/take.mp4 /tmp/take.gif
 ```
 
+The mock has a second take of that prompt for a regression check: with "theme-color" in the
+prompt it also edits `src/root.tsx` (a `<meta>` in the document head) and
+`src/editor-panel.css`, the edits after which the preview once stopped taking input
+(`docs/experiments/2026-10-11-preview-input-dead-after-edit-handoff.md`). It must pass too:
+
+```sh
+bun demo/run.ts --base http://127.0.0.1:4310/ --prompt "Give this app a dark theme with a violet accent and a theme-color, and show how many todos are left under the list."
+```
+
 The README's GIF (`docs/media/terminal-demo.gif`) is the scripted take cut once more: its first
 5 s dropped and the whole of it at 2.2x, labelled:
 
