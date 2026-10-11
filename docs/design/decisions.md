@@ -1117,3 +1117,47 @@ and are not rewritten. Where those things are now:
   `wasm-term`, `__wasmTerm…` globals, `wasmTermAlloc`/`wasmTermFree` of the Wasm core,
   `/wasm-term/…` asset paths, the relay's `wasm-term tcp relay:` error text). Renaming them
   changes the built client or the wire for no gain.
+
+## 2026-10-10: the React UI is a package of its own (`packages/react`)
+
+`@kkrausse/browser-agent-toolkit` listed Base UI, lucide, class-variance-authority, clsx,
+tailwind-merge and Marked as dependencies and React as an optional peer, so an app that only
+prepares, serves, or opens an editor under a UI of its own (`examples/terminal-app`)
+installed all of them.
+
+- **Two packages.** `packages/toolkit` keeps its name and `./prepare`, `./server`,
+  `./browser`, `./vite`, `./fake`, `./fake/server`, unchanged. `packages/react` is
+  `@kkrausse/browser-agent-toolkit-react`: the package root is what `./react` was
+  (`useEditor`, `useEditorSnapshot`, `EditorPreview`, `ChatView`, `Transcript`, `Composer`,
+  `useChatSnapshot`), and `./styles.css` is the stylesheet with its Tailwind build.
+  `react` and `react-dom` are required peers there. For an app: the `/react` import and
+  the `/styles.css` import change, and one dependency is added.
+- **The rule is the dependency direction.** `react` imports `toolkit`; nothing in
+  `packages/toolkit/src` imports React, a UI library or the React package. Where a file
+  lives follows from that and from nothing else.
+- **The chat logic stays in the toolkit.** `openEditor` creates the chat controller
+  (`editor.chat`, `chat: { startNewSession }`) and `sessions.ts` uses its endpoint type,
+  so the controller, `api.ts`, `admission.ts`, `forms.ts`, `types.ts` and the vendored
+  reducer and OpenCode types (`src/chat/`) cannot move without the toolkit importing the
+  React package. It is also what a page needs to drive a chat without this view. What moved
+  is what draws: `view.tsx`, `markdown.tsx`, `ui/*`, the two stylesheets, `react.tsx` (now
+  `packages/react/src/index.tsx`), the style build script, `LICENSE.shadcn`,
+  `LICENSE.marked` and their notices. No file is in both.
+- **One export was added:** `isPreparing` on `./browser`, beside `canSend` (the view parks
+  a send in that state). The view takes everything else from what `./browser` already
+  exported (`createChatController`, `canSend`, the chat types). A `./chat` subpath was
+  considered and not added for one function.
+- **One copy of the chat code on a page.** The toolkit's build used to split shared chunks
+  between `browser.js` and `react.js`. Now the React package's bundle keeps
+  `@kkrausse/browser-agent-toolkit/*` external, so the app's bundler resolves both to the
+  same module.
+- **The Vite plugin** named `./react` in `optimizeDeps.include`. It now names the React
+  package only when a `node_modules` at or above the Vite root has it: a string and a
+  file check, not an import, so an app without the package gets no warning.
+- **Guest policy unchanged.** Its prune globs name `@kkrausse/browser-agent-toolkit/dist/runtime/**`
+  and `…/prepare/**`; the React package has neither directory and its name does not match
+  those globs. `examples/todo-app/startup-modules.json` records only the toolkit's
+  `dist/vite.js`, whose path did not change, so it was not recorded again.
+- **Release:** `scripts/release.ts` stages a third tarball,
+  `kkrausse-browser-agent-toolkit-react-<version>-<commit>.tgz`, with the workspace
+  dependency on the toolkit rewritten to the version. The two packages share one version.

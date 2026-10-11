@@ -1,8 +1,11 @@
 # @kkrausse/browser-agent-toolkit
 
 Embed a coding agent in a web app: the app's own dev server and an OpenCode 2.0.3 server run
-inside the visitor's browser tab, and a chat panel edits the app's source there. One package,
-five entry points. Build with `bun run build` (output in `dist/`).
+inside the visitor's browser tab, and a chat panel edits the app's source there. This
+package has no UI and no React: five entry points (`./prepare`, `./server`, `./browser`,
+`./vite`, and the development fake). The React components and their stylesheet are
+[`@kkrausse/browser-agent-toolkit-react`](../react/README.md). Build with `bun run build`
+(output in `dist/`).
 
 ## `./prepare` (build time)
 
@@ -133,21 +136,16 @@ before anything is written.
 Steps, in `editorSteps`: `manifest`, `boot`, `source`, `preview.spawn`, `preview.listening`,
 `preview.ready`, `agent.spawn`, `agent.ready`, `chat.ready`.
 
-## `./react`
+`editor.chat` is the chat controller (`subscribe`, `snapshot`, `send`, sessions, models,
+permission and question replies); it exists whether or not anything draws it. For a view
+of your own, `./browser` also exports `createChatController`, the admission predicates
+`canSend` and `isPreparing`, and the chat types.
 
-```tsx
-import { ChatView, EditorPreview, useEditor } from '@kkrausse/browser-agent-toolkit/react'
-import '@kkrausse/browser-agent-toolkit/styles.css'
+## React
 
-function Editor() {
-  const { editor, snapshot, retry } = useEditor()
-  if (!editor) return <p>{snapshot.error ?? snapshot.message}</p>
-  return <>
-    <EditorPreview editor={editor} hostPaths={['/api']} isReady={frame => !!frame.contentDocument?.querySelector('main')} />
-    <ChatView controller={editor.chat} />
-  </>
-}
-```
+A separate package, [`@kkrausse/browser-agent-toolkit-react`](../react/README.md)
+(`useEditor`, `EditorPreview`, `ChatView`, `styles.css`). It imports this one; nothing here
+imports it or React.
 
 ## `./vite`
 
@@ -163,7 +161,9 @@ In the guest (`BROWSER_AGENT_GUEST=1`) it sets `base` to `/preview/<port>/` and 
 directory, and replaces `module` with a component that renders nothing, so the preview does
 not offer an editor inside the editor. In a host build it lists the chunks only
 `privateEntry` reaches in `editor-assets.json`; pass `clientDir` to the server handler and
-they are served only through it. `previewBase()` is the matching router basename.
+they are served only through it. `previewBase()` is the matching router basename. On a
+host dev server it asks Vite to prebundle `./browser` in the first pass, and the React
+package with it when the app has that installed.
 
 ## Runtime interface and the development fake
 
@@ -184,15 +184,17 @@ See `examples/todo-app` (`bun run editor:fake`).
 ## Releasing
 
 `bun scripts/release.ts` (repository root; `--skip-setup` when everything is built,
-`--allow-dirty` for a trial) writes two tarballs to `.release/<version>-<commit>/`, for an
+`--allow-dirty` for a trial) writes three tarballs to `.release/<version>-<commit>/`, for an
 app that vendors the toolkit instead of using a checkout:
 
 - `kkrausse-browser-agent-toolkit-<version>-<commit>.tgz`: this package with the browser
   runtime in `dist/runtime/` and `prepare/` (guest policy, shim packages, OpenCode server);
+- `kkrausse-browser-agent-toolkit-react-<version>-<commit>.tgz`: the React package, for an
+  app that uses it. It names this package by version as a dependency;
 - `kkrausse-browser-agent-prepare-<platform>-<arch>-<version>-<commit>.tgz`: the
   `bat-prepare` executable for the machine the script ran on.
 
-The app depends on both by `file:` path. Prepare then needs only `bun` and `node` 24 on
+The app depends on them by `file:` path. Prepare then needs only `bun` and `node` 24 on
 `PATH` (bubblewrap when present), no Rust and no download but the app's own packages. Each
 tarball has a `BUILD-PROVENANCE.json`. On another platform run the script there, or build
 `bat-prepare` and set `BAT_PREPARE`.

@@ -12,7 +12,7 @@ your app's dev server, all in the user's tab.
   sending anything to another origin (planned).
 - **Live preview.** The agent edits your app's source and it hot-reloads.
 - **The real OpenCode, not a reimplementation.**
-- **Fits an existing app.** One package, optional React helpers.
+- **Fits an existing app.** One package, and a second with React components if you want them.
 
 ![The TODO example: two todos are added, "Open editor" starts the app's dev server and OpenCode inside the tab, the agent is asked for a dark theme and a todos-left counter, and the live preview updates](docs/media/todo-editor-demo-rust.gif)
 
@@ -76,7 +76,7 @@ a real network, any browser but Chrome) are in the
   JavaScript APIs or browser glue by nature: the objects guest programs touch (`fs`,
   `http`, `child_process`, …, thin over kernel calls; pure-JS modules are Node's own
   `lib/`), the worker bootstrap and module loader, the service worker that routes the
-  preview frame, and the toolkit package with its React chat UI.
+  preview frame, the toolkit package and its React chat UI.
 
 Design: [`docs/design/rust-rewrite.md`](docs/design/rust-rewrite.md); what changed while
 building it: [`docs/design/decisions.md`](docs/design/decisions.md).
@@ -84,7 +84,8 @@ building it: [`docs/design/decisions.md`](docs/design/decisions.md).
 ## Using it in an app
 
 One package, `@kkrausse/browser-agent-toolkit` ([its README](packages/toolkit/README.md)),
-five entry points for three moments:
+for three moments, and `@kkrausse/browser-agent-toolkit-react`
+([its README](packages/react/README.md)) for an app that wants the ready-made UI:
 
 1. **Prepare**, at build time. `./prepare` packs the app's dependencies into the image,
    lists the source the agent may edit and writes a directory of static files. `./vite` is
@@ -96,7 +97,8 @@ five entry points for three moments:
 3. **Open**, in the browser. `./browser` has `openEditor()`, which boots the runtime,
    installs the source, starts the dev server and OpenCode and returns the files, the
    preview and the chat controller; `preloadEditor()` warms it up when the button is
-   shown. `./react` has the preview frame, the chat view and a hook.
+   shown. The React package has the preview frame, the chat view, a hook and the
+   stylesheet; the toolkit itself has no React and no UI dependencies.
 
 [`examples/todo-app`](examples/todo-app/README.md) is all of it in a small app.
 
@@ -137,7 +139,8 @@ The ranked list of known gaps is in the
 | `crates/bat-node-native/` | zlib and digests for the guest's `zlib` and `crypto` |
 | `crates/bat-tools/` | Wasm backends for esbuild-shaped transforms and Tailwind's scanner |
 | `runtime/` | TypeScript: kernel bindings, process worker, loader, Node built-ins, SQLite, page host, service worker; `harness/` runs guest scripts in Chrome |
-| `packages/toolkit/` | `@kkrausse/browser-agent-toolkit`: prepare, server, browser, react, vite |
+| `packages/toolkit/` | `@kkrausse/browser-agent-toolkit`: prepare, server, browser (with the chat controller), vite; no React |
+| `packages/react/` | `@kkrausse/browser-agent-toolkit-react`: the chat view, preview frame, `useEditor` and `styles.css`; imports the toolkit, never the reverse |
 | `packages/terminal/` | a terminal display for a page (ghostty-web, with the snapshot it wraps): bytes in, input and size out |
 | `packages/relay/` | the TCP relay behind the runtime's tunnel (`?tunnel=` of the terminal example) |
 | `ports/opencode/` | the OpenCode 2.0.26 terminal client built as a Node program for the runtime (OpenTUI's core as Wasm), and the 2.0.26 server bundle (`server/`) |
@@ -185,7 +188,8 @@ bun run build       # the toolkit package only
 gitignored `.runtime/` (downloaded from a checksummed release asset, or
 `BAT_OPENCODE_DIR`); `kernel.wasm`, `bat_modules.wasm`, `bat_node_native.wasm`,
 `bat_sh.wasm` and the `bat-prepare` CLI into `target/`; the runtime bundles into
-`runtime/dist/`; the toolkit into `packages/toolkit/dist/`. After a change to Rust or
+`runtime/dist/`; the toolkit into `packages/toolkit/dist/` and its React package into
+`packages/react/dist/`. After a change to Rust or
 runtime code, run it again and restart the example.
 
 Checks that exist: `runtime/harness/check.sh` (guest scripts in Chrome through the
@@ -202,5 +206,6 @@ No umbrella license has been chosen for this repository. Third-party code that i
 vendored or embedded (Node.js `lib/`, shims from Vivari, SQLite and wasi-libc, the
 Tailwind scanner, oxc and the other Rust crates, lightningcss files) is listed with its
 license in [`third_party/NOTICES.md`](third_party/NOTICES.md); what the toolkit package
-took from OpenCode, shadcn/ui and Marked is in
-[`packages/toolkit/NOTICES.md`](packages/toolkit/NOTICES.md).
+took from OpenCode is in [`packages/toolkit/NOTICES.md`](packages/toolkit/NOTICES.md), and
+what the React package took from shadcn/ui and Marked in
+[`packages/react/NOTICES.md`](packages/react/NOTICES.md).

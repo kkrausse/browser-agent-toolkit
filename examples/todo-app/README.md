@@ -16,7 +16,7 @@ dependency upgrade (`bench/startup/run.ts --trace --record-modules`, `bench/firs
 ## Run
 
 From the repository root, one command (builds the Wasm pieces, the `bat-prepare` CLI, the
-runtime and the toolkit, fetches the pinned OpenCode server, then prepares, builds and
+runtime, the toolkit and its React package, fetches the pinned OpenCode server, then prepares, builds and
 serves this example):
 
 ```sh
