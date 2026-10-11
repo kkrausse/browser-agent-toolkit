@@ -356,6 +356,8 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
     throw new Error(`kernel boot failed: ${(e as Error).message}`, { cause: e })
   }
   timings.kernel = performance.now() - t0
+  // The size the kernel memory was made with: for a page that shows what the browser granted.
+  timings.kernelMemoryBytes = booted.memory.buffer.byteLength
   Object.assign(timings, { kernelCompile: booted.timings.compileMs, kernelAttach: booted.timings.attachMs, kerneldInit: booted.timings.kerneldMs, restore: booted.restored?.ms ?? 0, journalBytes: booted.restored?.journalBytes ?? 0, snapshotBytes: booted.restored?.snapshotBytes ?? 0 })
   trace('boot.kernel')
   timed('kernel')

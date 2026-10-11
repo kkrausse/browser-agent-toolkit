@@ -35,6 +35,22 @@ interface Proc {
   pid: number
 }
 
+// A failure of this worker or of a process worker, said twice: on the console, and on a
+// channel a page may listen to (a phone has no console; examples/terminal-app/src/diag.ts
+// shows what arrives). Rare events only, so the channel costs nothing when nobody listens.
+let reports: BroadcastChannel | undefined
+function report(...args: unknown[]): void {
+  console.error(...args)
+  try {
+    reports ??= new BroadcastChannel('bat-diag')
+    reports.postMessage({ src: 'kerneld', text: args.map((a) => (a instanceof Error ? `${a.name}: ${a.message}\n${a.stack ?? ''}` : String(a))).join(' ').slice(0, 2000) })
+  } catch {
+    // no channel, or not cloneable
+  }
+}
+addEventListener('error', (e) => report('kerneld: uncaught', (e as ErrorEvent).error ?? (e as ErrorEvent).message))
+addEventListener('unhandledrejection', (e) => report('kerneld: unhandled rejection', (e as PromiseRejectionEvent).reason))
+
 const JOURNAL_MAGIC = 0x4a544142 // "BATJ"
 const FRAME_HEADER = 24
 const SNAP_HEADER = 32
@@ -102,13 +118,13 @@ function createProcessWorker(programs: string[] = [], attempt = 0): Promise<Proc
       } else if (m.type === 'exited') {
         retire(proc, 0)
       } else if (m.type === 'error') {
-        console.error('process worker:', m.error)
+        report('process worker:', m.error)
         if (proc.pid) k.x.bat_proc_mark_exited(proc.pid, 1)
         else reject(new Error(m.error))
       }
     }
     worker.onerror = (e) => {
-      console.error('process worker crashed:', e.message)
+      report('process worker crashed:', e.message || '(no message)', (e as ErrorEvent).filename ? `${(e as ErrorEvent).filename}:${(e as ErrorEvent).lineno}` : '')
       if (proc.pid) {
         k.x.bat_proc_mark_exited(proc.pid, 1)
         retire(proc, 0)
@@ -161,7 +177,7 @@ async function spawn(pid: number) {
   try {
     proc = await taken
   } catch (e) {
-    console.error('spawn failed:', e)
+    report('spawn failed:', e)
     k.x.bat_proc_mark_exited(pid, 127)
     return
   }
@@ -277,7 +293,7 @@ async function faultArriving(id: number, chunk: number) {
       image.stash.splice(image.stash.indexOf(stashed), 1)
     }
   } catch (e) {
-    console.error('kerneld: reading an arriving image:', e)
+    report('kerneld: reading an arriving image:', e)
   } finally {
     image.pending.delete(chunk)
   }
@@ -534,7 +550,7 @@ async function supervise() {
           else x.bat_image_fault(a, b)
         } else if (kind === 5) drainJournal()
       } catch (e) {
-        console.error('kerneld:', e)
+        report('kerneld:', e)
       }
     }
     await waitWord(i32, word, seen, 250)
@@ -542,10 +558,10 @@ async function supervise() {
       try {
         drainJournal()
       } catch (e) {
-        console.error('kerneld journal:', e)
+        report('kerneld journal:', e)
       }
     } else if (journal && journalSize > SNAPSHOT_IDLE_AT && performance.now() - journalWrittenAt > SNAPSHOT_IDLE_MS) {
-      void snapshot().catch((e) => console.error('kerneld snapshot:', e))
+      void snapshot().catch((e) => report('kerneld snapshot:', e))
     }
   }
 }

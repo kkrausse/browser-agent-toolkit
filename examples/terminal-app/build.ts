@@ -24,6 +24,8 @@
 //               default model endpoint (the server uses OpenCode's hosted free models), no
 //               diagnostics unless the address asks, no ChatGPT sign-in bar, only opencode.ai
 //               tunnelled. WISP_URL then defaults to the server below; MODEL_URL is refused
+//   DIAG_PANEL=1  the page shows its diagnostics panel (src/diag.ts) without being asked by `?diag=1`:
+//               for a build made to be tried on a device with no console
 //   PUBLIC_MODEL  the hosted free model a fresh workspace of the public build starts on
 //               (default below; empty for the server's own choice)
 import { copyFileSync, createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
@@ -100,7 +102,7 @@ async function bundle(entry: string, name: string, options: Partial<Parameters<t
   await Bun.write(join(out, name), await result.outputs[0]!.text())
   kept.add(name)
 }
-await bundle('src/main.ts', 'main.js', { define: { 'process.env.MODEL_URL': JSON.stringify(modelUrl), 'process.env.TUNNEL_URL': JSON.stringify(tunnelUrl), 'process.env.WISP_URL': JSON.stringify(wispUrl), 'process.env.PUBLIC': JSON.stringify(isPublic ? '1' : ''), 'process.env.PUBLIC_MODEL': JSON.stringify(publicModel) } })
+await bundle('src/main.ts', 'main.js', { define: { 'process.env.MODEL_URL': JSON.stringify(modelUrl), 'process.env.TUNNEL_URL': JSON.stringify(tunnelUrl), 'process.env.WISP_URL': JSON.stringify(wispUrl), 'process.env.PUBLIC': JSON.stringify(isPublic ? '1' : ''), 'process.env.PUBLIC_MODEL': JSON.stringify(publicModel), 'process.env.DIAG_PANEL': JSON.stringify(process.env.DIAG_PANEL === '1' ? '1' : '') } })
 await bundle('sw.ts', 'sw.js', { format: 'iife', define: { GZIPPED: JSON.stringify(gzipped) } })
 if (!isPublic) await bundle('client-tap.ts', 'client-tap.js', { target: 'node' })
 

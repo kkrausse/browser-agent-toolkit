@@ -22,7 +22,10 @@
 //   ?wisp=<wss URL>      a Wisp server (anybody's: the protocol is public) to carry those hosts instead of that relay.
 //                        Default: the build's WISP_URL, else none; `0` for none, which leaves `?tunnel=`. A `?wisp=` or
 //                        `?tunnel=` in the address comes before either built default
-//   ?diag=<url>          where the page posts its diagnostics (diag.ts); `0` for nowhere
+//   ?diag=<url>          where the page posts its diagnostics (diag.ts); `0` for nowhere; `1` for the
+//                        panel on the page itself (always there in a build made with DIAG_PANEL=1; `?panel=0` hides it)
+//   ?mock=1              the scripted model inside this page's service worker (sw.ts): no network, no key, no relay
+//   ?kmem=<MiB>          the size of the runtime's kernel memory (default 256), for a browser that refuses the default
 //
 // The public build (`PUBLIC=1 bun run build`, a page for strangers) differs: with no `?model=`
 // the server has no provider of this page's and uses OpenCode's own hosted free models
@@ -98,7 +101,9 @@ if (params.get('reset') === '1') {
 }
 // The public build names no endpoint: without `?model=` the server is left to its own default,
 // OpenCode's hosted free models, starting on `hostedModel()` (opencode.ts).
-const modelUrl = params.get('model') ?? builtModel ?? (isPublic ? undefined : `${location.protocol}//${location.hostname}:4311/v1`)
+// `?mock=1`: the scripted model that the page's own service worker answers (same origin, nothing leaves the tab).
+const mocked = params.get('mock') === '1'
+const modelUrl = params.get('model') ?? (mocked ? new URL('mock/v1', here).href : undefined) ?? builtModel ?? (isPublic ? undefined : `${location.protocol}//${location.hostname}:4311/v1`)
 const model: ModelEndpoint | undefined = modelUrl ? { baseURL: modelUrl, id: params.get('modelId') ?? 'scripted', apiKey: 'not-a-key' } : undefined
 
 /** Which hosted free model a fresh workspace starts on, when the page names no endpoint. The
@@ -125,8 +130,8 @@ const tunnel = tunnelUrl ? { url: tunnelUrl, protocol: wispUrl ? 'wisp' as const
 const status = document.querySelector<HTMLPreElement>('#status')!
 const frame = document.querySelector<HTMLIFrameElement>('#app')!
 const logPane = document.querySelector<HTMLPreElement>('#log pre')!
-const diag = installDiag(params, isPublic ? null : builtModel && new URL('/diag', builtModel).href)
-const say = (text: string, error = false) => { status.textContent = text; status.classList.toggle('error', error); diag.event(error ? 'failed' : 'stage', text) }
+const diag = installDiag(params, isPublic ? null : builtModel && new URL('/diag', builtModel).href, process.env.DIAG_PANEL === '1')
+const say = (text: string, error?: unknown) => { status.textContent = text; status.classList.toggle('error', error !== undefined); diag.event(error !== undefined ? 'failed' : 'stage', error ?? text) }
 window.batTerminal = { log: [], model }
 document.querySelector('#title')!.textContent = `OpenCode · ${model ? `model ${model.id} at ${new URL(model.baseURL).host}` : 'free model from OpenCode Zen'}${tunnel ? ` · ${isPublic ? 'relay' : 'tunnel'} ${new URL(tunnel.url).host}` : ''}`
 // The cog: the page's relay as a form. Applying it is a reload at the address that says
@@ -218,6 +223,7 @@ async function main() {
   const response = await fetch(manifestUrl, { cache: 'no-store' })
   if (!response.ok) throw Error(`No prepared editor: ${manifestUrl} answered HTTP ${response.status}`)
   const manifest = await response.json() as EditorManifest
+  diag.event('stage', `manifest read: image ${manifest.image?.file} ${Math.round((manifest.image?.bytes ?? 0) / 1e6)} MB`)
   if (!manifest.launch.agent) throw Error('The prepared directory has no OpenCode server')
   const runtimeModule = await import(new URL(manifest.runtime?.entry ?? 'runtime/host.js', manifestUrl).href) as { bootRuntime: BootRuntime; resetWorkspace(options: { manifestUrl: string }): Promise<void> }
   const startOver = async () => {
@@ -232,13 +238,19 @@ async function main() {
     await startOver()
   }
   const { bootRuntime } = runtimeModule
+  diag.event('stage', 'runtime module loaded')
+  // `?kmem=<MiB>`: another size for the kernel memory, where the browser refuses 256 MiB. With the
+  // panel, every thread of the runtime posts its start-up marks (off otherwise: host.ts, `trace`).
+  const kernelMiB = Number(params.get('kmem'))
+  const bootExtras = { ...(kernelMiB > 0 ? { kernelMemory: { pages: Math.round(kernelMiB * 16) } } : {}), ...(diag.panel ? { trace: true } : {}) }
   say('Opening the workspace in this browser…')
   const lifetime = new AbortController()
   // One worker for the whole directory: it is at the page's level, so no server has to allow its scope.
-  const boot = () => bootRuntime({ manifestUrl, manifest, signal: lifetime.signal, serviceWorker: { url: workerUrl, scope: here } }).catch(error => {
+  const boot = () => bootRuntime({ manifestUrl, manifest, signal: lifetime.signal, serviceWorker: { url: workerUrl, scope: here }, ...bootExtras }).catch(error => {
     throw (error as { code?: string })?.code === 'STORAGE_BUSY' ? Error('This workspace is already open in another tab or window.') : error
   })
   let runtime = await boot()
+  diag.event('stage', 'runtime booted: kernel up, image mounted, workspace restored')
   let source = await installSource(runtime.fs, manifest.project)
   // A workspace owns its source once installed, so one kept from a build of this page with
   // other dependencies cannot start on this build's image (the app that had React Router and
@@ -266,7 +278,7 @@ async function main() {
   if (!await runtime.fs.stat(clientEntry).then(() => true, () => false)) throw Error(`The prepared image has no OpenCode client (${clientEntry}): build ports/opencode for Node and prepare again`)
   // The page watches for a sign-in that waits on a loopback redirect (signin.ts).
   await installClient(runtime.fs, tapScript && { script: await tapScript, exchange: watchSignIn(() => window.batTerminal.runtime, log) })
-  if (model) log(`[page] model endpoint: ${model.baseURL} (model ${model.id}), fetched by this tab directly`)
+  if (model) log(`[page] model endpoint: ${model.baseURL} (model ${model.id}), ${mocked && !params.get('model') ? 'the scripted model in this page\'s service worker: nothing leaves the tab' : 'fetched by this tab directly'}`)
   else log(`[page] model: OpenCode's hosted free models (opencode.ai/zen), no key, starting on ${hostedId ?? "the server's choice"}${tunnel ? '' : '; they need a relay (?wisp= or ?tunnel=) and there is none'}`)
   if (tunnel) log(`[page] tunnel: ${tunnel.to.join(', ')} through the ${tunnel.protocol === 'wisp' ? 'Wisp server' : 'relay'} at ${new URL(tunnel.url).host}, with TLS in this tab`)
 
@@ -284,10 +296,12 @@ async function main() {
   ])
   follow('app', appProcess, false)
   follow('opencode', serverProcess, true)
-  const appUp = app.ready(lifetime.signal).then(() => { frame.src = app.url })
+  const appUp = app.ready(lifetime.signal).then(() => { frame.src = app.url; diag.event('stage', 'the app\'s dev server listens: frame set') })
+  frame.addEventListener('load', () => { if (frame.src) diag.event('stage', 'the app\'s frame loaded') })
   const serverUp = server.ready(lifetime.signal).then(() => serverHealthy(server, authorization, lifetime.signal))
   void Promise.allSettled([appUp, serverUp]).then(() => runtime.started?.())
   await serverUp
+  diag.event('stage', 'OpenCode server healthy')
 
   // Client and server are the same version. The display is mounted first: the client starts at its size.
   let client: RuntimeTerminal | undefined
@@ -327,6 +341,6 @@ async function main() {
 
 main().catch(error => {
   console.error(error)
-  say(`Could not start: ${error instanceof Error ? error.message : String(error)}`, true)
+  say(`Could not start: ${error instanceof Error ? error.message : String(error)}`, error ?? 'unknown')
   panel.setOpen(true)
 })

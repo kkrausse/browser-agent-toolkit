@@ -10,14 +10,21 @@
 //      with this worker's scope being the page's directory, it serves guest listeners at
 //      `<directory>/preview/<port>/` and leaves everything else to the listener below.
 //
+//   4. A model that needs no network. `POST <directory>/mock/v1/responses` is answered here
+//      by the scripted model (mock-script.ts, the logic of mock-model.ts): the page's `?mock=1`
+//      names it, so a first try on a new device does not depend on a provider, a relay or a
+//      sign-in. Nothing leaves the tab for it.
+//
 // A classic script at the top of the directory, so its scope needs no `Service-Worker-Allowed`.
+import { next, parse, reply, type Json } from './mock-script'
+
 interface FetchEventLike extends Event { request: Request; respondWith(response: Promise<Response>): void }
 interface WorkerScope { registration: { scope: string }; importScripts(...urls: string[]): void; addEventListener(type: 'fetch', listener: (event: FetchEventLike) => void): void }
 declare const GZIPPED: string[]
 
 const worker = self as unknown as WorkerScope
 const scope = new URL(worker.registration.scope)
-const preview = `${scope.pathname}preview/`
+const preview = `${scope.pathname}preview/`, mock = `${scope.pathname}mock/`
 worker.importScripts(new URL('editor/runtime/sw.js', scope).href)
 
 const gzipped = new Set(GZIPPED)
@@ -52,6 +59,12 @@ async function serve(request: Request, url: URL): Promise<Response> {
 
 worker.addEventListener('fetch', event => {
   const request = event.request, url = new URL(request.url)
+  if (url.origin === scope.origin && url.pathname.startsWith(mock)) {
+    event.respondWith(request.method === 'POST' && url.pathname.endsWith('/responses')
+      ? request.json().then(body => { const turn = parse(body as Json); return reply(turn, next(turn)) }, error => Response.json({ error: { message: `mock model: ${error}` } }, { status: 400 }))
+      : Promise.resolve(Response.json({ error: { message: `mock model: no handler for ${request.method} ${url.pathname}`, type: 'not_found' } }, { status: 404 })))
+    return
+  }
   if (request.method !== 'GET' && request.method !== 'HEAD') return
   // The page's own files only: not another origin (the model), not the preview, and not
   // what a preview frame asks of its server (the runtime's listener above routes those).
