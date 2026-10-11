@@ -2,6 +2,10 @@
 
 **Coding agent in your web app.**
 
+**[Try the live demo](https://kkrausse.github.io/browser-agent-toolkit/)**: a TODO app and the
+OpenCode terminal agent editing it, all in your browser tab, on a free model with nothing to
+set up. Desktop Chrome; the first load is about 55 MB.
+
 Runs the OpenCode *server* in the browser, along with a filesystem, a shell and
 your app's dev server, all in the user's tab.
 
