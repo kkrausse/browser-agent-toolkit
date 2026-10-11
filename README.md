@@ -10,7 +10,8 @@ Runs the OpenCode *server* in the browser, along with a filesystem, a shell and
 your app's dev server, all in the user's tab.
 
 - **Zero VM hosting costs.** Inference is the only per-session cost, and users
-  could cover that themselves by signing in with OpenAI (planned).
+  can cover that themselves: in the demo, signing in to a ChatGPT plan with a device code
+  works (ctrl+p, "Connect an integration", OpenAI).
 - **No sandbox to secure.** Agent-run code never executes on your servers. The
   browser tab is the sandbox, and a `Connection-Allowlist` header can stop it
   sending anything to another origin (planned).
@@ -46,8 +47,9 @@ from a fresh clone with warm Cargo and Bun caches); after that, a few seconds.
 
 ## Startup
 
-"Open editor" in the TODO example: Vite 7 with React Router and Tailwind, and the real
-OpenCode 2.0.3 server, both started inside the tab. Chrome 154 on a 12-core Linux machine
+"Open editor" in the TODO example as it was when this was measured (Vite 7 with React Router,
+tRPC and Tailwind; the example is a plain React app since, and the table has not been measured
+again), and the real OpenCode 2.0.3 server, both started inside the tab. Chrome 154 on a 12-core Linux machine
 that was busy with other work (load average 4.6–4.9); milliseconds, median (min–max) of
 12 reopens.
 
@@ -154,7 +156,7 @@ The ranked list of known gaps is in the
 | `packages/relay/` | the TCP relay behind the runtime's tunnel (`?tunnel=` of the terminal example) |
 | `ports/opencode/` | the OpenCode 2.0.26 terminal client built as a Node program for the runtime (OpenTUI's core as Wasm), and the 2.0.26 server bundle (`server/`) |
 | `packages/guest-shims/` | packages laid over native-tool packages in the guest (esbuild, lightningcss, Tailwind oxide) |
-| `examples/todo-app/` | React Router + Bun/tRPC TODO app with the editor; `demo/` drives and records the scenario |
+| `examples/todo-app/` | a plain React 19 + Vite 7 + Tailwind TODO app (todos in `localStorage`) behind a small Bun server, with the editor; `demo/` drives and records the scenario |
 | `examples/terminal-app/` | the same app with the OpenCode terminal client beside it, on a terminal of the runtime's kernel |
 | `bench/` | the drivers behind the numbers in `docs/experiments/` |
 | `third_party/` | Node's `lib/` and the notices |

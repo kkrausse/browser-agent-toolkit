@@ -41,7 +41,7 @@ const runtime = process.env.BAT_RUNTIME_DIR ?? resolve(import.meta.dirname, '../
 const manifest = await prepare({
   appRoot: app,
   outDir: resolve(import.meta.dirname, '.editor/prepared'),
-  source: ['src', 'vite.config.ts', 'react-router.config.ts', 'tsconfig.json', 'package.json'],
+  source: ['index.html', 'src', 'vite.config.ts', 'tsconfig.json', 'package.json'],
   openCodeDir,
   runtimeDir: existsSync(join(runtime, 'host.js')) ? runtime : undefined,
   startupModules: 'startup-modules.json',

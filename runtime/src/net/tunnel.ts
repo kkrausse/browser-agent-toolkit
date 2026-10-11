@@ -21,12 +21,43 @@
 // Flow control is by the acks, WINDOW bytes each way: this side sends no more than a window
 // ahead of the relay's acks, and acknowledges received bytes only once TLS has taken them,
 // which it does only while the reader of the response body wants more.
+//
+// A second wire format, `protocol: 'wisp'`: Wisp v1 (github.com/MercuryWorkshop/wisp-protocol),
+// for a relay that is somebody's stock Wisp server rather than packages/relay. Binary frames
+// only, each `type u8 | stream id u32le | payload`:
+//   CONNECT 1   page -> relay   `1 (TCP) | port u16le | host`; nothing answers it
+//   DATA 2      both ways       bytes of the stream
+//   CONTINUE 3  relay -> page   `buffer u32le`: how many DATA packets the page may send now
+//                               (stream 0, once, after the WebSocket opens: the same for a new stream)
+//   CLOSE 4     both ways       `reason u8`
+//   INFO 5      relay -> page   a Wisp v2 server's greeting; not answering it keeps v1
+// One WebSocket carries one stream here (id 1), as with the other format. Wisp has no flow
+// control towards the page: what the relay sends is held here until TLS takes it.
 import { netError, type WireResponse } from './client'
 
 const WINDOW = 256 * 1024
 const SCRATCH = 64 * 1024
 const HEAD_MAX = 256 * 1024
 const HIGH_WATER = 1 << 20
+const WISP_STREAM = 1
+
+function wispPacket(type: number, payload: Uint8Array): Uint8Array {
+  const packet = new Uint8Array(5 + payload.length)
+  packet[0] = type
+  new DataView(packet.buffer).setUint32(1, WISP_STREAM, true)
+  packet.set(payload, 5)
+  return packet
+}
+/** A Wisp CLOSE reason that is a refusal or a failure, as an error code and what to say. */
+const wispRefusals: Record<number, [string, string]> = {
+  0x41: ['EINVAL', 'invalid destination'],
+  0x42: ['EHOSTUNREACH', 'unreachable'],
+  0x43: ['ETIMEDOUT', 'the destination did not answer'],
+  0x44: ['ECONNREFUSED', 'the destination refused the connection'],
+  0x47: ['ETIMEDOUT', 'the transfer timed out'],
+  0x48: ['EACCES', 'the relay blocks this destination'],
+  0x49: ['EACCES', 'throttled by the relay'],
+}
 
 interface TlsExports {
   memory: WebAssembly.Memory
@@ -110,6 +141,8 @@ export function instantiateTls(module: WebAssembly.Module, random: (bytes: Uint8
 export interface TunnelDeps {
   /** The relay's WebSocket address, without the destination: `wss://relay.example/tcp`. */
   relayUrl: string
+  /** The relay's wire format: packages/relay's own (the default), or Wisp v1, where `relayUrl` is the Wisp server's address as it is. */
+  protocol?: 'relay' | 'wisp'
   WebSocket: typeof WebSocket
   engine(): Promise<TlsEngine>
 }
@@ -309,6 +342,9 @@ export function tunnelRequest(deps: TunnelDeps, req: TunnelRequest): Promise<Tun
     const outQueue: Uint8Array[] = []
     let outQueued = 0
     let unacked = 0
+    const wisp = deps.protocol === 'wisp'
+    /** Wisp: DATA packets the relay will take now. */
+    let credit = 0
     // From the relay: ciphertext TLS has not taken yet.
     const inQueue: Uint8Array[] = []
     let inEnded = false
@@ -324,6 +360,7 @@ export function tunnelRequest(deps: TunnelDeps, req: TunnelRequest): Promise<Tun
       if (conn && engine) engine.x.tls_free(conn)
       conn = 0
       try {
+        if (wisp && relayOpen && ws?.readyState === 1) ws.send(wispPacket(4, new Uint8Array([2])))
         ws?.close(1000)
       } catch {
         // already closing
@@ -355,9 +392,15 @@ export function tunnelRequest(deps: TunnelDeps, req: TunnelRequest): Promise<Tun
     const send = () => {
       while (outQueue.length && relayOpen && ws?.readyState === 1) {
         const chunk = outQueue[0]!
-        if (unacked && unacked + chunk.length > WINDOW) return
-        ws.send(chunk)
-        unacked += chunk.length
+        if (wisp) {
+          if (!credit) return
+          credit--
+          ws.send(wispPacket(2, chunk))
+        } else {
+          if (unacked && unacked + chunk.length > WINDOW) return
+          ws.send(chunk)
+          unacked += chunk.length
+        }
         outQueued -= chunk.length
         outQueue.shift()
       }
@@ -482,7 +525,7 @@ export function tunnelRequest(deps: TunnelDeps, req: TunnelRequest): Promise<Tun
         }
       } finally {
         pumping = false
-        if (taken && relayOpen && ws?.readyState === 1) ws.send(JSON.stringify({ t: 'ack', bytes: taken }))
+        if (taken && !wisp && relayOpen && ws?.readyState === 1) ws.send(JSON.stringify({ t: 'ack', bytes: taken }))
         wake()
       }
     }
@@ -515,6 +558,54 @@ export function tunnelRequest(deps: TunnelDeps, req: TunnelRequest): Promise<Tun
       }
     }
 
+    /** The relay carries the connection (or, with Wisp, has been asked to): TLS begins. */
+    function start(): void {
+      const { x, scratch } = engine!
+      const name = encoder.encode(host)
+      new Uint8Array(x.memory.buffer, scratch, name.length).set(name)
+      conn = x.tls_new(scratch, name.length)
+      if (!conn) {
+        const n = x.tls_error(0, scratch, 1024)
+        return fail(netError('EPROTO', `TLS with ${host}: ${utf8.decode(new Uint8Array(x.memory.buffer, scratch, n).slice())}`))
+      }
+      flush() // ClientHello
+      // The request is written now; TLS holds it until the handshake is over.
+      sendRequest().catch((error) => {
+        if (!over) fail(error)
+      })
+    }
+
+    function onWisp(packet: Uint8Array): void {
+      if (packet.length < 5) return
+      const type = packet[0]!
+      const stream = new DataView(packet.buffer, packet.byteOffset).getUint32(1, true)
+      // The server's first packet (CONTINUE for stream 0; INFO from a v2 server, which a CONNECT in reply turns to v1) says it is one.
+      if (!relayOpen) {
+        relayOpen = true
+        const name = encoder.encode(host)
+        const connect = new Uint8Array(3 + name.length)
+        connect[0] = 1
+        new DataView(connect.buffer).setUint16(1, port, true)
+        connect.set(name, 3)
+        ws!.send(wispPacket(1, connect))
+        start()
+        if (over) return
+      }
+      if (type === 3 && packet.length >= 9 && (stream === 0 || stream === WISP_STREAM)) {
+        credit = new DataView(packet.buffer, packet.byteOffset).getUint32(5, true)
+        send()
+        wake()
+      } else if (type === 2 && stream === WISP_STREAM) {
+        inQueue.push(packet.subarray(5))
+        pump()
+      } else if (type === 4 && stream === WISP_STREAM) {
+        const refusal = wispRefusals[packet[5] ?? 0]
+        if (refusal) return fail(netError(refusal[0], `the relay could not carry the connection to ${host}:${port} (${refusal[1]})`))
+        inEnded = true
+        pump()
+      }
+    }
+
     function onControl(text: string): void {
       let control: { t?: string; bytes?: number; code?: string; message?: string }
       try {
@@ -525,19 +616,7 @@ export function tunnelRequest(deps: TunnelDeps, req: TunnelRequest): Promise<Tun
       if (control.t === 'open') {
         if (relayOpen) return
         relayOpen = true
-        const { x, scratch } = engine!
-        const name = encoder.encode(host)
-        new Uint8Array(x.memory.buffer, scratch, name.length).set(name)
-        conn = x.tls_new(scratch, name.length)
-        if (!conn) {
-          const n = x.tls_error(0, scratch, 1024)
-          return fail(netError('EPROTO', `TLS with ${host}: ${utf8.decode(new Uint8Array(x.memory.buffer, scratch, n).slice())}`))
-        }
-        flush() // ClientHello
-        // The request is written now; TLS holds it until the handshake is over.
-        sendRequest().catch((error) => {
-          if (!over) fail(error)
-        })
+        start()
       } else if (control.t === 'ack' && Number.isFinite(control.bytes)) {
         unacked = Math.max(0, unacked - Number(control.bytes))
         send()
@@ -558,12 +637,15 @@ export function tunnelRequest(deps: TunnelDeps, req: TunnelRequest): Promise<Tun
       if (over) return
       engine = loaded
       const relay = new URL(deps.relayUrl)
-      relay.searchParams.set('host', host)
-      relay.searchParams.set('port', String(port))
+      if (!wisp) {
+        relay.searchParams.set('host', host)
+        relay.searchParams.set('port', String(port))
+      }
       ws = new deps.WebSocket(relay.href)
       ws.binaryType = 'arraybuffer'
       ws.onmessage = (event) => {
         if (over) return
+        if (wisp) return typeof event.data === 'string' ? undefined : onWisp(new Uint8Array(event.data as ArrayBuffer))
         if (typeof event.data === 'string') return onControl(event.data)
         inQueue.push(new Uint8Array(event.data as ArrayBuffer))
         pump()

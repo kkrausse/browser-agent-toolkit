@@ -1293,3 +1293,34 @@ steps: 2 grows for the same scripts, 82 runs without a crash.
   the overlay still grows); holding grows back while a worker is being destroyed (there
   is no signal for the end of a worker's teardown).
 - This is a reduction. A grow that meets a teardown still crashes.
+
+## 2026-10-11: the tunnel also speaks Wisp, and the public build uses a public Wisp server
+
+The public page depended on one deployment of ours (the relay on Deno Deploy). The tunnel only
+needs somebody to carry TCP for a tab, and there is a public protocol for that with public
+servers.
+
+- **A second wire format in the same client, not a second client.** `tunnelRequest` takes
+  `protocol: 'wisp'` (`BAT_FETCH_TUNNEL_PROTOCOL=wisp` in a process's environment): Wisp v1
+  framing around the same queues, TLS engine and HTTP parser. The default and every path of
+  the relay's own format are unchanged.
+- **One stream per WebSocket**, as with the relay, although Wisp multiplexes: a request's
+  failure, abort and cleanup stay those of one socket. Sharing a socket would save a WebSocket
+  handshake per request and is not done.
+- **No reply to a v2 server's INFO.** A CONNECT as the first packet keeps such a server on v1,
+  which is all that is used.
+- **What Wisp lacks**: an answer to CONNECT (TLS starts at once and a refusal arrives as a
+  CLOSE with a reason), and flow control towards the page (received bytes are held in the tab
+  until the body's reader takes them; the relay's format stops the far end instead).
+- **The public build's default is `wss://wisp.mercurywork.shop/`**, which is not ours and
+  publishes no terms. The build names no relay of ours any more: Deno Deploy suspended the
+  account that ran it (403 `USER_SUSPENDED`) the same day, so `TUNNEL_URL` has no default.
+- **Measured on 2026-10-11, Chrome, the public build on `http://127.0.0.1:4391`** (so that
+  server takes a WebSocket from an origin it has never seen): a prompt answered by
+  `ling-3.1-flash-free`, streamed, `HTTP 200 (tunnel via wisp.mercurywork.shop, TLSv1_3
+  TLS13_AES_256_GCM_SHA384)`.
+- **Seen: four HTTP 429 from Zen before that 200**, retried by OpenCode without anything on
+  the page. A second run on the plain TODO app ("change the page heading", done, the frame
+  showed the new heading within 100 s): 4 answers of 200 and 12 of 429. Not explained. The server's address is shared by everybody who uses it, which
+  would do it if Zen's free tier counts per address; there was no working relay of ours left
+  to compare with.

@@ -11,21 +11,21 @@ real OpenCode 2.0.26 server and the todo app's dev server; the real OpenCode 2.0
 (wasm-term, `web/embed.ts`) is in a side panel and talks to that server through the page.
 Its README has the build, the parameters and the sign-in steps.
 
-- Live: `https://raspberrypi.guineafowl-truck.ts.net/artifacts/bat-terminal-app/` (artifact slug
-  `bat-terminal-app`) and `https://diesel2.guineafowl-truck.ts.net:4310/` (tmux `bat-terminal`,
+- Live: `https://raspberrypi.<tailnet>.ts.net/artifacts/bat-terminal-app/` (artifact slug
+  `bat-terminal-app`) and `https://diesel2.<tailnet>.ts.net:4310/` (tmux `bat-terminal`,
   file server over this worktree's `examples/terminal-app/dist/`).
 - Mock model and diagnostics collector: tmux `bat-terminal-mock`, :4311,
   `/tmp/bat-terminal-diag.jsonl`.
 - Blind relay: tmux `tcp-relay`, `wasm-term/web/tcp-relay-main.ts` on 127.0.0.1:4799, tailnet
-  `wss://diesel2.guineafowl-truck.ts.net:4799/tcp`, origins: the two pages above, log
+  `wss://diesel2.<tailnet>.ts.net:4799/tcp`, origins: the two pages above, log
   `/tmp/tcp-relay.log`.
 
 Builds that are served must be made with the relay baked in, or the page silently loses it:
 
 ```sh
 cd examples/terminal-app
-TUNNEL_URL=wss://diesel2.guineafowl-truck.ts.net:4799/tcp bun run build          # dist/, served on :4310
-MODEL_URL=https://diesel2.guineafowl-truck.ts.net:4311/v1 TUNNEL_URL=wss://diesel2.guineafowl-truck.ts.net:4799/tcp OUT_DIR=dist-published bun run build
+TUNNEL_URL=wss://diesel2.<tailnet>.ts.net:4799/tcp bun run build          # dist/, served on :4310
+MODEL_URL=https://diesel2.<tailnet>.ts.net:4311/v1 TUNNEL_URL=wss://diesel2.<tailnet>.ts.net:4799/tcp OUT_DIR=dist-published bun run build
 ~/devfs/repos/kkrausse/random/scripts/deploy-artifact.sh $PWD/dist-published bat-terminal-app
 ```
 
