@@ -9,6 +9,9 @@
 //       parser.worker.js    OpenTUI's tree-sitter worker
 //       tree-sitter.wasm    web-tree-sitter's runtime
 //       assets/<lang>/...   the grammars and queries OpenTUI ships (markdown, js, ts, zig)
+//   bun build/build-site.ts --target=node      -> dist/node/: the same files for a Node program,
+//       main.js             host/node-main.ts: `node main.js` on a terminal (the toolkit runtime's pty)
+//       tui.js              the TUI with Node's built-ins left as imports (no shim bundled in)
 //   --minify (what `bun run build:tui` passes) halves tui.js; the linked source map still
 //   resolves stack traces. `bun run build:tui:debug` leaves it readable.
 import path from "node:path"
@@ -21,7 +24,7 @@ const HERE = path.resolve(import.meta.dir, "..")
 const OPENCODE_ROOT = path.resolve(HERE, "../../vendor/opencode")
 const TUI = path.join(OPENCODE_ROOT, "packages/tui")
 const args = process.argv.slice(2)
-const target = (args.find((arg) => arg.startsWith("--target="))?.slice(9) ?? "bun") as "bun" | "browser"
+const target = (args.find((arg) => arg.startsWith("--target="))?.slice(9) ?? "bun") as "bun" | "browser" | "node"
 
 const { createSolidTransformPlugin } = (await import(
   path.join(OPENTUI_ROOT, "packages/solid/scripts/solid-plugin.ts")
@@ -128,6 +131,13 @@ async function bundle(entry: string, outdir: string, name: string, plugins: BunP
 
 if (target === "bun") {
   await bundle("host/bun-main.ts", path.join(HERE, "dist"), "opencode-tui.bun.js", [conditionalStubs(), singleInstances(), opentuiWasmPlugin(), createSolidTransformPlugin()])
+} else if (target === "node") {
+  // Node's built-ins stay imports: the program's host supplies them (a real Node, or the toolkit runtime).
+  const out = path.join(HERE, "dist/node")
+  mkdirSync(out, { recursive: true })
+  await bundle("host/worker-app.ts", out, "tui.js", [conditionalStubs(), singleInstances(), opentuiWasmPlugin(), createSolidTransformPlugin()], { minify, sourcemap: "none" })
+  await bundle("host/node-main.ts", out, "main.js", [], { sourcemap: "none" })
+  cpSync(path.join(HERE, "dist/opentui.wasm"), path.join(out, "opentui.wasm"))
 } else {
   const site = path.join(HERE, "dist/site")
   mkdirSync(site, { recursive: true })
