@@ -39,3 +39,6 @@
   WebKit build 2370). `BAT_HARNESS_BROWSER=webkit runtime/harness/check.sh` runs the same 12
   scripts there; `examples/todo-app/demo/webkit.ts` is the README scenario, free with the
   scripted model (`EDITOR_MODEL_BASE_URL`). It is the Linux WebKit port, not Safari.
+  `examples/terminal-app/demo/run.ts --webkit` is the terminal example's scenario there.
+  `runtime/harness/webkit/grow-crash/` crashes WebKit without the runtime (a shared-memory grow
+  against worker teardown, report section 9.1): the reason the kernel heap grows in 64 MiB steps.

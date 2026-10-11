@@ -26,9 +26,8 @@ unsafe impl dlmalloc::Allocator for Pages {
         // in the middle of destroying makes it read a null pointer
         // (docs/experiments/2026-10-11-webkit.md, section 9). Process workers are terminated
         // all the time, so the fewer grows the better; this does not remove the fault.
-        // The cost of the step: V8 commits grown pages when they are first touched,
-        // JavaScriptCore zero-fills them at the grow, so there up to one step is resident
-        // before it is used.
+        // The step costs address space only: a 64 MiB grow of a shared memory took under
+        // 2 ms in WebKit and under 4 ms in Chrome, and the web process was no larger for it.
         let mut pages = needed.max(GROW_PAGES);
         let mut prev = core::arch::wasm32::memory_grow(0, pages);
         if prev == usize::MAX && pages > needed.max(16) {

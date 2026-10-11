@@ -1274,3 +1274,22 @@ Two smaller changes forced by the first runs in WebKit
   (`runtime/src/net/fetch.ts`). Chromium never sent it. WebKit does, and the header makes
   the request need a CORS preflight, which `models.opencode.ai` answers with 405. The
   host's proxy already sets the provider's User-Agent on model requests itself.
+
+## 2026-10-11: the kernel heap grows 64 MiB at a time
+
+`crates/bat-kernel/src/alloc.rs`. The design grew the shared memory on demand in 1 MiB
+steps (to bound how often every thread's views go stale). In WebKit every grow of a shared
+memory can crash the tab: JavaScriptCore walks all instances attached to the memory and
+reads through one that a terminated worker is still destroying
+(`docs/experiments/2026-10-11-webkit.md`, 9.1; `runtime/harness/webkit/grow-crash/` shows
+it without the runtime, 4 of 4 runs). Process workers are terminated constantly, and the
+harness grew the memory about 80 times a run: 2 web-process crashes in 4 runs. With 64 MiB
+steps: 2 grows for the same scripts, 82 runs without a crash.
+
+- On every engine, not by detection: a race cannot be tested for at start-up, and the
+  step costs address space only (a 64 MiB grow: under 2 ms in WebKit, under 4 ms in
+  Chrome; web-process size unchanged).
+- Rejected: reserving the image's size at mount (commits the perf work to a shape, and
+  the overlay still grows); holding grows back while a worker is being destroyed (there
+  is no signal for the end of a worker's teardown).
+- This is a reduction. A grow that meets a teardown still crashes.

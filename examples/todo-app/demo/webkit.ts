@@ -156,6 +156,21 @@ async function once(): Promise<Record<string, unknown>> {
   } catch (e) {
     result.failed = step
     result.error = String((e as Error)?.message ?? e).slice(0, 1500)
+    // What the preview shows at the failure (theme applied or not, same document or not).
+    result.preview = await app(page).catch(() => null)
+    // Whether the dev server has the agent's last edit: its answer for the module, asked now and uncached.
+    result.served = await page.evaluate(async () => {
+      const win = (document.querySelector('.todo-editor-preview iframe') as HTMLIFrameElement | null)?.contentWindow as (Window & typeof globalThis) | null | undefined
+      if (!win) return null
+      const out: Record<string, unknown> = {}
+      for (const path of ['src/home.tsx', 'app/routes/home.tsx']) {
+        const text = await win.fetch(new URL(`${path}?t=${Date.now()}`, win.document.baseURI)).then((r) => (r.ok ? r.text() : `HTTP ${r.status}`), (e) => String(e))
+        out[path] = { bytes: text.length, hasCount: /const left\b/.test(text), hasLine: /className: "left"/.test(text) }
+      }
+      // And what the document itself has loaded of it: the hot updates it took, in order.
+      out.loaded = win.performance.getEntriesByType('resource').map((e) => e.name).filter((n) => /home\.tsx/.test(n)).map((n) => n.slice(n.indexOf('home.tsx')))
+      return out
+    }).catch((e) => String(e))
   }
   if (flag('shot')) await page.screenshot({ path: flag('shot')! }).catch(() => {})
   result.problems = [...new Set(problems)].slice(0, 12)
