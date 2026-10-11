@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, relative, resolve, sep } from 'node:path';
-import { spawn } from 'node:child_process';
+import { delimiter, dirname, join, relative, resolve, sep } from 'node:path';
+import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { parseModelCatalog, type ModelCatalog } from './model-catalog';
 import { defaultPreview, encodeSourceFile, workspaceRoot, type EditorManifest, type LaunchDescription, type SourceFile } from './manifest';
@@ -163,7 +163,7 @@ async function installRuntime(outDir: string, runtimeDir: string): Promise<void>
 function run(command: string, args: string[]): Promise<void> {
   return new Promise((done, fail) => {
     // Its stdout is a JSON summary; progress and errors are on stderr.
-    const child = spawn(command, args, { stdio: ['ignore', 'ignore', 'inherit'] });
+    const child = spawn(command, args, { stdio: ['ignore', 'ignore', 'inherit'], env: withNode() });
     child.on('error', error => fail(Error(`Could not run ${command}: ${error.message}. No ${preparePackage} package is installed for this machine: build the tool from the toolkit repository (\`cargo build --release -p bat-prepare\`) and set BAT_PREPARE to it.`)));
     child.on('exit', code => code === 0 ? done() : fail(Error(`${command} exited with code ${code}`)));
   });
@@ -233,9 +233,32 @@ async function addAppFields(manifestPath: string, options: PrepareOptions): Prom
   await writeFile(manifestPath, JSON.stringify(manifest));
 }
 
+let node: string | undefined;
+/**
+ * The Node.js that prepare's helpers run on. `node` by name is not it under `bun run` with
+ * `run.bun = true` (bunfig.toml): Bun then puts a `node` that is Bun first on PATH, on which
+ * `--check` runs the file and the dependency optimizer's dev server never finishes, and prepare
+ * went on without the start-up program and the optimizer cache. So: the first `node` on PATH
+ * that is not Bun, or an error.
+ */
+function realNode(): string {
+  if (node) return node;
+  if (!process.versions.bun) return (node = process.execPath);
+  for (const dir of (process.env.PATH ?? '').split(delimiter)) {
+    const candidate = join(dir, 'node');
+    if (!dir || !existsSync(candidate)) continue;
+    const probe = spawnSync(candidate, ['-p', 'process.versions.bun ?? ""'], { encoding: 'utf8' });
+    if (probe.status === 0 && probe.stdout.trim() === '') return (node = candidate);
+  }
+  throw Error('prepare needs Node.js on PATH (the dependency optimizer and the start-up program check run on it); the only `node` found is Bun');
+}
+
+/** The environment for `bat-prepare`, whose project scripts start `node` by name. */
+const withNode = (): NodeJS.ProcessEnv => ({ ...process.env, PATH: [dirname(realNode()), process.env.PATH].filter(Boolean).join(delimiter) });
+
 function capture(command: string, args: string[]): Promise<{ code: number | null; stdout: string }> {
   return new Promise((done, fail) => {
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'inherit'] });
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'inherit'], env: withNode() });
     let stdout = '';
     child.stdout!.on('data', chunk => { stdout += chunk; });
     child.on('error', fail);
@@ -264,7 +287,7 @@ async function addStartupPrograms(bin: string, outDir: string, manifestPath: str
     // HTML-like comments are errors there, which no per-module rule above catches).
     const check = join(outDir, `.${name}.check.mjs`);
     await copyFile(join(outDir, record.file), check);
-    const parsed = await capture('node', ['--check', check]).catch(() => ({ code: 127, stdout: '' }));
+    const parsed = await capture(realNode(), ['--check', check]);
     await rm(check, { force: true });
     if (parsed.code !== 0) {
       await rm(join(outDir, record.file), { force: true });
