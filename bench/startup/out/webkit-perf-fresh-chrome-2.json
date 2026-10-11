@@ -1,0 +1,1569 @@
+{
+ "meta": {
+  "label": "ch-ab-fresh2",
+  "date": "2026-10-11T16:20:09.276Z",
+  "commit": "bebd975",
+  "variants": {
+   "new": "http://127.0.0.1:4475",
+   "base": "http://127.0.0.1:4474"
+  },
+  "trace": true,
+  "settleMs": 800,
+  "browser": "Chrome, headed on Xvfb, driven by browser-control",
+  "note": "traces removed to keep the file small"
+ },
+ "summary": {
+  "new": {
+   "fresh": {
+    "n": 8,
+    "load1": {
+     "n": 8,
+     "median": 12.1,
+     "min": 11.26,
+     "max": 12.91
+    },
+    "stages": {
+     "click → booted (manifest, runtime import, boot, mount)": {
+      "n": 8,
+      "median": 202.5,
+      "min": 155.4,
+      "max": 373
+     },
+     "boot + mount (bootRuntime alone)": {
+      "n": 8,
+      "median": 187.9,
+      "min": 142.7,
+      "max": 359.8
+     },
+     "vite spawn → listening": {
+      "n": 8,
+      "median": 359.9,
+      "min": 291.3,
+      "max": 414
+     },
+     "vite spawn → app visible": {
+      "n": 8,
+      "median": 1180.5,
+      "min": 1020,
+      "max": 1305.5
+     },
+     "opencode spawn → attached": {
+      "n": 8,
+      "median": 1423.7,
+      "min": 1309.7,
+      "max": 1658.2
+     },
+     "opencode spawn → chat ready": {
+      "n": 8,
+      "median": 1473.4,
+      "min": 1356,
+      "max": 1759.5
+     },
+     "whole open (click → app visible and chat ready)": {
+      "n": 8,
+      "median": 1799.3,
+      "min": 1633.8,
+      "max": 2203.6
+     }
+    },
+    "steps": {
+     "open": {
+      "n": 8,
+      "median": 2.1,
+      "min": 0.9,
+      "max": 2.5
+     },
+     "manifest": {
+      "n": 8,
+      "median": 13.6,
+      "min": 11.7,
+      "max": 17.1
+     },
+     "boot.kernel": {
+      "n": 8,
+      "median": 76.2,
+      "min": 58.3,
+      "max": 123.8
+     },
+     "boot.image": {
+      "n": 8,
+      "median": 127.3,
+      "min": 98.9,
+      "max": 170.7
+     },
+     "boot.mounted": {
+      "n": 8,
+      "median": 155.1,
+      "min": 121.4,
+      "max": 278.4
+     },
+     "boot.done": {
+      "n": 8,
+      "median": 202.4,
+      "min": 155.4,
+      "max": 372.9
+     },
+     "boot": {
+      "n": 8,
+      "median": 202.5,
+      "min": 155.4,
+      "max": 373
+     },
+     "source.project": {
+      "n": 8,
+      "median": 204.4,
+      "min": 158.1,
+      "max": 387
+     },
+     "source.derived": {
+      "n": 8,
+      "median": 307,
+      "min": 266.5,
+      "max": 494.7
+     },
+     "source": {
+      "n": 8,
+      "median": 308.9,
+      "min": 268,
+      "max": 496.8
+     },
+     "preview.spawn": {
+      "n": 8,
+      "median": 311.5,
+      "min": 271.6,
+      "max": 501.4
+     },
+     "agent.spawn": {
+      "n": 8,
+      "median": 311.6,
+      "min": 271.8,
+      "max": 501.7
+     },
+     "preview.listening": {
+      "n": 8,
+      "median": 704,
+      "min": 569.2,
+      "max": 826.7
+     },
+     "agent.listening": {
+      "n": 8,
+      "median": 906.9,
+      "min": 735.5,
+      "max": 1034.5
+     },
+     "agent.health": {
+      "n": 8,
+      "median": 1032.5,
+      "min": 847.2,
+      "max": 1159
+     },
+     "preview.ready": {
+      "n": 8,
+      "median": 1149.2,
+      "min": 949.8,
+      "max": 1288.6
+     },
+     "agent.activated": {
+      "n": 8,
+      "median": 1360.4,
+      "min": 1140.5,
+      "max": 1536
+     },
+     "agent.plugins": {
+      "n": 8,
+      "median": 1396.7,
+      "min": 1184,
+      "max": 1588.3
+     },
+     "preview.visible": {
+      "n": 8,
+      "median": 1538.3,
+      "min": 1297.9,
+      "max": 1759.3
+     },
+     "agent.config": {
+      "n": 8,
+      "median": 1660.8,
+      "min": 1249,
+      "max": 2093
+     },
+     "agent.ready": {
+      "n": 8,
+      "median": 1758.8,
+      "min": 1588.2,
+      "max": 2102.3
+     },
+     "chat.ready": {
+      "n": 8,
+      "median": 1799.3,
+      "min": 1633.8,
+      "max": 2203.6
+     }
+    },
+    "boot": {
+     "kernel": {
+      "n": 8,
+      "median": 61.3,
+      "min": 43.9,
+      "max": 109.2
+     },
+     "kernelCompile": {
+      "n": 8,
+      "median": 0,
+      "min": 0,
+      "max": 0
+     },
+     "kernelAttach": {
+      "n": 8,
+      "median": 1.8,
+      "min": 0.5,
+      "max": 2.1
+     },
+     "kerneldInit": {
+      "n": 8,
+      "median": 59.5,
+      "min": 41.5,
+      "max": 106.3
+     },
+     "restore": {
+      "n": 8,
+      "median": 28.4,
+      "min": 8.3,
+      "max": 43
+     },
+     "journalBytes": {
+      "n": 8,
+      "median": 0,
+      "min": 0,
+      "max": 0
+     },
+     "snapshotBytes": {
+      "n": 8,
+      "median": 0,
+      "min": 0,
+      "max": 0
+     },
+     "mount": {
+      "n": 8,
+      "median": 23.9,
+      "min": 17.5,
+      "max": 96.6
+     },
+     "image": {
+      "n": 8,
+      "median": 112.5,
+      "min": 84.8,
+      "max": 156.2
+     },
+     "mounted": {
+      "n": 8,
+      "median": 140.2,
+      "min": 107.3,
+      "max": 263.8
+     },
+     "serviceWorker": {
+      "n": 8,
+      "median": 187,
+      "min": 141.2,
+      "max": 358.2
+     },
+     "total": {
+      "n": 8,
+      "median": 187.1,
+      "min": 141.3,
+      "max": 358.4
+     }
+    }
+   }
+  },
+  "base": {
+   "fresh": {
+    "n": 8,
+    "load1": {
+     "n": 8,
+     "median": 12.2,
+     "min": 11.16,
+     "max": 13.69
+    },
+    "stages": {
+     "click → booted (manifest, runtime import, boot, mount)": {
+      "n": 8,
+      "median": 216.9,
+      "min": 158.7,
+      "max": 289.5
+     },
+     "boot + mount (bootRuntime alone)": {
+      "n": 8,
+      "median": 203.2,
+      "min": 144.2,
+      "max": 275.6
+     },
+     "vite spawn → listening": {
+      "n": 8,
+      "median": 356.6,
+      "min": 291.3,
+      "max": 421.3
+     },
+     "vite spawn → app visible": {
+      "n": 8,
+      "median": 1145.1,
+      "min": 1015.9,
+      "max": 1362.5
+     },
+     "opencode spawn → attached": {
+      "n": 8,
+      "median": 1384.3,
+      "min": 1267.5,
+      "max": 1666.5
+     },
+     "opencode spawn → chat ready": {
+      "n": 8,
+      "median": 1425.9,
+      "min": 1307,
+      "max": 1727.5
+     },
+     "whole open (click → app visible and chat ready)": {
+      "n": 8,
+      "median": 1777.9,
+      "min": 1654.8,
+      "max": 2169.7
+     }
+    },
+    "steps": {
+     "open": {
+      "n": 8,
+      "median": 1.9,
+      "min": 1.7,
+      "max": 2.5
+     },
+     "manifest": {
+      "n": 8,
+      "median": 13.3,
+      "min": 12.7,
+      "max": 14.7
+     },
+     "boot.kernel": {
+      "n": 8,
+      "median": 79.6,
+      "min": 65.8,
+      "max": 95.5
+     },
+     "boot.image": {
+      "n": 8,
+      "median": 121.4,
+      "min": 89.6,
+      "max": 164.1
+     },
+     "boot.mounted": {
+      "n": 8,
+      "median": 149.1,
+      "min": 116.4,
+      "max": 192.6
+     },
+     "boot.done": {
+      "n": 8,
+      "median": 216.9,
+      "min": 158.7,
+      "max": 289.5
+     },
+     "boot": {
+      "n": 8,
+      "median": 216.9,
+      "min": 158.7,
+      "max": 289.5
+     },
+     "source.project": {
+      "n": 8,
+      "median": 220.8,
+      "min": 166.1,
+      "max": 297.2
+     },
+     "source.derived": {
+      "n": 8,
+      "median": 335,
+      "min": 276,
+      "max": 429.5
+     },
+     "source": {
+      "n": 8,
+      "median": 337.5,
+      "min": 279.6,
+      "max": 435.5
+     },
+     "preview.spawn": {
+      "n": 8,
+      "median": 342.5,
+      "min": 283,
+      "max": 441.8
+     },
+     "agent.spawn": {
+      "n": 8,
+      "median": 342.9,
+      "min": 283.1,
+      "max": 442.2
+     },
+     "preview.listening": {
+      "n": 8,
+      "median": 713.6,
+      "min": 574.3,
+      "max": 863.1
+     },
+     "agent.listening": {
+      "n": 8,
+      "median": 926.4,
+      "min": 751.7,
+      "max": 1128.6
+     },
+     "agent.health": {
+      "n": 8,
+      "median": 1055.7,
+      "min": 864.6,
+      "max": 1242.8
+     },
+     "preview.ready": {
+      "n": 8,
+      "median": 1188.1,
+      "min": 979.2,
+      "max": 1394.7
+     },
+     "agent.activated": {
+      "n": 8,
+      "median": 1396.7,
+      "min": 1187.6,
+      "max": 1679.5
+     },
+     "agent.plugins": {
+      "n": 8,
+      "median": 1419.9,
+      "min": 1199,
+      "max": 1717.2
+     },
+     "agent.config": {
+      "n": 8,
+      "median": 1534.6,
+      "min": 1236.5,
+      "max": 2100.2
+     },
+     "preview.visible": {
+      "n": 8,
+      "median": 1498.5,
+      "min": 1346.7,
+      "max": 1804.3
+     },
+     "agent.ready": {
+      "n": 8,
+      "median": 1735.1,
+      "min": 1588.8,
+      "max": 2108.7
+     },
+     "chat.ready": {
+      "n": 8,
+      "median": 1777.9,
+      "min": 1654.8,
+      "max": 2169.7
+     }
+    },
+    "boot": {
+     "kernel": {
+      "n": 8,
+      "median": 64.9,
+      "min": 51.2,
+      "max": 81.2
+     },
+     "kernelCompile": {
+      "n": 8,
+      "median": 0,
+      "min": 0,
+      "max": 0
+     },
+     "kernelAttach": {
+      "n": 8,
+      "median": 1.9,
+      "min": 1.4,
+      "max": 2
+     },
+     "kerneldInit": {
+      "n": 8,
+      "median": 61.9,
+      "min": 48.1,
+      "max": 78.3
+     },
+     "restore": {
+      "n": 8,
+      "median": 20.5,
+      "min": 12.3,
+      "max": 42.8
+     },
+     "journalBytes": {
+      "n": 8,
+      "median": 0,
+      "min": 0,
+      "max": 0
+     },
+     "snapshotBytes": {
+      "n": 8,
+      "median": 0,
+      "min": 0,
+      "max": 0
+     },
+     "mount": {
+      "n": 8,
+      "median": 24.3,
+      "min": 17.4,
+      "max": 34.8
+     },
+     "image": {
+      "n": 8,
+      "median": 107.2,
+      "min": 75,
+      "max": 148.8
+     },
+     "mounted": {
+      "n": 8,
+      "median": 134.8,
+      "min": 101.3,
+      "max": 177.3
+     },
+     "serviceWorker": {
+      "n": 8,
+      "median": 201.5,
+      "min": 142.8,
+      "max": 274.1
+     },
+     "total": {
+      "n": 8,
+      "median": 202,
+      "min": 142.9,
+      "max": 274.3
+     }
+    }
+   }
+  }
+ },
+ "samples": [
+  {
+   "variant": "new",
+   "kind": "fresh",
+   "load": [
+    11.26,
+    9.25,
+    8.07
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 0.9,
+    "manifest": 14,
+    "boot.kernel": 67.8,
+    "boot.image": 124,
+    "boot.mounted": 150,
+    "boot.done": 202.1,
+    "boot": 202.2,
+    "source.project": 203.8,
+    "source.derived": 302.8,
+    "source": 304.7,
+    "preview.spawn": 306,
+    "agent.spawn": 306.1,
+    "preview.listening": 666.5,
+    "agent.listening": 907.3,
+    "agent.health": 1023.2,
+    "preview.ready": 1107.7,
+    "agent.activated": 1349.2,
+    "agent.plugins": 1380.9,
+    "preview.visible": 1382.3,
+    "agent.config": 1717.3,
+    "agent.ready": 1722.5,
+    "chat.ready": 1759.9
+   },
+   "boot": {
+    "kernel": 53.4,
+    "kernelCompile": 0,
+    "kernelAttach": 0.5,
+    "kerneldInit": 52.3,
+    "restore": 16.8,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 23.1,
+    "image": 109.6,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 135.6,
+    "serviceWorker": 187.7,
+    "total": 187.8
+   },
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 202.2,
+    "boot + mount (bootRuntime alone)": 188.2,
+    "vite spawn → listening": 360.5,
+    "vite spawn → app visible": 1076.3,
+    "opencode spawn → attached": 1416.4,
+    "opencode spawn → chat ready": 1453.8,
+    "whole open (click → app visible and chat ready)": 1759.9
+   }
+  },
+  {
+   "variant": "base",
+   "kind": "fresh",
+   "load": [
+    11.16,
+    9.26,
+    8.08
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2.5,
+    "manifest": 13.2,
+    "boot.kernel": 65.8,
+    "boot.image": 113.5,
+    "boot.mounted": 134.4,
+    "boot.done": 186.2,
+    "boot": 186.2,
+    "source.project": 188.7,
+    "source.derived": 276,
+    "source": 279.6,
+    "preview.spawn": 283,
+    "agent.spawn": 283.1,
+    "preview.listening": 574.3,
+    "agent.listening": 751.7,
+    "agent.health": 864.6,
+    "preview.ready": 979.2,
+    "agent.activated": 1187.6,
+    "agent.plugins": 1199,
+    "agent.config": 1236.5,
+    "preview.visible": 1346.7,
+    "agent.ready": 1588.8,
+    "chat.ready": 1659.3
+   },
+   "boot": {
+    "kernel": 51.2,
+    "kernelCompile": 0,
+    "kernelAttach": 1.9,
+    "kerneldInit": 48.1,
+    "restore": 12.3,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 17.4,
+    "image": 99,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 119.9,
+    "serviceWorker": 171.6,
+    "total": 171.7
+   },
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 186.2,
+    "boot + mount (bootRuntime alone)": 173,
+    "vite spawn → listening": 291.3,
+    "vite spawn → app visible": 1063.7,
+    "opencode spawn → attached": 1305.7,
+    "opencode spawn → chat ready": 1376.2,
+    "whole open (click → app visible and chat ready)": 1659.3
+   }
+  },
+  {
+   "variant": "new",
+   "kind": "fresh",
+   "load": [
+    11.94,
+    9.45,
+    8.15
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2.5,
+    "manifest": 11.7,
+    "boot.kernel": 96.4,
+    "boot.image": 168.7,
+    "boot.mounted": 214.1,
+    "boot.done": 292.1,
+    "boot": 292.1,
+    "source.project": 309.2,
+    "source.derived": 437.3,
+    "source": 439.5,
+    "preview.spawn": 443.9,
+    "agent.spawn": 444.1,
+    "preview.listening": 826.7,
+    "agent.listening": 1034.5,
+    "agent.health": 1159,
+    "preview.ready": 1254.2,
+    "agent.activated": 1536,
+    "agent.plugins": 1588.3,
+    "preview.visible": 1749.4,
+    "agent.config": 2093,
+    "agent.ready": 2102.3,
+    "chat.ready": 2203.6
+   },
+   "boot": {
+    "kernel": 83.3,
+    "kernelCompile": 0,
+    "kernelAttach": 2,
+    "kerneldInit": 80.1,
+    "restore": 42.3,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 39.1,
+    "image": 155.7,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 200.7,
+    "serviceWorker": 279,
+    "total": 279.1
+   },
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 292.1,
+    "boot + mount (bootRuntime alone)": 280.4,
+    "vite spawn → listening": 382.8,
+    "vite spawn → app visible": 1305.5,
+    "opencode spawn → attached": 1658.2,
+    "opencode spawn → chat ready": 1759.5,
+    "whole open (click → app visible and chat ready)": 2203.6
+   }
+  },
+  {
+   "variant": "base",
+   "kind": "fresh",
+   "load": [
+    12.59,
+    9.63,
+    8.21
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.9,
+    "manifest": 13,
+    "boot.kernel": 95.5,
+    "boot.image": 146.1,
+    "boot.mounted": 180.6,
+    "boot.done": 271.1,
+    "boot": 271.2,
+    "source.project": 280,
+    "source.derived": 423,
+    "source": 425.7,
+    "preview.spawn": 430.9,
+    "agent.spawn": 431.2,
+    "preview.listening": 783.4,
+    "agent.listening": 990.1,
+    "agent.health": 1098.5,
+    "preview.ready": 1187.1,
+    "agent.activated": 1395.3,
+    "agent.plugins": 1421.8,
+    "agent.config": 1458.9,
+    "preview.visible": 1495.2,
+    "agent.ready": 1731.6,
+    "chat.ready": 1781.4
+   },
+   "boot": {
+    "kernel": 81.2,
+    "kernelCompile": 0,
+    "kernelAttach": 1.9,
+    "kerneldInit": 78.3,
+    "restore": 22.2,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 27.7,
+    "image": 131.9,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 166.4,
+    "serviceWorker": 256.9,
+    "total": 257
+   },
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 271.2,
+    "boot + mount (bootRuntime alone)": 258.2,
+    "vite spawn → listening": 352.5,
+    "vite spawn → app visible": 1064.3,
+    "opencode spawn → attached": 1300.4,
+    "opencode spawn → chat ready": 1350.2,
+    "whole open (click → app visible and chat ready)": 1781.4
+   }
+  },
+  {
+   "variant": "new",
+   "kind": "fresh",
+   "load": [
+    12.22,
+    9.6,
+    8.21
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.7,
+    "manifest": 15.1,
+    "boot.kernel": 67.3,
+    "boot.image": 109.6,
+    "boot.mounted": 137,
+    "boot.done": 202.7,
+    "boot": 202.7,
+    "source.project": 205,
+    "source.derived": 291.1,
+    "source": 292.8,
+    "preview.spawn": 297.8,
+    "agent.spawn": 298,
+    "preview.listening": 711.8,
+    "agent.listening": 735.5,
+    "agent.health": 847.2,
+    "agent.activated": 1140.5,
+    "preview.ready": 1144.1,
+    "agent.plugins": 1184,
+    "preview.visible": 1548.1,
+    "agent.config": 1604.2,
+    "agent.ready": 1611.6,
+    "chat.ready": 1673
+   },
+   "boot": {
+    "kernel": 50.9,
+    "kernelCompile": 0,
+    "kernelAttach": 1.9,
+    "kerneldInit": 47.9,
+    "restore": 15.3,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 23.4,
+    "image": 93.3,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 120.7,
+    "serviceWorker": 186.3,
+    "total": 186.4
+   },
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 202.7,
+    "boot + mount (bootRuntime alone)": 187.6,
+    "vite spawn → listening": 414,
+    "vite spawn → app visible": 1250.3,
+    "opencode spawn → attached": 1313.6,
+    "opencode spawn → chat ready": 1375,
+    "whole open (click → app visible and chat ready)": 1673
+   }
+  },
+  {
+   "variant": "base",
+   "kind": "fresh",
+   "load": [
+    11.96,
+    9.59,
+    8.21
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2,
+    "manifest": 14.7,
+    "boot.kernel": 69.8,
+    "boot.image": 105,
+    "boot.mounted": 134.7,
+    "boot.done": 199.2,
+    "boot": 199.3,
+    "source.project": 204.7,
+    "source.derived": 306.6,
+    "source": 309.4,
+    "preview.spawn": 315.9,
+    "agent.spawn": 316.1,
+    "preview.listening": 665.3,
+    "agent.listening": 869.4,
+    "agent.health": 994.9,
+    "preview.ready": 1093.6,
+    "agent.activated": 1308,
+    "agent.plugins": 1311.6,
+    "agent.config": 1348.2,
+    "preview.visible": 1449,
+    "agent.ready": 1691.3,
+    "chat.ready": 1738.7
+   },
+   "boot": {
+    "kernel": 53.9,
+    "kernelCompile": 0,
+    "kernelAttach": 1.4,
+    "kerneldInit": 51.7,
+    "restore": 18.9,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 26.6,
+    "image": 89.1,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 118.9,
+    "serviceWorker": 182.5,
+    "total": 183.3
+   },
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 199.3,
+    "boot + mount (bootRuntime alone)": 184.6,
+    "vite spawn → listening": 349.4,
+    "vite spawn → app visible": 1133.1,
+    "opencode spawn → attached": 1375.2,
+    "opencode spawn → chat ready": 1422.6,
+    "whole open (click → app visible and chat ready)": 1738.7
+   }
+  },
+  {
+   "variant": "new",
+   "kind": "fresh",
+   "load": [
+    11.49,
+    9.53,
+    8.2
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2.5,
+    "manifest": 17.1,
+    "boot.kernel": 97.7,
+    "boot.image": 151.4,
+    "boot.mounted": 193.4,
+    "boot.done": 282,
+    "boot": 282.1,
+    "source.project": 284.8,
+    "source.derived": 398.6,
+    "source": 400.5,
+    "preview.spawn": 404.1,
+    "agent.spawn": 404.3,
+    "preview.listening": 763.4,
+    "agent.listening": 977.2,
+    "agent.health": 1098.3,
+    "preview.ready": 1197.9,
+    "agent.activated": 1433.8,
+    "agent.plugins": 1464.2,
+    "agent.config": 1508.6,
+    "preview.visible": 1553.6,
+    "agent.ready": 1835.3,
+    "chat.ready": 1897.2
+   },
+   "boot": {
+    "kernel": 79,
+    "kernelCompile": 0,
+    "kernelAttach": 2.1,
+    "kerneldInit": 75.8,
+    "restore": 41.5,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 30,
+    "image": 132.8,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 174.8,
+    "serviceWorker": 263.3,
+    "total": 263.4
+   },
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 282.1,
+    "boot + mount (bootRuntime alone)": 265,
+    "vite spawn → listening": 359.3,
+    "vite spawn → app visible": 1149.5,
+    "opencode spawn → attached": 1431,
+    "opencode spawn → chat ready": 1492.9,
+    "whole open (click → app visible and chat ready)": 1897.2
+   }
+  },
+  {
+   "variant": "base",
+   "kind": "fresh",
+   "load": [
+    11.45,
+    9.56,
+    8.22
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.9,
+    "manifest": 12.7,
+    "boot.kernel": 75.3,
+    "boot.image": 130.1,
+    "boot.mounted": 168.7,
+    "boot.done": 234.5,
+    "boot": 234.5,
+    "source.project": 236.9,
+    "source.derived": 337.5,
+    "source": 339.3,
+    "preview.spawn": 344.7,
+    "agent.spawn": 345.1,
+    "preview.listening": 705.4,
+    "agent.listening": 911.4,
+    "agent.health": 1047.8,
+    "preview.ready": 1189.4,
+    "agent.activated": 1398,
+    "agent.plugins": 1417.9,
+    "agent.config": 1421.1,
+    "preview.visible": 1501.7,
+    "agent.ready": 1738.5,
+    "chat.ready": 1774.3
+   },
+   "boot": {
+    "kernel": 61.3,
+    "kernelCompile": 0,
+    "kernelAttach": 1.9,
+    "kerneldInit": 58.4,
+    "restore": 15.5,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 34.8,
+    "image": 116.1,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 154.8,
+    "serviceWorker": 220.5,
+    "total": 220.6
+   },
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 234.5,
+    "boot + mount (bootRuntime alone)": 221.8,
+    "vite spawn → listening": 360.7,
+    "vite spawn → app visible": 1157,
+    "opencode spawn → attached": 1393.4,
+    "opencode spawn → chat ready": 1429.2,
+    "whole open (click → app visible and chat ready)": 1774.3
+   }
+  },
+  {
+   "variant": "new",
+   "kind": "fresh",
+   "load": [
+    12.53,
+    9.81,
+    8.31
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2,
+    "manifest": 13.1,
+    "boot.kernel": 58.3,
+    "boot.image": 104.2,
+    "boot.mounted": 124.7,
+    "boot.done": 183.4,
+    "boot": 183.5,
+    "source.project": 185.7,
+    "source.derived": 271.8,
+    "source": 273.5,
+    "preview.spawn": 277.9,
+    "agent.spawn": 278.5,
+    "preview.listening": 569.2,
+    "agent.listening": 761.9,
+    "agent.health": 891.1,
+    "preview.ready": 949.8,
+    "agent.activated": 1207.1,
+    "agent.plugins": 1259.4,
+    "preview.visible": 1297.9,
+    "agent.config": 1582.7,
+    "agent.ready": 1588.2,
+    "chat.ready": 1634.5
+   },
+   "boot": {
+    "kernel": 43.9,
+    "kernelCompile": 0,
+    "kernelAttach": 1.6,
+    "kerneldInit": 41.5,
+    "restore": 8.3,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 17.5,
+    "image": 89.9,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 110.4,
+    "serviceWorker": 169,
+    "total": 169.1
+   },
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 183.5,
+    "boot + mount (bootRuntime alone)": 170.4,
+    "vite spawn → listening": 291.3,
+    "vite spawn → app visible": 1020,
+    "opencode spawn → attached": 1309.7,
+    "opencode spawn → chat ready": 1356,
+    "whole open (click → app visible and chat ready)": 1634.5
+   }
+  },
+  {
+   "variant": "base",
+   "kind": "fresh",
+   "load": [
+    13.69,
+    10.1,
+    8.41
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.7,
+    "manifest": 13.3,
+    "boot.kernel": 86.4,
+    "boot.image": 89.6,
+    "boot.mounted": 116.4,
+    "boot.done": 166.7,
+    "boot": 166.8,
+    "source.project": 174.9,
+    "source.derived": 323.9,
+    "source": 326.1,
+    "preview.spawn": 332.9,
+    "agent.spawn": 333.3,
+    "preview.listening": 721.8,
+    "agent.listening": 941.4,
+    "agent.health": 1063.5,
+    "preview.ready": 1189,
+    "agent.activated": 1407.7,
+    "agent.plugins": 1441,
+    "preview.visible": 1544.1,
+    "agent.config": 1755.2,
+    "agent.ready": 1767.4,
+    "chat.ready": 1822.8
+   },
+   "boot": {
+    "kernel": 71.8,
+    "kernelCompile": 0,
+    "kernelAttach": 1.9,
+    "kerneldInit": 69,
+    "restore": 22.1,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 21,
+    "image": 75,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 101.3,
+    "serviceWorker": 152,
+    "total": 152.2
+   },
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 166.8,
+    "boot + mount (bootRuntime alone)": 153.5,
+    "vite spawn → listening": 388.9,
+    "vite spawn → app visible": 1211.2,
+    "opencode spawn → attached": 1434.1,
+    "opencode spawn → chat ready": 1489.5,
+    "whole open (click → app visible and chat ready)": 1822.8
+   }
+  },
+  {
+   "variant": "new",
+   "kind": "fresh",
+   "load": [
+    12.91,
+    10,
+    8.38
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2.4,
+    "manifest": 14,
+    "boot.kernel": 84.6,
+    "boot.image": 130.6,
+    "boot.mounted": 160.1,
+    "boot.done": 200.7,
+    "boot": 200.7,
+    "source.project": 203.3,
+    "source.derived": 311.1,
+    "source": 313.1,
+    "preview.spawn": 316.9,
+    "agent.spawn": 317,
+    "preview.listening": 696.1,
+    "agent.listening": 906.5,
+    "agent.health": 1041.8,
+    "preview.ready": 1154.3,
+    "agent.activated": 1371.6,
+    "agent.plugins": 1412.5,
+    "preview.visible": 1528.4,
+    "agent.config": 1789,
+    "agent.ready": 1795,
+    "chat.ready": 1838.7
+   },
+   "boot": {
+    "kernel": 69.2,
+    "kernelCompile": 0,
+    "kernelAttach": 1.6,
+    "kerneldInit": 66.6,
+    "restore": 43,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 24.3,
+    "image": 115.3,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 144.8,
+    "serviceWorker": 185.3,
+    "total": 185.4
+   },
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 200.7,
+    "boot + mount (bootRuntime alone)": 186.7,
+    "vite spawn → listening": 379.2,
+    "vite spawn → app visible": 1211.5,
+    "opencode spawn → attached": 1478,
+    "opencode spawn → chat ready": 1521.7,
+    "whole open (click → app visible and chat ready)": 1838.7
+   }
+  },
+  {
+   "variant": "base",
+   "kind": "fresh",
+   "load": [
+    12.44,
+    9.95,
+    8.38
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.9,
+    "manifest": 12.7,
+    "boot.kernel": 82.6,
+    "boot.image": 129.3,
+    "boot.mounted": 163.6,
+    "boot.done": 238.3,
+    "boot": 238.4,
+    "source.project": 240.8,
+    "source.derived": 338.6,
+    "source": 340.8,
+    "preview.spawn": 347.6,
+    "agent.spawn": 347.8,
+    "preview.listening": 680.1,
+    "agent.listening": 853.8,
+    "agent.health": 957.6,
+    "preview.ready": 1054.1,
+    "agent.activated": 1223.2,
+    "agent.plugins": 1259.6,
+    "preview.visible": 1363.5,
+    "agent.config": 1610.2,
+    "agent.ready": 1615.3,
+    "chat.ready": 1654.8
+   },
+   "boot": {
+    "kernel": 68.6,
+    "kernelCompile": 0,
+    "kernelAttach": 1.9,
+    "kerneldInit": 65.4,
+    "restore": 23.6,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 27.6,
+    "image": 115.4,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 149.7,
+    "serviceWorker": 224.3,
+    "total": 224.4
+   },
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 238.4,
+    "boot + mount (bootRuntime alone)": 225.7,
+    "vite spawn → listening": 332.5,
+    "vite spawn → app visible": 1015.9,
+    "opencode spawn → attached": 1267.5,
+    "opencode spawn → chat ready": 1307,
+    "whole open (click → app visible and chat ready)": 1654.8
+   }
+  },
+  {
+   "variant": "new",
+   "kind": "fresh",
+   "load": [
+    12.16,
+    9.93,
+    8.38
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.8,
+    "manifest": 12.7,
+    "boot.kernel": 63.5,
+    "boot.image": 98.9,
+    "boot.mounted": 121.4,
+    "boot.done": 155.4,
+    "boot": 155.4,
+    "source.project": 158.1,
+    "source.derived": 266.5,
+    "source": 268,
+    "preview.spawn": 271.6,
+    "agent.spawn": 271.8,
+    "preview.listening": 581.4,
+    "agent.listening": 772.2,
+    "agent.health": 899.1,
+    "preview.ready": 994.1,
+    "agent.activated": 1219.9,
+    "agent.plugins": 1244.4,
+    "agent.config": 1249,
+    "preview.visible": 1334,
+    "agent.ready": 1594.8,
+    "chat.ready": 1633.8
+   },
+   "boot": {
+    "kernel": 49.4,
+    "kernelCompile": 0,
+    "kernelAttach": 1.7,
+    "kerneldInit": 46.5,
+    "restore": 11,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 18.9,
+    "image": 84.8,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 107.3,
+    "serviceWorker": 141.2,
+    "total": 141.3
+   },
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 155.4,
+    "boot + mount (bootRuntime alone)": 142.7,
+    "vite spawn → listening": 309.8,
+    "vite spawn → app visible": 1062.4,
+    "opencode spawn → attached": 1323,
+    "opencode spawn → chat ready": 1362,
+    "whole open (click → app visible and chat ready)": 1633.8
+   }
+  },
+  {
+   "variant": "base",
+   "kind": "fresh",
+   "load": [
+    12.47,
+    10.03,
+    8.42
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 1.7,
+    "manifest": 14.5,
+    "boot.kernel": 76.5,
+    "boot.image": 99,
+    "boot.mounted": 121.1,
+    "boot.done": 158.7,
+    "boot": 158.7,
+    "source.project": 166.1,
+    "source.derived": 332.5,
+    "source": 335.7,
+    "preview.spawn": 340.4,
+    "agent.spawn": 340.6,
+    "preview.listening": 745,
+    "agent.listening": 948.7,
+    "agent.health": 1076.7,
+    "preview.ready": 1265.3,
+    "agent.activated": 1411.7,
+    "agent.plugins": 1457.6,
+    "preview.visible": 1603.4,
+    "agent.config": 1799.1,
+    "agent.ready": 1804.3,
+    "chat.ready": 1839.6
+   },
+   "boot": {
+    "kernel": 60.6,
+    "kernelCompile": 0,
+    "kernelAttach": 1.8,
+    "kerneldInit": 57.6,
+    "restore": 16.6,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 18.3,
+    "image": 83.1,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 105.2,
+    "serviceWorker": 142.8,
+    "total": 142.9
+   },
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 158.7,
+    "boot + mount (bootRuntime alone)": 144.2,
+    "vite spawn → listening": 404.6,
+    "vite spawn → app visible": 1263,
+    "opencode spawn → attached": 1463.7,
+    "opencode spawn → chat ready": 1499,
+    "whole open (click → app visible and chat ready)": 1839.6
+   }
+  },
+  {
+   "variant": "new",
+   "kind": "fresh",
+   "load": [
+    11.79,
+    9.93,
+    8.4
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2.1,
+    "manifest": 13.2,
+    "boot.kernel": 123.8,
+    "boot.image": 170.7,
+    "boot.mounted": 278.4,
+    "boot.done": 372.9,
+    "boot": 373,
+    "source.project": 387,
+    "source.derived": 494.7,
+    "source": 496.8,
+    "preview.spawn": 501.4,
+    "agent.spawn": 501.7,
+    "preview.listening": 824.9,
+    "agent.listening": 974.8,
+    "agent.health": 1127.2,
+    "preview.ready": 1288.6,
+    "agent.activated": 1489.1,
+    "agent.plugins": 1530.6,
+    "preview.visible": 1759.3,
+    "agent.config": 1970.2,
+    "agent.ready": 1977.8,
+    "chat.ready": 2042.1
+   },
+   "boot": {
+    "kernel": 109.2,
+    "kernelCompile": 0,
+    "kernelAttach": 1.8,
+    "kerneldInit": 106.3,
+    "restore": 39.9,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 96.6,
+    "image": 156.2,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 263.8,
+    "serviceWorker": 358.2,
+    "total": 358.4
+   },
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 373,
+    "boot + mount (bootRuntime alone)": 359.8,
+    "vite spawn → listening": 323.5,
+    "vite spawn → app visible": 1257.9,
+    "opencode spawn → attached": 1476.1,
+    "opencode spawn → chat ready": 1540.4,
+    "whole open (click → app visible and chat ready)": 2042.1
+   }
+  },
+  {
+   "variant": "base",
+   "kind": "fresh",
+   "load": [
+    11.97,
+    10,
+    8.43
+   ],
+   "outcome": "ok",
+   "before": {
+    "visibility": "visible",
+    "focused": true,
+    "isolated": true
+   },
+   "steps": {
+    "open": 2.5,
+    "manifest": 13.9,
+    "boot.kernel": 93.7,
+    "boot.image": 164.1,
+    "boot.mounted": 192.6,
+    "boot.done": 289.5,
+    "boot": 289.5,
+    "source.project": 297.2,
+    "source.derived": 429.5,
+    "source": 435.5,
+    "preview.spawn": 441.8,
+    "agent.spawn": 442.2,
+    "preview.listening": 863.1,
+    "agent.listening": 1128.6,
+    "agent.health": 1242.8,
+    "preview.ready": 1394.7,
+    "agent.activated": 1679.5,
+    "agent.plugins": 1717.2,
+    "preview.visible": 1804.3,
+    "agent.config": 2100.2,
+    "agent.ready": 2108.7,
+    "chat.ready": 2169.7
+   },
+   "boot": {
+    "kernel": 78.4,
+    "kernelCompile": 0,
+    "kernelAttach": 2,
+    "kerneldInit": 75.4,
+    "restore": 42.8,
+    "journalBytes": 0,
+    "snapshotBytes": 0,
+    "mount": 22,
+    "image": 148.8,
+    "imageCached": false,
+    "imageArriving": true,
+    "mounted": 177.3,
+    "serviceWorker": 274.1,
+    "total": 274.3
+   },
+   "stages": {
+    "click → booted (manifest, runtime import, boot, mount)": 289.5,
+    "boot + mount (bootRuntime alone)": 275.6,
+    "vite spawn → listening": 421.3,
+    "vite spawn → app visible": 1362.5,
+    "opencode spawn → attached": 1666.5,
+    "opencode spawn → chat ready": 1727.5,
+    "whole open (click → app visible and chat ready)": 2169.7
+   }
+  }
+ ]
+}
