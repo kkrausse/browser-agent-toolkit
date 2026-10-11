@@ -184,36 +184,44 @@ async function main() {
   const manifest = await response.json() as EditorManifest
   if (!manifest.launch.agent) throw Error('The prepared directory has no OpenCode server')
   const runtimeModule = await import(new URL(manifest.runtime?.entry ?? 'runtime/host.js', manifestUrl).href) as { bootRuntime: BootRuntime; resetWorkspace(options: { manifestUrl: string }): Promise<void> }
-  // A workspace owns its source once installed, so one kept from a build of this page with
-  // other dependencies cannot start on this build's image (the app that had React Router and
-  // tRPC, against an image without them: Vite exits). The prepared package.json stands for the
-  // dependencies; a browser that last opened another one starts over.
-  const packageKey = `terminal-app-package:${new URL(here).pathname}`
-  const packageNow = JSON.stringify(manifest.project['/package.json'] ?? '')
-  let outdated = false
-  try {
-    outdated = localStorage.getItem(packageKey) !== packageNow
-    localStorage.setItem(packageKey, packageNow)
-  } catch { /* no storage: nothing to compare with */ }
-  if (outdated) log('[page] this browser last opened a build with other dependencies (or none): starting from a fresh workspace')
-  if (sessionStorage.getItem(resetKey) || outdated) {
-    sessionStorage.removeItem(resetKey)
+  const startOver = async () => {
     await runtimeModule.resetWorkspace({ manifestUrl })
     // The TODO app keeps its list in this origin's localStorage (../todo-app/src/App.tsx), not in the workspace.
     try { localStorage.removeItem('todos') } catch { /* no storage */ }
     // What an earlier build of this page kept for the client (wasm-term's IndexedDB); the client's files are in the workspace now.
     for (const database of await indexedDB.databases()) if (database.name) indexedDB.deleteDatabase(database.name)
   }
+  if (sessionStorage.getItem(resetKey)) {
+    sessionStorage.removeItem(resetKey)
+    await startOver()
+  }
   const { bootRuntime } = runtimeModule
   say('Opening the workspace in this browser…')
   const lifetime = new AbortController()
   // One worker for the whole directory: it is at the page's level, so no server has to allow its scope.
-  const runtime = await bootRuntime({ manifestUrl, manifest, signal: lifetime.signal, serviceWorker: { url: workerUrl, scope: here } }).catch(error => {
+  const boot = () => bootRuntime({ manifestUrl, manifest, signal: lifetime.signal, serviceWorker: { url: workerUrl, scope: here } }).catch(error => {
     throw (error as { code?: string })?.code === 'STORAGE_BUSY' ? Error('This workspace is already open in another tab or window.') : error
   })
+  let runtime = await boot()
+  let source = await installSource(runtime.fs, manifest.project)
+  // A workspace owns its source once installed, so one kept from a build of this page with
+  // other dependencies cannot start on this build's image (the app that had React Router and
+  // tRPC, against an image without them: Vite exits and the frame stays empty). The prepared
+  // package.json stands for the dependencies and is written into the workspace beside the
+  // source; a workspace that has another one, or none, starts over. The note is in the
+  // workspace and not in localStorage so that it cannot say more than the workspace holds.
+  const packageNote = '/workspace/.server/prepared-package.json'
+  const packageNow = JSON.stringify(manifest.project['/package.json'] ?? '')
+  if (source.preserved && await runtime.fs.readFile(packageNote).then(bytes => new TextDecoder().decode(bytes), () => '') !== packageNow) {
+    log('[page] the workspace in this browser is from a build with other dependencies: starting from a fresh one')
+    await runtime.close()
+    await startOver()
+    runtime = await boot()
+    source = await installSource(runtime.fs, manifest.project)
+  }
+  if (!source.preserved) await runtime.fs.writeFile(packageNote, new TextEncoder().encode(packageNow))
   window.batTerminal.runtime = runtime
-  window.addEventListener('pagehide', () => void runtime.close().catch(() => {}))
-  const source = await installSource(runtime.fs, manifest.project)
+  window.addEventListener('pagehide', () => void window.batTerminal.runtime?.close().catch(() => {}))
   log(`[page] ${source.preserved ? 'kept the workspace already in this browser' : `installed ${source.installed} source files`}`)
   await installDerived(runtime.fs, manifest, manifestUrl)
   const hostedId = await hosted
