@@ -85,8 +85,9 @@ const exit = () => execute<any>(`
 async function rebuildToolkit(note: string) {
   // A real source change that reaches dist (the chat's stylesheet and a module).
   appendFileSync(join(tree, 'packages/toolkit/src/vite.ts'), `\nexport const rebuilt_${note.replace(/\W/g, '_')}_${Date.now().toString(36)} = true;\n`)
-  appendFileSync(join(tree, 'packages/toolkit/src/chat/styles.css'), `\n/* ${note} */\n`)
+  appendFileSync(join(tree, 'packages/react/src/chat/styles.css'), `\n/* ${note} */\n`)
   await $`bun run build`.cwd(join(tree, 'packages/toolkit')).env(env).quiet()
+  await $`bun run build`.cwd(join(tree, 'packages/react')).env(env).quiet()
   await $`bun run prepare:editor`.cwd(app).env(env).quiet()
   await $`bun run build`.cwd(app).env(env).quiet()
   await $`${join(root, 'bench/first-open/serve.sh')} ${port} ${arg('tree', 'new')!}`.quiet()

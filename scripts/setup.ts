@@ -17,7 +17,8 @@
 //      published packages (ports/opencode/server) into .runtime/opencode-2.0.26/
 //   3. kernel.wasm, bat_modules.wasm, bat_node_native.wasm, bat_sh.wasm, the bat-prepare CLI
 //   4. runtime bundles → runtime/dist/
-//   5. the toolkit package → packages/toolkit/dist/
+//   5. the toolkit package → packages/toolkit/dist/, then its React package →
+//      packages/react/dist/
 import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -97,6 +98,7 @@ export async function setup(): Promise<{ env: Record<string, string> }> {
   await run('runtime bundles', ['bun', 'runtime/build.ts'])
   await run('runtime host bundles', ['bun', 'runtime/src/host/build.ts'], { env: { BAT_KERNEL_WASM: kernel } })
   await run('toolkit', ['bun', 'run', 'build'], { cwd: join(root, 'packages/toolkit') })
+  await run('toolkit React package', ['bun', 'run', 'build'], { cwd: join(root, 'packages/react') })
   return { env: { BAT_PREPARE: join(target, 'release/bat-prepare'), BAT_OPENCODE_DIR: openCode, BAT_RUNTIME_DIR: join(root, 'runtime/dist') } }
 }
 

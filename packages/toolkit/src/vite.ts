@@ -1,4 +1,5 @@
-import { resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 
 /** True inside the browser guest, where the app's dev server is the editor's preview. */
 export const isGuest = () => process.env.BROWSER_AGENT_GUEST === '1';
@@ -24,16 +25,27 @@ export interface BrowserEditorOptions {
 
 type IncomingLike = { url?: string; originalUrl?: string };
 
+const reactPackage = '@kkrausse/browser-agent-toolkit-react';
+
+/** Whether `name` is in a `node_modules` at or above `from`. */
+function installed(from: string, name: string): boolean {
+  for (let directory = from; ; directory = dirname(directory)) {
+    if (existsSync(join(directory, 'node_modules', name, 'package.json'))) return true;
+    if (dirname(directory) === directory) return false;
+  }
+}
+
 /** One Vite plugin for both sides. The application still owns its Vite config. */
 export function browserEditor(options: BrowserEditorOptions): any {
   let editingModule: string;
   return {
     name: 'browser-editor', enforce: 'pre' as const,
-    config() {
+    config(config: { root?: string }) {
       // A dev server prebundles the browser entries in its first pass, together (they share
       // the chat code) and with their CommonJS dependencies converted; found later, they
-      // would cost a second pass and a page reload when the editor is first opened.
-      if (!isGuest()) return { optimizeDeps: { include: ['@kkrausse/browser-agent-toolkit/browser', '@kkrausse/browser-agent-toolkit/react'] } };
+      // would cost a second pass and a page reload when the editor is first opened. The
+      // React package is a separate install and is named only for an app that has it.
+      if (!isGuest()) return { optimizeDeps: { include: ['@kkrausse/browser-agent-toolkit/browser', ...(installed(resolve(config.root ?? '.'), reactPackage) ? [reactPackage] : [])] } };
       return {
         base: previewBase(),
         // Outside node_modules/.vite: that tree is the read-only image.

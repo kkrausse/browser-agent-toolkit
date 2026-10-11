@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// Stage what an app vendors instead of a checkout of this repository: two npm tarballs.
+// Stage what an app vendors instead of a checkout of this repository: three npm tarballs.
 //
 //   bun scripts/release.ts [--out <dir>] [--skip-setup] [--allow-dirty]
 //
@@ -8,13 +8,16 @@
 //     the guest policy with the shim packages it names, and the pinned OpenCode server.
 //     `prepare()` finds all of it beside itself; nothing is downloaded at prepare time
 //     except the app's own npm packages.
+//   kkrausse-browser-agent-toolkit-react-<version>-<commit>.tgz
+//     the React components and their stylesheet (`packages/react`), for an app that uses
+//     them. It depends on the toolkit package by version: the app installs both.
 //   kkrausse-browser-agent-prepare-<platform>-<arch>-<version>-<commit>.tgz
 //     the `bat-prepare` executable for the machine this script runs on. `prepare()` resolves
 //     `@kkrausse/browser-agent-prepare-<platform>-<arch>` for the machine it runs on; on any
 //     other machine build the tool there (`cargo build --release -p bat-prepare`, or run this
 //     script there) and install that package, or set BAT_PREPARE.
 //
-// Both carry BUILD-PROVENANCE.json (commit, dirty flag, tool versions, file digests). The
+// All carry BUILD-PROVENANCE.json (commit, dirty flag, tool versions, file digests). The
 // commit is in the file names so a package manager never reuses an older unpacked copy of
 // the same version. Default output: `.release/<version>-<commit>/`.
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, chmodSync, renameSync } from 'node:fs'
@@ -68,7 +71,7 @@ mkdirSync(stage, { recursive: true })
 const dist = join(root, 'packages/toolkit/dist')
 if (!existsSync(join(dist, 'runtime/host.js'))) throw Error('packages/toolkit/dist has no runtime: run `bun run setup` (the toolkit build copies runtime/dist into it).')
 cpSync(dist, join(stage, 'dist'), { recursive: true })
-for (const name of ['README.md', 'NOTICES.md', 'LICENSE.upstream', 'LICENSE.marked', 'LICENSE.shadcn']) cpSync(join(root, 'packages/toolkit', name), join(stage, name))
+for (const name of ['README.md', 'NOTICES.md', 'LICENSE.upstream']) cpSync(join(root, 'packages/toolkit', name), join(stage, name))
 const prepareDir = join(stage, 'prepare')
 cpSync(join(root, 'packages/guest-shims'), join(prepareDir, 'guest-shims'), { recursive: true, filter: source => !source.includes('/node_modules') })
 // The policy's `dir:` paths are relative to the policy file: in the package the shims sit beside it.
@@ -91,7 +94,25 @@ const { devDependencies: _dev, scripts: _scripts, ...manifest } = toolkit
 writeFileSync(join(stage, 'package.json'), JSON.stringify({ ...manifest, files: [...toolkit.files, 'prepare', 'BUILD-PROVENANCE.json'] }, null, 2) + '\n')
 const toolkitArchive = pack(stage, 'kkrausse-browser-agent-toolkit')
 
-// 2. The prepare tool for this machine.
+// 2. The React package.
+const react = JSON.parse(readFileSync(join(root, 'packages/react/package.json'), 'utf8'))
+if (react.version !== toolkit.version) throw Error(`packages/react is ${react.version} and packages/toolkit is ${toolkit.version}: they are released together under one version`)
+const reactStage = join(out, 'stage/react')
+mkdirSync(reactStage, { recursive: true })
+const reactDist = join(root, 'packages/react/dist')
+if (!existsSync(join(reactDist, 'index.js')) || !existsSync(join(reactDist, 'styles.css'))) throw Error('packages/react/dist is not built: run `bun run setup` (or `bun run build`).')
+cpSync(reactDist, join(reactStage, 'dist'), { recursive: true })
+for (const name of ['README.md', 'NOTICES.md', 'LICENSE.marked', 'LICENSE.shadcn']) cpSync(join(root, 'packages/react', name), join(reactStage, name))
+writeFileSync(join(reactStage, 'BUILD-PROVENANCE.json'), provenance({ 'dist/index.js': sha256(join(reactStage, 'dist/index.js')), 'dist/styles.css': sha256(join(reactStage, 'dist/styles.css')) }))
+const { devDependencies: _reactDev, scripts: _reactScripts, ...reactManifest } = react
+// In the repository the toolkit is a workspace member; outside it, the package of this version.
+writeFileSync(join(reactStage, 'package.json'), JSON.stringify({
+  ...reactManifest, files: [...react.files, 'BUILD-PROVENANCE.json'],
+  dependencies: { ...react.dependencies, [toolkit.name]: toolkit.version },
+}, null, 2) + '\n')
+const reactArchive = pack(reactStage, 'kkrausse-browser-agent-toolkit-react')
+
+// 3. The prepare tool for this machine.
 const platform = `${process.platform}-${process.arch}`
 const binStage = join(out, `stage/prepare-${platform}`)
 mkdirSync(binStage, { recursive: true })
@@ -111,4 +132,4 @@ const binArchive = pack(binStage, `kkrausse-browser-agent-prepare-${platform}`)
 
 rmSync(join(out, 'stage'), { recursive: true, force: true })
 console.log(`[release] commit ${commit}${dirty ? ' (dirty)' : ''}`)
-for (const archive of [toolkitArchive, binArchive]) console.log(`[release] ${archive}  ${(statSync(archive).size / 1e6).toFixed(1)} MB  sha256 ${sha256(archive)}`)
+for (const archive of [toolkitArchive, reactArchive, binArchive]) console.log(`[release] ${archive}  ${(statSync(archive).size / 1e6).toFixed(1)} MB  sha256 ${sha256(archive)}`)

@@ -7,14 +7,15 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import type {
-  ChatController,
-  PermissionRequest,
-  QuestionRequest,
-  RequestState,
-  SessionMessageInfo,
-} from "./types";
-import { canSend, isPreparing } from "./admission";
+import {
+  canSend,
+  isPreparing,
+  type ChatController,
+  type PermissionRequest,
+  type QuestionRequest,
+  type RequestState,
+  type SessionMessageInfo,
+} from "@kkrausse/browser-agent-toolkit/browser";
 import { Markdown } from "./markdown";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";

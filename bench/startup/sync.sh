@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Startup measurements run from a private copy of the worktree, so another agent's builds
-# (runtime/dist, packages/toolkit/dist, examples/todo-app/.editor) never change what is
+# (runtime/dist, packages/toolkit/dist, packages/react/dist, examples/todo-app/.editor) never change what is
 # being measured mid-run:  <worktree>/target-perf/tree
 #
 #   bench/startup/sync.sh            copy sources (no build)
@@ -14,7 +14,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 tree=$root/target-perf/${TREE:-tree}
 mkdir -p "$tree"
 excludes=(--exclude '/target-*' --exclude '/target' --exclude '.git' --exclude '.editor'
-  --exclude '/runtime/dist' --exclude '/packages/toolkit/dist' --exclude '/examples/todo-app/build'
+  --exclude '/runtime/dist' --exclude '/packages/toolkit/dist' --exclude '/packages/react/dist' --exclude '/examples/todo-app/build'
   --exclude '/examples/todo-app/.react-router' --exclude '/bench/startup/out')
 if [ -n "${REF:-}" ]; then
   # A committed state (for A/B runs): tracked files of $REF, plus the untracked inputs a build needs.
@@ -36,6 +36,7 @@ js() {
   bun runtime/build.ts
   bun runtime/src/host/build.ts
   (cd packages/toolkit && bun run build)
+  (cd packages/react && bun run build)
 }
 case "${1:-}" in
   setup) bun scripts/setup.ts ;;

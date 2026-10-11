@@ -6,7 +6,6 @@
     "module": "Preserve",
     "moduleResolution": "Bundler",
     "moduleDetection": "force",
-    "jsx": "react-jsx",
     "types": ["bun"],
     "strict": true,
     "noUncheckedIndexedAccess": true,

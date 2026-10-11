@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { ChatView, EditorPreview, useEditor } from '@kkrausse/browser-agent-toolkit/react'
+import { ChatView, EditorPreview, useEditor } from '@kkrausse/browser-agent-toolkit-react'
 import { editorSteps, type BootRuntime, type EditorEvent } from '@kkrausse/browser-agent-toolkit/browser'
 // Through this module, so the toolkit stays in the chunks only authorized users are served.
 export { resetWorkspace, preloadEditor } from '@kkrausse/browser-agent-toolkit/browser'
-import '@kkrausse/browser-agent-toolkit/styles.css'
+import '@kkrausse/browser-agent-toolkit-react/styles.css'
 import './editor-panel.css'
 
 const hostPaths = ['/api']

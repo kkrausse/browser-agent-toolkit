@@ -11,6 +11,8 @@ export type { SessionBundle } from './sessions';
 export { captureSource, unpackSource, managedNames, type CaptureSourceOptions, type SourceArchive, type SourceLimits } from './source-archive';
 export { workspaceRoot } from './manifest';
 export { createChatController, canSend } from './chat/controller';
+// For a chat view (the React package's): the state in which a send may be parked.
+export { isPreparing } from './chat/admission';
 export type * from './chat/types';
 
 /** In start order. Each is recorded once per open, as milliseconds since `openEditor` was called. */
