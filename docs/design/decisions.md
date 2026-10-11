@@ -1229,6 +1229,7 @@ servers.
   `ling-3.1-flash-free`, streamed, `HTTP 200 (tunnel via wisp.mercurywork.shop, TLSv1_3
   TLS13_AES_256_GCM_SHA384)`.
 - **Seen: four HTTP 429 from Zen before that 200**, retried by OpenCode without anything on
-  the page. Not explained. The server's address is shared by everybody who uses it, which
+  the page. A second run on the plain TODO app ("change the page heading", done, the frame
+  showed the new heading within 100 s): 4 answers of 200 and 12 of 429. Not explained. The server's address is shared by everybody who uses it, which
   would do it if Zen's free tier counts per address; there was no working relay of ours left
   to compare with.
