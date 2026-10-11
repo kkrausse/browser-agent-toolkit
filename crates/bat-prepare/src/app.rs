@@ -189,6 +189,17 @@ fn check_relative(path: &str) -> Result<()> {
     Ok(())
 }
 
+/// A file a project script produced. Like `check_relative`, except that only the project's
+/// own `node_modules` (the image's mount) is refused: the Vite optimizer cache lives in a
+/// directory of that name further down (`.browser-editor-cache/node_modules/.vite`), so
+/// that plugins treat its files as the dependencies they are.
+fn check_derived(path: &str) -> Result<()> {
+    if path.split('/').next() == Some("node_modules") {
+        bail!("a derived file cannot be inside the project's node_modules: {path:?}");
+    }
+    check_relative(&path.replace("/node_modules/", "/_/"))
+}
+
 fn collect_source(app: &Path, source: &[String], project: &mut Map<String, Value>) -> Result<()> {
     fn add(app: &Path, host: &Path, rel: &str, project: &mut Map<String, Value>) -> Result<()> {
         let real = host.canonicalize().with_context(|| format!("source {}", host.display()))?;
@@ -531,7 +542,7 @@ fn run_project_scripts(policy: &Policy, options: &AppOptions, app: &Path, state:
         let (mut count, mut bytes) = (0u64, 0u64);
         for item in items {
             let Source::Host { path, len } = &item.source else { continue };
-            check_relative(&item.path)?;
+            check_derived(&item.path)?;
             derived.insert(format!("/{}", item.path), project_file(fs::read(path)?));
             count += 1;
             bytes += len;

@@ -5,6 +5,9 @@
 //   bun run setup            build
 //   bun run editor           build, then prepare + build + serve examples/todo-app (PORT, default 3000)
 //   bun run terminal         the same for examples/terminal-app (PORT, default 4310)
+//   bun run fullstack        examples/terminal-app again, showing examples/start-app (TanStack
+//                            Start with an Effect API and SQLite) instead of the TODO example
+//                            (PORT, default 4320)
 //
 // Needs: bun, cargo with the targets wasm32-wasip1-threads and wasm32-unknown-unknown
 // (`rustup target add …`), node 24 and network access the first time (dependencies and the
@@ -104,11 +107,13 @@ export async function setup(): Promise<{ env: Record<string, string> }> {
 
 if (import.meta.main) {
   const { env } = await setup()
-  // `editor`: the TODO example; `terminal`: the same app with the OpenCode TUI (examples/terminal-app).
-  const example = { editor: 'examples/todo-app', terminal: 'examples/terminal-app' }[process.argv[2] ?? '']
+  // `editor`: the TODO example; `terminal`: the same app with the OpenCode TUI (examples/terminal-app);
+  // `fullstack`: that page with the app of examples/start-app (terminal-app's `BAT_APP`).
+  const example = { editor: 'examples/todo-app', terminal: 'examples/terminal-app', fullstack: 'examples/terminal-app' }[process.argv[2] ?? '']
   if (example) {
     // The example's own script: prepare (image, manifest, runtime assets), build, serve.
-    if (process.argv[2] === 'terminal' && !process.env.BAT_OPENCODE_DIR) env.BAT_OPENCODE_DIR = await builtOpenCodeDir()
+    if (example === 'examples/terminal-app' && !process.env.BAT_OPENCODE_DIR) env.BAT_OPENCODE_DIR = await builtOpenCodeDir()
+    if (process.argv[2] === 'fullstack') Object.assign(env, { BAT_APP: join(root, 'examples/start-app'), PORT: process.env.PORT ?? '4320' })
     const child = Bun.spawn(['bun', 'run', 'editor'], { cwd: join(root, example), env: { ...process.env, ...env }, stdout: 'inherit', stderr: 'inherit', stdin: 'inherit' })
     for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => child.kill(signal))
     process.exit(await child.exited)

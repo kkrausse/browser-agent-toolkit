@@ -9,7 +9,7 @@
 // It speaks the OpenAI Responses API with streaming (`POST <base>/responses`), which is what
 // OpenCode uses for `@opencode/ai/providers/openai` models. Scripts, by the last user message:
 //
-//   contains "heading"   reads src/App.tsx, then replaces the text of its <h1> with the
+//   contains "heading"   reads src/App.tsx (or SCRIPTED_FILE), then replaces the text of its <h1> with the
 //                        quoted text of the prompt (`set the heading to "Tasks"`), or with
 //                        the old text plus " (edited in the tab)"; ends SCRIPTED-EDIT-DONE
 //   contains "dark theme" the demo video's prompt (demo/run.ts): reads src/style.css and src/App.tsx,
@@ -31,8 +31,11 @@ interface Tool { name: string; properties: string[] }
 interface Turn { model: string; user: string; results: string[]; tools: Tool[] }
 interface Step { text: string; call?: { name: string; arguments: string }; pauseMs?: number }
 
-const file = '/workspace/src/App.tsx'
-const plain = 'Hello from the scripted model. This reply is streamed in small pieces by a mock on another origin that this tab fetched directly; no model was called and no tokens were spent. Ask me to change the heading (for example: set the heading to "Tasks") and I will read and edit src/App.tsx in this tab. SCRIPTED-PLAIN-DONE'
+// The file with the app's <h1>: the TODO example's, or `SCRIPTED_FILE` for another app
+// (`/workspace/src/routes/index.tsx` for examples/start-app).
+const file = process.env.SCRIPTED_FILE ?? '/workspace/src/App.tsx'
+const shown = file.replace('/workspace/', '')
+const plain = `Hello from the scripted model. This reply is streamed in small pieces by a mock on another origin that this tab fetched directly; no model was called and no tokens were spent. Ask me to change the heading (for example: set the heading to "Tasks") and I will read and edit ${shown} in this tab. SCRIPTED-PLAIN-DONE`
 
 // The theme script: what it reads and the three edits it makes, each an exact replacement in
 // the TODO app's source as it is shipped. The rules are appended, since the stylesheet's
@@ -112,11 +115,11 @@ function next(turn: Turn): Step {
   if (!/\bheading\b/i.test(turn.user)) return { text: plain }
   if (turn.results.length === 0) {
     const read = call(turn, 'read', { filePath: file, file_path: file, path: file })
-    return read ? { text: 'I will read `src/App.tsx` to find the heading.', call: read } : { text: `The heading script needs the read tool ${offered}.` }
+    return read ? { text: `I will read \`${shown}\` to find the heading.`, call: read } : { text: `The heading script needs the read tool ${offered}.` }
   }
   if (turn.results.length === 1) {
     const old = /<h1>([^<]*)<\/h1>/.exec(turn.results[0]!)?.[1]
-    if (old === undefined) return { text: `I could not find an <h1> in src/App.tsx. The read tool returned: ${turn.results[0]!.slice(0, 300)}` }
+    if (old === undefined) return { text: `I could not find an <h1> in ${shown}. The read tool returned: ${turn.results[0]!.slice(0, 300)}` }
     const wanted = /"([^"\n]+)"/.exec(turn.user)?.[1] ?? `${old} (edited in the tab)`
     const before = `<h1>${old}</h1>`, after = `<h1>${wanted}</h1>`
     const edit = call(turn, 'edit', { filePath: file, file_path: file, path: file, oldString: before, old_string: before, newString: after, new_string: after })

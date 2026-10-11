@@ -37,6 +37,10 @@ function installed(from: string, name: string): boolean {
 }
 
 /** One Vite plugin for both sides. The application still owns its Vite config. */
+/** What the editing module is in the guest: a component that renders nothing. */
+const nothing = 'export default function Editing(){return null}';
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export function browserEditor(options: BrowserEditorOptions = {}): any {
   let editingModule: string | undefined;
   return {
@@ -47,15 +51,29 @@ export function browserEditor(options: BrowserEditorOptions = {}): any {
       // would cost a second pass and a page reload when the editor is first opened. The
       // React package is a separate install and is named only for an app that has it.
       if (!isGuest()) return { optimizeDeps: { include: ['@kkrausse/browser-agent-toolkit/browser', ...(installed(resolve(config.root ?? '.'), reactPackage) ? [reactPackage] : [])] } };
+      // Vite's dependency scan reads source files itself (esbuild), not through `load` below,
+      // so it saw the real editing module and prebundled the editor's packages for a
+      // preview that never loads them (2 MB of shipped cache for the TODO example). The
+      // scan gets the same stand-in.
+      const scanned = options.module && resolve(config.root ?? '.', options.module);
+      const standIn = scanned && {
+        name: 'browser-editor:scan',
+        setup(build: { onLoad(options: { filter: RegExp }, load: () => { contents: string; loader: 'js' }): void }) {
+          build.onLoad({ filter: new RegExp(`^${escapeRegExp(scanned)}$`) }, () => ({ contents: nothing, loader: 'js' }));
+        },
+      };
       return {
         base: previewBase(),
-        // Outside node_modules/.vite: that tree is the read-only image.
-        cacheDir: '.browser-editor-cache/vite',
+        // Outside the project's node_modules, which is the read-only image, but still
+        // below a directory of that name: plugins leave dependencies alone by matching
+        // `/node_modules/` in the path, and without it they worked on the optimized ones
+        // (@vitejs/plugin-react ran Babel over react-dom's 1.1 MB chunk at every start).
+        cacheDir: '.browser-editor-cache/node_modules/.vite',
         // The guest filesystem holds the workspace and its dependencies, nothing else.
         server: { fs: { strict: false } },
         // No source maps for optimized dependencies: they were two thirds of the cache
         // prepare ships (3.7 of 5.8 MB for the TODO app) and of every re-optimization.
-        optimizeDeps: { esbuildOptions: { sourcemap: false } },
+        optimizeDeps: { esbuildOptions: { sourcemap: false, plugins: standIn ? [standIn] : [] } },
       };
     },
     configureServer(server: { middlewares: { use(handler: (request: IncomingLike, response: unknown, next: () => void) => void): void }; httpServer?: { prependListener(name: string, listener: (request: IncomingLike) => void): void; removeListener(name: string, listener: (request: IncomingLike) => void): void; once(name: string, listener: () => void): void } | null }) {
@@ -87,10 +105,10 @@ export function browserEditor(options: BrowserEditorOptions = {}): any {
       // for every such response, with the whole file as its content: react-dom's 1.1 MB chunk
       // went out as 6.1 MB and took the server 290 ms (native: 500-750 ms under load). A map
       // with empty mappings is Vite's way of saying "none, and do not invent one".
-      if (isGuest() && id.includes('/.browser-editor-cache/vite/deps/')) return { code, map: { mappings: '' } };
+      if (isGuest() && id.includes('/.browser-editor-cache/node_modules/.vite/deps')) return { code, map: { mappings: '' } };
     },
     load(id: string) {
-      if (isGuest() && editingModule && id.split('?')[0] === editingModule) return 'export default function Editing(){return null}';
+      if (isGuest() && editingModule && id.split('?')[0] === editingModule) return nothing;
     },
     generateBundle(this: { emitFile(file: { type: 'asset'; fileName: string; source: string }): void }, _: unknown, bundle: Record<string, any>) {
       const privateEntry = options.privateEntry;

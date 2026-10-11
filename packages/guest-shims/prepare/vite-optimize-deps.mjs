@@ -94,9 +94,10 @@ if (!result.ok) {
 }
 
 // ---- collect: <cacheDir>/deps* as project files
-for (const environment of Object.values(result.environments)) if (environment.cacheDir?.split('/').includes('node_modules')) {
-  // That tree is the dependency image; project files cannot be placed in it.
-  console.error(`vite-optimize-deps: the cache directory ${environment.cacheDir} is inside node_modules; set cacheDir outside it for the guest`);
+for (const environment of Object.values(result.environments)) if (environment.cacheDir?.split('/')[0] === 'node_modules') {
+  // The project's node_modules is the dependency image; project files cannot be placed in
+  // it. (A directory of that name further down is fine, and is what the toolkit's plugin sets.)
+  console.error(`vite-optimize-deps: the cache directory ${environment.cacheDir} is inside the project's node_modules; set cacheDir outside it for the guest`);
   process.exit(1);
 }
 const files = path.join(kept, 'files');

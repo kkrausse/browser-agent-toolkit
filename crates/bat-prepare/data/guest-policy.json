@@ -59,7 +59,7 @@
       "name": "vite-optimize-deps",
       "run": ["node", "dir:../../../packages/guest-shims/prepare/vite-optimize-deps.mjs"],
       "ifExists": "vite/package.json",
-      "owns": [".browser-editor-cache/vite"]
+      "owns": [".browser-editor-cache"]
     }
   ],
   "programs": [{ "name": "opencode-server", "modules": ["/app/server.js"] }],
