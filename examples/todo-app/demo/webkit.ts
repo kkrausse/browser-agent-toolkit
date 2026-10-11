@@ -1,0 +1,172 @@
+#!/usr/bin/env bun
+// The README scenario of demo/run.ts in WebKit (Playwright's build; `browser-control` is
+// Chromium-only). The example must already be serving; with a scripted model it costs nothing:
+//
+//   PORT=4311 bun ../terminal-app/mock-model.ts
+//   EDITOR_MODEL_API_KEY=not-a-key EDITOR_MODEL_BASE_URL=http://127.0.0.1:4311/v1 PORT=3000 bun run editor
+//   bun demo/webkit.ts [--base http://127.0.0.1:3000] [--runs 1] [--profile DIR] [--headed]
+//                      [--keep-workspace] [--no-prompt] [--shot out.png]
+//
+// Per run: reset the workspace (unless --keep-workspace), add two todos, tick one, "Open
+// editor", wait for the app in the preview and for the chat; send the dark-theme prompt and
+// wait for the assistant; the preview must have turned dark in the same document and show
+// "1 … left"; then type "Ship it" inside the preview and tick a box there. Prints one JSON
+// line per run and exits 1 if any failed.
+//
+// The profile directory must persist (WebKit refuses OPFS sync access handles in an
+// ephemeral context); the default is a fresh one per invocation, so the first run is a
+// first-ever open and later runs of the same invocation are reopens.
+import { webkit, type Page } from 'playwright'
+import { mkdtempSync } from 'node:fs'
+import { loadavg, tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+const flag = (name: string) => { const at = process.argv.indexOf(`--${name}`); return at < 0 ? undefined : process.argv[at + 1] ?? '' }
+const has = (name: string) => process.argv.includes(`--${name}`)
+const base = (flag('base') ?? `http://127.0.0.1:${process.env.PORT ?? 3000}`).replace(/\/$/, '')
+const runs = Number(flag('runs') ?? 1)
+const prompt = flag('prompt') ?? 'Give this app a dark theme with a violet accent, and show how many todos are left under the list.'
+const profile = flag('profile') ?? mkdtempSync(join(tmpdir(), 'bat-demo-webkit-'))
+
+const context = await webkit.launchPersistentContext(profile, { headless: !has('headed'), viewport: { width: 1280, height: 800 } })
+const page = context.pages()[0] ?? (await context.newPage())
+const problems: string[] = []
+page.on('pageerror', (e) => problems.push(`pageerror: ${String(e).slice(0, 300)}`))
+page.on('console', (m) => { if (m.type() === 'error') problems.push(`console: ${m.text().slice(0, 300)}`) })
+
+const panel = (page: Page) => page.evaluate(() => {
+  const q = (s: string) => document.querySelector(s)
+  const chat = q('.todo-editor-chat'), log = chat?.querySelector('[role=log]')
+  const frame = q('.todo-editor-preview iframe') as HTMLIFrameElement | null
+  let preview = false
+  try { preview = !!frame?.contentDocument?.querySelector('main input#title:not(:disabled)') } catch {}
+  return {
+    preview, composer: !!chat?.querySelector('textarea'),
+    status: q('.todo-editor-panel > footer [role=status]')?.textContent ?? '',
+    error: q('.todo-editor-panel > footer [role=alert]')?.textContent ?? '',
+    users: log?.querySelectorAll('[aria-label="user message"]').length ?? 0,
+    assistants: log?.querySelectorAll('[aria-label="assistant message"]').length ?? 0,
+    chatStatus: chat?.querySelector('.oc-connection [role=status]')?.textContent ?? '',
+    alerts: [...(chat?.querySelectorAll('[role=alert]') ?? [])].map((e) => (e.textContent ?? '').slice(0, 300)),
+    timings: (window as any).__editorTimings?.current ?? {},
+  }
+})
+// What the scenario is about, read from the app inside the preview frame.
+const app = (page: Page) => page.evaluate(() => {
+  const frame = document.querySelector('.todo-editor-preview iframe') as HTMLIFrameElement | null
+  const doc = frame?.contentDocument, win = frame?.contentWindow as any
+  if (!doc?.body) return null
+  const luminance = (el: Element) => { const m = /rgba?\(([\d.]+), ([\d.]+), ([\d.]+)(?:, ([\d.]+))?/.exec(win.getComputedStyle(el).backgroundColor); return !m || m[4] === '0' ? null : (0.2126 * +m[1] + 0.7152 * +m[2] + 0.0722 * +m[3]) / 255 }
+  const text = (doc.querySelector('main') as HTMLElement | null)?.innerText ?? doc.body.innerText
+  const left = /(\d+)\s*(?:of\s*\d+\s*)?(?:todos?|items?|tasks?)?\s*(?:left|remaining|to go)/i.exec(text) ?? /(?:left|remaining)\D{0,12}(\d+)/i.exec(text)
+  return { background: luminance(doc.body) ?? luminance(doc.documentElement) ?? 1, left: left ? Number(left[1]) : null, text: text.slice(0, 600), sameDocument: win.__demoDocument === true }
+})
+
+async function once(): Promise<Record<string, unknown>> {
+  const result: Record<string, unknown> = { pass: false, load: loadavg().map((n) => Math.round(n * 100) / 100) }
+  let step = 'home'
+  problems.length = 0
+  try {
+    await page.goto(`${base}/`, { waitUntil: 'load' })
+    const box = page.getByRole('textbox', { name: 'New todo' })
+    await box.waitFor()
+    // Todos live in the server's memory: start from none.
+    for (let i = 0; i < 50; i++) {
+      await page.locator('main input#title:not(:disabled)').waitFor()
+      const buttons = page.getByRole('button', { name: /^Delete / })
+      const count = await buttons.count()
+      if (!count) break
+      await buttons.first().click({ timeout: 3000 }).catch(() => {})
+      await page.waitForFunction((n) => document.querySelectorAll('main li').length < n, count, { timeout: 5000 }).catch(() => {})
+    }
+    if (!has('keep-workspace')) {
+      await page.getByRole('button', { name: 'Reset workspace', exact: true }).click()
+      await page.locator('aside [role=status]').filter({ hasText: /^\s*Workspace reset\.$/ }).waitFor({ timeout: 20000 })
+      await page.reload({ waitUntil: 'load' })
+      await box.waitFor()
+    }
+    for (const title of ['Record a demo GIF', 'Water the plants']) {
+      await box.click()
+      await page.keyboard.type(title)
+      await page.getByRole('button', { name: 'Add', exact: true }).click()
+      await page.getByRole('checkbox', { name: title }).waitFor()
+    }
+    await page.getByRole('checkbox', { name: 'Water the plants' }).click()
+    await page.getByRole('checkbox', { name: 'Water the plants', checked: true }).waitFor()
+
+    step = 'open'
+    const clicked = Date.now()
+    await page.getByRole('button', { name: 'Open editor', exact: true }).click()
+    let s = await panel(page)
+    for (;;) {
+      s = await panel(page)
+      if (s.preview && s.composer && /^Ready/.test(s.status)) break
+      if (s.error) throw Error(`The editor failed to open: ${s.error}`)
+      if (Date.now() - clicked > 180000) throw Error(`The editor was not ready within 180 s: ${JSON.stringify(s)}`)
+      await page.waitForTimeout(100)
+    }
+    result.openMs = Date.now() - clicked
+    result.timings = s.timings
+    const before = await app(page)
+    if (!before || before.background < 0.5) throw Error(`The app does not start light: ${JSON.stringify(before)}`)
+    // Survives hot updates, not a reload of the frame.
+    await page.evaluate(() => { ((document.querySelector('.todo-editor-preview iframe') as HTMLIFrameElement).contentWindow as any).__demoDocument = true })
+
+    if (!has('no-prompt')) {
+      step = 'prompt'
+      const start = await panel(page)
+      await page.locator('.todo-editor-chat textarea').first().click()
+      await page.keyboard.type(prompt)
+      await page.keyboard.press('Enter')
+      const sent = Date.now()
+      let busy = false
+      for (;;) {
+        s = await panel(page)
+        if (s.chatStatus && s.chatStatus !== 'Ready') busy = true
+        if (s.alerts.length > start.alerts.length) throw Error(`The chat reported: ${s.alerts.at(-1)}`)
+        if (s.assistants > start.assistants && s.chatStatus === 'Ready' && (busy || Date.now() - sent > 3000)) break
+        if (Date.now() - sent > 240000) throw Error(`The assistant did not finish within 240 s: ${JSON.stringify(s)}`)
+        await page.waitForTimeout(150)
+      }
+      result.replyMs = Date.now() - sent
+      result.tools = await page.evaluate(() => (document.querySelector('.todo-editor-chat [role=log]') as HTMLElement | null)?.innerText.match(/\b(read|edit|write|grep|glob|runJavascript)\s*(completed|error)/g) ?? [])
+
+      step = 'preview'
+      const expectLeft = async (n: number, what: string) => {
+        const deadline = Date.now() + 10000
+        for (;;) {
+          const a = await app(page)
+          if (a?.left === n) return a
+          if (Date.now() > deadline) throw Error(`${what}: expected ${n} left, the preview shows: ${JSON.stringify(a?.text)}`)
+          await page.waitForTimeout(100)
+        }
+      }
+      const after = await expectLeft(1, 'after the change')
+      if (after.background > 0.3) throw Error(`The preview is not dark: background luminance ${after.background}`)
+      if (!after.sameDocument) throw Error('The preview was reloaded instead of hot-updated')
+      const frame = page.frameLocator('.todo-editor-preview iframe')
+      await frame.locator('input#title').click()
+      await page.keyboard.type('Ship it')
+      await page.keyboard.press('Enter')
+      await expectLeft(2, 'after adding "Ship it" inside the preview')
+      await frame.getByRole('checkbox').first().click()
+      result.end = await expectLeft(1, 'after ticking the first todo inside the preview')
+    }
+    result.pass = true
+  } catch (e) {
+    result.failed = step
+    result.error = String((e as Error)?.message ?? e).slice(0, 1500)
+  }
+  if (flag('shot')) await page.screenshot({ path: flag('shot')! }).catch(() => {})
+  result.problems = [...new Set(problems)].slice(0, 12)
+  return result
+}
+
+let failed = 0
+for (let i = 0; i < runs; i++) {
+  const r = await once()
+  if (!r.pass) failed++
+  console.log(JSON.stringify(r))
+}
+await context.close()
+process.exit(failed ? 1 : 0)
