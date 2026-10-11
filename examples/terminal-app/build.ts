@@ -23,7 +23,7 @@
 //   PUBLIC=1    the public build, a page for strangers (README.md, "The public build"): no
 //               default model endpoint (the server uses OpenCode's hosted free models), no
 //               diagnostics unless the address asks, no ChatGPT sign-in bar, only opencode.ai
-//               tunnelled. WISP_URL and TUNNEL_URL then default to the two below; MODEL_URL is refused
+//               tunnelled. WISP_URL then defaults to the server below; MODEL_URL is refused
 //   PUBLIC_MODEL  the hosted free model a fresh workspace of the public build starts on
 //               (default below; empty for the server's own choice)
 import { copyFileSync, createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
@@ -33,18 +33,16 @@ import { createGzip } from 'node:zlib'
 
 const here = import.meta.dirname
 const isPublic = process.env.PUBLIC === '1'
-// The relay of the public build: packages/relay/tcp-relay-deno.ts on Deno Deploy, which carries
-// opencode.ai:443 and nothing else, for the page origins in its RELAY_ORIGINS.
-const publicRelay = 'wss://bat-relay-2.kevonavin.deno.net/tcp'
-// What the public build uses first: Mercury Workshop's public Wisp server, which is not ours
-// and promises nothing (it carried opencode.ai:443 on 2026-10-11). `?wisp=0` on the page
-// goes back to the relay above; `?wisp=<wss URL>` names another Wisp server.
+// What carries opencode.ai for the public build: Mercury Workshop's public Wisp server, which
+// is not ours and promises nothing (it carried opencode.ai:443 on 2026-10-11). `?wisp=<wss URL>`
+// on the page names another Wisp server, `?tunnel=<wss URL>` a relay of packages/relay. The
+// build named such a relay on Deno Deploy until that account was suspended on 2026-10-11.
 const publicWisp = 'wss://wisp.mercurywork.shop/'
 if (isPublic && process.env.MODEL_URL) throw Error('PUBLIC=1 builds a page with no default model endpoint: unset MODEL_URL')
 // OpenCode Zen's free models come and go. This one answered on 2026-10-10; the page stops
 // naming it once Zen no longer lists it (src/main.ts, hostedModel).
 const publicModel = isPublic ? process.env.PUBLIC_MODEL ?? 'ling-3.1-flash-free' : ''
-const modelUrl = process.env.MODEL_URL ?? '', tunnelUrl = process.env.TUNNEL_URL ?? (isPublic ? publicRelay : ''), wispUrl = process.env.WISP_URL ?? (isPublic ? publicWisp : '')
+const modelUrl = process.env.MODEL_URL ?? '', tunnelUrl = process.env.TUNNEL_URL ?? '', wispUrl = process.env.WISP_URL ?? (isPublic ? publicWisp : '')
 const out = resolve(here, process.env.OUT_DIR ?? 'dist')
 for (const [path, how] of [['.display/display.js', 'bun run display'], ['.editor/prepared/manifest.json', 'bun run prepare:editor']] as const) {
   if (!existsSync(resolve(here, path))) throw Error(`Missing ${path}: run \`${how}\` in examples/terminal-app (or \`bun run terminal\` in the repository root).`)

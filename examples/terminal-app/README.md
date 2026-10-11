@@ -64,7 +64,7 @@ sign-in. What differs from the development build, all of it decided when the pag
 | --- | --- | --- |
 | model | `?model=`, else `MODEL_URL`, else the mock on port 4311 of the page's host | none named: the OpenCode server's own `opencode` provider, OpenCode Zen with the key `public`, which has the models that cost nothing and needs no sign-in. `?model=` still names an endpoint |
 | first model | `?modelId=`, default `scripted` | `PUBLIC_MODEL` of the build (default `ling-3.1-flash-free`), for as long as `https://opencode.ai/zen/v1/models` lists it; then the server's choice. `?modelId=<id>` names another hosted one |
-| tunnel | `WISP_URL`, else `TUNNEL_URL`, else none; carries `api.openai.com`, OpenAI's keys document and `opencode.ai` | `WISP_URL`, else the public Wisp server `wss://wisp.mercurywork.shop/`; with `?wisp=0`, `TUNNEL_URL`, else `wss://bat-relay-2.kevonavin.deno.net/tcp` (`packages/relay/tcp-relay-deno.ts` on Deno Deploy); carries `opencode.ai` only |
+| tunnel | `WISP_URL`, else `TUNNEL_URL`, else none; carries `api.openai.com`, OpenAI's keys document and `opencode.ai` | `WISP_URL`, else the public Wisp server `wss://wisp.mercurywork.shop/`; with `?wisp=0`, `TUNNEL_URL`, else none; carries `opencode.ai` only |
 | diagnostics | posted to the collector unless `?diag=0` | nothing is sent unless the address has `?diag=<url>` |
 | ChatGPT sign-in | the bar and the client's preload module (`client-tap.js`) | neither is installed; `client-tap.js` and `openai-jwks.json` are not shipped |
 | the page says | title: model and tunnel | title: `free model from OpenCode Zen · relay <host>`; a two-line footer under the panel: what runs in the tab, whose model it is, what the relay carries, a link to the source |
@@ -296,7 +296,8 @@ more. The differences are in what it promises:
 
 - **Whose it is.** The public build's default, `wss://wisp.mercurywork.shop/`, is Mercury
   Workshop's. It publishes no terms; it may throttle, refuse this page's origin one day, or go
-  away. `?wisp=0` goes back to the relay above, `?wisp=<another>` to another server.
+  away. `?wisp=<another>` names another server, `?tunnel=` a relay as above; the build has no
+  relay of its own to fall back to.
 - **Its allowlists are its own.** The page tunnels only the hosts it names, but nothing on the
   server ties it to this page or to those hosts.
 - **No flow control towards the page** in Wisp v1: what the server sends faster than the

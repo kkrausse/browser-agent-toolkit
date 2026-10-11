@@ -1222,6 +1222,13 @@ servers.
   CLOSE with a reason), and flow control towards the page (received bytes are held in the tab
   until the body's reader takes them; the relay's format stops the far end instead).
 - **The public build's default is `wss://wisp.mercurywork.shop/`**, which is not ours and
-  publishes no terms; the Deno relay stays one `?wisp=0` away. Measured there on 2026-10-11,
-  outside a browser: `GET https://opencode.ai/zen/v1/models` through this client, 200,
-  `TLSv1_3 TLS13_AES_256_GCM_SHA384`, 0.25 s with the WebSocket handshake.
+  publishes no terms. The build names no relay of ours any more: Deno Deploy suspended the
+  account that ran it (403 `USER_SUSPENDED`) the same day, so `TUNNEL_URL` has no default.
+- **Measured on 2026-10-11, Chrome, the public build on `http://127.0.0.1:4391`** (so that
+  server takes a WebSocket from an origin it has never seen): a prompt answered by
+  `ling-3.1-flash-free`, streamed, `HTTP 200 (tunnel via wisp.mercurywork.shop, TLSv1_3
+  TLS13_AES_256_GCM_SHA384)`.
+- **Seen: four HTTP 429 from Zen before that 200**, retried by OpenCode without anything on
+  the page. Not explained. The server's address is shared by everybody who uses it, which
+  would do it if Zen's free tier counts per address; there was no working relay of ours left
+  to compare with.

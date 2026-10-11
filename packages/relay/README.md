@@ -29,6 +29,8 @@ at the root of what is uploaded; an entry point in a subdirectory failed its bui
 `RELAY_ORIGINS` in its environment. `tcp-relay-deno-probe.ts` answers whether a host can run
 the relay at all: it needs a raw TCP connection to port 443 that the platform does not wrap in
 its own TLS. Deno Deploy allows it (probed 2026-10-11).
+The account that ran this for the public page was suspended by Deno the same day (403
+`USER_SUSPENDED`, no reason given), so count on that for a relay strangers use.
 
 Both files came from wasm-term's dev server (`wasm-term/web/`, now only on the branch
 `wasm-term`), which mounted the same relay at `/proxy/tcp`. Comments in `tcp-relay.ts` that
