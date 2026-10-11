@@ -1006,3 +1006,60 @@ token (200 and a stream outside a browser, "Failed to fetch" in a tab), and
 - **The terminal example** takes `?tunnel=` / `TUNNEL_URL` and tunnels `api.openai.com` and
   `https://auth.openai.com/.well-known/` (the keys; the shipped copy and `BAT_FETCH_MAP` are
   then unused). The token exchange stays with the browser's fetch, where it was seen to work.
+
+## 2026-10-10: the terminal is a kernel device; the OpenCode client is a toolkit process
+
+Until now the terminal example ran two machines in one tab: the toolkit runtime (servers)
+and wasm-term's program host (the OpenCode TUI on its own pty, shim and private files),
+talking through the page. The terminal is now a feature of the toolkit runtime. Spike:
+`docs/experiments/2026-10-10-toolkit-pty-spike.md`; result and numbers:
+`docs/experiments/2026-10-10-toolkit-pty.md`.
+
+- **The pty and line discipline are one crate, `crates/bat-pty`,** moved out of
+  `wasm-term/kernel` with their 51 tests; wasm-term's kernel keeps its C ABI and depends on
+  it. A path dependency from `bat-kernel` on `wasm-term/kernel` was the first try and
+  cargo refuses it (a workspace root inside this workspace).
+- **A terminal is two file descriptors** (`bat_tty_open`: master and slave), not a new kind
+  of process attribute. The generic read/write/poll/subscribe calls work on both; four calls
+  cover termios and the window size (ABI section 18). The pty sits behind one kernel lock
+  like a pipe's ring; a blocking slave read waits on a wait-queue word with the `VTIME`
+  deadline as timeout; a writer that may block waits above 1 MiB of untaken output (the
+  flow control wasm-term's host did against the page).
+- **No process groups.** The line discipline's signals (^C, a resize, hang-up) go to the
+  newest live process that was spawned with the slave as its stdin. Enough for one program
+  per terminal and for a shell that waits for its child; not job control.
+- **`RuntimeHost.spawnTerminal(launch, { cols, rows, onOutput })`** is the page's handle:
+  `write`, `resize`, `kill`, `exited`. Output is a callback, not a `ReadableStream`: every
+  chunk is drawn at once and nothing may be dropped (a process's stdout stream drops old
+  bytes when unread).
+- **Node's tty surface is filled in where the stdio streams are made** (`node/process.ts`):
+  `isTTY`, `setRawMode` with libuv's raw bits (OPOST stays on) restored at exit,
+  `columns`/`rows`, `resize` on SIGWINCH. `tty.ReadStream`/`WriteStream` return those same
+  streams and are not classes one can extend.
+- **`worker_threads.Worker` is a forked process.** OpenTUI's tree-sitter worker has to run
+  somewhere, and without it the client crashes at the first reply. A worker thread here is
+  another process worker joined by `fork`'s channel: messages are JSON, nothing is
+  transferred or shared, and its stdin is not the parent's terminal. Right for a worker
+  that is asked things and answers; wrong for anything that shares memory or passes ports.
+- **The client is the same source built for Node** (`wasm-term/ports/opencode`,
+  `--target=node`): the bundle wasm-term serves has wasm-term's shim compiled in, the Node
+  build leaves `node:*` as imports. It is an application file of the image (`/app/tui/`),
+  beside the server; the example's `prepare.ts` joins the two directories.
+- **The client's files are ordinary workspace files** (`/home/user/.config|.local/...`,
+  persisted with the overlay in OPFS), not a private vfs with IndexedDB. A reload kills the
+  client without a chance to release its file locks, which it would then wait a minute
+  for; the page removes the lock directories before it starts the client.
+- **The sign-in bar needed a new source.** The page used to see every request of the
+  client. Now it gives the client a preload module (`node --import`, `client-tap.ts`) that
+  appends the sign-in exchanges, and only those, to a file the page watches. Considered and
+  not done: keeping the page in the path as a proxy (that is what was being removed), and
+  an `xdg-open` program in the guest (the bar would only appear when the user presses the
+  client's "open" key).
+- **The display is a component of its own** (`wasm-term/web/display.ts`): bytes in, input
+  and size out. `embed.ts` joins it to wasm-term's machine, the example to a
+  `RuntimeTerminal`. The example loads it as a separate bundled module, not by importing
+  the source: ghostty-web's sources do not pass the example's stricter TypeScript settings.
+- **Not done: an interactive shell.** `bat-sh` has no prompt and no line editing; with no
+  script argument it reads all of stdin to end of file and then runs it. On a terminal
+  that means typed lines are echoed by the line discipline and run together after ^D
+  (checked). A prompt loop is a shell feature, not a terminal one.
