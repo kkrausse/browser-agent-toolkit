@@ -1160,7 +1160,9 @@ installed all of them.
   `dist/vite.js`, whose path did not change, so it was not recorded again.
 - **Release:** `scripts/release.ts` stages a third tarball,
   `kkrausse-browser-agent-toolkit-react-<version>-<commit>.tgz`. In it the workspace
-  dependency on the toolkit becomes a peer dependency on the version: as a plain
-  dependency `bun install` asked the registry for it (404) in an app that has both
-  tarballs by `file:` path; as a peer the app's install of the toolkit tarball satisfies
-  it. The two packages share one version.
+  dependency on the toolkit becomes a peer dependency on the version, marked optional.
+  Tried in a scratch app with both tarballs by `file:` path (bun 1.4): as a dependency, and
+  as a required peer, `bun install` asks the registry for the toolkit and fails (404);
+  as an optional peer it installs and both packages import. The peer is required in fact;
+  "optional" only keeps the package manager from fetching it. The two packages share one
+  version.

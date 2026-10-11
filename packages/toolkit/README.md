@@ -190,7 +190,8 @@ app that vendors the toolkit instead of using a checkout:
 - `kkrausse-browser-agent-toolkit-<version>-<commit>.tgz`: this package with the browser
   runtime in `dist/runtime/` and `prepare/` (guest policy, shim packages, OpenCode server);
 - `kkrausse-browser-agent-toolkit-react-<version>-<commit>.tgz`: the React package, for an
-  app that uses it. This package is its peer there: install both;
+  app that uses it. This package is its peer there (marked optional only so that the
+  package manager does not look for it in the registry): install both;
 - `kkrausse-browser-agent-prepare-<platform>-<arch>-<version>-<commit>.tgz`: the
   `bat-prepare` executable for the machine the script ran on.
 

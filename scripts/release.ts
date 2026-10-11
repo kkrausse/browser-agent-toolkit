@@ -10,8 +10,9 @@
 //     except the app's own npm packages.
 //   kkrausse-browser-agent-toolkit-react-<version>-<commit>.tgz
 //     the React components and their stylesheet (`packages/react`), for an app that uses
-//     them. The toolkit package is its peer, by version: the app installs both tarballs.
-//     (As a plain dependency the package manager would look for it in the registry.)
+//     them. The toolkit package is its peer, by version, and marked optional: the app
+//     installs both tarballs. (As a dependency or a required peer, `bun install` looks for
+//     it in the registry, where it is not, and fails.)
 //   kkrausse-browser-agent-prepare-<platform>-<arch>-<version>-<commit>.tgz
 //     the `bat-prepare` executable for the machine this script runs on. `prepare()` resolves
 //     `@kkrausse/browser-agent-prepare-<platform>-<arch>` for the machine it runs on; on any
@@ -107,13 +108,15 @@ for (const name of ['README.md', 'NOTICES.md', 'LICENSE.marked', 'LICENSE.shadcn
 writeFileSync(join(reactStage, 'BUILD-PROVENANCE.json'), provenance({ 'dist/index.js': sha256(join(reactStage, 'dist/index.js')), 'dist/styles.css': sha256(join(reactStage, 'dist/styles.css')) }))
 const { devDependencies: _reactDev, scripts: _reactScripts, ...reactManifest } = react
 // In the repository the toolkit is a workspace dependency. Outside it, it is the tarball
-// above, which the app installs by `file:` path: a peer is satisfied by that install,
-// where a dependency on the version would be fetched from the registry.
+// above, which the app installs by `file:` path. Declared as a dependency, or as a
+// required peer, `bun install` (1.4) asks the registry for it and fails with a 404; an
+// optional peer is left to the app's own install. It is not optional in fact.
 const { [toolkit.name as string]: _workspace, ...reactDependencies } = react.dependencies
 writeFileSync(join(reactStage, 'package.json'), JSON.stringify({
   ...reactManifest, files: [...react.files, 'BUILD-PROVENANCE.json'],
   dependencies: reactDependencies,
   peerDependencies: { [toolkit.name]: toolkit.version, ...react.peerDependencies },
+  peerDependenciesMeta: { [toolkit.name]: { optional: true } },
 }, null, 2) + '\n')
 const reactArchive = pack(reactStage, 'kkrausse-browser-agent-toolkit-react')
 
