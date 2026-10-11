@@ -30,6 +30,7 @@
 //
 // Output: bench/memory/out/<label>.json  { meta, runs[] }
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 const arg = (name: string, fallback?: string) => {
@@ -45,10 +46,21 @@ const idleSeconds = Number(arg('idle', '180'))
 // collection) crashed the renderer of the terminal example every time it was tried (Chrome
 // 154, a segfault inside the chrome binary), so it is off there: its points have no "post"
 // floor and its Wasm memories come from smaps alone.
-const query = arg('query', example === 'todo' ? 'on' : 'off') === 'on'
+// --browser webkit: the same walk in Playwright's Linux WebKit (runtime/harness/webkit/driver.ts,
+// one browser per tab, a profile kept in out/.run for the label). There is no CDP there, so
+// the browser-side capture is only what a page can ask (storage, the kernel's own counters)
+// and nothing forces a collection: "post" is a second sample, not a floor. The processes
+// are WebKit's: the web process that hosts the page, and beside it every other process of
+// that browser (`others`: UI, network, further web processes), each from /proc.
+const webkit = arg('browser', 'chrome') === 'webkit'
+// --cache BYTES, --kmem PAGES, --kmax PAGES: the runtime's image cache limit and kernel memory size (and maximum) for
+// this run, through the localStorage keys the runtime reads when the page sets no option.
+const initScript = `await page.addInitScript(values => { try { for (const [key, value] of Object.entries(values)) if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value) } catch {} }, ${JSON.stringify({ 'bat-memory-stats': '1', 'bat-image-cache-bytes': arg('cache') ?? null, 'bat-kernel-memory-pages': arg('kmem') ?? null, 'bat-kernel-memory-maximum-pages': arg('kmax') ?? null })});`
+const driverPort = Number(arg('driver-port', '4886'))
+const query = !webkit && arg('query', example === 'todo' ? 'on' : 'off') === 'on'
 const todoPort = arg('todo-port', '4871')!, mockPort = arg('mock-port', '4872')!, termPort = arg('term-port', '4873')!
 // A hostname no other tab uses: Chrome gives the site a renderer process of its own.
-const host = arg('host', example === 'todo' ? 'batmem-a.localhost' : 'batmem-b.localhost')!
+const host = arg('host', webkit ? '127.0.0.1' : example === 'todo' ? 'batmem-a.localhost' : 'batmem-b.localhost')!
 const base = example === 'todo' ? `http://${host}:${todoPort}/` : `http://${host}:${termPort}/?model=${encodeURIComponent(`http://127.0.0.1:${mockPort}/v1`)}&diag=0`
 const out = arg('out', join(import.meta.dir, 'out', `${label}.json`))!
 // Not in /tmp: its quota ran out under the other sessions of this machine during a run.
@@ -66,9 +78,46 @@ async function control(...args: string[]): Promise<string> {
   if (code !== 0) throw Error(`browser-control ${args.slice(0, 3).join(' ')}: ${(err || text).slice(0, 800)}`)
   return text
 }
+/** `session new` also makes the new session the CLI's default, which other users of this
+ * machine's browser-control rely on: the default is put back as it was. */
+const sessionFile = join(homedir(), '.browser-control', 'session.json')
+const drivers = new Map<string, { child: ReturnType<typeof Bun.spawn>; pid: number }>()
+const driverUrl = `http://127.0.0.1:${driverPort}`
+async function newSession(name: string) {
+  if (webkit) {
+    // One WebKit per "session": a new web process for every tab that is measured.
+    const child = Bun.spawn(['bun', join(import.meta.dir, '../../runtime/harness/webkit/driver.ts'), String(driverPort)], { env: { ...process.env, BAT_WEBKIT_PROFILE: join(import.meta.dir, 'out', '.run', `webkit-profile-${label}`) }, stdout: 'ignore', stderr: 'inherit' })
+    drivers.set(name, { child, pid: child.pid })
+    for (let i = 0; ; i++) {
+      try { if ((await fetch(driverUrl)).ok) break } catch { /* not up yet */ }
+      if (i > 150) throw Error('the WebKit driver did not start')
+      await sleep(200)
+    }
+    return
+  }
+  let before: string | undefined
+  try { before = readFileSync(sessionFile, 'utf8') } catch { /* no default recorded */ }
+  await control('session', 'new', name)
+  if (before !== undefined) writeFileSync(sessionFile, before)
+}
+async function deleteSession(name: string) {
+  if (!webkit) return void (await control('session', 'delete', name))
+  const driver = drivers.get(name)
+  if (!driver) return
+  drivers.delete(name)
+  await fetch(`${driverUrl}/stop`, { method: 'POST' }).catch(() => {})
+  await Promise.race([driver.child.exited, sleep(15000)])
+  driver.child.kill()
+}
 let serial = 0
 /** Run one Playwright snippet in a session's tab; its return value must be JSON-serialisable. Large results are left in `state` and read in pieces. */
 async function execute<T = any>(session: string, body: string): Promise<T> {
+  if (webkit) {
+    const response = await fetch(`${driverUrl}/execute`, { method: 'POST', body: `const state = (globalThis.__batmemState ??= {});\n${body}`, signal: AbortSignal.timeout(400_000) })
+    const envelope = await response.json() as { ok: boolean; value?: T; error?: string }
+    if (!envelope.ok) throw Error(`execute: ${String(envelope.error).slice(0, 1500)}`)
+    return envelope.value as T
+  }
   const file = join(scratch, `step-${++serial}.js`)
   writeFileSync(file, `const __value = await (async () => {\n${body}\n})();\nstate.__batmem = JSON.stringify(__value ?? null);\nreturn state.__batmem.length;`)
   const run = async (path: string) => {
@@ -89,7 +138,17 @@ async function execute<T = any>(session: string, body: string): Promise<T> {
 
 // ---------------------------------------------------------------- /proc
 
-const renderers = () => readdirSync('/proc').filter((name) => /^\d+$/.test(name)).map(Number).filter((pid) => {
+const cmdline = (pid: number) => { try { return readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ').trim() } catch { return '' } }
+/** Every process below the WebKit drivers this run started. */
+function webkitProcesses(): number[] {
+  const all = readdirSync('/proc').filter((name) => /^\d+$/.test(name)).map(Number)
+  const parent = (pid: number) => { try { const stat = readFileSync(`/proc/${pid}/stat`, 'utf8'); return Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]) } catch { return 0 } }
+  const mine = new Set<number>([...drivers.values()].map((driver) => driver.pid))
+  for (let changed = true; changed; ) { changed = false; for (const pid of all) if (!mine.has(pid) && mine.has(parent(pid))) { mine.add(pid); changed = true } }
+  for (const driver of drivers.values()) mine.delete(driver.pid)
+  return [...mine]
+}
+const renderers = () => webkit ? webkitProcesses().filter((pid) => /WebProcess/.test(cmdline(pid))) : readdirSync('/proc').filter((name) => /^\d+$/.test(name)).map(Number).filter((pid) => {
   try { return readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes('--type=renderer') } catch { return false }
 })
 const cpuTicks = (pid: number) => {
@@ -202,13 +261,21 @@ const processSample = (pids: { main: number; sw?: number }, detail: boolean) => 
   at: Date.now(), load: load(),
   main: { ...rollup(pids.main), threadNames: detail ? threadNames(pids.main) : undefined, ...(detail ? smaps(pids.main) : {}) },
   sw: pids.sw ? { ...rollup(pids.sw), ...(detail ? { regions: smaps(pids.sw)?.regions } : {}) } : undefined,
+  // WebKit: the rest of that browser, by process.
+  others: webkit ? webkitProcesses().filter((pid) => pid !== pids.main).map((pid) => ({ pid, name: cmdline(pid).split(' ')[0]!.split('/').pop(), ...rollup(pid) })).filter((p) => p.rss) : undefined,
 })
 
 // ---------------------------------------------------------------- in the browser
 
 /** Chrome's own numbers for the page and every worker. Ends with a forced collection everywhere.
  * Every wait in here is bounded: the relay cannot cancel a snippet that never settles. */
-const captureCode = `
+const webkitCaptureCode = `
+const result = { targets: [{ kind: 'page', url: page.url().replace(/^https?:\\/\\/[^/]+/, '') }], errors: [], workers: page.workers().length };
+result.page = await page.evaluate(async () => ({ isolated: crossOriginIsolated, storage: await navigator.storage.estimate(), frames: document.querySelectorAll('iframe').length }));
+result.runtime = await page.evaluate(() => globalThis.__batMemory ? globalThis.__batMemory() : null).catch(() => null);
+return result;
+`
+const captureCode = webkit ? webkitCaptureCode : `
 const QUERY = ${query};
 const short = url => url.replace(/#.*$/, '').replace(/^https?:\\/\\/[^/]+/, '');
 const cdp = async () => {
@@ -259,6 +326,8 @@ result.opfs = await attempt('opfs', () => page.evaluate(() => Promise.race([(asy
   }
   return top;
 })(), new Promise((_, no) => setTimeout(() => no(Error('no answer in 30 s')), 30000))])));
+// The kernel's own counters (bytes): its memory, and the image chunk cache.
+result.runtime = await attempt('runtime', () => page.evaluate(() => globalThis.__batMemory ? globalThis.__batMemory() : null));
 const measured = await attempt('measureUserAgentSpecificMemory', () => page.evaluate(() => Promise.race([performance.measureUserAgentSpecificMemory(), new Promise((_, no) => setTimeout(() => no(Error('no answer in 60 s')), 60000))])));
 if (measured) result.userAgentSpecificMemory = { bytes: measured.bytes, breakdown: measured.breakdown.filter(b => b.bytes).map(b => ({ bytes: b.bytes, types: b.types, attribution: b.attribution.map(a => ({ scope: a.scope, url: short(a.url) })) })) };
 // Every WebAssembly.Memory and Module each context can reach. Runtime.queryObjects collects
@@ -295,7 +364,7 @@ return await page.evaluate(() => navigator.storage.estimate());
 
 // ---- the TODO example
 const todo = {
-  load: `await page.setViewportSize({ width: 1280, height: 800 }); await page.goto(${JSON.stringify(base)}, { waitUntil: 'load' }); await page.getByRole('button', { name: 'Open editor', exact: true }).waitFor(); await page.bringToFront(); return { url: page.url(), isolated: await page.evaluate(() => crossOriginIsolated) };`,
+  load: `${initScript} await page.setViewportSize({ width: 1280, height: 800 }); await page.goto(${JSON.stringify(base)}, { waitUntil: 'load' }); await page.getByRole('button', { name: 'Open editor', exact: true }).waitFor(); await page.bringToFront(); return { url: page.url(), isolated: await page.evaluate(() => crossOriginIsolated) };`,
   reset: `await page.getByRole('button', { name: 'Reset workspace', exact: true }).click(); await page.locator('aside [role=status]').filter({ hasText: /^\\s*Workspace reset\\.$/ }).waitFor({ timeout: 30000 }); await page.reload({ waitUntil: 'load' }); await page.getByRole('button', { name: 'Open editor', exact: true }).waitFor(); return true;`,
   open: `
 const started = Date.now();
@@ -358,6 +427,7 @@ const ready = async limit => {
 };`
 const terminal = {
   open: (reset: boolean) => `${terminalReady}
+${initScript}
 await page.setViewportSize({ width: 1280, height: 800 });
 const started = Date.now();
 await page.goto(${JSON.stringify(base)} + ${JSON.stringify(reset ? '&reset=1' : '')}, { waitUntil: 'load' });
@@ -398,12 +468,12 @@ async function gone(pid: number | undefined, limitMs = 150_000): Promise<boolean
 }
 /** Steps in a tab that is closed again; returns once that tab's renderer has exited, so the measured tab cannot inherit it. */
 async function throwaway(name: string, steps: (session: string, identify: () => Promise<void>) => Promise<void>) {
-  await control('session', 'new', name)
+  await newSession(name)
   let pid: number | undefined
   try {
     // Which renderer the tab uses is asked while it still shows the site.
     await steps(name, async () => { pid = await rendererOf(name) })
-  } finally { await control('session', 'delete', name).catch(() => {}) }
+  } finally { await deleteSession(name).catch(() => {}) }
   log(`preparation tab closed; waiting for its renderer ${pid} to exit`)
   if (!(await gone(pid))) log(`the preparation tab's renderer ${pid} is still alive`)
   await sleep(1000)
@@ -425,7 +495,7 @@ async function oneRun(index: number): Promise<any> {
 
   const session = `${label}-${index}`
   log(`run ${index}: starting state made; opening the measured tab`)
-  await control('session', 'new', session)
+  await newSession(session)
   const run: any = { index, example, kind, startedAt: new Date().toISOString(), points: [], light: [], events: [] }
   const pids: { main: number; sw?: number } = { main: 0 }
   // Peak between points, from a sample of the main renderer every 500 ms.
@@ -439,7 +509,7 @@ async function oneRun(index: number): Promise<any> {
     run.points.push({ name, peakSincePreviousPoint: peak, pre, browser, post })
     peak = { rss: 0, pss: 0 }
     const mb = (kb?: number) => Math.round((kb ?? 0) / 1024)
-    log(`run ${index} ${name}: main rss ${mb(pre.main.rss)} → ${mb(post.main.rss)} MB, pss ${mb(pre.main.pss)} → ${mb(post.main.pss)} MB, sw pss ${mb(pre.sw?.pss)} MB, workers ${browser.targets.length - 1}, kernel ${mb((browser.targets[0]?.memories?.find((m: any) => m.shared)?.bytes ?? 0) / 1024)} MB committed, load ${pre.load[0]}${browser.errors.length ? `, errors: ${browser.errors.join('; ')}` : ''}`)
+    log(`run ${index} ${name}: main rss ${mb(pre.main.rss)} → ${mb(post.main.rss)} MB, pss ${mb(pre.main.pss)} → ${mb(post.main.pss)} MB, sw pss ${mb(pre.sw?.pss)} MB, workers ${browser.targets.length - 1}, kernel ${mb((browser.targets[0]?.memories?.find((m: any) => m.shared)?.bytes ?? browser.runtime?.kernel?.size ?? 0) / 1024)} MB committed${browser.runtime ? `, ${mb(browser.runtime.kernel.inUse / 1024)} in use (peak ${mb(browser.runtime.kernel.peakInUse / 1024)}), image cache ${mb(browser.runtime.imageCache.bytes / 1024)} MB after ${browser.runtime.imageCache.loads} loads and ${browser.runtime.imageCache.evictions} drops` : ''}, load ${pre.load[0]}${browser.errors.length ? `, errors: ${browser.errors.join('; ')}` : ''}`)
   }
   const identifyMain = async () => {
     const pid = await rendererOf(session)
@@ -449,6 +519,7 @@ async function oneRun(index: number): Promise<any> {
   }
   const identifySw = async () => {
     // The site has a renderer of its own, so a service-worker thread in it is this page's.
+    if (webkit) return
     run.swInMainRenderer = Object.keys(threadNames(pids.main)).some((name) => name.startsWith('ServiceWorker'))
     if (!run.swInMainRenderer) {
       const candidates = renderers().filter((pid) => pid !== pids.main && Object.keys(threadNames(pid)).some((name) => name.startsWith('ServiceWorker')))
@@ -464,7 +535,17 @@ async function oneRun(index: number): Promise<any> {
       await identifyMain()
       await sleep(5000)
       await point('loaded')
-      run.open = await execute(session, todo.open)
+      // While the editor opens: the renderer by kind of mapping, four times a second, so
+      // that a peak can be put on what holds it (docs/experiments/2026-10-11-memory-reduction.md).
+      run.openTimeline = []
+      const openStarted = Date.now()
+      const timeline = setInterval(() => {
+        const r = rollup(pids.main), m = smaps(pids.main)
+        if (!r || !m) return
+        const kb = (name: string) => (m.regions[name]?.rss ?? 0) + (m.regions[name]?.swap ?? 0)
+        run.openTimeline.push({ ms: Date.now() - openStarted, rss: r.rss + r.swap, pss: r.pss + r.swap, partitionAlloc: kb('[anon:partition_alloc]'), v8Sandbox: kb('[anon:v8-sandbox]'), wasmMemories: kb('[anon:v8-sandbox] wasm memories'), v8: kb('[anon:v8]'), threads: r.threads })
+      }, 250)
+      try { run.open = await execute(session, todo.open) } finally { setTimeout(() => clearInterval(timeline), 8000) }
       await identifySw()
       await sleep(10000)
       await point('open')
@@ -504,7 +585,7 @@ async function oneRun(index: number): Promise<any> {
     log(`run ${index} failed: ${run.error}`)
   } finally {
     clearInterval(sampler)
-    await control('session', 'delete', session).catch(() => {})
+    await deleteSession(session).catch(() => {})
   }
   run.processesGoneAfterClose = { main: await gone(pids.main), sw: await gone(pids.sw, 60_000) }
   return run
@@ -512,6 +593,7 @@ async function oneRun(index: number): Promise<any> {
 
 const meta = {
   label, example, kind, base, idleSeconds, queryObjects: query, startedAt: new Date().toISOString(),
+  browser: webkit ? 'webkit (Playwright, Linux)' : 'chrome',
   chrome: (await Bun.$`/opt/google/chrome/chrome --version`.quiet().nothrow().text()).trim(),
   kernel: (await Bun.$`uname -sr`.quiet().text()).trim(),
   cores: navigator.hardwareConcurrency,

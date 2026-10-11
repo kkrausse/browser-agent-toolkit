@@ -19,7 +19,8 @@ const { createEditorHandler, readModelCatalog } = await import(Bun.resolveSync('
 const port = Number(process.env.PORT) || 4871
 const todos = new Map<string, Todo>()
 const editor = createEditorHandler({
-  preparedDir: '.editor/prepared',
+  // PREPARED_DIR: another prepared directory (an experiment's copy).
+  preparedDir: process.env.PREPARED_DIR ?? '.editor/prepared',
   clientDir: 'build/client',
   modelCatalog: await readModelCatalog(resolve(app, 'model-catalog.json')),
   providers: { opencode: { baseURL: process.env.MOCK_URL ?? 'http://127.0.0.1:4872/v1', headers: { authorization: 'Bearer scripted' } } },
