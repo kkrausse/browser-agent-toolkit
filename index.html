@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TODO app + OpenCode terminal, in the tab</title>
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; background: #fafafa; font: 13px/1.4 system-ui, sans-serif; }
+    /* The app fills the page; the terminal is a panel on its right edge that slides out of
+       the way and is as wide as it was dragged (--panel, kept per browser). */
+    body { display: flex; --panel: min(560px, 55vw); }
+    #app { flex: 1 1 0; min-width: 0; height: 100%; border: 0; background: #fff; }
+    #panel { position: relative; flex: 0 0 var(--panel); width: var(--panel); min-width: 0; height: 100%; display: flex; flex-direction: column; background: #16161d; color: #a6a69c; margin-right: 0; transition: margin-right .18s ease; }
+    body.closed #panel { margin-right: calc(-1 * var(--panel)); visibility: hidden; transition: margin-right .18s ease, visibility 0s .18s; }
+    body.dragging #panel { transition: none; }
+    /* While dragging, the pointer must not fall into the app's frame or the terminal. */
+    body.dragging #app, body.dragging #terminal { pointer-events: none; }
+    #grip { position: absolute; left: -4px; top: 0; bottom: 0; width: 9px; cursor: col-resize; z-index: 2; touch-action: none; }
+    #grip::after { content: ""; position: absolute; left: 4px; top: 0; bottom: 0; width: 1px; background: #363646; }
+    #grip:hover::after, body.dragging #grip::after { width: 3px; left: 3px; background: #7e9cd8; }
+    #panel > header { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border-bottom: 1px solid #363646; font: 12px ui-monospace, monospace; }
+    #panel > header span { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #panel > header .icon { flex: 0 0 auto; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; color: #a6a69c; background: none; }
+    #panel > header .icon:hover, #panel > header .icon[aria-expanded="true"] { color: #dcd7ba; background: #2a2a37; }
+    #panel > header .icon svg { width: 15px; height: 15px; }
+    /* The cog's form, over the top of the terminal (main.ts fills and applies it). */
+    #settings { position: absolute; top: 37px; right: 8px; z-index: 4; width: min(340px, calc(100% - 16px)); box-sizing: border-box; display: grid; gap: 10px; padding: 12px; background: #1f1f28; border: 1px solid #363646; border-radius: 6px; box-shadow: 0 8px 24px #0008; font: 12px ui-monospace, monospace; color: #dcd7ba; }
+    #settings[hidden] { display: none; }
+    #settings label { display: grid; gap: 3px; }
+    #settings small { color: #727169; font-size: 11px; }
+    #settings input { min-width: 0; font: inherit; color: #dcd7ba; background: #16161d; border: 1px solid #363646; border-radius: 4px; padding: 4px 6px; }
+    #settings input:focus-visible { outline: 1px solid #7e9cd8; }
+    #settings .row { display: flex; gap: 8px; justify-content: space-between; }
+    #settings button[name="apply"] { background: #2d4f67; border-color: #2d4f67; }
+    button { font: 12px ui-monospace, monospace; color: #dcd7ba; background: #16161d; border: 1px solid #363646; border-radius: 4px; padding: 3px 9px; cursor: pointer; }
+    #open { position: fixed; top: 8px; right: 8px; z-index: 3; display: none; }
+    body.closed #open { display: block; }
+    #body { position: relative; flex: 1 1 0; min-height: 0; }
+    #terminal { position: absolute; inset: 0; overflow: hidden; }
+    #terminal canvas { display: block; }
+    #status { position: absolute; inset: 0; margin: 0; padding: 12px; white-space: pre-wrap; pointer-events: none; font: 12px/1.5 ui-monospace, monospace; }
+    #status.error { color: #e06c75; }
+    /* Shown only while a sign-in waits for its loopback redirect (src/signin.ts). */
+    #signin { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 10px; border-bottom: 1px solid #363646; font: 12px ui-monospace, monospace; }
+    #signin[hidden] { display: none; }
+    #signin a { color: #7e9cd8; }
+    #signin input { flex: 1 1 180px; min-width: 0; font: inherit; color: #dcd7ba; background: #1f1f28; border: 1px solid #363646; border-radius: 4px; padding: 3px 6px; }
+    #signin.over > :not(output) { display: none; }
+    #signin output { flex: 1 0 100%; overflow-wrap: anywhere; }
+    #signin output:empty { display: none; }
+    #log { flex: 0 0 auto; border-top: 1px solid #363646; font: 12px ui-monospace, monospace; }
+    #log summary { padding: 4px 10px; cursor: pointer; user-select: none; }
+    #log pre { margin: 0; padding: 0 10px 8px; height: 26vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+    /* The public build's two lines about itself (main.ts shows them). */
+    #about { flex: 0 0 auto; margin: 0; padding: 5px 10px 6px; border-top: 1px solid #363646; font: 11px/1.45 ui-monospace, monospace; color: #727169; }
+    #about[hidden] { display: none; }
+    #about a { color: #7e9cd8; }
+    @media (max-width: 700px) { body { --panel: 100vw; } }
+  </style>
+</head>
+<body>
+  <iframe id="app" title="The TODO app, served by its dev server in this tab"></iframe>
+  <aside id="panel" aria-label="OpenCode terminal">
+    <div id="grip" role="separator" aria-orientation="vertical" aria-label="Resize the terminal panel" tabindex="0"></div>
+    <header>
+      <span id="title">OpenCode</span>
+      <a class="icon" href="https://github.com/kkrausse/browser-agent-toolkit" target="_blank" rel="noreferrer" title="Source on GitHub" aria-label="Source on GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2.1c-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.78 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.13v3.16c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg></a>
+      <button class="icon" id="cog" title="Settings" aria-label="Settings" aria-expanded="false" aria-controls="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
+      <button id="close" title="Hide the terminal (it keeps running)">Close</button>
+    </header>
+    <form id="settings" hidden>
+      <label>Relay (a Wisp server)<input name="wisp" autocomplete="off" spellcheck="false"><small>Carries the encrypted connection to the model. Empty for this page's default.</small></label>
+      <div class="row"><button type="button" name="reset" title="Forget this browser's source edits and sessions, then reload">Reset workspace</button><button name="apply">Apply and reload</button></div>
+    </form>
+    <form id="signin" hidden>
+      <a target="_blank" rel="noreferrer">Open the sign-in page</a>
+      <input name="callback" aria-label="The address the sign-in tab ended on" autocomplete="off" spellcheck="false">
+      <button>Finish sign-in</button>
+      <output></output>
+    </form>
+    <div id="body"><div id="terminal"></div><pre id="status">Starting…</pre></div>
+    <details id="log"><summary>OpenCode server output</summary><pre></pre></details>
+    <p id="about" hidden>Everything here runs in this tab: the app, its dev server and the agent. The model is OpenCode's free hosted one (to use your ChatGPT plan: ctrl+p, Connect an integration, OpenAI, sign in with a code); requests to either leave through a relay that carries only encrypted bytes. <a href="https://github.com/kkrausse/browser-agent-toolkit" target="_blank" rel="noreferrer">Source</a></p>
+  </aside>
+  <button id="open">OpenCode</button>
+  <script type="module" src="main.js"></script>
+</body>
+</html>
