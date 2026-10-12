@@ -30,8 +30,6 @@
 //   ?auto=<prompt>       type this prompt into the client and press Enter once it is up: with the next one, a state
 //                        of the page can be reached by its address alone, where nothing can tap or type (a simulator)
 //   ?closeAfter=<s>      close the terminal panel that many seconds after the terminal is up
-//   ?layout=old          the phone layout as it was before 2026-10-11 (the panel beside the app, which is then 0 px
-//                        wide until Close; nothing done on Close), to compare the two on a device
 //
 // The public build (`PUBLIC=1 bun run build`, a page for strangers) differs: with no `?model=`
 // the server has no provider of this page's and uses OpenCode's own hosted free models
@@ -171,32 +169,10 @@ document.querySelector('#title')!.textContent = `OpenCode · ${model ? `model ${
 }
 // What the public page says about itself; it names the free model, so not with a `?model=` of the visitor's.
 document.querySelector<HTMLElement>('#about')!.hidden = !isPublic || !!model
-/** The app's frame after the page around it changed: put the page back where it belongs (a
- * phone scrolls it towards a focused field, and `overflow: hidden` does not stop that), have
- * the frame laid out and painted again, and tell its window, which gets no `resize` of its
- * own when its size did not change. */
-const oldLayout = params.get('layout') === 'old'
-document.body.classList.toggle('flow', oldLayout)
-const settleFrame = () => {
-  if (oldLayout) return
-  const settle = () => {
-    if (scrollX || scrollY) scrollTo(0, 0)
-    document.documentElement.scrollLeft = document.documentElement.scrollTop = document.body.scrollLeft = document.body.scrollTop = 0
-    frame.style.transform = 'translateZ(0)'
-    void frame.offsetWidth
-    requestAnimationFrame(() => { frame.style.transform = '' })
-    try { frame.contentWindow?.dispatchEvent(new Event('resize')) } catch { /* not a document of ours */ }
-    window.dispatchEvent(new Event('resize'))
-  }
-  requestAnimationFrame(settle)
-  // Again once the slide of the wide layout and a phone's keyboard are done.
-  setTimeout(settle, 400)
-}
 const panel = installPanel({
   startClosed: params.get('panel') === 'closed',
-  keepFocus: oldLayout,
   onOpen: () => window.batTerminal.terminal?.display.focus(),
-  onChange: open => { diag.event('stage', `terminal panel ${open ? 'opened' : 'closed'}`); settleFrame() },
+  onChange: open => { diag.event('stage', `terminal panel ${open ? 'opened' : 'closed'}`) },
 })
 // Ctrl+Tab and Ctrl+Shift+Tab switch browser tabs. The terminal would take them (and cancel
 // the browser's handling) like any other key, so they are kept from it here.
@@ -331,7 +307,7 @@ async function main() {
   follow('app', appProcess, diag.panel)
   follow('opencode', serverProcess, true)
   const appUp = app.ready(lifetime.signal).then(() => { frame.src = app.url; diag.event('stage', 'the app\'s dev server listens: frame set') })
-  frame.addEventListener('load', () => { if (frame.src) { diag.event('stage', 'the app\'s frame loaded'); settleFrame() } })
+  frame.addEventListener('load', () => { if (frame.src) { diag.event('stage', 'the app\'s frame loaded') } })
   const serverUp = server.ready(lifetime.signal).then(() => serverHealthy(server, authorization, lifetime.signal))
   void Promise.allSettled([appUp, serverUp]).then(() => runtime.started?.())
   await serverUp
