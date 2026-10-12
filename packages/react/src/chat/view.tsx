@@ -567,6 +567,11 @@ export function ChatView({
           <Button onClick={() => controller.clearError()}>Dismiss</Button>
         </div>
       )}
+      {state.failure && (
+        <div className="oc-error" role="alert">
+          <span>{state.failure.message}</span>
+        </div>
+      )}
       <Transcript controller={controller} onOpenFile={onOpenFile} />
       <div className="oc-requests">
         {state.permissions.map((entry) => <PermissionCard key={entry.request.id} controller={controller} entry={entry} />)}

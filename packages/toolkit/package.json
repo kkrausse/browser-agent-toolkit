@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@opencode/client": "2.0.26",
     "fflate": "0.8.2",
     "ignore": "7.0.9"
   },

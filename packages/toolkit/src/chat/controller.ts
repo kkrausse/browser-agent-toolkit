@@ -1,697 +1,575 @@
-import { createChatAPI, type ChatAPI, type NativeEvent } from "./api";
-import { createV2SessionReducer } from "./vendor/reducer";
-import { questionFromForm, formAnswer } from "./forms";
-import { canSend, holdBlocker } from "./admission";
-import type { ChatController, ChatOptions, ChatSnapshot, ModelRef, QuestionRequest, QuestionAnswers } from "./types";
+// The chat controller: what a view (or a script) drives a conversation through.
+//
+// It owns no protocol logic of its own. The official client makes the requests
+// (./client.ts), the connection loop keeps one event stream alive (./connection.ts), the
+// reducer folds events into the state (./reduce.ts), sync decides what is read and when
+// (./sync.ts), and the store holds the result (./store.ts). What is here is intent: which
+// session is on screen, prompts and their optimistic rows, replies, the admission rules
+// (hold, pending session operations) and the flat snapshot the legacy view renders from.
+import {
+  isFormAlreadySettledError, isFormNotFoundError, isPermissionNotFoundError,
+  type FormInfo, type ModelRef, type OpenCodeEvent, type PermissionRequest, type SessionInboxInfo, type SessionInfo,
+} from '@opencode/client';
+import { canSend, holdBlocker } from './admission';
+import { prepareFiles, type PreparedFiles } from './attachments';
+import { createClient } from './client';
+import { createConnection } from './connection';
+import { formAnswer, questionFromForm, validateAnswer } from './forms';
+import { messageID } from './id';
+import { admit, retract } from './reduce';
+import { executionOf, familyOf, pendingPrompts } from './selectors';
+import { createStore, emptySession, initialState, type ChatState, type Message, type SessionState } from './store';
+import { createSync } from './sync';
+import type {
+  ChatController, ChatOptions, ChatSnapshot, FormAnswer, PromptDraft, QuestionAnswers, QuestionRequest, RequestState,
+} from './types';
 
 export { canSend };
 
-const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
-const asError = (e: unknown) => (e instanceof Error ? e : new Error(String(e)));
-type Message = ChatSnapshot["messages"][number];
-/** A sent message shown before the server has it, under a local id. `before` is the
- * transcript the send started from. */
-interface Provisional { id: string; text: string; before: readonly Message[]; inboxID?: string; delivered?: true }
-const isProvisional = (message: Message) => message.id.startsWith("provisional:");
-/** Text deltas are not persisted: a history snapshot taken mid-stream carries a
- * streaming part with less text than the events already delivered. A refresh keeps
- * the delivered text there, so what is on screen never shrinks. */
-function keepStreamed(snapshot: Message, shown: Message | undefined): Message {
-  if (snapshot.type !== "assistant" || shown?.type !== "assistant" || snapshot.time.completed) return snapshot;
-  return {
-    ...snapshot,
-    content: snapshot.content.map((part, i) => {
-      const live = shown.content[i];
-      return (part.type === "text" || part.type === "reasoning") && live?.type === part.type &&
-        live.text.length > part.text.length && live.text.startsWith(part.text)
-        ? { ...part, text: live.text } : part;
-    }),
-  };
-}
-function freeze<T>(value: T): T {
-  if (value && typeof value === "object" && !Object.isFrozen(value)) {
-    Object.freeze(value);
-    for (const item of Object.values(value)) freeze(item);
-  }
-  return value;
-}
-/** A nested abort scope: aborting the parent aborts the child. */
-function child(parent: AbortController): AbortController {
-  const scope = new AbortController();
-  if (parent.signal.aborted) scope.abort(parent.signal.reason);
-  else parent.signal.addEventListener("abort", () => scope.abort(parent.signal.reason), { once: true, signal: scope.signal });
-  return scope;
-}
-const stopped = () => new DOMException("Chat request was superseded", "AbortError");
+const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+const asError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)));
+const stopped = () => new DOMException('Chat controller is disposed', 'AbortError');
+/** The request was answered, or withdrawn, by someone else: there is nothing left to do. */
+const settledElsewhere = (error: unknown) => isPermissionNotFoundError(error) || isFormNotFoundError(error) || isFormAlreadySettledError(error);
 
-/**
- * Owns only its local state and injected HTTP requests. Creation never creates a session
- * by default. Three nested abort scopes own all request work: the controller's lifetime,
- * the current event connection, and the current session selection. Results that arrive
- * for a superseded connection or selection are dropped (`valid`).
- */
+/** Root sessions, newest first. */
+function rootsOf(state: ChatState): SessionInfo[] {
+  const roots: SessionInfo[] = [];
+  for (const session of Object.values(state.sessions)) if (session.info && !session.info.parentID) roots.push(session.info);
+  return roots.sort((a, b) => b.time.created - a.time.created || (a.id < b.id ? 1 : -1));
+}
+const sameItems = <A>(a: readonly A[], b: readonly A[]) => a.length === b.length && a.every((item, index) => item === b[index]);
+
 export function createChatController(options: ChatOptions): ChatController {
-  if (!options.directory?.trim()) throw new Error("Caller directory is required");
+  if (!options.directory?.trim()) throw new Error('Caller directory is required');
   // Observation only: an observer must never break chat.
   const diagnostic = (event: string, data?: Record<string, unknown>) => {
     try { options.onDiagnostic?.(event, data); } catch { /* observer failure */ }
   };
-  // Everything this client started and has not seen finish; dispose joins it.
-  const pending = new Set<Promise<unknown>>();
+  const milestone = (stage: string, data?: Record<string, unknown>) => diagnostic('chat.connect', { stage, ...data });
+  // Every request this client started and has not seen finish; dispose joins them.
+  const requests = new Set<Promise<unknown>>();
   const track = <A>(promise: Promise<A>): Promise<A> => {
-    pending.add(promise);
-    void promise.then(() => pending.delete(promise), () => pending.delete(promise));
+    requests.add(promise);
+    void promise.then(() => requests.delete(promise), () => requests.delete(promise));
     return promise;
   };
-  const api: ChatAPI = createChatAPI({ fetch: (path, init) => track(options.endpoint.fetch(path, init)) }, options.directory);
   const lifetime = new AbortController();
-  const reducer = createV2SessionReducer();
-  let state: ChatSnapshot = freeze({
-    connection: "connecting",
-    sessionID: options.sessionID,
-    draftKey: options.sessionID ? `session:${options.sessionID}` : undefined,
-    sessions: [],
-    models: [],
-    messages: [],
-    execution: "unknown",
-    interruptRequested: false,
-    sending: false,
-    loading: true,
-    loadingOlder: false,
-    hasOlder: false,
-    permissions: [],
-    questions: [],
-    unsupportedForms: [],
-  });
-  const listeners = new Set<() => void>();
-  let disposed = false, generation = 0, selection = 0, revision = 0;
-  let connection = child(lifetime), selectionScope = child(connection);
-  let older: string | undefined | null, hydration: Promise<void> | undefined;
-  // The first page of this selection has been walked back to the start of history.
-  let reachedStart = false;
-  let requestEvents: NativeEvent[] = [];
-  // While a history request is in flight: messages changed by live events, and
-  // whether a refresh was asked for that this request may be too old to satisfy.
-  const live = new Set<string>();
-  let stale = false;
-  let provisional: Provisional[] = [];
-  // Deliveries seen while a prompt response is outstanding: its inbox id is not known yet.
-  const deliveredEarly = new Set<string>();
-  const answered = new Set<string>();
-  const dismissing = new Set<string>();
-  let recovery: ReturnType<typeof setTimeout> | undefined;
-  let settling: symbol | undefined;
+  const signal = lifetime.signal;
+  const handshake = options.handshakeTimeoutMs ?? 15_000;
+  const client = createClient(options.endpoint, track);
+  const store = createStore<ChatState>(initialState(options.sessionID));
+  let disposed = false, disposal: Promise<void> | undefined;
+  // The pending session operation (create, model switch). The state's flag is its shadow.
   let mutation: symbol | undefined;
+  // Counts selections, so work started for one is dropped when another replaced it.
+  let selection = 0;
   let draftSequence = 0;
   const draftKeys = new Map<string, string>();
   // Untitled sessions this controller created that nothing has been sent to.
   const unsent = new Set<string>();
-  let disposal: Promise<void> | undefined;
+  // `startNewSession` is honoured once, at the first choice of a session.
+  let opened = !!options.sessionID;
+  let choosing: Promise<void> | undefined;
+  // Prompts of one session reach the server in the order they were sent.
+  const chains = new Map<string, Promise<unknown>>();
   // The latest send's timeline, joined by `send`. Ids, lengths and timings only.
   let sent: { send: string; sessionID: string; at: number; event?: true; text?: true } | undefined;
   let sendSequence = 0;
   const sendStage = (timeline: NonNullable<typeof sent>, event: string, data?: Record<string, unknown>) =>
     diagnostic(event, { sessionID: timeline.sessionID, send: timeline.send, elapsedMs: Math.round(performance.now() - timeline.at), ...data });
-  // `mutation` is the only record of a pending session operation. The snapshot
-  // flag is stamped on every publish so the two cannot drift.
-  const publish = (patch: Partial<Omit<ChatSnapshot, "sessionOperationPending">>) => {
-    if (disposed) return;
-    state = freeze({ ...state, ...patch, sessionOperationPending: !!mutation });
-    for (const listener of listeners) listener();
+
+  const check = () => { if (disposed) throw new Error('Chat controller is disposed'); };
+  const patch = (change: Partial<ChatState>) => store.update(state => ({ ...state, ...change }));
+  const setMutation = (token: symbol | undefined) => {
+    mutation = token;
+    if (store.get().sessionOperationPending !== !!token) patch({ sessionOperationPending: !!token });
   };
-  const check = () => {
-    if (disposed) throw new Error("Chat controller is disposed");
-  };
+  const editSession = (id: string, edit: (session: SessionState) => SessionState) => store.update(state => {
+    const before = state.sessions[id] ?? emptySession(id);
+    const after = edit(before);
+    return after === before && state.sessions[id] ? state : { ...state, sessions: { ...state.sessions, [id]: after } };
+  });
   const currentSession = () => {
-    if (!state.sessionID) throw new Error("Select a session first");
-    return state.sessionID;
+    const id = store.get().sessionID;
+    if (!id) throw new Error('Select a session first');
+    return id;
   };
-  const valid = (g: number, s: number) => !disposed && g === generation && s === selection;
-  /** Background work: its failure is published, unless it was superseded. */
-  const background = (work: Promise<unknown>, g: number, s: number, signal: AbortSignal) =>
-    void track(work.catch(error => {
-      if (valid(g, s) && !signal.aborted) publish({ error: errorText(error) });
-    }));
-  /** The public boundary. `start` runs its synchronous admission immediately; a failure
-   * of the selection it leaves in place is published as the snapshot error. */
+  /** The public boundary: a failure is the snapshot's error as well as the rejection. */
   const run = <A>(start: () => Promise<A>): Promise<A> => {
-    if (disposed) return Promise.reject(new Error("Chat controller is disposed"));
+    if (disposed) return Promise.reject(new Error('Chat controller is disposed'));
     let work: Promise<A>;
     try { work = start(); } catch (error) { return Promise.reject(asError(error)); }
-    const g = generation, s = selection, signal = selectionScope.signal;
     return track(work.catch(error => {
-      if (valid(g, s) && !signal.aborted) publish({ error: errorText(error) });
+      if (!disposed) patch({ error: errorText(error) });
       throw asError(error);
     }));
   };
-  function recover() {
-    if (hydration) stale = true;
-    if (disposed || recovery || state.connection !== "connected") return;
-    const g = generation, s = selection, signal = selectionScope.signal;
-    recovery = setTimeout(() => {
-      recovery = undefined;
-      if (valid(g, s) && !signal.aborted) background(hydrate(), g, s, signal);
-    }, 120);
-  }
-  // A finished run's last content and its idle row only arrive with a history
-  // refresh. Idle is published after that refresh, so the chat never reads Ready
-  // before the answer is in the transcript. The event stays authoritative: idle
-  // follows even when the refresh fails, unless a newer run started meanwhile.
-  function settle() {
-    if (disposed) return;
-    const g = generation, s = selection, signal = selectionScope.signal, token = (settling = Symbol());
-    background((async () => {
-      try {
-        // A request already in flight may predate the end of the run.
-        if (hydration) await hydration.catch(() => {});
-        await hydrate();
-      } finally {
-        if (valid(g, s) && settling === token) {
-          settling = undefined;
-          publish({ execution: "idle", interruptRequested: false });
-        }
-      }
-    })(), g, s, signal);
-  }
-  /** One history refresh at a time; a second caller joins the one in flight. */
-  function hydrate(): Promise<void> {
-    if (hydration) return hydration;
-    if (!state.sessionID) return Promise.resolve();
-    const g = generation, s = selection, rev = revision, id = state.sessionID, signal = selectionScope.signal;
-    requestEvents = [];
-    live.clear();
-    stale = false;
-    const delivered = new Set(provisional.filter((p) => p.delivered).map((p) => p.id));
-    const task: Promise<void> = (async () => {
-      const [page, permissions, forms, active] = await Promise.all([
-        api.messages(id, { order: "desc", limit: options.pageSize ?? 50 }, signal),
-        api.permissions(id, signal), api.forms(id, signal), api.active(signal),
-      ]);
-      if (!valid(g, s)) return;
-      // HTTP snapshots have no shared SSE cursor. Never replay overlapping deltas:
-      // they may already be persisted. Refetch after the overlap instead.
-      const messages = [...page.data].reverse();
-      const ids = new Set(messages.map((m) => m.id));
-      // A provisional message gives way to this page when the page holds its persisted
-      // message: the one under its inbox id if the server kept that id, otherwise a
-      // user message with the same text that the transcript did not have when the send
-      // began (the persisted id need not be the inbox id, and carries no reference to
-      // it). A page requested after `session.inbox.delivered` named its inbox id is
-      // authoritative either way. Until then it stays, below everything in the page;
-      // its client-clock timestamp never makes it older history.
-      const claimed = new Set<string>();
-      provisional = provisional.filter((p) => {
-        const persisted = messages.find((m) => m.type === "user" && !claimed.has(m.id) &&
-          (m.id === p.inboxID || (m.text === p.text && !p.before.some((b) => b.id === m.id))));
-        if (persisted) claimed.add(persisted.id);
-        return !persisted && !delivered.has(p.id);
-      });
-      const unsettled = new Set(provisional.map((p) => p.id));
-      const prefix = state.messages.filter((m) => !ids.has(m.id) && !isProvisional(m));
-      const first = messages[0]?.time.created ?? 0;
-      const previous = prefix.filter((m) => m.time.created < first);
-      // The server returns a cursor for every non-empty page. Once the start of
-      // history is known, a refresh has nothing older to look for.
-      if (!previous.length && !reachedStart) older = page.cursor.next;
-      // Events kept arriving while this page was in flight and it may predate them:
-      // a message they changed, or created, stays as the events left it.
-      const shown = new Map(state.messages.map((m) => [m.id, m]));
-      publish({
-        messages: [
-          ...previous,
-          ...messages.map((m) => (live.has(m.id) && shown.get(m.id)) || keepStreamed(m, shown.get(m.id))),
-          // In the order shown: a reply that began streaming stays below its prompt.
-          ...state.messages.filter((m) => unsettled.has(m.id) ||
-            (live.has(m.id) && prefix.includes(m) && !previous.includes(m))),
-        ],
-        hasOlder: !!older,
-        permissions: permissions
-          .filter((r) => !answered.has(`permission:${r.id}`))
-          .map((request) => ({ submitting: false, ...state.permissions.find((p) => p.request.id === request.id), request })),
-        unsupportedForms: forms.filter(f => !answered.has(`question:${f.id}`) && !questionFromForm(f)),
-        questions: forms.flatMap(f => { const q = questionFromForm(f); return q ? [q] : []; })
-          .filter((r) => !answered.has(`question:${r.id}`))
-          .map((request) => ({ submitting: false, ...state.questions.find((p) => p.request.id === request.id), request })),
-        // Events own a known execution state; an unknown one has nothing to protect.
-        ...(revision === rev || state.execution === "unknown"
-          ? { execution: active[id] ? ("running" as const) : ("idle" as const), ...(!active[id] ? { interruptRequested: false } : {}) }
-          : {}),
-        loading: false,
-      });
-      if (older) {
-        publish({ loadingOlder: true });
-        try { await drainOlder(g, s, signal); }
-        finally { if (valid(g, s)) publish({ loadingOlder: false }); }
-      }
-      reachedStart = !older;
-      for (const e of requestEvents) requestEvent(e);
-      if (stale) recover();
-    })();
-    const joined = task.finally(() => {
-      if (hydration === joined) hydration = undefined;
+  function until(test: (state: ChatState) => boolean, limit: number, why: () => string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (test(store.get())) { resolve(); return; }
+      const finish = (error?: Error) => {
+        clearTimeout(timer);
+        unsubscribe();
+        signal.removeEventListener('abort', aborted);
+        if (error) reject(error); else resolve();
+      };
+      const aborted = () => finish(new Error('Chat controller is disposed'));
+      const unsubscribe = store.subscribe(() => { if (test(store.get())) finish(); });
+      const timer = setTimeout(() => finish(new Error(why())), limit);
+      signal.addEventListener('abort', aborted, { once: true });
     });
-    void joined.catch(() => {});
-    hydration = joined;
-    return joined;
   }
-  function requestEvent(e: NativeEvent) {
-    if (e.type === "permission.asked")
-      publish({ permissions: [...state.permissions.filter((p) => p.request.id !== e.data.id), { request: e.data, submitting: false }] });
-    if (e.type === "form.created") {
-      const form = e.data.form;
-      const request = questionFromForm(form);
-      if (answered.has(`question:${form.id}`)) return;
-      if (request) publish({ questions: [...state.questions.filter((p) => p.request.id !== form.id), { request, submitting: false }] });
-      else publish({ unsupportedForms: [...state.unsupportedForms.filter(f => f.id !== form.id), form] });
+
+  // ---- events ---------------------------------------------------------------
+
+  function onBatch(touched: ReadonlySet<string>, events: readonly OpenCodeEvent[]) {
+    const state = store.get();
+    // An interrupt is over when its session stopped.
+    if (state.interrupting.some(id => state.sessions[id]?.status !== 'running'))
+      patch({ interrupting: state.interrupting.filter(id => state.sessions[id]?.status === 'running') });
+    // An answer's failure is forgotten with the request it was for.
+    const replied = Object.keys(state.replies);
+    if (replied.length) {
+      const pending = new Set<string>();
+      for (const session of Object.values(state.sessions)) {
+        for (const request of session.permissions) pending.add(request.id);
+        for (const form of session.forms) pending.add(form.id);
+      }
+      if (replied.some(id => !pending.has(id) && !state.replies[id]!.submitting))
+        patch({ replies: Object.fromEntries(Object.entries(state.replies).filter(([id, reply]) => pending.has(id) || reply.submitting)) });
     }
-    if (e.type === "permission.replied") {
-      answered.add(`permission:${e.data.requestID}`);
-      publish({ permissions: state.permissions.filter((p) => p.request.id !== e.data.requestID) });
-    }
-    if (e.type === "form.replied" || e.type === "form.cancelled") {
-      answered.add(`question:${e.data.id}`);
-      publish({
-        unsupportedForms: state.unsupportedForms.filter(f => f.id !== e.data.id),
-        questions: state.questions.filter((p) => p.request.id !== e.data.id),
-      });
-    }
-  }
-  function event(e: NativeEvent) {
-    if (e.type === "session.renamed") {
-      publish({ sessions: state.sessions.map(session => session.id === e.data.sessionID ? { ...session, title: e.data.title } : session) });
-      return;
-    }
-    const sessionID = e.type === "form.created" ? e.data.form.sessionID :
-      "sessionID" in e.data ? e.data.sessionID : undefined;
-    if (!sessionID || sessionID !== state.sessionID) return;
-    revision++;
-    requestEvent(e);
-    if (hydration && /^(permission|form)\./.test(e.type)) requestEvents.push(e);
-    if (e.type === "session.execution.started") {
-      settling = undefined;
-      publish({ execution: "running" });
-    }
-    if (e.type === "session.retry.scheduled") {
-      settling = undefined;
-      publish({ execution: "retrying" });
-    }
-    if (e.type === "session.status") {
-      if (e.data.status.type === "idle") settle();
-      else {
-        settling = undefined;
-        publish({ execution: e.data.status.type === "retry" ? "retrying" : "running" });
+    const timeline = sent;
+    if (!timeline || (timeline.event && timeline.text) || !touched.has(timeline.sessionID)) return;
+    for (const event of events) {
+      const data = (event as { data?: { sessionID?: unknown; assistantMessageID?: unknown } }).data;
+      if (data?.sessionID !== timeline.sessionID || typeof data.assistantMessageID !== 'string') continue;
+      if (!timeline.event) {
+        timeline.event = true;
+        sendStage(timeline, 'chat.reply.first-event', { type: event.type });
+      }
+      if (!timeline.text && event.type === 'session.text.delta') {
+        timeline.text = true;
+        sendStage(timeline, 'chat.reply.first-text');
       }
     }
-    if (e.type === "session.model.selected") publish({ model: e.data.model });
-    if (e.type === "session.inbox.delivered") {
-      const entry = provisional.find((p) => p.inboxID === e.data.inboxID);
-      if (entry) entry.delivered = true;
-      else if (provisional.some((p) => !p.inboxID)) deliveredEarly.add(e.data.inboxID);
-    }
-    if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(e.type)) {
-      if ("error" in e.data) publish({ error: errorText(JSON.stringify(e.data.error)) });
-      settle();
-    }
-    const before = state.messages;
-    const reduced = reducer.reduce(before, e);
-    if (reduced?.touched.length) publish({ messages: reduced.messages });
-    const timeline = sent?.sessionID === sessionID ? sent : undefined;
-    if (timeline && !timeline.event && "assistantMessageID" in e.data) {
-      timeline.event = true;
-      sendStage(timeline, "chat.reply.first-event", { type: e.type });
-    }
-    if (timeline && !timeline.text && e.type === "session.text.delta" && reduced?.touched.length) {
-      timeline.text = true;
-      sendStage(timeline, "chat.reply.first-text");
-    }
-    // Events are never held back for a history request: a long answer keeps
-    // streaming. What an event changed outlives the page in flight; an event that
-    // changed nothing here is covered by a refresh after it.
-    if (hydration) {
-      if (reduced?.touched.length) for (const id of reduced.touched) live.add(id);
-      else recover();
-    }
-    if (reduced && "assistantMessageID" in e.data && /\.(delta|success|failed)$/.test(e.type)) {
-      const id = e.data.assistantMessageID,
-        old = before.find((m) => m.id === id),
-        next = reduced.messages.find((m) => m.id === id);
-      if (old?.type === "assistant" && next?.type === "assistant" && old.content.every((p, i) => next.content[i] === p)) recover();
-    }
-    if (reduced?.missing || (reduced && !reduced.touched.length && "assistantMessageID" in e.data)) recover();
-    if (e.type === "session.inbox.delivered" || e.type === "session.instructions.updated" ||
-        e.type === "session.moved" || e.type === "session.model.selected") recover();
-    if (/^session\.(text|reasoning|tool\.input)\.ended$/.test(e.type) || e.type === "session.step.ended") recover();
   }
-  // Selection is user intent, not asynchronous request work. Publish before the
-  // public call returns, so the next input event cannot address the old draft.
-  // The returned promise is the first history load of the new selection.
-  function selectSession(id: string | undefined, draftKey?: string, preserveMutation = false): Promise<void> {
+
+  const sync = createSync({
+    client, store, directory: options.directory, pageSize: options.pageSize ?? 50, onBatch,
+    onError: error => { if (!disposed) patch({ error: errorText(error) }); },
+  });
+  const connection = createConnection(client, {
+    ...options.connection,
+    firstConnectTimeout: handshake,
+    onEvents: sync.events,
+    onState(next) {
+      if (disposed) return;
+      store.batch(() => {
+        if (next.status !== 'connected') {
+          sync.offline();
+          // What was asked of the old connection's server state is unknown now.
+          if (store.get().interrupting.length) patch({ interrupting: [] });
+        }
+        patch({ connection: next });
+      });
+      if (next.status === 'connected') milestone('handshake');
+    },
+  });
+  // The catalog arrives on every connection; a session is chosen when none is selected.
+  store.select(state => state.ready && state.connection.status === 'connected', ready => {
+    if (!ready || disposed) return;
+    const state = store.get();
+    milestone('catalog', { sessions: rootsOf(state).length, models: state.models.length });
+    void choose().catch(error => { if (!disposed) patch({ error: errorText(error) }); });
+  });
+
+  // ---- sessions -------------------------------------------------------------
+
+  /** What a session keeps when it leaves the screen: who it is and what it asks, not its transcript. */
+  const evicted = (session: SessionState): SessionState => ({
+    ...emptySession(session.id), info: session.info, parentID: session.parentID, status: session.status,
+    permissions: session.permissions, forms: session.forms, seq: session.seq,
+  });
+  // Selection is user intent, not asynchronous request work: the state changes before the
+  // call returns, so the next input event cannot address the old draft. The returned
+  // promise is the first read of the new selection's transcript.
+  function select(id: string | undefined, draftKey?: string, preserveMutation = false): Promise<void> {
     check();
-    const previous = selectionScope;
-    selectionScope = child(connection);
     selection++;
-    hydration = undefined;
-    if (!preserveMutation) mutation = undefined;
-    clearTimeout(recovery);
-    recovery = undefined;
-    if (state.sessionID) reducer.clear(state.sessionID);
-    answered.clear();
-    provisional = [];
-    deliveredEarly.clear();
-    older = undefined;
-    reachedStart = false;
-    publish({
-      sessionID: id,
-      draftKey: draftKey ?? (id ? draftKeys.get(id) ?? `session:${id}` : undefined),
-      model: state.sessions.find((s) => s.id === id)?.model,
-      messages: [],
-      permissions: [],
-      questions: [],
-      unsupportedForms: [],
-      loading: !!id || !!mutation,
-      loadingOlder: false,
-      hasOlder: false,
-      execution: id || mutation ? "unknown" : "idle",
-      sending: false,
-      interruptRequested: false,
+    opened = true;
+    if (!preserveMutation) setMutation(undefined);
+    store.update(state => {
+      const keep = new Set(id ? familyOf(state, id) : []);
+      const sessions: Record<string, SessionState> = {};
+      for (const [key, session] of Object.entries(state.sessions))
+        sessions[key] = keep.has(key) || key === 'global' || session.outbox.length || (!session.loaded && !session.order.length) ? session : evicted(session);
+      return { ...state, sessions, sessionID: id, draftKey: draftKey ?? (id ? draftKeys.get(id) ?? `session:${id}` : undefined) };
     });
-    previous.abort(stopped());
-    const g = generation, s = selection;
-    return hydrate().finally(() => {
-      if (valid(g, s)) publish({ loading: false });
-    });
+    sync.unwatch(id);
+    return id ? sync.watch(id) : Promise.resolve();
   }
-  async function reconnect(): Promise<void> {
-    check();
-    generation++;
-    const previous = connection;
-    connection = child(lifetime);
-    selectionScope = child(connection);
-    mutation = undefined;
-    hydration = undefined;
-    clearTimeout(recovery);
-    recovery = undefined;
-    const g = generation, scope = connection, selectionAtStart = selection;
-    // Milestones for stage timing; observation only.
-    const milestone = (stage: string, data?: Record<string, unknown>) => diagnostic("chat.connect", { stage, ...data });
-    milestone("requested");
-    if (state.sessionID) reducer.clear(state.sessionID);
-    // A send cut off by the reconnect is not known to be accepted; history decides.
-    provisional = [];
-    deliveredEarly.clear();
-    publish({
-      connection: "connecting",
-      messages: state.messages.filter((m) => !isProvisional(m)),
-      loading: true,
-      error: undefined,
-      execution: "unknown",
-      sending: false,
-    });
-    previous.abort(stopped());
-    try {
-      let connected!: () => void, failed!: (error: unknown) => void;
-      const marker = new Promise<void>((resolve, reject) => { connected = resolve; failed = reject; });
-      void marker.catch(() => {});
-      void track((async () => {
-        try {
-          for await (const e of api.events(scope.signal)) {
-            if (g !== generation || disposed) return;
-            if (e.type === "server.connected") connected();
-            event(e);
-          }
-          throw new Error("OpenCode event connection closed. Reconnect to reload history.");
-        } catch (error) {
-          failed(error);
-          if (g !== generation || disposed || scope.signal.aborted) return;
-          publish({ connection: "disconnected", execution: "unknown", loading: false, error: errorText(error) });
-          scope.abort(stopped());
-        }
-      })());
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      await Promise.race([marker, new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("OpenCode event handshake timed out")), options.handshakeTimeoutMs ?? 15000);
-      })]).finally(() => clearTimeout(timer));
-      milestone("handshake");
-      const [sessions, models] = await Promise.all([api.list(scope.signal), api.models(scope.signal)]);
-      milestone("catalog", { sessions: sessions.length, models: models.length });
-      // models() awaits plugin activation before resolving the same location's default.
-      const defaultModel = await api.defaultModel(scope.signal);
-      milestone("default-model");
-      if (g !== generation || disposed) return;
-      publish({ sessions, models, defaultModel, connection: "connected" });
-      if (selection !== selectionAtStart) return;
-      const id = state.sessionID ?? sessions[0]?.id;
-      if (options.startNewSession && !state.sessionID) {
+  /** With the catalog read and nothing selected: the latest conversation, or a new one. */
+  function choose(): Promise<void> {
+    return choosing ??= (async () => {
+      const state = store.get();
+      if (state.sessionID || mutation) return;
+      const latest = rootsOf(state)[0]?.id, at = selection;
+      if (options.startNewSession && !opened) {
         // The chat an earlier open created and nobody wrote in is as new as a new one:
         // without this every open leaves one more empty session in the list.
-        if (sessions[0]) await selectSession(sessions[0].id);
-        if (!sessions[0] || state.messages.length || state.hasOlder) await createSession();
+        if (latest) await select(latest);
+        if (selection !== at + (latest ? 1 : 0)) return;
+        const session = latest ? store.get().sessions[latest] : undefined;
+        if (!session || session.order.length || session.older) await createSession();
       }
-      else if (id) await selectSession(id);
+      else if (latest) await select(latest);
       else if (options.autoCreateSession) await createSession();
-      else publish({ loading: false, execution: "idle" });
-      milestone("session", { messages: state.messages.length });
-    } catch (error) {
-      if (g === generation && !disposed) {
-        publish({ connection: "disconnected", loading: false, error: state.error ?? errorText(error) });
-        scope.abort(stopped());
-      }
-      throw error;
-    }
-  }
-  async function reply(kind: "permission" | "question", id: string, submit: (sessionID: string, signal: AbortSignal) => Promise<void>) {
-    const list = kind === "permission" ? state.permissions : state.questions;
-    const entry = list.find((p) => p.request.id === id);
-    if (!entry) throw new Error("Request is no longer pending");
-    if (entry.submitting) throw new Error("Response is already submitting");
-    const g = generation, s = selection, signal = selectionScope.signal;
-    const update = (error?: string, submitting = false, remove = false) => {
-      if (!valid(g, s)) return;
-      if (kind === "permission")
-        publish({ permissions: state.permissions.flatMap((p) => p.request.id !== id ? [p] : remove ? [] : [{ ...p, error, submitting }]) });
-      else
-        publish({ questions: state.questions.flatMap((p) => p.request.id !== id ? [p] : remove ? [] : [{ ...p, error, submitting }]) });
-    };
-    update(undefined, true);
-    try { await submit(currentSession(), signal); }
-    catch (error) { update(errorText(error)); throw error; }
-    if (valid(g, s)) answered.add(`${kind}:${id}`);
-    update(undefined, false, true);
+      milestone('session', { messages: store.get().sessions[store.get().sessionID ?? '']?.order.length ?? 0 });
+    })().finally(() => { choosing = undefined; });
   }
   function createSession(title?: string): Promise<string> {
     check();
-    if (mutation) return Promise.reject(new Error("A session operation is pending"));
+    if (mutation) return Promise.reject(new Error('A session operation is pending'));
+    const state = store.get();
     // New chat must not leave a trail of empty sessions: go back to the one already
     // created and never written to, with its draft, instead of creating another.
-    const empty = title === undefined ? state.sessions.find(session => unsent.has(session.id))?.id : undefined;
-    if (empty) return empty === state.sessionID ? Promise.resolve(empty) : selectSession(empty).then(() => empty);
-    const token = (mutation = Symbol());
+    const empty = title === undefined ? rootsOf(state).find(session => unsent.has(session.id))?.id : undefined;
+    if (empty) return empty === state.sessionID ? Promise.resolve(empty) : select(empty).then(() => empty);
+    const token = Symbol();
     // Admission is synchronous. Retry retains the uncreated draft; a new intent from a
     // real session allocates a fresh key.
     const key = !state.sessionID && state.draftKey ? state.draftKey : `new:${++draftSequence}`;
-    const transition = selectSession(undefined, key, true);
-    const g = generation, s = selection, signal = selectionScope.signal;
+    void select(undefined, key);
+    setMutation(token);
+    const at = selection;
     return (async () => {
       try {
-        await transition;
-        if (!valid(g, s) || mutation !== token) throw new Error("Session creation was abandoned");
         // A custom title suppresses OpenCode's automatic first-prompt naming.
-        const session = await api.create(title, signal);
+        const session = await client.session.create({ ...(title === undefined ? {} : { title }), location: { directory: options.directory } }, { signal });
         if (title === undefined) unsent.add(session.id);
-        if (valid(g, s)) {
-          draftKeys.set(session.id, key);
-          publish({ sessions: [session, ...state.sessions] });
-          await selectSession(session.id, key, true);
-        }
+        draftKeys.set(session.id, key);
+        // Created here and now: it is empty, and its events are its whole transcript.
+        editSession(session.id, current => ({ ...current, info: current.info ?? session, parentID: session.parentID ?? undefined, status: current.status === 'unknown' ? 'idle' : current.status, loaded: true }));
+        if (!disposed && selection === at && mutation === token) await select(session.id, key, true);
         return session.id;
       } finally {
-        if (mutation === token) {
-          mutation = undefined;
-          publish({ loading: false });
-        }
+        if (mutation === token) setMutation(undefined);
       }
     })();
   }
-  async function drainOlder(g: number, s: number, signal: AbortSignal) {
-    const cursors = new Set<string>();
-    while (older && valid(g, s)) {
-      const cursor = older;
-      cursors.add(cursor);
-      const page = await api.messages(currentSession(), { cursor, limit: options.pageSize ?? 50 }, signal);
-      if (!valid(g, s)) return;
-      if (page.cursor.next && cursors.has(page.cursor.next)) {
-        older = undefined;
-        publish({ hasOlder: false });
-        throw new Error("Repeated history cursor");
-      }
-      older = page.cursor.next;
-      const ids = new Set(state.messages.map((m) => m.id));
-      publish({
-        messages: [...page.data].reverse().filter((m) => !ids.has(m.id)).concat([...state.messages]),
-        hasOlder: !!older,
-      });
-    }
+  /** Connected, catalog read, a session chosen and its transcript here. */
+  async function established() {
+    await until(state => state.connection.status === 'connected' && state.ready, handshake,
+      () => store.get().connection.error ?? 'OpenCode event handshake timed out');
+    await choose();
+    const id = store.get().sessionID;
+    if (id && !store.get().sessions[id]?.loaded) await sync.watch(id);
   }
-  async function loadOlder() {
-    if (!older || state.loadingOlder || hydration) return;
-    const g = generation, s = selection, signal = selectionScope.signal;
-    publish({ loadingOlder: true });
-    try { await drainOlder(g, s, signal); }
-    finally { if (valid(g, s)) publish({ loadingOlder: false }); }
+  function reconnect(): Promise<void> {
+    check();
+    setMutation(undefined);
+    milestone('requested');
+    patch({ error: undefined });
+    connection.stop();
+    void connection.start();
+    return established();
   }
-  async function send(draft: { text: string }) {
-    if (!draft.text.trim()) throw new Error("Enter a message");
-    if (!canSend(state)) throw new Error("Chat is not ready to send");
-    const g = generation, s = selection, id = currentSession(), signal = selectionScope.signal;
-    const timeline = (sent = { send: `${Date.now().toString(36)}-${++sendSequence}`, sessionID: id, at: performance.now() });
-    sendStage(timeline, "chat.send.clicked", { length: draft.text.length });
-    // Shown at once, in the shape of the persisted user message that replaces it.
-    const entry: Provisional = { id: `provisional:${timeline.send}`, text: draft.text, before: state.messages };
-    provisional.push(entry);
-    publish({
-      sending: true,
-      error: undefined,
-      messages: [...state.messages, { id: entry.id, type: "user", text: draft.text, time: { created: Date.now() } }],
+
+  // ---- prompts --------------------------------------------------------------
+
+  function modelOf(sessionID: string) {
+    const state = store.get(), ref = state.sessions[sessionID]?.info?.model ?? state.defaultModel;
+    return ref ? state.models.find(model => model.id === ref.id && model.providerID === ref.providerID) : undefined;
+  }
+  function send(draft: PromptDraft): Promise<string> {
+    const sessionID = draft.sessionID ?? currentSession();
+    if (!draft.text.trim() && !draft.files?.length) throw new Error('Enter a message');
+    const id = messageID(), delivery = draft.delivery ?? 'steer';
+    const timeline = (sent = { send: `${Date.now().toString(36)}-${++sendSequence}`, sessionID, at: performance.now() });
+    sendStage(timeline, 'chat.send.clicked', { length: draft.text.length, files: draft.files?.length ?? 0, delivery });
+    // Before the request: a prompt whose response is lost may still be accepted.
+    unsent.delete(sessionID);
+    // Shown at once, under the id the server will keep, in the shape of the pending prompt
+    // the server's answer replaces it with.
+    const optimistic: SessionInboxInfo = { id, sessionID, type: 'user', payload: { text: draft.text }, delivery, time: { created: Date.now() } };
+    store.batch(() => {
+      patch({ sending: store.get().sending + 1, error: undefined });
+      editSession(sessionID, session => ({ ...admit(session, optimistic), outbox: [...session.outbox, id] }));
     });
-    try {
-      // Before the request: a prompt whose response is lost may still be accepted.
-      unsent.delete(id);
-      const inbox = await api.prompt(id, draft.text, signal).catch(error => {
-        sendStage(timeline, "chat.send.rejected", { interrupted: signal.aborted });
-        // Withdrawn; the caller still holds the text. A changed selection already dropped it.
-        provisional = provisional.filter((p) => p !== entry);
-        if (state.messages.some((m) => m.id === entry.id)) publish({ messages: state.messages.filter((m) => m.id !== entry.id) });
-        throw error;
-      });
-      sendStage(timeline, "chat.send.accepted");
-      entry.inboxID = inbox.id;
-      if (deliveredEarly.has(inbox.id)) entry.delivered = true;
-      deliveredEarly.clear();
-      if (valid(g, s)) {
-        await hydrate().catch(error => {
-          // Prompt acceptance is known. A refresh failure must not invite a
-          // duplicate submission of an already accepted prompt.
-          if (valid(g, s)) publish({ error: `Message accepted; refresh failed: ${errorText(error)}`, execution: "unknown" });
+    const work = (chains.get(sessionID) ?? Promise.resolve()).catch(() => {}).then(async () => {
+      let prepared: PreparedFiles | undefined;
+      try {
+        if (draft.files?.length)
+          prepared = await prepareFiles(draft.files, { model: modelOf(sessionID), files: options.files, directory: options.uploadDirectory, signal });
+        const admitted = await client.session.prompt({ sessionID, id, text: draft.text, delivery, ...(prepared ? { files: prepared.files } : {}) }, { signal });
+        sendStage(timeline, 'chat.send.accepted');
+        // Delivered already (the event came first): it is a message now, not a pending prompt.
+        editSession(sessionID, session => {
+          const acknowledged = { ...session, outbox: session.outbox.filter(entry => entry !== id) };
+          return session.pending.some(entry => entry.id === id) ? admit(acknowledged, admitted) : acknowledged;
         });
+        return id;
+      } catch (error) {
+        sendStage(timeline, 'chat.send.rejected', { interrupted: signal.aborted });
+        await prepared?.discard();
+        // Withdrawn; the caller still holds the draft.
+        editSession(sessionID, session => retract(session, id));
+        // The server may have taken a prompt whose answer did not arrive: read and see.
+        if (!disposed && store.get().sessions[sessionID]?.loaded) void sync.reload(sessionID).catch(() => {});
+        throw error;
+      } finally {
+        patch({ sending: Math.max(0, store.get().sending - 1) });
+        if (chains.get(sessionID) === work) chains.delete(sessionID);
       }
-    } finally {
-      if (valid(g, s)) publish({ sending: false });
+    });
+    chains.set(sessionID, work);
+    return work;
+  }
+  async function cancelQueued(id: string, target?: string) {
+    const sessionID = target ?? currentSession();
+    try { await client.session.inbox.cancel({ sessionID, inboxID: id }, { signal }); }
+    catch (error) {
+      // Delivered, or cancelled, in the meantime: the transcript says which.
+      if (store.get().sessions[sessionID]?.loaded) void sync.reload(sessionID).catch(() => {});
+      throw error;
     }
+    editSession(sessionID, session => retract(session, id));
   }
   async function selectModel(model: ModelRef | undefined) {
-    if (!model) throw new Error("Select an explicit model; the pinned API cannot reset a session model");
-    if (state.execution !== "idle" || mutation || state.sending || state.held) throw new Error("Wait for the current operation");
-    const id = currentSession();
-    const g = generation, s = selection, signal = selectionScope.signal, token = (mutation = Symbol());
-    publish({}); // republishes the derived pending flag
+    if (!model) throw new Error('Select an explicit model; the server cannot reset a session model');
+    if (mutation) throw new Error('Wait for the current operation');
+    const id = currentSession(), token = Symbol();
+    setMutation(token);
     try {
-      await api.model(id, model, signal);
-      if (valid(g, s)) publish({ model, sessions: state.sessions.map(session => session.id === id ? { ...session, model } : session) });
+      // Allowed while the session runs: the server records it and the next step uses it.
+      await client.session.switchModel({ sessionID: id, model }, { signal });
+      editSession(id, session => session.info ? { ...session, info: { ...session.info, model } } : session);
     } finally {
-      if (mutation === token) {
-        mutation = undefined;
-        publish({});
-      }
+      if (mutation === token) setMutation(undefined);
     }
   }
-  async function interrupt() {
-    const id = currentSession(), g = generation, s = selection, signal = selectionScope.signal;
-    publish({ interruptRequested: true });
-    await api.interrupt(id, signal);
-    if (valid(g, s)) await hydrate();
+  async function interrupt(target?: string) {
+    const id = target ?? currentSession();
+    const drop = () => { if (store.get().interrupting.includes(id)) patch({ interrupting: store.get().interrupting.filter(entry => entry !== id) }); };
+    if (!store.get().interrupting.includes(id)) patch({ interrupting: [...store.get().interrupting, id] });
+    try {
+      const result = await client.session.interrupt({ sessionID: id }, { signal });
+      // Nothing was running, or it has stopped already: no event will say so later.
+      if (!result.interrupted || store.get().sessions[id]?.status !== 'running') drop();
+    } catch (error) {
+      drop();
+      throw error;
+    }
+  }
+
+  // ---- requests -------------------------------------------------------------
+
+  function findPermission(id: string): PermissionRequest | undefined {
+    for (const session of Object.values(store.get().sessions)) {
+      const found = session.permissions.find(request => request.id === id);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  function findForm(id: string): FormInfo | undefined {
+    for (const session of Object.values(store.get().sessions)) {
+      const found = session.forms.find(form => form.id === id);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  const setReply = (id: string, reply: { submitting: boolean; error?: string } | undefined) => store.update(state => {
+    const { [id]: _previous, ...rest } = state.replies;
+    return { ...state, replies: reply ? { ...rest, [id]: reply } : rest };
+  });
+  /** One answer at a time per request. An answer the server no longer wants (someone
+   * else gave it, or the request was withdrawn) counts as given. */
+  async function answer(id: string, sessionID: string, submit: () => Promise<unknown>, kind: 'permissions' | 'forms') {
+    if (store.get().replies[id]?.submitting) throw new Error('Response is already submitting');
+    setReply(id, { submitting: true });
+    try { await submit(); }
+    catch (error) {
+      if (!settledElsewhere(error)) {
+        setReply(id, { submitting: false, error: errorText(error) });
+        throw error;
+      }
+    }
+    store.batch(() => {
+      setReply(id, undefined);
+      editSession(sessionID, session => kind === 'permissions'
+        ? { ...session, permissions: session.permissions.filter(request => request.id !== id) }
+        : { ...session, forms: session.forms.filter(form => form.id !== id) });
+    });
+  }
+  async function replyPermission(id: string, decision: 'once' | 'always' | 'reject') {
+    const request = findPermission(id);
+    if (!request) throw new Error('Request is no longer pending');
+    await answer(id, request.sessionID, () => client.permission.reply({ sessionID: request.sessionID, requestID: id, decision }, { signal }), 'permissions');
+  }
+  async function replyForm(id: string, value: FormAnswer) {
+    const form = findForm(id);
+    if (!form) throw new Error('Form is no longer pending');
+    const invalid = validateAnswer(form.fields, value);
+    if (invalid) throw new Error(invalid);
+    await answer(id, form.sessionID, () => client.session.form.reply({ sessionID: form.sessionID, formID: id, answer: value }, { signal }), 'forms');
+  }
+  async function cancelForm(id: string) {
+    const form = findForm(id);
+    if (!form) throw new Error('Form is no longer pending');
+    await answer(id, form.sessionID, () => client.session.form.cancel({ sessionID: form.sessionID, formID: id }, { signal }), 'forms');
   }
   async function replyQuestion(id: string, answers: QuestionAnswers) {
-    const request = state.questions.find(q => q.request.id === id)?.request;
+    const form = findForm(id), request = form && questionFromForm(form);
     validateAnswers(request, answers);
-    await reply("question", id, (sessionID, signal) => api.replyForm(sessionID, id, formAnswer(request!, answers), signal));
+    await replyForm(id, formAnswer(request!, answers));
   }
-  // Unsupported forms have no reply the question UI can express. Cancelling
-  // is the only answer this client can give, and it unblocks the session.
-  async function dismissForm(id: string) {
-    if (!state.unsupportedForms.some(f => f.id === id)) throw new Error("Form is no longer pending");
-    if (dismissing.has(id)) throw new Error("Response is already submitting");
-    const g = generation, s = selection, signal = selectionScope.signal, session = currentSession();
-    dismissing.add(id);
-    try { await api.cancelForm(session, id, signal); }
-    finally { dismissing.delete(id); }
-    if (!valid(g, s)) return;
-    answered.add(`question:${id}`);
-    publish({ unsupportedForms: state.unsupportedForms.filter(f => f.id !== id) });
+
+  // ---- the flat snapshot ------------------------------------------------------
+
+  let snapshotOf: ChatState | undefined, snapshot: ChatSnapshot | undefined;
+  let roots: readonly SessionInfo[] = [], messages: readonly Message[] = [];
+  let messagesOf: { order: readonly string[]; messages: SessionState['messages'] } | undefined;
+  function getSnapshot(): ChatSnapshot {
+    const state = store.get();
+    if (snapshot && snapshotOf === state) return snapshot;
+    const id = state.sessionID, session = id ? state.sessions[id] : undefined;
+    const nextRoots = rootsOf(state);
+    if (!sameItems(roots, nextRoots)) roots = nextRoots;
+    if (!session) { messages = messages.length ? [] : messages; messagesOf = undefined; }
+    else if (messagesOf?.order !== session.order || messagesOf.messages !== session.messages) {
+      messages = session.order.flatMap(key => { const message = session.messages[key]; return message ? [message] : []; });
+      messagesOf = { order: session.order, messages: session.messages };
+    }
+    const family = id ? familyOf(state, id) : [];
+    const requestState = <T extends { id: string }>(request: T): RequestState<T> => {
+      const reply = state.replies[request.id];
+      return { request, submitting: reply?.submitting ?? false, ...(reply?.error ? { error: reply.error } : {}) };
+    };
+    const forms = [...family, 'global'].flatMap(key => state.sessions[key]?.forms ?? []);
+    const questions: RequestState<QuestionRequest>[] = [], unsupportedForms: FormInfo[] = [];
+    for (const form of forms) {
+      const question = questionFromForm(form);
+      if (question) questions.push(requestState(question));
+      else unsupportedForms.push(form);
+    }
+    snapshotOf = state;
+    return snapshot = {
+      connection: state.connection.status === 'connected' ? 'connected' : state.connection.status === 'stopped' ? 'disconnected' : 'connecting',
+      connectionState: state.connection,
+      sessionID: id,
+      sessions: roots,
+      draftKey: state.draftKey,
+      sessionOperationPending: state.sessionOperationPending,
+      held: state.held,
+      models: state.models,
+      model: session?.info?.model,
+      defaultModel: state.defaultModel,
+      messages,
+      execution: !id ? 'idle' : !session || state.connection.status !== 'connected' ? 'unknown' : executionOf(session),
+      failure: session?.failure,
+      interruptRequested: !!id && state.interrupting.includes(id),
+      sending: state.sending > 0,
+      loading: id ? !session?.loaded : !state.ready || state.sessionOperationPending,
+      loadingOlder: session?.loadingOlder ?? false,
+      hasOlder: !!session?.older,
+      pending: pendingPrompts(session),
+      permissions: family.flatMap(key => state.sessions[key]?.permissions ?? []).map(requestState),
+      forms: forms.map(requestState),
+      questions,
+      unsupportedForms,
+      error: state.error,
+    };
   }
-  // A hold freezes new intent at the public boundary. Bootstrap selection is
-  // internal and not routed through here; replies and interrupt stay available.
-  const unheld = <A>(intent: () => Promise<A>): Promise<A> =>
-    state.held && !disposed ? Promise.reject(new Error(`Chat is held: ${state.held}`)) : intent();
+
+  // A hold freezes new intent at the public boundary. The choice of a session at
+  // connection is internal and not routed through here; replies and interrupt stay available.
+  const unheld = <A>(intent: () => Promise<A>): Promise<A> => {
+    const held = store.get().held;
+    return held && !disposed ? Promise.reject(new Error(`Chat is held: ${held}`)) : intent();
+  };
   const controller: ChatController = {
     ready: undefined as unknown as Promise<void>,
-    getSnapshot: () => state,
+    store,
+    getSnapshot,
     subscribe(notify) {
       check();
-      listeners.add(notify);
-      return () => { listeners.delete(notify); };
+      return store.subscribe(notify);
     },
-    selectSession: id => unheld(() => run(() => selectSession(id))),
+    selectSession: id => unheld(() => run(() => select(id))),
     reconnect: () => unheld(() => run(reconnect)),
     createSession: title => unheld(() => run(() => createSession(title))),
-    loadOlder: () => run(loadOlder),
+    loadOlder: id => run(() => sync.loadOlder(id ?? currentSession())),
+    loadSession: id => run(() => sync.watch(id)),
     send: draft => unheld(() => {
       // A rejected intent is not a chat error, and must never become a queued send
       // merely because readiness changes before the request starts.
-      if (!disposed && !canSend(state)) return Promise.reject(new Error("Chat is not ready to send"));
+      if (!disposed) {
+        const state = store.get();
+        const ready = draft.sessionID && draft.sessionID !== state.sessionID
+          ? state.connection.status === 'connected' && !state.held : canSend(getSnapshot());
+        if (!ready) return Promise.reject(new Error('Chat is not ready to send'));
+      }
       return run(() => send(draft));
     }),
+    cancelQueued: (id, sessionID) => run(() => cancelQueued(id, sessionID)),
     selectModel: model => unheld(() => run(() => selectModel(model))),
-    interrupt: () => run(interrupt),
-    replyPermission: (id, decision) => run(() => reply("permission", id, (sessionID, signal) => api.replyPermission(sessionID, id, decision, signal))),
+    interrupt: id => run(() => interrupt(id)),
+    replyPermission: (id, decision) => run(() => replyPermission(id, decision)),
+    replyForm: (id, value) => run(() => replyForm(id, value)),
+    cancelForm: id => run(() => cancelForm(id)),
     replyQuestion: (id, answers) => run(() => replyQuestion(id, answers)),
-    rejectQuestion: id => run(() => reply("question", id, (sessionID, signal) => api.cancelForm(sessionID, id, signal))),
-    dismissForm: id => run(() => dismissForm(id)),
-    clearError: () => publish({ error: undefined }),
+    rejectQuestion: id => run(() => cancelForm(id)),
+    dismissForm: id => run(() => cancelForm(id)),
+    clearError: () => { if (store.get().error !== undefined) patch({ error: undefined }); },
     hold(reason) {
       check();
-      if (!reason.trim()) throw new Error("A hold needs a reason");
-      const blocker = holdBlocker(state);
+      if (!reason.trim()) throw new Error('A hold needs a reason');
+      const blocker = holdBlocker(getSnapshot());
       if (blocker) throw new Error(`Chat cannot be held for "${reason}": ${blocker}`);
-      // The snapshot is the lease: exclusive because a held chat blocks hold().
-      publish({ held: reason });
+      // The state is the lease: exclusive because a held chat blocks hold().
+      patch({ held: reason });
       let released = false;
       return {
         release() {
           if (released) return;
           released = true;
-          publish({ held: undefined });
+          patch({ held: undefined });
         },
       };
     },
     dispose() {
       if (disposal) return disposal;
       disposed = true;
-      generation++;
-      clearTimeout(recovery);
       lifetime.abort(stopped());
-      if (state.sessionID) reducer.clear(state.sessionID);
-      listeners.clear();
+      sync.dispose();
+      const closing = connection.dispose();
+      store.close();
       // Aborted requests and the event reader settle on their own; wait for them so a
       // caller that closes the runtime next does not race open connections.
       disposal = (async () => {
-        while (pending.size) await Promise.allSettled([...pending]);
+        await closing;
+        while (requests.size) await Promise.allSettled([...requests]);
       })();
       return disposal;
     },
   };
-  Object.defineProperty(controller, "ready", { value: run(reconnect), enumerable: true });
+  milestone('requested');
+  if (options.sessionID) void sync.watch(options.sessionID);
+  void connection.start();
+  Object.defineProperty(controller, 'ready', { value: run(established), enumerable: true });
   void controller.ready.catch(() => {});
   return controller;
 }
 
-function validateAnswers(request: QuestionRequest | undefined, answers: QuestionAnswers) {
-  if (!request) throw new Error("Question is no longer pending");
-  if (answers.length !== request.questions.length) throw new Error("Answer every question");
-  for (const [i, question] of request.questions.entries()) {
-    const answer = answers[i]!;
-    if (!answer.length || answer.some((a) => !a.trim()) || (!question.multiple && answer.length !== 1))
-      throw new Error("Choose an answer for each question");
-    if (question.custom === false && answer.some((a) => !question.options.some((o) => o.label === a)))
-      throw new Error("Choose one of the offered answers");
+function validateAnswers(request: QuestionRequest | undefined, answers: QuestionAnswers): asserts request {
+  if (!request) throw new Error('Question is no longer pending');
+  if (answers.length !== request.questions.length) throw new Error('Answer every question');
+  for (const [index, question] of request.questions.entries()) {
+    const answer = answers[index]!;
+    if (!answer.length || answer.some(value => !value.trim()) || (!question.multiple && answer.length !== 1))
+      throw new Error('Choose an answer for each question');
+    if (question.custom === false && answer.some(value => !question.options.some(option => option.label === value)))
+      throw new Error('Choose one of the offered answers');
   }
 }

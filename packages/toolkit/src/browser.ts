@@ -11,6 +11,9 @@ export type { SessionBundle } from './sessions';
 export { captureSource, unpackSource, managedNames, type CaptureSourceOptions, type SourceArchive, type SourceLimits } from './source-archive';
 export { workspaceRoot } from './manifest';
 export { createChatController, canSend } from './chat/controller';
+export * from './chat/selectors';
+export { defaultAnswer, isFieldActive, validateAnswer } from './chat/forms';
+export { maxAttachmentBytes, maxPromptAttachmentBytes } from './chat/attachments';
 // For a chat view (the React package's): the state in which a send may be parked.
 export { isPreparing } from './chat/admission';
 export type * from './chat/types';
@@ -484,6 +487,8 @@ export async function openEditor(options: OpenEditorOptions = {}): Promise<Edito
     startNewSession: options.chat?.startNewSession && !initial?.selectedSession,
     // Counted from now, and the agent has not been started yet.
     handshakeTimeoutMs: 120_000,
+    // Attachments a model does not take inline are written into the guest for the agent to read.
+    files: { mkdir: path => host.fs.mkdir(path), writeFile: (path, data) => host.fs.writeFile(path, data), remove: path => host.fs.remove(path) },
     onDiagnostic: (event, data) => emit({ type: 'chat', event, data }),
   });
   let agentStarted = false;
