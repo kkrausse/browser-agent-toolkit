@@ -159,6 +159,9 @@ turn was **not** run on iOS. Not looked into.
 - At phone width the terminal lies over the app instead of beside it, so the frame is never
   0 px wide; closing blurs the terminal, resets the page's scroll and has the frame laid
   out again. `?layout=old` is the earlier layout, to compare.
+  **Taken out again on 2026-10-12** (`ce36c3d`): the earlier layout is the only one, at every
+  width, and `?layout` is gone; closing still blurs the terminal. See
+  `2026-10-12-webkit-ios-summary.md`.
 - `?panel=closed`, `?auto=<prompt>`, `?closeAfter=<s>`, `?diagTall=1`, `?diagPage=<s>`: a
   simulator that nothing can tap, read from screenshots (`ios-build sh xcrun simctl openurl
   booted <url>`, `xcrun simctl io booted screenshot`). A page there cannot post to a plain
