@@ -62,8 +62,6 @@
     #keys button svg { width: 18px; height: 18px; vertical-align: middle; }
     /* The page follows the visual viewport, which the keyboard shortens (src/keys.ts). */
     body.keys { position: fixed; top: 0; left: 0; right: 0; }
-    /* The folded diagnostics button (src/diag.ts) stays off the row. */
-    body.keys #diag.small { bottom: calc(54px + env(safe-area-inset-bottom)); }
     @media (any-pointer: coarse) { #keys { display: grid; } }
     @media (max-width: 700px) { body { --panel: 100vw; } }
   </style>

@@ -168,6 +168,14 @@ document.querySelector('#title')!.textContent = `OpenCode · ${model ? `model ${
     reload((next) => { for (const name of fields) { const value = input(name).value.trim(); if (value) next.set(name, value); else next.delete(name) } })
   })
   input('reset').addEventListener('click', () => reload((next) => next.set('reset', '1')))
+  // The diagnostics panel hides itself once the terminal is up; this is the way back to it.
+  if (diag.panel) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = 'Diagnostics'
+    button.addEventListener('click', () => { show(false); diag.show() })
+    form.querySelector('.row')!.before(button)
+  }
 }
 // What the public page says about itself; it names the free model, so not with a `?model=` of the visitor's.
 document.querySelector<HTMLElement>('#about')!.hidden = !isPublic || !!model

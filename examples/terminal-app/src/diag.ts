@@ -30,6 +30,8 @@ export interface Diag {
   watchScreen(screen: () => string[]): void
   /** The on-page panel is shown: the caller may ask the runtime for its trace marks. */
   readonly panel: boolean
+  /** Bring back the panel after it was hidden. */
+  show(): void
 }
 
 const text = (value: unknown, limit = 2000): string => {
@@ -78,6 +80,7 @@ export function installDiag(params: URLSearchParams, built?: string | null, pane
   return {
     event,
     panel: !!panel,
+    show: () => panel?.show(),
     watchScreen(screen) {
       let last = ''
       setInterval(() => {
@@ -96,7 +99,7 @@ const lastKey = 'terminal-app-diag-last', loadsKey = 'terminal-app-diag-loads'
 
 interface Line { t: number; kind: string; text: string }
 
-function installPanel(collector: string | null, id: string): { event(kind: string, data?: unknown): void; screen(text: string): void } {
+function installPanel(collector: string | null, id: string): { event(kind: string, data?: unknown): void; screen(text: string): void; show(): void } {
   const started = new Date()
   const ms = (t: number) => `${String(Math.round(t)).padStart(6)} ms`
   const mib = (bytes: number | undefined) => bytes === undefined ? '?' : `${(bytes / 1048576).toFixed(1)} MiB`
@@ -124,21 +127,19 @@ function installPanel(collector: string | null, id: string): { event(kind: strin
   root.setAttribute('aria-label', 'Diagnostics')
   root.innerHTML = `<style>
     #diag { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; flex-direction: column; max-height: 55vh; background: #0d0d12f2; color: #c8c5b4; border-top: 1px solid #54546d; font: 11px/1.4 ui-monospace, Menlo, monospace; }
-    #diag.small { left: auto; right: 6px; bottom: 6px; border: 1px solid #54546d; border-radius: 6px; }
-    #diag.small > pre, #diag.small > textarea, #diag.small .wide { display: none; }
+    #diag.small { display: none; }
     #diag > header { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 5px 8px; }
     #diag > header b { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: #dcd7ba; }
     #diag > header b.bad { color: #e06c75; }
     #diag > header { flex-wrap: wrap; }
     #diag > header i { flex: 1 0 100%; order: -1; font-style: normal; color: #98bb6c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    #diag.small > header { max-width: 92vw; }
     #diag.tall { max-height: 94vh; font-size: 9px; line-height: 1.25; }
     #diag button { font: inherit; padding: 5px 10px; }
     #diag > pre { flex: 1 1 auto; min-height: 0; margin: 0; padding: 0 8px 8px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; -webkit-user-select: text; user-select: text; }
     #diag > textarea { flex: 0 0 30vh; margin: 0 8px 8px; font: inherit; color: inherit; background: #16161d; border: 1px solid #54546d; }
     #diag > textarea[hidden] { display: none; }
   </style>
-  <header><i></i><b></b><button type="button" name="send">Send</button><button type="button" name="copy" class="wide">Copy all</button><button type="button" name="toggle">Hide</button></header>
+  <header><i></i><b></b><button type="button" name="send">Send</button><button type="button" name="copy">Copy all</button><button type="button" name="toggle">Hide</button></header>
   <pre></pre><textarea readonly hidden aria-label="The readout as text, to select and copy by hand"></textarea>`
   const headline = root.querySelector('b')!, body = root.querySelector('pre')!, manual = root.querySelector('textarea')!
   const marker = root.querySelector('i')!, sendButton = root.querySelector<HTMLButtonElement>('button[name="send"]')!
@@ -147,10 +148,11 @@ function installPanel(collector: string | null, id: string): { event(kind: strin
   if (new URLSearchParams(location.search).get('diagTall') === '1') root.classList.add('tall')
   const attach = () => document.body.append(root)
   if (document.body) attach(); else addEventListener('DOMContentLoaded', attach)
-  // Open while the page starts, out of the way once it has (unless something failed, or it was touched).
+  // Open while the page starts, gone once it has (unless something failed, or it was touched):
+  // the page's settings bring it back (`show`).
   let touched = false
-  const small = (on: boolean) => { root.classList.toggle('small', on); toggle.textContent = on ? 'Diagnostics' : 'Hide'; render() }
-  toggle.addEventListener('click', () => { touched = true; small(!root.classList.contains('small')) })
+  const small = (on: boolean) => { root.classList.toggle('small', on); render() }
+  toggle.addEventListener('click', () => { touched = true; small(true) })
   copy.addEventListener('click', () => {
     const all = readout(true)
     const shown = (label: string) => { copy.textContent = label; setTimeout(() => { copy.textContent = 'Copy all' }, 2500) }
@@ -432,7 +434,7 @@ function installPanel(collector: string | null, id: string): { event(kind: strin
         if (data === 'terminal mounted' && !touched && !errors.length) small(true)
         if (data === 'terminal mounted') uploadSoon('mounted', 4000)
       }
-      else if (kind === 'failed') { push(stages, 'failed', data instanceof Error ? data.message : data, 300); problem('failed', data) }
+      else if (kind === 'failed') { small(false); push(stages, 'failed', data instanceof Error ? data.message : data, 300); problem('failed', data) }
       else if (kind === 'foreign') push(foreign, '', data, 40)
       else if (kind === 'log') push(logs, '', data, 400)
       else if (kind === 'console.warn') push(warnings, '', data, 60)
@@ -440,5 +442,6 @@ function installPanel(collector: string | null, id: string): { event(kind: strin
       else problem(kind, data)
     },
     screen(now) { screenText = now },
+    show() { touched = true; small(false) },
   }
 }
