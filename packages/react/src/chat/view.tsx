@@ -70,10 +70,17 @@ export const ToolCard = memo(function ToolCard({
       : "filePath" in input
         ? input.filePath
         : undefined);
+  // What the call is about, on the closed card: the command of a shell call, else the file.
+  const command =
+    typeof input === "object" && input && "command" in input && typeof input.command === "string"
+      ? input.command.trim().split("\n")[0]
+      : undefined;
+  const subject = command ?? (typeof file === "string" ? file : undefined);
   return (
     <details className="oc-tool">
       <summary>
         <strong>{part.name}</strong>
+        {subject && <code className="oc-tool-subject">{subject}</code>}
         <span>{part.state.status}</span>
       </summary>
       {typeof file === "string" && onOpenFile && (
