@@ -26,6 +26,10 @@
 //                        panel on the page itself (always there in a build made with DIAG_PANEL=1; `?panel=0` hides it)
 //   ?mock=1              the scripted model inside this page's service worker (sw.ts): no network, no key, no relay
 //   ?kmem=<MiB>          the size of the runtime's kernel memory (default 256), for a browser that refuses the default
+//   ?panel=closed        start with the terminal panel closed (the app showing), whatever this browser remembers
+//   ?auto=<prompt>       type this prompt into the client and press Enter once it is up: with the next one, a state
+//                        of the page can be reached by its address alone, where nothing can tap or type (a simulator)
+//   ?closeAfter=<s>      close the terminal panel that many seconds after the terminal is up
 //
 // The public build (`PUBLIC=1 bun run build`, a page for strangers) differs: with no `?model=`
 // the server has no provider of this page's and uses OpenCode's own hosted free models
@@ -130,7 +134,8 @@ const tunnel = tunnelUrl ? { url: tunnelUrl, protocol: wispUrl ? 'wisp' as const
 const status = document.querySelector<HTMLPreElement>('#status')!
 const frame = document.querySelector<HTMLIFrameElement>('#app')!
 const logPane = document.querySelector<HTMLPreElement>('#log pre')!
-const diag = installDiag(params, isPublic ? null : builtModel && new URL('/diag', builtModel).href, process.env.DIAG_PANEL === '1')
+// A collector of the build's (DIAG_URL: the phone build, build-phone.ts) is used by the public build too; it has none otherwise.
+const diag = installDiag(params, process.env.DIAG_URL || (isPublic ? null : builtModel && new URL('/diag', builtModel).href), process.env.DIAG_PANEL === '1')
 const say = (text: string, error?: unknown) => { status.textContent = text; status.classList.toggle('error', error !== undefined); diag.event(error !== undefined ? 'failed' : 'stage', error ?? text) }
 window.batTerminal = { log: [], model }
 document.querySelector('#title')!.textContent = `OpenCode · ${model ? `model ${model.id} at ${new URL(model.baseURL).host}` : 'free model from OpenCode Zen'}${tunnel ? ` · ${isPublic ? 'relay' : 'tunnel'} ${new URL(tunnel.url).host}` : ''}`
@@ -164,7 +169,29 @@ document.querySelector('#title')!.textContent = `OpenCode · ${model ? `model ${
 }
 // What the public page says about itself; it names the free model, so not with a `?model=` of the visitor's.
 document.querySelector<HTMLElement>('#about')!.hidden = !isPublic || !!model
-const panel = installPanel({ onOpen: () => window.batTerminal.terminal?.display.focus() })
+/** The app's frame after the page around it changed: put the page back where it belongs (a
+ * phone scrolls it towards a focused field, and `overflow: hidden` does not stop that), have
+ * the frame laid out and painted again, and tell its window, which gets no `resize` of its
+ * own when its size did not change. */
+const settleFrame = () => {
+  const settle = () => {
+    if (scrollX || scrollY) scrollTo(0, 0)
+    document.documentElement.scrollLeft = document.documentElement.scrollTop = document.body.scrollLeft = document.body.scrollTop = 0
+    frame.style.transform = 'translateZ(0)'
+    void frame.offsetWidth
+    requestAnimationFrame(() => { frame.style.transform = '' })
+    try { frame.contentWindow?.dispatchEvent(new Event('resize')) } catch { /* not a document of ours */ }
+    window.dispatchEvent(new Event('resize'))
+  }
+  requestAnimationFrame(settle)
+  // Again once the slide of the wide layout and a phone's keyboard are done.
+  setTimeout(settle, 400)
+}
+const panel = installPanel({
+  startClosed: params.get('panel') === 'closed',
+  onOpen: () => window.batTerminal.terminal?.display.focus(),
+  onChange: open => { diag.event('stage', `terminal panel ${open ? 'opened' : 'closed'}`); settleFrame() },
+})
 // Ctrl+Tab and Ctrl+Shift+Tab switch browser tabs. The terminal would take them (and cancel
 // the browser's handling) like any other key, so they are kept from it here.
 for (const type of ['keydown', 'keyup'] as const) {
@@ -297,7 +324,7 @@ async function main() {
   follow('app', appProcess, false)
   follow('opencode', serverProcess, true)
   const appUp = app.ready(lifetime.signal).then(() => { frame.src = app.url; diag.event('stage', 'the app\'s dev server listens: frame set') })
-  frame.addEventListener('load', () => { if (frame.src) diag.event('stage', 'the app\'s frame loaded') })
+  frame.addEventListener('load', () => { if (frame.src) { diag.event('stage', 'the app\'s frame loaded'); settleFrame() } })
   const serverUp = server.ready(lifetime.signal).then(() => serverHealthy(server, authorization, lifetime.signal))
   void Promise.allSettled([appUp, serverUp]).then(() => runtime.started?.())
   await serverUp
@@ -336,6 +363,9 @@ async function main() {
   diag.event('stage', 'terminal mounted')
   diag.watchScreen(() => window.batTerminal.terminal!.screen())
   if (!panel.open) (document.activeElement as HTMLElement | null)?.blur()
+  const auto = params.get('auto'), closeAfter = Number(params.get('closeAfter'))
+  if (auto) setTimeout(() => { diag.event('stage', `?auto: typing "${auto.slice(0, 80)}"`); client!.write(auto); setTimeout(() => client!.write('\r'), 300) }, 3000)
+  if (closeAfter > 0) setTimeout(() => panel.setOpen(false), closeAfter * 1000)
   await appUp
 }
 

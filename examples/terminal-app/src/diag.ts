@@ -14,7 +14,16 @@
 // and has a button that copies all of it as text. Once the terminal is up and nothing has
 // failed it folds itself into a button in the corner. The readout is also kept in localStorage as
 // it changes, so that a tab the browser killed shows what it had reached when it is opened
-// again ("previous load"). Nothing of the panel is sent anywhere.
+// again ("previous load"). With a collector (`?diag=<url>`, or a build made with DIAG_URL:
+// diag-collector.ts) the whole readout is also posted there as text: by the Send button, once
+// when the terminal is up, after an error, when the app's frame changes (its box, its node
+// count, its heading) and as a beacon when the page goes away, so that a phone needs no paste.
+// Without a collector nothing of the panel is sent anywhere.
+//
+// The app's frame is same-origin, so the panel reads it directly (its box, what covers it, its
+// document, its requests); what has to be caught as it happens inside the frame (errors,
+// rejections, console.error, the dev client's websocket) is posted to this page by the
+// runtime's preview shim, which does so only for a page that sets `__batPreviewReport`.
 export interface Diag {
   event(kind: string, data?: unknown): void
   /** Sends the screen whenever it has changed. */
@@ -39,8 +48,8 @@ const isPanel = (given: string | null) => given === '1' || given === 'panel'
 export function installDiag(params: URLSearchParams, built?: string | null, panelBuilt = false): Diag {
   const given = params.get('diag')
   const url = given === '0' ? null : given && !isPanel(given) ? given : built === null ? null : built ?? `${location.protocol}//${location.hostname}:4311/diag`
-  const panel = (isPanel(given) || panelBuilt) && params.get('panel') !== '0' ? installPanel() : undefined
   const id = Math.random().toString(36).slice(2, 8)
+  const panel = (isPanel(given) || panelBuilt) && params.get('panel') !== '0' ? installPanel(url, id) : undefined
   let queue: unknown[] = [], timer: ReturnType<typeof setTimeout> | undefined
   const flush = () => {
     timer = undefined
@@ -57,7 +66,9 @@ export function installDiag(params: URLSearchParams, built?: string | null, pane
     timer ??= setTimeout(flush, 500)
   }
   event('start', { href: location.href, userAgent: navigator.userAgent, isolated: crossOriginIsolated, viewport: [innerWidth, innerHeight], touch: navigator.maxTouchPoints })
-  window.addEventListener('error', e => event('error', e.error instanceof Error ? e.error : `${e.message} (${e.filename}:${e.lineno}:${e.colno})`))
+  // A script the browser put into the page (Brave's wallet, an extension) fails as an error of
+  // this window too: it is listed, apart, and does not count as the page failing.
+  window.addEventListener('error', e => event(!e.filename || !e.filename.includes(location.origin) ? 'foreign' : 'error', e.error instanceof Error ? `${text(e.error)}\n(${e.filename}:${e.lineno}:${e.colno})` : `${e.message} (${e.filename}:${e.lineno}:${e.colno})`))
   window.addEventListener('unhandledrejection', e => event('rejection', e.reason instanceof Error ? e.reason : text(e.reason)))
   for (const level of ['error', 'warn'] as const) {
     const original = console[level].bind(console)
@@ -85,11 +96,11 @@ const lastKey = 'terminal-app-diag-last', loadsKey = 'terminal-app-diag-loads'
 
 interface Line { t: number; kind: string; text: string }
 
-function installPanel(): { event(kind: string, data?: unknown): void; screen(text: string): void } {
+function installPanel(collector: string | null, id: string): { event(kind: string, data?: unknown): void; screen(text: string): void } {
   const started = new Date()
   const ms = (t: number) => `${String(Math.round(t)).padStart(6)} ms`
   const mib = (bytes: number | undefined) => bytes === undefined ? '?' : `${(bytes / 1048576).toFixed(1)} MiB`
-  const stages: Line[] = [], errors: Line[] = [], warnings: Line[] = [], logs: Line[] = [], marks: Line[] = []
+  const stages: Line[] = [], errors: Line[] = [], warnings: Line[] = [], logs: Line[] = [], marks: Line[] = [], foreign: Line[] = [], frameLog: Line[] = [], uploads: Line[] = []
   const facts: Record<string, string> = {}
   let lastError: Line | undefined, screenText = '', traceTotal = 0
   let previous = ''
@@ -105,7 +116,7 @@ function installPanel(): { event(kind: string, data?: unknown): void; screen(tex
     changed()
     return line
   }
-  const problem = (kind: string, value: unknown) => { lastError = push(errors, kind, value, 60) }
+  const problem = (kind: string, value: unknown) => { lastError = push(errors, kind, value, 60); uploadSoon('error') }
 
   // --- the panel itself: a sheet at the bottom of the page, over everything.
   const root = document.createElement('section')
@@ -118,14 +129,18 @@ function installPanel(): { event(kind: string, data?: unknown): void; screen(tex
     #diag > header { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 5px 8px; }
     #diag > header b { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: #dcd7ba; }
     #diag > header b.bad { color: #e06c75; }
+    #diag > header { flex-wrap: wrap; }
+    #diag > header i { flex: 1 0 100%; order: -1; font-style: normal; color: #98bb6c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #diag.small > header { max-width: 92vw; }
     #diag button { font: inherit; padding: 5px 10px; }
     #diag > pre { flex: 1 1 auto; min-height: 0; margin: 0; padding: 0 8px 8px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; -webkit-user-select: text; user-select: text; }
     #diag > textarea { flex: 0 0 30vh; margin: 0 8px 8px; font: inherit; color: inherit; background: #16161d; border: 1px solid #54546d; }
     #diag > textarea[hidden] { display: none; }
   </style>
-  <header><b></b><button type="button" name="copy" class="wide">Copy all</button><button type="button" name="toggle">Hide</button></header>
+  <header><i></i><b></b><button type="button" name="send">Send</button><button type="button" name="copy" class="wide">Copy all</button><button type="button" name="toggle">Hide</button></header>
   <pre></pre><textarea readonly hidden aria-label="The readout as text, to select and copy by hand"></textarea>`
   const headline = root.querySelector('b')!, body = root.querySelector('pre')!, manual = root.querySelector('textarea')!
+  const marker = root.querySelector('i')!, sendButton = root.querySelector<HTMLButtonElement>('button[name="send"]')!
   const toggle = root.querySelector<HTMLButtonElement>('button[name="toggle"]')!, copy = root.querySelector<HTMLButtonElement>('button[name="copy"]')!
   const attach = () => document.body.append(root)
   if (document.body) attach(); else addEventListener('DOMContentLoaded', attach)
@@ -158,8 +173,21 @@ function installPanel(): { event(kind: string, data?: unknown): void; screen(tex
     if (!navigator.storage?.estimate) return fact('storage.estimate', 'not offered')
     void navigator.storage.estimate().then(e => fact('storage.estimate', `usage ${mib(e.usage)}, quota ${mib(e.quota)}`), e => fact('storage.estimate', `failed: ${text(e, 300)}`))
   }
-  estimate()
-  setInterval(estimate, 15_000)
+  // What is in the origin's private file system, by name and size: whether an image is stored once.
+  const stored = async () => {
+    const found: string[] = []
+    const walk = async (directory: FileSystemDirectoryHandle, path: string, depth: number): Promise<void> => {
+      for await (const [name, handle] of (directory as unknown as { entries(): AsyncIterable<[string, FileSystemHandle]> }).entries()) {
+        if (found.length >= 40) return
+        if (handle.kind === 'file') found.push(`${path}${name} ${await (handle as FileSystemFileHandle).getFile().then(file => mib(file.size), () => '(size not readable)')}`)
+        else if (depth < 5) await walk(handle as FileSystemDirectoryHandle, `${path}${name}/`, depth + 1)
+      }
+    }
+    try { await walk(await navigator.storage.getDirectory(), '', 0); fact('storage files', found.join('; ') || 'none') } catch (error) { fact('storage files', `not readable: ${text(error, 200)}`) }
+  }
+  const storage = () => { estimate(); void stored() }
+  storage()
+  setInterval(storage, 15_000)
   void navigator.storage?.persisted?.().then(p => fact('storage.persisted', String(p)), e => fact('storage.persisted', `failed: ${text(e, 300)}`))
   // Can a worker of this page open a sync access handle in the origin's private file system?
   // The runtime's supervisor needs that; asked here apart from it, on a file of this probe's own.
@@ -224,6 +252,87 @@ function installPanel(): { event(kind: string, data?: unknown): void; screen(tex
   document.addEventListener('visibilitychange', () => push(stages, 'page', `visibility ${document.visibilityState}`, 300))
   navigator.serviceWorker?.addEventListener('controllerchange', () => push(stages, 'page', 'service worker controller changed', 300))
 
+  // --- the app's frame, read from outside (same origin), and what its shim says from inside.
+  ;(window as { __batPreviewReport?: boolean }).__batPreviewReport = true
+  addEventListener('message', e => {
+    const said = e.data as { t?: string; kind?: string; text?: string } | null
+    if (!said || said.t !== 'bat-preview' || e.origin !== location.origin) return
+    push(frameLog, said.kind ?? '', said.text ?? '', 120)
+    if (said.kind === 'error' || said.kind === 'rejection' || said.kind === 'console.error') problem(`app frame ${said.kind}`, said.text ?? '')
+  })
+  const describe = (element: Element | null | undefined) => element ? `${element.tagName.toLowerCase()}${element.id ? '#' + element.id : ''}` : 'nothing'
+  const size = (box: { width: number; height: number }) => `${Math.round(box.width)}x${Math.round(box.height)}`
+  let frameKey = '', frameMark = 'app: no frame yet'
+  /** The frame as this page sees it. The first line is the one shown on the screen at all times. */
+  function frameFacts(full: boolean): string[] {
+    const out: string[] = []
+    const say = (line: string) => out.push(line)
+    try {
+      const frame = document.querySelector<HTMLIFrameElement>('iframe#app')
+      if (!frame) return ['app: no iframe#app in this page']
+      const box = frame.getBoundingClientRect(), style = getComputedStyle(frame)
+      const over = box.width > 0 && box.height > 0 ? document.elementFromPoint(box.left + box.width / 2, Math.min(box.top + 80, box.top + box.height / 2)) : null
+      const view = window.visualViewport
+      say(`frame element: box ${size(box)} at ${Math.round(box.left)},${Math.round(box.top)}, display ${style.display}, visibility ${style.visibility}, opacity ${style.opacity}, src ${frame.getAttribute('src') ? 'set' : 'not set'}; on top at its upper middle: ${describe(over)}`)
+      say(`page: scroll ${Math.round(scrollX)},${Math.round(scrollY)}, body scroll ${document.body.scrollLeft},${document.body.scrollTop}, inner ${innerWidth}x${innerHeight}, visual viewport ${view ? `${size(view)} at ${Math.round(view.offsetLeft)},${Math.round(view.offsetTop)} scale ${view.scale.toFixed(2)}` : 'n/a'}, body.closed ${document.body.classList.contains('closed')}, focus in ${describe(document.activeElement)}`)
+      let inner: Document | null = null, inside: (Window & typeof globalThis) | null = null
+      try { inner = frame.contentDocument; inside = frame.contentWindow as (Window & typeof globalThis) | null } catch (error) { say(`frame document: not readable: ${text(error, 200)}`) }
+      if (!inner || !inside || !frame.getAttribute('src')) {
+        frameMark = `app: not loaded, frame ${size(box)}`
+        return [frameMark, ...out]
+      }
+      const nodes = inner.querySelectorAll('*').length
+      const appRoot = inner.getElementById('root'), body = inner.body
+      const heading = inner.querySelector('h1')?.textContent?.trim().slice(0, 30)
+      const bodyBox = body?.getBoundingClientRect(), bodyStyle = body ? inside.getComputedStyle(body) : undefined
+      const rootBox = appRoot?.getBoundingClientRect()
+      say(`frame document: ${inner.readyState}, ${inside.location.pathname}, title "${inner.title}", ${nodes} nodes, window ${inside.innerWidth}x${inside.innerHeight}, visibility ${inner.visibilityState}`)
+      say(`frame #root: ${appRoot ? `${appRoot.childElementCount} children, innerText ${(appRoot as HTMLElement).innerText?.length ?? 0} chars, box ${rootBox ? size(rootBox) : '?'}` : 'missing'}; h1 ${heading === undefined ? 'none' : `"${heading}"`}`)
+      say(`frame body: ${bodyBox && bodyStyle ? `box ${size(bodyBox)}, computed ${bodyStyle.width} x ${bodyStyle.height}, display ${bodyStyle.display}, visibility ${bodyStyle.visibility}, color ${bodyStyle.color} on ${bodyStyle.backgroundColor}` : 'none'}; stylesheets ${inner.styleSheets.length}, style elements ${inner.querySelectorAll('style').length}`)
+      const shim = inside as unknown as { __batPreviewShim?: boolean; __batPreviewWs?: string; ethereum?: unknown }
+      say(`frame scripts: preview shim ${shim.__batPreviewShim ? 'ran' : 'did NOT run'}, dev client websocket ${shim.__batPreviewWs ?? 'never opened'}, vite client ${inner.querySelector('script[src*="@vite/client"]') ? 'in the document' : 'not in the document'}, window.ethereum ${typeof shim.ethereum} (top: ${typeof (window as { ethereum?: unknown }).ethereum})`)
+      frameMark = `app: ${nodes} nodes, ${size(box)}${heading === undefined ? ', no h1' : ` "${heading}"`}${appRoot?.childElementCount ? '' : ', #root EMPTY'}`
+      if (full) {
+        const requests = inside.performance.getEntriesByType('resource') as (PerformanceResourceTiming & { responseStatus?: number })[]
+        say(`frame requests (${requests.length}; status as the frame saw it, ms, bytes):`)
+        for (const entry of requests.slice(-60)) say(`  ${entry.responseStatus ?? '?'}  ${String(Math.round(entry.duration)).padStart(5)} ms  ${String(entry.decodedBodySize ?? '?').padStart(7)}  ${entry.initiatorType}  ${entry.name.replace(location.origin, '').slice(0, 140)}`)
+      }
+    } catch (error) { say(`reading the frame failed: ${text(error, 300)}`) }
+    return [frameMark, ...out]
+  }
+
+  // --- the collector: the readout as text, posted.
+  let sent = 0, sendFailed = '', autoSends = 0
+  const pendingSends = new Map<string, ReturnType<typeof setTimeout>>()
+  const target = (why: string) => `${collector}${collector!.includes('?') ? '&' : '?'}id=${id}&why=${why}`
+  /** `mode: 'cors'` and a text/plain body: no preflight, and allowed from a COEP page. */
+  const upload = (why: string): Promise<string> => {
+    if (!collector) return Promise.resolve('no collector: add ?diag=<url>')
+    const all = readout(true)
+    return fetch(target(why), { method: 'POST', mode: 'cors', credentials: 'omit', body: all, headers: { 'content-type': 'text/plain' } }).then(
+      response => { if (response.ok) { sent++; sendFailed = ''; push(uploads, why, `sent ${all.length} chars`, 40); return `Sent (${sent})` } sendFailed = `HTTP ${response.status}`; push(uploads, why, sendFailed, 40); return `Send: ${sendFailed}` },
+      error => { sendFailed = text(error, 200); push(uploads, why, `failed: ${sendFailed}`, 40); return 'Send failed' })
+  }
+  /** At most one pending upload per reason, a little after the cause, so that what follows it is in. */
+  const uploadSoon = (why: string, after = 2000) => {
+    if (!collector || pendingSends.has(why) || autoSends >= 60) return
+    autoSends++
+    pendingSends.set(why, setTimeout(() => { pendingSends.delete(why); void upload(why) }, after))
+  }
+  sendButton.addEventListener('click', () => {
+    sendButton.textContent = 'Sending…'
+    void upload('button').then(label => { sendButton.textContent = label; setTimeout(() => { sendButton.textContent = 'Send' }, 4000) })
+  })
+  addEventListener('pagehide', () => {
+    if (!collector || !navigator.sendBeacon) return
+    try { navigator.sendBeacon(target('pagehide'), new Blob([readout(true).slice(0, 60_000)], { type: 'text/plain' })) } catch { /* not allowed */ }
+  })
+  setInterval(() => {
+    const first = frameFacts(false)[0]!
+    marker.textContent = `${first}${collector ? sendFailed ? ' · send FAILED' : ` · sent ${sent}` : ''}`
+    if (first !== frameKey) { frameKey = first; changed(); uploadSoon('frame', 2500) }
+  }, 1000)
+
   // --- the readout.
   const lines = (list: Line[], last?: number) => (last ? list.slice(-last) : list).map(line => `${ms(line.t)}  ${line.kind ? `[${line.kind}] ` : ''}${line.text}`)
   function readout(full: boolean): string {
@@ -240,13 +349,23 @@ function installPanel(): { event(kind: string, data?: unknown): void; screen(tex
       ...(facts['kernel memory'] ? [] : ['kernel memory: not allocated yet (or the runtime never got that far)']),
       ...(memory ? [`js heap: ${mib(memory.usedJSHeapSize)} of ${mib(memory.jsHeapSizeLimit)}`] : []),
       '',
+      `collector: ${collector ?? 'none (?diag=<url>)'}${collector ? `, load id ${id}, ${sent} sent${sendFailed ? `, last failure: ${sendFailed}` : ''}` : ''}`,
+      '',
       `LAST ERROR: ${lastError ? `+${Math.round(lastError.t)} ms [${lastError.kind}]\n${lastError.text}` : 'none'}`,
+      '',
+      'APP FRAME',
+      ...frameFacts(full),
+      `inside the frame, as its shim said it (${frameLog.length}):`,
+      ...lines(frameLog, full ? undefined : 6),
       '',
       `STAGES (${stages.length})`,
       ...lines(stages),
       '',
       `ERRORS, REJECTIONS, WORKER CRASHES, console.error (${errors.length})`,
       ...lines(errors, full ? undefined : 8),
+      '',
+      `SCRIPTS NOT OF THIS PAGE THAT FAILED IN IT (injected by the browser or an extension) (${foreign.length})`,
+      ...lines(foreign, full ? undefined : 3),
       '',
       `WARNINGS (${warnings.length})`,
       ...lines(warnings, full ? undefined : 4),
@@ -257,7 +376,7 @@ function installPanel(): { event(kind: string, data?: unknown): void; screen(tex
       `RUNTIME TRACE (last ${full ? Math.min(marks.length, 400) : Math.min(marks.length, 15)} of ${traceTotal})`,
       ...lines(marks, full ? 400 : 15),
     ]
-    if (full) out.push('', 'TERMINAL SCREEN', screenText || '(nothing drawn)')
+    if (full) out.push('', `UPLOADS (${uploads.length})`, ...lines(uploads), '', 'TERMINAL SCREEN', screenText || '(nothing drawn)')
     if (previous) out.push('', `PREVIOUS LOAD OF THIS PAGE IN THIS BROWSER (what it had reached; ${full ? 'whole' : 'its head, Copy all has the rest'})`, full ? previous : previous.split('\n').slice(0, 14).join('\n'))
     return out.join('\n')
   }
@@ -288,8 +407,10 @@ function installPanel(): { event(kind: string, data?: unknown): void; screen(tex
       if (kind === 'stage') {
         push(stages, 'stage', data, 300)
         if (data === 'terminal mounted' && !touched && !errors.length) small(true)
+        if (data === 'terminal mounted') uploadSoon('mounted', 4000)
       }
       else if (kind === 'failed') { push(stages, 'failed', data instanceof Error ? data.message : data, 300); problem('failed', data) }
+      else if (kind === 'foreign') push(foreign, '', data, 40)
       else if (kind === 'log') push(logs, '', data, 400)
       else if (kind === 'console.warn') push(warnings, '', data, 60)
       else if (kind === 'start' || kind === 'screen') { /* shown from the page itself */ }

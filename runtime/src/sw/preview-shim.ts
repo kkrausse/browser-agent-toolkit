@@ -13,6 +13,52 @@ export function previewShim(prefix = '/preview/'): void {
   if (w.__batPreviewShim) return
   w.__batPreviewShim = true
   const Native: typeof WebSocket = w.WebSocket
+  // A page that wants to know what happens in its preview frame (a diagnostics panel on a
+  // device with no console) sets `__batPreviewReport` on its own window before the frame
+  // loads. The frame is same-origin with it, so the flag is read directly, and errors,
+  // rejections, console.error and the state of guest sockets are posted to that page as
+  // `{ t: 'bat-preview', kind, text }`. Without the flag nothing here is installed.
+  let report: (kind: string, text: unknown) => void = () => {}
+  try {
+    if (w.parent !== w && w.parent.__batPreviewReport) {
+      const words = (value: any): string => {
+        try {
+          return String(value instanceof Error ? `${value.name}: ${value.message}\n${value.stack ?? ''}` : typeof value === 'object' && value ? JSON.stringify(value) : value).slice(0, 2000)
+        } catch {
+          return String(value).slice(0, 2000)
+        }
+      }
+      report = (kind, text) => {
+        try {
+          w.parent.postMessage({ t: 'bat-preview', kind, text: words(text) }, location.origin)
+        } catch {
+          // the page is gone
+        }
+      }
+      // Capturing, so a script, stylesheet or image that failed to load is seen too.
+      addEventListener('error', (e: any) => {
+        const target = e.target
+        if (target && target !== w && (target.src || target.href)) report('error', `${String(target.tagName).toLowerCase()} failed to load: ${target.src || target.href}`)
+        else report('error', e.error instanceof Error ? e.error : `${e.message} (${e.filename}:${e.lineno}:${e.colno})`)
+      }, true)
+      addEventListener('unhandledrejection', (e: any) => report('rejection', e.reason))
+      const original = console.error.bind(console)
+      console.error = (...args: unknown[]) => {
+        report('console.error', args.map(words).join(' '))
+        original(...args)
+      }
+      report('state', `shim ran in ${location.pathname}, readyState ${document.readyState}`)
+      addEventListener('DOMContentLoaded', () => report('state', 'DOMContentLoaded'))
+      addEventListener('load', () => report('state', 'load'))
+    }
+  } catch {
+    // a parent of another origin: no report
+  }
+  const socketState = (url: string, protocols: string[], state: string) => {
+    const said = `${state} ${new URL(url).pathname}${protocols.length ? ` (${protocols.join(',')})` : ''}`
+    w.__batPreviewWs = said
+    report('ws', said)
+  }
   const guestPath = { test: (path: string) => path.startsWith(prefix) && /^\d+(\/|$)/.test(path.slice(prefix.length)) }
   const CONNECTING = 0
   const OPEN = 1
@@ -27,6 +73,7 @@ export function previewShim(prefix = '/preview/'): void {
     _buffered = 0
     _binaryType: BinaryType = 'blob'
     _port: MessagePort
+    _protocols: string[] = []
     _order: Promise<void> = Promise.resolve()
     onopen: ((e: Event) => void) | null = null
     onmessage: ((e: MessageEvent) => void) | null = null
@@ -39,6 +86,8 @@ export function previewShim(prefix = '/preview/'): void {
       const channel = new MessageChannel()
       this._port = channel.port1
       this._port.onmessage = (e) => this._receive(e.data)
+      this._protocols = protocols
+      socketState(this._url, protocols, 'connecting')
       const message = { t: 'bat-ws', url: url.href, protocols, channel: channel.port2 }
       const controller = navigator.serviceWorker.controller
       if (controller) controller.postMessage(message, [channel.port2])
@@ -71,6 +120,7 @@ export function previewShim(prefix = '/preview/'): void {
         this._state = OPEN
         this._protocol = m.protocol
         this._extensions = m.extensions
+        socketState(this._url, this._protocols, 'open')
         this._emit('open', new Event('open'))
       } else if (m.t === 'message') {
         const data = typeof m.data === 'string' || this._binaryType === 'arraybuffer' ? m.data : new Blob([m.data])
@@ -81,6 +131,7 @@ export function previewShim(prefix = '/preview/'): void {
         const failed = this._state === CONNECTING
         this._state = CLOSED
         this._port.close()
+        socketState(this._url, this._protocols, failed ? 'failed to connect' : `closed (${m.code})`)
         if (failed) this._emit('error', new Event('error'))
         this._emit('close', new CloseEvent('close', { code: m.code, reason: m.reason, wasClean: m.wasClean }))
       }

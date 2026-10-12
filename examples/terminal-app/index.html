@@ -55,7 +55,16 @@
     #about { flex: 0 0 auto; margin: 0; padding: 5px 10px 6px; border-top: 1px solid #363646; font: 11px/1.45 ui-monospace, monospace; color: #727169; }
     #about[hidden] { display: none; }
     #about a { color: #7e9cd8; }
-    @media (max-width: 700px) { body { --panel: 100vw; } }
+    /* A phone: the terminal lies over the app, which keeps the whole page behind it. The app's
+       frame is then never zero wide (it loads and paints at its real size while the terminal
+       covers it), closing moves nothing, and no part of the page lies outside the viewport
+       where a focused field could have the browser scroll to it. */
+    @media (max-width: 700px) {
+      body { --panel: 100vw; }
+      #panel { position: fixed; top: 0; right: 0; bottom: 0; left: 0; width: auto; z-index: 2; transition: none; }
+      body.closed #panel { margin-right: 0; transition: none; }
+      #grip { display: none; }
+    }
   </style>
 </head>
 <body>

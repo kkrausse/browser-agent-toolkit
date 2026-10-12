@@ -12,7 +12,7 @@ export interface Panel {
   setWidth(pixels: number): void
 }
 
-export function installPanel(options: { onOpen?(): void } = {}): Panel {
+export function installPanel(options: { onOpen?(): void; /** After the panel opened or closed (not at the start). */ onChange?(open: boolean): void; /** Start closed whatever this browser remembers (`?panel=closed`). */ startClosed?: boolean } = {}): Panel {
   const body = document.body
   const panel = document.querySelector<HTMLElement>('#panel')!, grip = document.querySelector<HTMLElement>('#grip')!
   const clamp = (pixels: number) => Math.round(Math.max(280, Math.min(window.innerWidth - 120, pixels)))
@@ -22,14 +22,18 @@ export function installPanel(options: { onOpen?(): void } = {}): Panel {
   }
   const saved = Number(stored(widthKey))
   if (saved > 0) setWidth(saved)
-  let open = stored(openKey) !== '0'
+  let open = !options.startClosed && stored(openKey) !== '0'
   const apply = () => body.classList.toggle('closed', !open)
   apply()
   const setOpen = (next: boolean) => {
     open = next
     store(openKey, next ? '1' : '0')
+    // Closing takes the focus out of the terminal: a focused field in a hidden panel keeps a
+    // phone's keyboard up, and the browser may scroll the page towards it.
+    if (!next && panel.contains(document.activeElement)) (document.activeElement as HTMLElement).blur()
     apply()
     if (next) options.onOpen?.()
+    options.onChange?.(next)
   }
   document.querySelector<HTMLButtonElement>('#close')!.addEventListener('click', () => setOpen(false))
   document.querySelector<HTMLButtonElement>('#open')!.addEventListener('click', () => setOpen(true))

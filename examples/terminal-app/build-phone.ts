@@ -9,6 +9,7 @@
 //
 //   bun build-phone.ts            after a setup, `bun run display` and `bun run prepare:editor`
 //   OUT_DIR=…                     another output directory (default dist-phone/)
+//   DIAG_URL=https://…/diag       a collector (diag-collector.ts) the panel posts its readout to; none by default
 // It publishes nothing: copy the directory to a host yourself.
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
