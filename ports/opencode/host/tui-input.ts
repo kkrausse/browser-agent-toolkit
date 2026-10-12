@@ -11,6 +11,8 @@ export interface RemoteTuiOptions {
   password?: string
   version: string
   prompt?: string
+  /** Open on this session (the native CLI's `--session`). */
+  sessionID?: string
   log?: TuiInput["log"]
   /** Where the TUI's settings (theme, keybinds, ...) are kept: the native CLI's `<config>/cli.json`.
    * Without it settings last only as long as the process. */
@@ -50,7 +52,7 @@ export function remoteTuiInput(options: RemoteTuiOptions): TuiInput {
           : undefined,
       },
     },
-    args: { prompt: options.prompt },
+    args: { prompt: options.prompt, sessionID: options.sessionID },
     config: {
       path: file,
       get: async () => config,

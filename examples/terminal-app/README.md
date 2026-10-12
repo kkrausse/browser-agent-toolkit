@@ -220,7 +220,10 @@ client's settings, prompt history and open tabs are files under `/home/user` in 
 storage, so a reload keeps them and `?reset=1` forgets them.
 
 `BAT_OPENCODE_CLIENT_DIR` names another built client directory (default
-`../../ports/opencode/dist/node`). wasm-term's program host (its own pty machine, shim and
+`../../ports/opencode/dist/node`). The client opens on its home screen; with
+`OPENCODE_SESSION=<id>` in its environment it opens on that session of the server instead (the
+native `--session`), which is how a page that drives a session through the server's API shows
+the same conversation in the terminal (autoanimate's agent-studio does). wasm-term's program host (its own pty machine, shim and
 page relay), which this page ran the client on before, is on the branch `wasm-term`.
 
 ## How the pieces talk

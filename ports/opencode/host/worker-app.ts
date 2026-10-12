@@ -19,6 +19,8 @@ export interface StartOptions {
   /** The project directory: a path on the server's machine. Default: the directory the server runs in. */
   directory?: string
   prompt?: string
+  /** A session of the server to open on: the conversation another client of it (a page) already drives. */
+  sessionID?: string
   log(level: string, message: string, tags?: unknown): void
 }
 

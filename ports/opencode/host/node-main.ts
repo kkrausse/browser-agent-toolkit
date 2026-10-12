@@ -8,6 +8,7 @@
 //   OPENCODE_SERVER_URL        the server (default http://127.0.0.1:4096)
 //   OPENCODE_SERVER_PASSWORD   its HTTP Basic password
 //   OPENCODE_DIRECTORY         the project directory on the server's machine
+//   OPENCODE_SESSION           open on this session of the server (as `opencode --session <id>` does), not on the home screen
 //   OPENCODE_TUI_LOG           a file the TUI's warnings and errors are appended to (stderr is the screen)
 //   OPENCODE_TUI_DEBUG         log every level there
 import { appendFileSync, readFileSync, writeSync } from "node:fs"
@@ -54,6 +55,7 @@ await app.start({
   password: env.OPENCODE_SERVER_PASSWORD || undefined,
   directory: env.OPENCODE_DIRECTORY || undefined,
   prompt: env.OPENCODE_PROMPT || undefined,
+  sessionID: env.OPENCODE_SESSION || undefined,
   log,
 })
 process.exit(0)
