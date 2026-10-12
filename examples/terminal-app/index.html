@@ -55,6 +55,14 @@
     #about { flex: 0 0 auto; margin: 0; padding: 5px 10px 6px; border-top: 1px solid #363646; font: 11px/1.45 ui-monospace, monospace; color: #727169; }
     #about[hidden] { display: none; }
     #about a { color: #7e9cd8; }
+    /* The keys a phone's keyboard lacks (src/keys.ts), where the pointer is a finger. */
+    #keys { display: none; flex: 0 0 auto; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 4px; padding: 4px 4px max(4px, env(safe-area-inset-bottom)); border-top: 1px solid #363646; }
+    #keys button { min-width: 0; min-height: 40px; padding: 2px; touch-action: manipulation; }
+    #keys button[aria-pressed="true"] { color: #16161d; background: #7e9cd8; border-color: #7e9cd8; }
+    #keys button svg { width: 18px; height: 18px; vertical-align: middle; }
+    /* The page follows the visual viewport, which the keyboard shortens (src/keys.ts). */
+    body.keys { position: fixed; top: 0; left: 0; right: 0; }
+    @media (any-pointer: coarse) { #keys { display: grid; } }
     @media (max-width: 700px) { body { --panel: 100vw; } }
   </style>
 </head>

@@ -41,6 +41,7 @@ import { installDerived, installSource, type BootRuntime, type EditorManifest, t
 import { clientEntry, clientLaunch, clientLog, installClient } from './client'
 import { installDiag } from './diag'
 import { isolate } from './isolate'
+import { installKeys } from './keys'
 import { installServerConfig, serverHealthy, serverLaunch, toLaunch, workspace, type ModelEndpoint } from './opencode'
 import { installPanel } from './panel'
 import { watchSignIn } from './signin'
@@ -57,6 +58,7 @@ interface DisplayModule {
   }): Promise<Display>
 }
 interface Display {
+  terminal: { textarea?: HTMLElement }
   write(data: Uint8Array | string): void
   size(): Required<TerminalSize>
   screen(): string[]
@@ -169,6 +171,7 @@ document.querySelector('#title')!.textContent = `OpenCode · ${model ? `model ${
 }
 // What the public page says about itself; it names the free model, so not with a `?model=` of the visitor's.
 document.querySelector<HTMLElement>('#about')!.hidden = !isPublic || !!model
+const keys = installKeys(document.querySelector<HTMLElement>('#body')!)
 const panel = installPanel({
   startClosed: params.get('panel') === 'closed',
   onOpen: () => window.batTerminal.terminal?.display.focus(),
@@ -322,9 +325,10 @@ async function main() {
     // The client has no clipboard of its own in the guest: ctrl+v is the browser's paste, which
     // reaches it as (bracketed) input. What it copies comes out as OSC 52, which the display serves.
     ctrlVPaste: true,
-    onInput: data => client?.write(data),
+    onInput: data => client?.write(keys.input(data)),
     onResize: size => client?.resize(size),
   })
+  keys.attach({ textarea: display.terminal.textarea, focus: () => display.focus() })
   const started = performance.now()
   const launch = clientLaunch(agent.port, password, !!tapScript)
   // `?clientLog=debug`: the client logs every level to its file, not only warnings and errors.
