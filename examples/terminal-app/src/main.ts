@@ -171,7 +171,7 @@ document.querySelector('#title')!.textContent = `OpenCode · ${model ? `model ${
 }
 // What the public page says about itself; it names the free model, so not with a `?model=` of the visitor's.
 document.querySelector<HTMLElement>('#about')!.hidden = !isPublic || !!model
-const keys = installKeys(document.querySelector<HTMLElement>('#body')!)
+const keys = installKeys(document.querySelector<HTMLElement>('#panel')!)
 const panel = installPanel({
   startClosed: params.get('panel') === 'closed',
   onOpen: () => window.batTerminal.terminal?.display.focus(),

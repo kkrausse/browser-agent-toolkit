@@ -1,4 +1,4 @@
-// The keys a phone's keyboard lacks, as a row under the terminal: Esc, a sticky Ctrl, Tab, the
+// The keys a phone's keyboard lacks, as the last row of the terminal's panel: Esc, a sticky Ctrl, Tab, the
 // arrows and Enter, and a button that raises or drops the keyboard. Shown where the pointer is
 // coarse (index.html). After `random/bun-web-terminal/src/mobile.ts` (same author), without its
 // dictation, paste and attach.
@@ -25,7 +25,7 @@ export interface Keys {
   attach(target: { textarea?: HTMLElement; focus(): void }): void
 }
 
-export function installKeys(container: HTMLElement): Keys {
+export function installKeys(panel: HTMLElement): Keys {
   const toolbar = document.createElement('div')
   toolbar.id = 'keys'
   toolbar.setAttribute('role', 'group')
@@ -41,7 +41,7 @@ export function installKeys(container: HTMLElement): Keys {
     if (key === 'Control') button.setAttribute('aria-pressed', 'false')
     toolbar.append(button)
   }
-  container.after(toolbar)
+  panel.append(toolbar)
 
   let target: { textarea?: HTMLElement; focus(): void } | undefined
   let control = false
@@ -68,14 +68,14 @@ export function installKeys(container: HTMLElement): Keys {
   function press(key: string) {
     if (!target) return
     if (key === 'Keyboard') {
-      if (container.contains(document.activeElement)) (document.activeElement as HTMLElement).blur()
+      if (panel.contains(document.activeElement)) (document.activeElement as HTMLElement).blur()
       else target.focus()
       return
     }
     if (key === 'Control') { setControl(!control); return }
     const ctrlKey = control
     setControl(false)
-    ;(target.textarea ?? container).dispatchEvent(new KeyboardEvent('keydown', { key, code: key, ctrlKey, bubbles: true, cancelable: true }))
+    ;(target.textarea ?? panel).dispatchEvent(new KeyboardEvent('keydown', { key, code: key, ctrlKey, bubbles: true, cancelable: true }))
   }
   window.addEventListener('blur', () => setControl(false))
 
