@@ -1,0 +1,1006 @@
+{
+ "meta": {
+  "label": "s5-todo-first",
+  "example": "todo",
+  "kind": "first",
+  "base": "http://batmem-c.localhost:4881/",
+  "idleSeconds": 30,
+  "queryObjects": true,
+  "startedAt": "2026-10-11T18:56:59.263Z",
+  "browser": "chrome",
+  "chrome": "Google Chrome 154.0.8037.97",
+  "kernel": "Linux 7.0.0-38-generic",
+  "cores": 12,
+  "memory": "MemTotal: 63628224 kB; MemAvailable: 38806180 kB; SwapTotal: 8388604 kB; SwapFree: 1564 kB",
+  "git": "c057c67",
+  "units": "process figures in kB (smaps_rollup, smaps, status); browser figures in bytes",
+  "finishedAt": "2026-10-11T18:59:39.292Z",
+  "loadAtEnd": [
+   5.33,
+   6.91,
+   7.14
+  ]
+ },
+ "runs": [
+  {
+   "index": 1,
+   "example": "todo",
+   "kind": "first",
+   "startedAt": "2026-10-11T18:57:15.474Z",
+   "points": [
+    {
+     "name": "loaded",
+     "peakSincePreviousPoint": {
+      "rss": 161428,
+      "pss": 36286
+     },
+     "pre": {
+      "at": 1791745061274,
+      "load": [
+       10.1,
+       7.21,
+       7.2
+      ],
+      "main": {
+       "rss": 147800,
+       "pss": 25664,
+       "pssAnon": 21997,
+       "pssFile": 2111,
+       "pssShmem": 1554,
+       "privateDirty": 22448,
+       "swap": 10424,
+       "hwm": 148452,
+       "threads": 20,
+       "threadNames": {
+        "chrome": 1,
+        "PerfettoTrace": 1,
+        "ThreadPoolServi": 1,
+        "ThreadPoolForeg": 11,
+        "ThreadPoolPrese": 1,
+        "ThreadPoolAudio": 1,
+        "Chrome_ChildIOT": 1,
+        "Compositor": 1,
+        "ThreadPoolSingl": 1,
+        "HangWatcher": 1
+       },
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 12540,
+         "pss": 12520,
+         "swap": 160,
+         "size": 54789056,
+         "maps": 109
+        },
+        "[anon:v8]": {
+         "rss": 2032,
+         "pss": 2032,
+         "swap": 0,
+         "size": 18350904,
+         "maps": 8
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 5176,
+         "pss": 5176,
+         "swap": 0,
+         "size": 1442840576,
+         "maps": 35
+        },
+        "file: chrome binary": {
+         "rss": 115424,
+         "pss": 2370,
+         "swap": 8892,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1152,
+         "pss": 1008,
+         "swap": 112,
+         "size": 219432,
+         "maps": 79
+        },
+        "shm: shared-memory-region": {
+         "rss": 2668,
+         "pss": 1554,
+         "swap": 0,
+         "size": 9256,
+         "maps": 28
+        },
+        "file: other": {
+         "rss": 7932,
+         "pss": 96,
+         "swap": 1232,
+         "size": 109928,
+         "maps": 420
+        },
+        "[anon:absl]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 704,
+         "pss": 704,
+         "swap": 0,
+         "size": 2097152,
+         "maps": 20
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 196,
+         "maps": 5
+        }
+       },
+       "wasmMemories": []
+      }
+     },
+     "browser": {
+      "targets": [
+       {
+        "kind": "page",
+        "url": "/",
+        "identity": {
+         "argv": null,
+         "name": "",
+         "pid": null,
+         "title": null
+        },
+        "heap": {
+         "backingStorageSize": 951163,
+         "embedderHeapUsedSize": 1881152,
+         "totalSize": 7143424,
+         "usedSize": 4005168
+        },
+        "memories": [],
+        "modules": [
+         {
+          "exports": 148,
+          "imports": 10
+         }
+        ],
+        "heapAfterGc": {
+         "backingStorageSize": 914858,
+         "embedderHeapUsedSize": 541824,
+         "totalSize": 4259840,
+         "usedSize": 3562468
+        }
+       }
+      ],
+      "errors": [],
+      "metrics": {
+       "Documents": 2,
+       "Frames": 2,
+       "JSEventListeners": 176,
+       "Nodes": 90,
+       "Resources": 16,
+       "WorkerGlobalScopes": 0,
+       "ArrayBufferContents": 1,
+       "JSHeapUsedSize": 4005168,
+       "JSHeapTotalSize": 7143424
+      },
+      "page": {
+       "isolated": true,
+       "performanceMemory": {
+        "used": 4960983,
+        "total": 8094587,
+        "limit": 4395630592
+       },
+       "storage": {
+        "quota": 15308368512,
+        "usage": 4570950272,
+        "usageDetails": {
+         "fileSystem": 4570950272
+        }
+       },
+       "serviceWorkers": [],
+       "frames": []
+      },
+      "opfs": {},
+      "runtime": null,
+      "userAgentSpecificMemory": {
+       "bytes": 4277651,
+       "breakdown": [
+        {
+         "bytes": 40520,
+         "types": [
+          "DOM"
+         ],
+         "attribution": []
+        },
+        {
+         "bytes": 3669757,
+         "types": [
+          "JavaScript"
+         ],
+         "attribution": [
+          {
+           "scope": "Window",
+           "url": "/"
+          }
+         ]
+        },
+        {
+         "bytes": 567374,
+         "types": [
+          "Shared"
+         ],
+         "attribution": []
+        }
+       ]
+      }
+     },
+     "post": {
+      "at": 1791745070879,
+      "load": [
+       10.5,
+       7.38,
+       7.26
+      ],
+      "main": {
+       "rss": 149664,
+       "pss": 23959,
+       "pssAnon": 20079,
+       "pssFile": 2240,
+       "pssShmem": 1638,
+       "privateDirty": 20596,
+       "swap": 10420,
+       "hwm": 152556,
+       "threads": 20,
+       "threadNames": {
+        "chrome": 1,
+        "PerfettoTrace": 1,
+        "ThreadPoolServi": 1,
+        "ThreadPoolForeg": 11,
+        "ThreadPoolPrese": 1,
+        "ThreadPoolAudio": 1,
+        "Chrome_ChildIOT": 1,
+        "Compositor": 1,
+        "ThreadPoolSingl": 1,
+        "HangWatcher": 1
+       },
+       "regions": {
+        "[anon:partition_alloc]": {
+         "rss": 12584,
+         "pss": 12564,
+         "swap": 160,
+         "size": 54789056,
+         "maps": 115
+        },
+        "[anon:v8]": {
+         "rss": 1892,
+         "pss": 1892,
+         "swap": 0,
+         "size": 18350904,
+         "maps": 8
+        },
+        "[anon:v8-sandbox]": {
+         "rss": 3352,
+         "pss": 3352,
+         "swap": 0,
+         "size": 1442840576,
+         "maps": 43
+        },
+        "file: chrome binary": {
+         "rss": 119108,
+         "pss": 2501,
+         "swap": 8888,
+         "size": 290292,
+         "maps": 16
+        },
+        "anon (unnamed)": {
+         "rss": 1152,
+         "pss": 1008,
+         "swap": 112,
+         "size": 219432,
+         "maps": 79
+        },
+        "shm: shared-memory-region": {
+         "rss": 2768,
+         "pss": 1638,
+         "swap": 0,
+         "size": 9288,
+         "maps": 29
+        },
+        "file: other": {
+         "rss": 7932,
+         "pss": 96,
+         "swap": 1232,
+         "size": 109928,
+         "maps": 420
+        },
+        "[anon:absl]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 0,
+         "size": 64,
+         "maps": 1
+        },
+        "[anon:v8-pointer-table]": {
+         "rss": 704,
+         "pss": 704,
+         "swap": 0,
+         "size": 2097152,
+         "maps": 20
+        },
+        "[anon:tls-mmap-allocator]": {
+         "rss": 4,
+         "pss": 4,
+         "swap": 28,
+         "size": 32,
+         "maps": 1
+        },
+        "(mappings under 1 MB each)": {
+         "rss": 164,
+         "pss": 156,
+         "swap": 0,
+         "size": 196,
+         "maps": 5
+        }
+       },
+       "wasmMemories": []
+      }
+     }
+    }
+   ],
+   "light": [],
+   "events": [],
+   "mainPid": 1936412,
+   "openTimeline": [
+    {
+     "ms": 287,
+     "rss": 160084,
+     "pss": 34379,
+     "partitionAlloc": 12744,
+     "v8Sandbox": 3352,
+     "wasmMemories": 0,
+     "v8": 1892,
+     "threads": 20
+    },
+    {
+     "ms": 525,
+     "rss": 160084,
+     "pss": 34379,
+     "partitionAlloc": 12744,
+     "v8Sandbox": 3352,
+     "wasmMemories": 0,
+     "v8": 1892,
+     "threads": 20
+    },
+    {
+     "ms": 778,
+     "rss": 160084,
+     "pss": 34379,
+     "partitionAlloc": 12744,
+     "v8Sandbox": 3352,
+     "wasmMemories": 0,
+     "v8": 1892,
+     "threads": 20
+    },
+    {
+     "ms": 1027,
+     "rss": 160084,
+     "pss": 34379,
+     "partitionAlloc": 12744,
+     "v8Sandbox": 3352,
+     "wasmMemories": 0,
+     "v8": 1892,
+     "threads": 20
+    },
+    {
+     "ms": 1308,
+     "rss": 196740,
+     "pss": 63808,
+     "partitionAlloc": 28044,
+     "v8Sandbox": 10164,
+     "wasmMemories": 132,
+     "v8": 3288,
+     "threads": 26
+    },
+    {
+     "ms": 1587,
+     "rss": 280684,
+     "pss": 146214,
+     "partitionAlloc": 104564,
+     "v8Sandbox": 14488,
+     "wasmMemories": 132,
+     "v8": 6124,
+     "threads": 26
+    },
+    {
+     "ms": 2017,
+     "rss": 367136,
+     "pss": 232037,
+     "partitionAlloc": 98680,
+     "v8Sandbox": 33444,
+     "wasmMemories": 9624,
+     "v8": 54296,
+     "threads": 26
+    },
+    {
+     "ms": 2301,
+     "rss": 414928,
+     "pss": 277814,
+     "partitionAlloc": 97816,
+     "v8Sandbox": 55340,
+     "wasmMemories": 10624,
+     "v8": 69472,
+     "threads": 26
+    },
+    {
+     "ms": 2482,
+     "rss": 436044,
+     "pss": 298789,
+     "partitionAlloc": 100484,
+     "v8Sandbox": 76128,
+     "wasmMemories": 13468,
+     "v8": 70796,
+     "threads": 26
+    },
+    {
+     "ms": 2688,
+     "rss": 477368,
+     "pss": 340025,
+     "partitionAlloc": 123836,
+     "v8Sandbox": 87140,
+     "wasmMemories": 15136,
+     "v8": 74616,
+     "threads": 26
+    },
+    {
+     "ms": 2949,
+     "rss": 493408,
+     "pss": 355934,
+     "partitionAlloc": 109884,
+     "v8Sandbox": 105832,
+     "wasmMemories": 21100,
+     "v8": 78608,
+     "threads": 26
+    },
+    {
+     "ms": 3247,
+     "rss": 507036,
+     "pss": 369454,
+     "partitionAlloc": 115548,
+     "v8Sandbox": 114860,
+     "wasmMemories": 22528,
+     "v8": 80988,
+     "threads": 26
+    },
+    {
+     "ms": 3666,
+     "rss": 559904,
+     "pss": 420350,
+     "partitionAlloc": 136516,
+     "v8Sandbox": 141544,
+     "wasmMemories": 25724,
+     "v8": 89040,
+     "threads": 27
+    },
+    {
+     "ms": 3765,
+     "rss": 589196,
+     "pss": 449583,
+     "partitionAlloc": 161492,
+     "v8Sandbox": 147356,
+     "wasmMemories": 26748,
+     "v8": 89628,
+     "threads": 27
+    },
+    {
+     "ms": 4069,
+     "rss": 683664,
+     "pss": 542973,
+     "partitionAlloc": 166528,
+     "v8Sandbox": 173028,
+     "wasmMemories": 92212,
+     "v8": 90876,
+     "threads": 27
+    },
+    {
+     "ms": 4400,
+     "rss": 711220,
+     "pss": 570164,
+     "partitionAlloc": 173468,
+     "v8Sandbox": 185556,
+     "wasmMemories": 92288,
+     "v8": 92508,
+     "threads": 27
+    },
+    {
+     "ms": 4589,
+     "rss": 708708,
+     "pss": 567653,
+     "partitionAlloc": 175876,
+     "v8Sandbox": 185644,
+     "wasmMemories": 92288,
+     "v8": 87452,
+     "threads": 27
+    },
+    {
+     "ms": 5111,
+     "rss": 689040,
+     "pss": 547982,
+     "partitionAlloc": 177340,
+     "v8Sandbox": 185904,
+     "wasmMemories": 92288,
+     "v8": 55068,
+     "threads": 27
+    },
+    {
+     "ms": 5230,
+     "rss": 668672,
+     "pss": 527614,
+     "partitionAlloc": 178464,
+     "v8Sandbox": 186060,
+     "wasmMemories": 92288,
+     "v8": 42156,
+     "threads": 27
+    },
+    {
+     "ms": 5570,
+     "rss": 666036,
+     "pss": 524978,
+     "partitionAlloc": 180244,
+     "v8Sandbox": 187012,
+     "wasmMemories": 92288,
+     "v8": 41832,
+     "threads": 27
+    },
+    {
+     "ms": 6062,
+     "rss": 667524,
+     "pss": 526466,
+     "partitionAlloc": 181172,
+     "v8Sandbox": 193360,
+     "wasmMemories": 92288,
+     "v8": 40588,
+     "threads": 27
+    },
+    {
+     "ms": 6286,
+     "rss": 685496,
+     "pss": 544438,
+     "partitionAlloc": 182872,
+     "v8Sandbox": 193432,
+     "wasmMemories": 92288,
+     "v8": 43436,
+     "threads": 27
+    },
+    {
+     "ms": 6569,
+     "rss": 680648,
+     "pss": 539590,
+     "partitionAlloc": 182888,
+     "v8Sandbox": 193520,
+     "wasmMemories": 92288,
+     "v8": 43268,
+     "threads": 27
+    },
+    {
+     "ms": 6717,
+     "rss": 678024,
+     "pss": 536982,
+     "partitionAlloc": 183172,
+     "v8Sandbox": 194128,
+     "wasmMemories": 92288,
+     "v8": 40832,
+     "threads": 27
+    },
+    {
+     "ms": 7078,
+     "rss": 677720,
+     "pss": 537798,
+     "partitionAlloc": 184736,
+     "v8Sandbox": 194136,
+     "wasmMemories": 92288,
+     "v8": 40832,
+     "threads": 27
+    },
+    {
+     "ms": 7220,
+     "rss": 677724,
+     "pss": 537802,
+     "partitionAlloc": 184736,
+     "v8Sandbox": 194136,
+     "wasmMemories": 92288,
+     "v8": 40832,
+     "threads": 27
+    },
+    {
+     "ms": 7497,
+     "rss": 677708,
+     "pss": 537794,
+     "partitionAlloc": 184736,
+     "v8Sandbox": 194136,
+     "wasmMemories": 92288,
+     "v8": 40832,
+     "threads": 27
+    },
+    {
+     "ms": 7719,
+     "rss": 677708,
+     "pss": 537794,
+     "partitionAlloc": 184736,
+     "v8Sandbox": 194136,
+     "wasmMemories": 92288,
+     "v8": 40832,
+     "threads": 27
+    },
+    {
+     "ms": 7980,
+     "rss": 683524,
+     "pss": 543642,
+     "partitionAlloc": 185960,
+     "v8Sandbox": 198052,
+     "wasmMemories": 92288,
+     "v8": 41340,
+     "threads": 27
+    },
+    {
+     "ms": 8207,
+     "rss": 685896,
+     "pss": 545790,
+     "partitionAlloc": 186152,
+     "v8Sandbox": 199256,
+     "wasmMemories": 92288,
+     "v8": 42028,
+     "threads": 27
+    },
+    {
+     "ms": 8460,
+     "rss": 685896,
+     "pss": 545790,
+     "partitionAlloc": 186152,
+     "v8Sandbox": 199256,
+     "wasmMemories": 92288,
+     "v8": 42028,
+     "threads": 27
+    },
+    {
+     "ms": 8704,
+     "rss": 685896,
+     "pss": 545790,
+     "partitionAlloc": 186152,
+     "v8Sandbox": 199256,
+     "wasmMemories": 92288,
+     "v8": 42028,
+     "threads": 27
+    },
+    {
+     "ms": 8954,
+     "rss": 685900,
+     "pss": 545794,
+     "partitionAlloc": 186152,
+     "v8Sandbox": 199256,
+     "wasmMemories": 92288,
+     "v8": 42032,
+     "threads": 27
+    },
+    {
+     "ms": 9209,
+     "rss": 685904,
+     "pss": 545798,
+     "partitionAlloc": 186152,
+     "v8Sandbox": 199256,
+     "wasmMemories": 92288,
+     "v8": 42036,
+     "threads": 27
+    },
+    {
+     "ms": 9459,
+     "rss": 693856,
+     "pss": 553878,
+     "partitionAlloc": 186152,
+     "v8Sandbox": 199068,
+     "wasmMemories": 100620,
+     "v8": 42036,
+     "threads": 27
+    },
+    {
+     "ms": 9718,
+     "rss": 693856,
+     "pss": 553878,
+     "partitionAlloc": 186152,
+     "v8Sandbox": 199068,
+     "wasmMemories": 100620,
+     "v8": 42036,
+     "threads": 27
+    },
+    {
+     "ms": 9990,
+     "rss": 693756,
+     "pss": 553764,
+     "partitionAlloc": 186240,
+     "v8Sandbox": 198996,
+     "wasmMemories": 100620,
+     "v8": 42196,
+     "threads": 27
+    },
+    {
+     "ms": 10235,
+     "rss": 695900,
+     "pss": 555908,
+     "partitionAlloc": 186436,
+     "v8Sandbox": 199048,
+     "wasmMemories": 100620,
+     "v8": 43896,
+     "threads": 27
+    },
+    {
+     "ms": 10479,
+     "rss": 698496,
+     "pss": 558504,
+     "partitionAlloc": 187172,
+     "v8Sandbox": 199100,
+     "wasmMemories": 100620,
+     "v8": 50900,
+     "threads": 27
+    },
+    {
+     "ms": 10716,
+     "rss": 699012,
+     "pss": 559020,
+     "partitionAlloc": 187272,
+     "v8Sandbox": 199104,
+     "wasmMemories": 100620,
+     "v8": 46064,
+     "threads": 27
+    },
+    {
+     "ms": 10975,
+     "rss": 699012,
+     "pss": 559020,
+     "partitionAlloc": 187272,
+     "v8Sandbox": 199104,
+     "wasmMemories": 100620,
+     "v8": 46064,
+     "threads": 27
+    },
+    {
+     "ms": 11228,
+     "rss": 699012,
+     "pss": 559020,
+     "partitionAlloc": 187272,
+     "v8Sandbox": 199104,
+     "wasmMemories": 100620,
+     "v8": 46064,
+     "threads": 27
+    },
+    {
+     "ms": 11493,
+     "rss": 699016,
+     "pss": 559024,
+     "partitionAlloc": 187272,
+     "v8Sandbox": 199108,
+     "wasmMemories": 100620,
+     "v8": 46064,
+     "threads": 27
+    },
+    {
+     "ms": 11733,
+     "rss": 699048,
+     "pss": 559056,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199112,
+     "wasmMemories": 100620,
+     "v8": 46084,
+     "threads": 27
+    },
+    {
+     "ms": 11983,
+     "rss": 699056,
+     "pss": 559064,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199112,
+     "wasmMemories": 100620,
+     "v8": 46092,
+     "threads": 27
+    },
+    {
+     "ms": 12232,
+     "rss": 699060,
+     "pss": 559068,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199112,
+     "wasmMemories": 100620,
+     "v8": 46096,
+     "threads": 27
+    },
+    {
+     "ms": 12488,
+     "rss": 699060,
+     "pss": 559068,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199112,
+     "wasmMemories": 100620,
+     "v8": 46096,
+     "threads": 27
+    },
+    {
+     "ms": 12725,
+     "rss": 699064,
+     "pss": 559072,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199116,
+     "wasmMemories": 100620,
+     "v8": 46096,
+     "threads": 27
+    },
+    {
+     "ms": 12967,
+     "rss": 699064,
+     "pss": 559072,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199116,
+     "wasmMemories": 100620,
+     "v8": 46096,
+     "threads": 27
+    },
+    {
+     "ms": 13320,
+     "rss": 697704,
+     "pss": 558392,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199116,
+     "wasmMemories": 100620,
+     "v8": 46096,
+     "threads": 27
+    },
+    {
+     "ms": 13548,
+     "rss": 697704,
+     "pss": 558392,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199116,
+     "wasmMemories": 100620,
+     "v8": 46096,
+     "threads": 27
+    },
+    {
+     "ms": 13946,
+     "rss": 697704,
+     "pss": 558392,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199120,
+     "wasmMemories": 100620,
+     "v8": 46096,
+     "threads": 27
+    },
+    {
+     "ms": 14205,
+     "rss": 697692,
+     "pss": 558388,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199120,
+     "wasmMemories": 100620,
+     "v8": 46096,
+     "threads": 27
+    },
+    {
+     "ms": 14335,
+     "rss": 697692,
+     "pss": 558388,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199120,
+     "wasmMemories": 100620,
+     "v8": 46096,
+     "threads": 27
+    },
+    {
+     "ms": 14842,
+     "rss": 697692,
+     "pss": 558388,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199120,
+     "wasmMemories": 100620,
+     "v8": 46096,
+     "threads": 27
+    },
+    {
+     "ms": 15325,
+     "rss": 697696,
+     "pss": 558392,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199124,
+     "wasmMemories": 100620,
+     "v8": 46096,
+     "threads": 27
+    },
+    {
+     "ms": 15491,
+     "rss": 697696,
+     "pss": 558392,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199124,
+     "wasmMemories": 100620,
+     "v8": 46096,
+     "threads": 27
+    },
+    {
+     "ms": 15922,
+     "rss": 697696,
+     "pss": 558392,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199124,
+     "wasmMemories": 100620,
+     "v8": 46096,
+     "threads": 27
+    },
+    {
+     "ms": 16007,
+     "rss": 697696,
+     "pss": 558392,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199124,
+     "wasmMemories": 100620,
+     "v8": 46096,
+     "threads": 27
+    },
+    {
+     "ms": 16615,
+     "rss": 697696,
+     "pss": 558392,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199128,
+     "wasmMemories": 100620,
+     "v8": 46096,
+     "threads": 27
+    },
+    {
+     "ms": 16709,
+     "rss": 697668,
+     "pss": 558380,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199128,
+     "wasmMemories": 100620,
+     "v8": 46096,
+     "threads": 27
+    },
+    {
+     "ms": 17078,
+     "rss": 697668,
+     "pss": 558380,
+     "partitionAlloc": 187280,
+     "v8Sandbox": 199128,
+     "wasmMemories": 100620,
+     "v8": 46096,
+     "threads": 27
+    }
+   ],
+   "open": {
+    "openMs": 7015,
+    "timings": {
+     "manifest": 10,
+     "boot": 554,
+     "source": 676,
+     "preview.spawn": 684,
+     "agent.spawn": 684,
+     "agent.listening": 1419,
+     "preview.listening": 1484,
+     "preview.ready": 2655,
+     "agent.ready": 3043,
+     "chat.ready": 3222,
+     "preview.visible": 6882
+    }
+   },
+   "swInMainRenderer": false,
+   "swPid": 27620,
+   "error": "browser-control execute --json --session: {\n  \"ok\": false,\n  \"isError\": true,\n  \"text\": \"Session not found: s5-todo-first-1\",\n  \"value\": null,\n  \"valueUnavailable\": true,\n  \"error\": {\n    \"_tag\": \"RelayClient.RelayRejected\",\n    \"message\": \"Session not found: s5-todo-first-1\"\n  },\n  \"logs\": [],\n  \"warnings\": []\n}\n",
+   "processesGoneAfterClose": {
+    "main": true,
+    "sw": false
+   }
+  }
+ ]
+}
