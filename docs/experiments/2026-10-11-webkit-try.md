@@ -2,7 +2,7 @@
 
 Branch `webkit-try`, cut from `webkit-support` at `c8ab34c`. It joins the day's WebKit work
 into one tree and makes a static build that can be opened on an iPhone over the tailnet.
-**Nothing here has run in Safari or on iOS.** "WebKit" below is Playwright's Linux build
+**Sections 1 to 6 were written before anything had run in Safari or on iOS; section 7 is the first try on both.** "WebKit" below is Playwright's Linux build
 (`webkit-2370`, WebKit 27.2), headless; Chrome is 154 through `browser-control`. Machine load
 4 to 9 throughout.
 
@@ -120,3 +120,61 @@ runs, two of them with new profiles.
 - **Another relay**: `?wisp=wss://…` or the cog's field; `?tunnel=wss://…` for a relay of
   `packages/relay`, whose `RELAY_ORIGINS` must then list the page's origin. No relay or
   default was changed for this build, and no key is in it.
+
+## 7. The first try on an iPhone, and what it took
+
+iPhone, iOS 18.7, Brave (WebKit), the deployed build with `?mock=1`: 256 MiB of kernel memory,
+the dev server listening at 938 ms, OpenCode healthy at 1,556 ms, the scripted reply to
+`hello`. **The TODO app was blank.**
+
+**Cause, reproduced in the iOS 18.3 simulator (Safari) on the user's Mac.** The frame's
+document stayed `interactive` with `#root` empty: 9 module requests had arrived, and
+`react-dom_client.js` and `chunk-….js` never did, although the dev server had answered both
+(`res 200` in the runtime trace). Those two are the only bodies over 256 KB, which the
+preview bridge sends as a transferred `ReadableStream`; iOS 18 cannot transfer one
+(decisions, "a preview body crosses a port"). The same build with the fix draws the app
+there. The phone's own trace had the same shape (everything 200, blank app) but no readout
+of the frame, so that it is the same fault on 18.7 is an inference until a readout from the
+phone says `stream transfer: NO` and `app: 22 nodes`.
+
+Ruled out in the simulator: the frame being 0 px wide while the terminal covers the page
+(`?layout=old` and the new layout failed alike before the fix, and both work after it).
+Not reproducible there: Brave's injected wallet script. An exception in an injected script
+ends that script only; the frame's modules are separate scripts and do not depend on it.
+
+Also found there: on iOS before 18.4 the OpenCode server died at start (`Can't find
+variable: Iterator`, fixed); and with a workspace of the simulator's first runs the client
+opened on "Connect an integration", which took the `?auto=` prompt, so the scripted edit
+turn was **not** run on iOS. Not looked into.
+
+**What changed in the build** (`examples/terminal-app`):
+
+- The panel sends its readout to a collector (`diag-collector.ts`; `DIAG_URL` at build
+  time or `?diag=<url>`): the Send button, and by itself once the terminal is up, on an
+  error, when the app's frame changes and on pagehide. It needs https from an https page:
+  `tailscale serve --bg --https=4319 http://127.0.0.1:4319` on the collecting machine.
+- The readout starts with the last error and the app's frame (box, what covers it, scroll
+  offsets, readyState, `#root`, body, the dev client's websocket, each request), then the
+  stages; the environment is at the end. One line of it is always on the screen.
+- At phone width the terminal lies over the app instead of beside it, so the frame is never
+  0 px wide; closing blurs the terminal, resets the page's scroll and has the frame laid
+  out again. `?layout=old` is the earlier layout, to compare.
+- `?panel=closed`, `?auto=<prompt>`, `?closeAfter=<s>`, `?diagTall=1`, `?diagPage=<s>`: a
+  simulator that nothing can tap, read from screenshots (`ios-build sh xcrun simctl openurl
+  booted <url>`, `xcrun simctl io booted screenshot`). A page there cannot post to a plain
+  http collector on the Mac's loopback (mixed content), hence the screenshots.
+
+**Storage.** The 210 MiB that `storage.estimate` showed at the first load was not the
+image: the shelf's origin is shared with other pages, and its private file system held two
+speech models of another page (`pk-models/…`, 129 + 81 MiB). The image is stored once. What
+makes the estimate jump is a reload while the image arrives: the next load downloads it
+again into the same `.partial` file (`imageCached:false, imageArriving:true`), and WebKit's
+estimate then counts both (392 to 424 MiB in Playwright's WebKit with one 194 MiB file in
+the profile; back to 208 MiB after a browser restart). The panel now lists the stored
+files with their sizes. An interrupted download still starts over from zero; not changed.
+
+**Checked after the change**, deployed address, `?mock=1&reset=1`: open, `hello`, the
+heading edit, Close, the app visible with "Tasks" on top of the page: Chrome 154 at
+430 x 800 (4 readouts arrived at the collector over loopback) and Playwright WebKit as an
+iPhone 15 Pro Max (its uploads refused as mixed content from the https page; from the same
+build on `http://127.0.0.1` they arrived). `runtime/harness/check.sh` in WebKit: 12 of 12.

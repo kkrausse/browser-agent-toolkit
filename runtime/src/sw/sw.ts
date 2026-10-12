@@ -13,6 +13,7 @@
 // streams, so nothing is buffered whole and the page's main thread is not on
 // the path.
 import type { FromNetd, ShimToServiceWorker, ToNetd, ToServiceWorker } from '../host/bridge-protocol'
+import { canTransferStreams, portToStream } from '../host/stream-port'
 import { previewShim } from './preview-shim'
 
 declare const self: ServiceWorkerGlobalScope
@@ -51,6 +52,7 @@ function setBridge(port: MessagePort) {
   bridge = port
   port.onmessage = (e: MessageEvent<FromNetd>) => {
     const m = e.data
+    if (m.t === 'response' && m.body && !(m.body instanceof ArrayBuffer) && !(m.body instanceof ReadableStream)) m.body = portToStream(m.body.port)
     const p = pending.get(m.id)
     if (!p) return void (m.t === 'response' && m.body instanceof ReadableStream && m.body.cancel().catch(() => {}))
     pending.delete(m.id)
@@ -210,8 +212,10 @@ async function toGuest(event: FetchEvent, guestPort: number, url: URL): Promise<
   const id = nextId++
   const answer = new Promise<Extract<FromNetd, { t: 'response' }>>((resolve, reject) => pending.set(id, { resolve, reject }))
   // The guest server is configured with the prefix as its base: it sees the whole path.
-  const message: ToNetd = { t: 'fetch', id, port: guestPort, method: request.method, path: url.pathname + url.search, headers, body: hasBody ? request.body : null }
-  port.postMessage(message, hasBody ? [request.body as unknown as Transferable] : [])
+  // A request body streams where a stream can be transferred, and is sent whole elsewhere.
+  const sent = !hasBody ? null : canTransferStreams() && request.body ? request.body : await request.arrayBuffer()
+  const message: ToNetd = { t: 'fetch', id, port: guestPort, method: request.method, path: url.pathname + url.search, headers, body: sent }
+  port.postMessage(message, sent ? [sent as unknown as Transferable] : [])
   request.signal.addEventListener('abort', () => {
     port.postMessage({ t: 'abort', id } satisfies ToNetd)
     pending.get(id)?.reject(Object.assign(new Error('aborted'), { code: 'ABORT_ERR' }))
@@ -269,7 +273,8 @@ async function toGuest(event: FetchEvent, guestPort: number, url: URL): Promise<
     return plain(502, `The preview server answered with status ${res.status}.`)
   }
   const nullBody = res.status === 204 || res.status === 205 || res.status === 304 || request.method === 'HEAD'
-  let body: ReadableStream<Uint8Array> | ArrayBuffer | null = nullBody ? null : res.body
+  // (A ported body became a stream when the answer arrived: setBridge.)
+  let body: ReadableStream<Uint8Array> | ArrayBuffer | null = nullBody ? null : (res.body as ReadableStream<Uint8Array> | ArrayBuffer | null)
   if (nullBody) void discard()
   if (body && html && res.status !== 206) {
     body = injectShim(body instanceof ReadableStream ? body : new Response(body).body!)

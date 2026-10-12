@@ -30,6 +30,8 @@
 //   ?auto=<prompt>       type this prompt into the client and press Enter once it is up: with the next one, a state
 //                        of the page can be reached by its address alone, where nothing can tap or type (a simulator)
 //   ?closeAfter=<s>      close the terminal panel that many seconds after the terminal is up
+//   ?layout=old          the phone layout as it was before 2026-10-11 (the panel beside the app, which is then 0 px
+//                        wide until Close; nothing done on Close), to compare the two on a device
 //
 // The public build (`PUBLIC=1 bun run build`, a page for strangers) differs: with no `?model=`
 // the server has no provider of this page's and uses OpenCode's own hosted free models
@@ -173,7 +175,10 @@ document.querySelector<HTMLElement>('#about')!.hidden = !isPublic || !!model
  * phone scrolls it towards a focused field, and `overflow: hidden` does not stop that), have
  * the frame laid out and painted again, and tell its window, which gets no `resize` of its
  * own when its size did not change. */
+const oldLayout = params.get('layout') === 'old'
+document.body.classList.toggle('flow', oldLayout)
 const settleFrame = () => {
+  if (oldLayout) return
   const settle = () => {
     if (scrollX || scrollY) scrollTo(0, 0)
     document.documentElement.scrollLeft = document.documentElement.scrollTop = document.body.scrollLeft = document.body.scrollTop = 0
@@ -189,6 +194,7 @@ const settleFrame = () => {
 }
 const panel = installPanel({
   startClosed: params.get('panel') === 'closed',
+  keepFocus: oldLayout,
   onOpen: () => window.batTerminal.terminal?.display.focus(),
   onChange: open => { diag.event('stage', `terminal panel ${open ? 'opened' : 'closed'}`); settleFrame() },
 })
@@ -321,7 +327,8 @@ async function main() {
     runtime.spawn(toLaunch(preview, { BROWSER_AGENT_PORT: String(preview.port), BROWSER_AGENT_BASE: new URL(app.url).pathname })),
     runtime.spawn(serverLaunch(agent, password, model, tunnel ? { tunnel } : isPublic ? {} : { fetchMap: { [openAiKeys]: new URL('openai-jwks.json', here).href } })),
   ])
-  follow('app', appProcess, false)
+  // With the panel the dev server's own output is in the readout too: what it says when a request fails.
+  follow('app', appProcess, diag.panel)
   follow('opencode', serverProcess, true)
   const appUp = app.ready(lifetime.signal).then(() => { frame.src = app.url; diag.event('stage', 'the app\'s dev server listens: frame set') })
   frame.addEventListener('load', () => { if (frame.src) { diag.event('stage', 'the app\'s frame loaded'); settleFrame() } })

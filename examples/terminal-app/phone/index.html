@@ -4,10 +4,11 @@
 <style>li { margin: 10px 0; } small { color: #8a8980; display: block; } code { font-size: 12px; }</style></head>
 <body>
 <h1>browser-agent-toolkit · first try in Safari</h1>
-<p>Branch <code>webkit-try</code>, built __BUILT__ from <code>__COMMIT__</code>. Every page has its readout on the page and a <b>Copy all</b> button: paste that back.</p>
+<p>Branch <code>webkit-try</code>, built __BUILT__ from <code>__COMMIT__</code>. The demo's readout is on the page, and where this build was given a collector it is sent there by itself (once the terminal is up, when the app's frame changes, on an error) and by the <b>Send</b> button: nothing to copy or paste. The line above the buttons ("app: 22 nodes, 430x739 … · sent 3") says what the app's frame holds and how many readouts arrived.</p>
 <h1>The demo</h1>
 <ul>
-<li><a href="demo/?mock=1&reset=1"><b>Demo with the scripted model</b> (start here)</a><small>No network, key or relay after the first download (about 45 MB). A fresh workspace each time this link is used. In the terminal type <code>hello</code>, then <code>set the heading to "Tasks"</code>.</small></li>
+<li><a href="demo/?mock=1&reset=1"><b>Demo with the scripted model</b> (start here)</a><small>When the terminal is there tap <b>Close</b> to see the app. No network, key or relay after the first download (about 45 MB). A fresh workspace each time this link is used. In the terminal type <code>hello</code>, then <code>set the heading to "Tasks"</code>.</small></li>
+<li><a href="demo/?mock=1&layout=old">The same link with the phone layout as it was</a><small>The terminal beside the app instead of over it (the app's frame is 0 px wide until Close). To compare if the app is blank in one and not the other.</small></li>
 <li><a href="demo/?mock=1">The same, keeping the workspace</a><small>A reopen: nothing is downloaded again, the edits are kept.</small></li>
 <li><a href="demo/?mock=1&reset=1&kmem=128">Scripted model, kernel memory 128 MiB</a><small>If the first link fails with "this browser refused a shared memory of 256 MiB".</small></li>
 <li><a href="demo/?reset=1">Demo as published: OpenCode's free hosted model through the public Wisp relay</a><small>Needs the phone to reach the internet (opencode.ai, wss://wisp.mercurywork.shop). ChatGPT plan: type <code>/connect</code> in the prompt, OpenAI, sign in with a code.</small></li>

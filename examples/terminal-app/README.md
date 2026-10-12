@@ -128,6 +128,11 @@ bun build-phone.ts          # dist-phone/: index.html, demo/, probes/
 the WebKit probes of `runtime/harness/webkit/` as pages. Put the directory on any https file
 shelf and open its `index.html`; nothing is published by the script.
 
+- **Sending the readout** (no paste on a phone): `bun diag-collector.ts` keeps every upload
+  as a file under `.diagnostics/uploads/`; build with `DIAG_URL=https://<machine>:4319/diag`
+  (or add `?diag=<that>` to the address) and the panel posts there by itself and from its
+  Send button. From an https page the collector must be https:
+  `tailscale serve --bg --https=4319 http://127.0.0.1:4319`.
 - **The panel** (`src/diag.ts`; always on in this build, `?diag=1` in any other, `?panel=0`
   hides it): user agent, `crossOriginIsolated`, whether the service worker controls the page,
   `navigator.storage.estimate()`, a probe of an OPFS sync access handle, the size the kernel

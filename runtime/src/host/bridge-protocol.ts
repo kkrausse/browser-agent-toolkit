@@ -4,7 +4,7 @@
 
 /** Service worker → netd, over the port the page handed to both. */
 export type ToNetd =
-  | { t: 'fetch'; id: number; port: number; method: string; path: string; headers: [string, string][]; body: ReadableStream<Uint8Array> | null }
+  | { t: 'fetch'; id: number; port: number; method: string; path: string; headers: [string, string][]; body: ReadableStream<Uint8Array> | ArrayBuffer | null }
   | { t: 'abort'; id: number }
   /** A WebSocket of the preview frame: `channel` is the frame's end. */
   | { t: 'ws'; port: number; path: string; protocols: string[]; headers: [string, string][]; channel: MessagePort }
@@ -12,8 +12,11 @@ export type ToNetd =
 /** netd → service worker. */
 export type FromNetd =
   /** `body` is a transferred stream, or the whole body when it is small and its length was announced. */
-  | { t: 'response'; id: number; status: number; statusText: string; headers: [string, string][]; body: ReadableStream<Uint8Array> | ArrayBuffer | null }
+  | { t: 'response'; id: number; status: number; statusText: string; headers: [string, string][]; body: ReadableStream<Uint8Array> | ArrayBuffer | PortedBody | null }
   | { t: 'error'; id: number; code: string; message: string }
+
+/** A body where a stream cannot be transferred (Safari on iOS 18): read through `port` (stream-port.ts). */
+export type PortedBody = { port: MessagePort }
 
 /** Preview frame shim → netd, over the per-socket channel. */
 export type WsToNetd = { t: 'send'; data: string | ArrayBuffer } | { t: 'close'; code?: number; reason?: string }

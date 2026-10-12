@@ -492,7 +492,9 @@ export function createSqliteModule(backend: FsBackend, options: SqliteModuleOpti
       return sql
     }
   }
-  const iteratorPrototype = Object.create(Iterator.prototype, {
+  // %IteratorPrototype% by way of an array iterator: the global `Iterator` is missing before
+  // Safari 18.4, where the OpenCode server died here at start ("Can't find variable: Iterator").
+  const iteratorPrototype = Object.create(Object.getPrototypeOf(Object.getPrototypeOf([][Symbol.iterator]())), {
     [Symbol.toStringTag]: { value: 'StatementSyncIterator', configurable: true },
   })
 

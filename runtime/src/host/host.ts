@@ -491,7 +491,14 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
   const toWorker = (m: ToServiceWorker, transfer: Transferable[] = []) => serviceWorker?.postMessage(m, transfer)
   const sendPort = (target: ServiceWorker) => {
     const channel = new MessageChannel()
-    void netd.call('port', { port: channel.port1 }, [channel.port1])
+    // For a check of the port-carried bodies in an engine that transfers streams (stream-port.ts).
+    let portedBodies = false
+    try {
+      portedBodies = localStorage.getItem('bat-ported-bodies') === '1'
+    } catch {
+      // storage unavailable
+    }
+    void netd.call('port', { port: channel.port1, portedBodies }, [channel.port1])
     target.postMessage({ t: 'bat-port', port: channel.port2, hostPaths, guestPaths } satisfies ToServiceWorker, [channel.port2])
   }
   const onWorkerMessage = (e: MessageEvent) => {

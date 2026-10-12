@@ -61,8 +61,8 @@
        where a focused field could have the browser scroll to it. */
     @media (max-width: 700px) {
       body { --panel: 100vw; }
-      #panel { position: fixed; top: 0; right: 0; bottom: 0; left: 0; width: auto; z-index: 2; transition: none; }
-      body.closed #panel { margin-right: 0; transition: none; }
+      body:not(.flow) #panel { position: fixed; top: 0; right: 0; bottom: 0; left: 0; width: auto; z-index: 2; transition: none; }
+      body.closed:not(.flow) #panel { margin-right: 0; transition: none; }
       #grip { display: none; }
     }
   </style>

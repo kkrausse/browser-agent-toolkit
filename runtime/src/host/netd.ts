@@ -15,6 +15,7 @@ import { wsConnect } from '../net/ws-client'
 import type { FromNetd, ToNetd, WsFromNetd, WsToNetd } from './bridge-protocol'
 import { collectImages, storeImage } from './image'
 import { createReactor } from './reactor'
+import { canTransferStreams, streamToPort, withoutStreamTransfer } from './stream-port'
 
 let kernel: Kernel | undefined
 let ctx: NetContext | undefined
@@ -43,7 +44,7 @@ function serve(port: MessagePort) {
     const abort = new AbortController()
     inflight.set(m.id, abort)
     client!
-      .request(m.port, { method: m.method, path: m.path, headers: m.headers, body: m.body, signal: abort.signal })
+      .request(m.port, { method: m.method, path: m.path, headers: m.headers, body: m.body instanceof ArrayBuffer ? new Response(m.body).body : m.body, signal: abort.signal })
       .then(
         async (res) => {
           const head = { t: 'response' as const, id: m.id, status: res.status, statusText: res.statusText, headers: res.headers }
@@ -67,10 +68,21 @@ function serve(port: MessagePort) {
             return post({ ...head, body: buffer }, [buffer])
           }
           // The stream is transferred; when the frame cancels it the connection closes.
-          post({ ...head, body: res.body }, [res.body as unknown as Transferable])
+          // Where a stream cannot be transferred, a port to read it through is.
+          if (canTransferStreams()) return post({ ...head, body: res.body }, [res.body as unknown as Transferable])
+          const through = streamToPort(res.body)
+          post({ ...head, body: { port: through } }, [through])
         },
         (err) => post({ t: 'error', id: m.id, code: String(err?.code ?? err?.name ?? 'EFAIL'), message: String(err?.message ?? err) }),
       )
+      // Whatever went wrong on the way out: the frame's request fails, it does not wait for ever.
+      .catch((err) => {
+        try {
+          post({ t: 'error', id: m.id, code: 'EBRIDGE', message: String(err?.message ?? err) })
+        } catch {
+          // the port is gone
+        }
+      })
       .finally(() => inflight.delete(m.id))
   }
   ;(port as any).onclose = () => {
@@ -135,7 +147,8 @@ const ops: Record<string, (a: any, id: number) => unknown> = {
     return { pid, thread: inst.thread }
   },
   /** A new service worker instance (first registration, update, or restart after idle). */
-  port(a: { port: MessagePort }) {
+  port(a: { port: MessagePort; portedBodies?: boolean }) {
+    if (a.portedBodies) withoutStreamTransfer()
     serve(a.port)
   },
   close() {

@@ -12,7 +12,7 @@ export interface Panel {
   setWidth(pixels: number): void
 }
 
-export function installPanel(options: { onOpen?(): void; /** After the panel opened or closed (not at the start). */ onChange?(open: boolean): void; /** Start closed whatever this browser remembers (`?panel=closed`). */ startClosed?: boolean } = {}): Panel {
+export function installPanel(options: { onOpen?(): void; /** After the panel opened or closed (not at the start). */ onChange?(open: boolean): void; /** Start closed whatever this browser remembers (`?panel=closed`). */ startClosed?: boolean; /** Leave the focus where it is on closing (the behaviour before 2026-10-11). */ keepFocus?: boolean } = {}): Panel {
   const body = document.body
   const panel = document.querySelector<HTMLElement>('#panel')!, grip = document.querySelector<HTMLElement>('#grip')!
   const clamp = (pixels: number) => Math.round(Math.max(280, Math.min(window.innerWidth - 120, pixels)))
@@ -30,7 +30,7 @@ export function installPanel(options: { onOpen?(): void; /** After the panel ope
     store(openKey, next ? '1' : '0')
     // Closing takes the focus out of the terminal: a focused field in a hidden panel keeps a
     // phone's keyboard up, and the browser may scroll the page towards it.
-    if (!next && panel.contains(document.activeElement)) (document.activeElement as HTMLElement).blur()
+    if (!next && !options.keepFocus && panel.contains(document.activeElement)) (document.activeElement as HTMLElement).blur()
     apply()
     if (next) options.onOpen?.()
     options.onChange?.(next)

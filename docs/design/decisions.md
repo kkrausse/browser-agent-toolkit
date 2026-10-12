@@ -1584,3 +1584,29 @@ servers.
   showed the new heading within 100 s): 4 answers of 200 and 12 of 429. Not explained. The server's address is shared by everybody who uses it, which
   would do it if Zen's free tier counts per address; there was no working relay of ours left
   to compare with.
+
+## 2026-10-11: a preview body crosses a port where a stream cannot be transferred
+
+- **What was wrong.** The preview bridge sent every response body over 256 KB, or of unknown
+  length, from the bridge worker to the service worker as a transferred `ReadableStream`.
+  Safari on iOS 18 cannot transfer one: `postMessage` throws, nothing caught it, the request
+  was never answered. A Vite dev server's `react-dom_client.js` and its shared chunk are
+  over the limit, so the frame's module graph waited for ever: the document stayed
+  `interactive`, `#root` empty, the app blank, with every request marked `res 200` in the
+  runtime trace (that mark is made at the headers). Playwright's WebKit 27.2 transfers
+  streams, so no check on this machine showed it.
+- **Decision.** `runtime/src/host/stream-port.ts`: where a probe says a stream cannot be
+  transferred, the body is read through a transferred `MessagePort`, one chunk per request
+  of the reader, so backpressure and cancellation still reach the guest's connection. A
+  request body is sent whole in that case. Engines that transfer streams are unchanged.
+  Whatever fails on the way out now answers the request with an error.
+- **Checked.** iOS 18.3 simulator (Safari): before, 9 of 11 module requests arrived and the
+  app never mounted, in the old and the new phone layout alike; after, the app is drawn.
+  `localStorage['bat-ported-bodies'] = '1'` makes the bridge use the port in any engine: the
+  terminal example's scripted scenario passed that way in WebKit 27.2.
+- **Also for Safari before 18.4**: `node:sqlite`'s iterator prototype no longer names the
+  global `Iterator`, which is missing there (the OpenCode server died at start).
+- **The preview shim reports to a page that asks.** A page that sets `__batPreviewReport` on
+  its window before the frame loads is posted the frame's errors, failed loads, rejections,
+  `console.error` and guest socket states (`{ t: 'bat-preview', kind, text }`). Off
+  otherwise: a diagnostics aid, not part of the toolkit's API.

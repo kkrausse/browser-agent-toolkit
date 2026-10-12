@@ -132,6 +132,7 @@ function installPanel(collector: string | null, id: string): { event(kind: strin
     #diag > header { flex-wrap: wrap; }
     #diag > header i { flex: 1 0 100%; order: -1; font-style: normal; color: #98bb6c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #diag.small > header { max-width: 92vw; }
+    #diag.tall { max-height: 94vh; font-size: 9px; line-height: 1.25; }
     #diag button { font: inherit; padding: 5px 10px; }
     #diag > pre { flex: 1 1 auto; min-height: 0; margin: 0; padding: 0 8px 8px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; -webkit-user-select: text; user-select: text; }
     #diag > textarea { flex: 0 0 30vh; margin: 0 8px 8px; font: inherit; color: inherit; background: #16161d; border: 1px solid #54546d; }
@@ -142,6 +143,8 @@ function installPanel(collector: string | null, id: string): { event(kind: strin
   const headline = root.querySelector('b')!, body = root.querySelector('pre')!, manual = root.querySelector('textarea')!
   const marker = root.querySelector('i')!, sendButton = root.querySelector<HTMLButtonElement>('button[name="send"]')!
   const toggle = root.querySelector<HTMLButtonElement>('button[name="toggle"]')!, copy = root.querySelector<HTMLButtonElement>('button[name="copy"]')!
+  // `?diagTall=1`: nearly the whole screen and small type, to read much of it from a screenshot.
+  if (new URLSearchParams(location.search).get('diagTall') === '1') root.classList.add('tall')
   const attach = () => document.body.append(root)
   if (document.body) attach(); else addEventListener('DOMContentLoaded', attach)
   // Open while the page starts, out of the way once it has (unless something failed, or it was touched).
@@ -185,6 +188,14 @@ function installPanel(collector: string | null, id: string): { event(kind: strin
     }
     try { await walk(await navigator.storage.getDirectory(), '', 0); fact('storage files', found.join('; ') || 'none') } catch (error) { fact('storage files', `not readable: ${text(error, 200)}`) }
   }
+  // Safari on iOS 18 cannot transfer a ReadableStream between threads; the preview bridge then
+  // carries large bodies over a port (runtime/src/host/stream-port.ts).
+  try {
+    const { port1, port2 } = new MessageChannel(), probe = new ReadableStream()
+    port1.postMessage(probe, [probe as unknown as Transferable])
+    port1.close(); port2.close()
+    facts['stream transfer'] = 'yes'
+  } catch (error) { facts['stream transfer'] = `NO (${text(error, 120)}): preview bodies over 256 KB cross a port instead` }
   const storage = () => { estimate(); void stored() }
   storage()
   setInterval(storage, 15_000)
@@ -292,10 +303,10 @@ function installPanel(collector: string | null, id: string): { event(kind: strin
       const shim = inside as unknown as { __batPreviewShim?: boolean; __batPreviewWs?: string; ethereum?: unknown }
       say(`frame scripts: preview shim ${shim.__batPreviewShim ? 'ran' : 'did NOT run'}, dev client websocket ${shim.__batPreviewWs ?? 'never opened'}, vite client ${inner.querySelector('script[src*="@vite/client"]') ? 'in the document' : 'not in the document'}, window.ethereum ${typeof shim.ethereum} (top: ${typeof (window as { ethereum?: unknown }).ethereum})`)
       frameMark = `app: ${nodes} nodes, ${size(box)}${heading === undefined ? ', no h1' : ` "${heading}"`}${appRoot?.childElementCount ? '' : ', #root EMPTY'}`
-      if (full) {
+      {
         const requests = inside.performance.getEntriesByType('resource') as (PerformanceResourceTiming & { responseStatus?: number })[]
         say(`frame requests (${requests.length}; status as the frame saw it, ms, bytes):`)
-        for (const entry of requests.slice(-60)) say(`  ${entry.responseStatus ?? '?'}  ${String(Math.round(entry.duration)).padStart(5)} ms  ${String(entry.decodedBodySize ?? '?').padStart(7)}  ${entry.initiatorType}  ${entry.name.replace(location.origin, '').slice(0, 140)}`)
+        for (const entry of requests.slice(full ? -60 : -8)) say(`  ${entry.responseStatus ?? '?'}  ${String(Math.round(entry.duration)).padStart(5)} ms  ${String(entry.decodedBodySize ?? '?').padStart(7)}  ${entry.initiatorType}  ${entry.name.replace(location.origin, '').slice(0, 140)}`)
       }
     } catch (error) { say(`reading the frame failed: ${text(error, 300)}`) }
     return [frameMark, ...out]
@@ -341,14 +352,6 @@ function installPanel(collector: string | null, id: string): { event(kind: strin
     const out = [
       `diagnostics of ${location.href}`,
       `loaded ${started.toISOString()}, now +${Math.round(performance.now())} ms, load ${loads} of this tab`,
-      `user agent: ${navigator.userAgent}`,
-      `platform: ${navigator.platform}, touch points ${navigator.maxTouchPoints}, cores ${navigator.hardwareConcurrency ?? '?'}, deviceMemory ${(navigator as { deviceMemory?: number }).deviceMemory ?? '?'}, viewport ${innerWidth}x${innerHeight} @${devicePixelRatio}, standalone ${(navigator as { standalone?: boolean }).standalone ?? 'n/a'}`,
-      `crossOriginIsolated: ${crossOriginIsolated}, secure context: ${isSecureContext}, SharedArrayBuffer: ${typeof SharedArrayBuffer}, Atomics.waitAsync: ${typeof (Atomics as { waitAsync?: unknown }).waitAsync}, DecompressionStream: ${typeof DecompressionStream}`,
-      `service worker: ${!('serviceWorker' in navigator) ? 'not offered' : controller ? `controls the page (${controller.state}, ${controller.scriptURL.split('/').pop()})` : 'does not control the page'}`,
-      ...Object.entries(facts).map(([name, value]) => `${name}: ${value}`),
-      ...(facts['kernel memory'] ? [] : ['kernel memory: not allocated yet (or the runtime never got that far)']),
-      ...(memory ? [`js heap: ${mib(memory.usedJSHeapSize)} of ${mib(memory.jsHeapSizeLimit)}`] : []),
-      '',
       `collector: ${collector ?? 'none (?diag=<url>)'}${collector ? `, load id ${id}, ${sent} sent${sendFailed ? `, last failure: ${sendFailed}` : ''}` : ''}`,
       '',
       `LAST ERROR: ${lastError ? `+${Math.round(lastError.t)} ms [${lastError.kind}]\n${lastError.text}` : 'none'}`,
@@ -376,6 +379,15 @@ function installPanel(collector: string | null, id: string): { event(kind: strin
       `RUNTIME TRACE (last ${full ? Math.min(marks.length, 400) : Math.min(marks.length, 15)} of ${traceTotal})`,
       ...lines(marks, full ? 400 : 15),
     ]
+    out.push('', 'ENVIRONMENT',
+      `user agent: ${navigator.userAgent}`,
+      `platform: ${navigator.platform}, touch points ${navigator.maxTouchPoints}, cores ${navigator.hardwareConcurrency ?? '?'}, deviceMemory ${(navigator as { deviceMemory?: number }).deviceMemory ?? '?'}, viewport ${innerWidth}x${innerHeight} @${devicePixelRatio}, standalone ${(navigator as { standalone?: boolean }).standalone ?? 'n/a'}`,
+      `crossOriginIsolated: ${crossOriginIsolated}, secure context: ${isSecureContext}, SharedArrayBuffer: ${typeof SharedArrayBuffer}, Atomics.waitAsync: ${typeof (Atomics as { waitAsync?: unknown }).waitAsync}, DecompressionStream: ${typeof DecompressionStream}`,
+      `service worker: ${!('serviceWorker' in navigator) ? 'not offered' : controller ? `controls the page (${controller.state}, ${controller.scriptURL.split('/').pop()})` : 'does not control the page'}`,
+      ...Object.entries(facts).map(([name, value]) => `${name}: ${value}`),
+      ...(facts['kernel memory'] ? [] : ['kernel memory: not allocated yet (or the runtime never got that far)']),
+      ...(memory ? [`js heap: ${mib(memory.usedJSHeapSize)} of ${mib(memory.jsHeapSizeLimit)}`] : []),
+      '')
     if (full) out.push('', `UPLOADS (${uploads.length})`, ...lines(uploads), '', 'TERMINAL SCREEN', screenText || '(nothing drawn)')
     if (previous) out.push('', `PREVIOUS LOAD OF THIS PAGE IN THIS BROWSER (what it had reached; ${full ? 'whole' : 'its head, Copy all has the rest'})`, full ? previous : previous.split('\n').slice(0, 14).join('\n'))
     return out.join('\n')
@@ -385,13 +397,24 @@ function installPanel(collector: string | null, id: string): { event(kind: strin
     try { localStorage.setItem(lastKey, readout(true).split('\nPREVIOUS LOAD OF THIS PAGE')[0]!.slice(0, 60_000)) } catch { /* no storage, or full */ }
   }
   let pending: ReturnType<typeof setTimeout> | undefined, saved = 0
+  // `?diagPage=<s>` (with `?diagTall=1`): after that many seconds the whole readout stands still
+  // and is paged through, a page every 3 s, so that screenshots of a simulator can take all of it.
+  let frozen = false
+  const pageAfter = Number(new URLSearchParams(location.search).get('diagPage'))
+  if (pageAfter > 0) setTimeout(() => {
+    frozen = true
+    root.classList.remove('small')
+    body.textContent = readout(true).split('\nPREVIOUS LOAD OF THIS PAGE')[0]!
+    body.scrollTop = 0
+    setInterval(() => { body.scrollTop += Math.round(body.clientHeight * 0.9) }, 3000)
+  }, pageAfter * 1000)
   function render() {
     pending = undefined
     const failed = stages.findLast(line => line.kind === 'failed')
     const stage = stages.findLast(line => line.kind === 'stage' || line.kind === 'failed')
     headline.textContent = `diag · ${failed ? 'FAILED' : stage?.text.slice(0, 60) ?? 'starting'}${errors.length ? ` · ${errors.length} error(s)` : ''}`
     headline.classList.toggle('bad', !!failed || errors.length > 0)
-    if (!root.classList.contains('small')) {
+    if (!root.classList.contains('small') && !frozen) {
       const pinned = body.scrollTop < 4
       body.textContent = readout(false)
       if (pinned) body.scrollTop = 0
