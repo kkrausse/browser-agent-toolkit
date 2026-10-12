@@ -203,6 +203,6 @@ export function pendingPrompts(session: SessionState | undefined): PendingPrompt
   return session.pending.flatMap(item => item.type === 'user'
     ? [{ id: item.id, sessionID: session.id, text: item.payload.text, delivery: item.delivery, status: pendingStatus(session, item.id) ?? 'starting' }] : []);
 }
-/** Text and reasoning parts whose beginning was not received (the client joined mid-stream). */
+/** A streaming text or reasoning part whose text here has a piece missing until it ends. */
 export const isPartial = (session: SessionState, messageID: string, kind: 'text' | 'reasoning', ordinal: number): boolean =>
   session.partial.includes(`${messageID}:${kind}:${ordinal}`);

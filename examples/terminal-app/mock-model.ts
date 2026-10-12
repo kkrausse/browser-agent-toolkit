@@ -66,7 +66,7 @@ const server = Bun.serve({
     const turn = parse(await request.json() as Json)
     const step = next(turn)
     const sent = [...request.headers.keys()].filter(name => !/^(host|connection|content-length|accept-encoding|accept-language|sec-|origin$|referer$|priority$)/.test(name))
-    console.log(`[mock] ${url.pathname} from ${origin} "${turn.user.slice(0, 60).replaceAll('\n', ' ')}" results=${turn.results.length} tools=${turn.tools.length} -> ${step.call ? `${step.call.name} ${step.call.arguments.slice(0, 120)}` : 'text'}  (request headers: ${sent.join(', ')})`)
+    console.log(`[mock] ${url.pathname} from ${origin} "${turn.user.slice(0, 60).replaceAll('\n', ' ')}" results=${turn.results.length} tools=${turn.tools.length}${turn.attachments.length ? ` attachments=[${turn.attachments.join(', ')}]` : ''} -> ${step.call ? `${step.call.name} ${step.call.arguments.slice(0, 120)}` : 'text'}  (request headers: ${sent.join(', ')})`)
     return reply(turn, step, cors)
   },
 })

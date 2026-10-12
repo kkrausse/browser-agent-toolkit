@@ -285,6 +285,8 @@ function reduceTranscript(session: SessionState, event: OpenCodeEvent): SessionS
     case 'session.step.started': {
       const existing = session.messages[event.data.assistantMessageID];
       if (existing?.type === 'assistant') {
+        // This very start, again: the transcript read already included it.
+        if (existing.time.created === event.data.started) return session;
         // The same step attempted again (a retry): its parts stay, and the ordinals of the
         // new attempt count from here.
         const base = { text: countParts(existing, 'text'), reasoning: countParts(existing, 'reasoning') };
@@ -324,7 +326,8 @@ function reduceTranscript(session: SessionState, event: OpenCodeEvent): SessionS
     case 'session.text.started':
     case 'session.reasoning.started': {
       const kind = event.type === 'session.text.started' ? 'text' : 'reasoning';
-      return editAssistant(session, event.data.assistantMessageID, assistant => {
+      // Heard from its start, whatever a read in flight made of it.
+      return editAssistant(clearPartial(session, partialKey(event.data.assistantMessageID, kind, event.data.ordinal)), event.data.assistantMessageID, assistant => {
         // Already there: the transcript read included this start.
         if (partIndex(session, assistant, kind, event.data.ordinal) >= 0) return assistant;
         const part: MessagePart = event.type === 'session.text.started'
@@ -436,6 +439,8 @@ function reduceTranscript(session: SessionState, event: OpenCodeEvent): SessionS
     case 'session.execution.interrupted': {
       const current = activeAssistant(session);
       let next = current?.retry ? put(session, { ...current, retry: undefined }) : session;
+      // Nothing streams once the run is over.
+      if (next.partial.length) next = { ...next, partial: [] };
       // A run the server shut down under ends without a marker; the next start resumes it.
       if (event.type === 'session.execution.interrupted' && event.data.reason === 'shutdown') return next;
       // Mirror the projected idle marker so turn boundaries match before the next read.
@@ -503,7 +508,11 @@ export function applySnapshot(session: SessionState, snapshot: TranscriptSnapsho
   const partial = new Set<string>();
   const messages: Record<string, Message> = {};
   for (const id of prefix) messages[id] = session.messages[id]!;
-  for (const message of snapshot.messages) messages[message.id] = mergeStreamed(message, session.messages[message.id], session, partial);
+  // Only the last assistant message can still be streaming; an earlier one left open is
+  // what a run that was cut off (the server stopped) left behind.
+  const streaming = snapshot.messages.findLast(message => message.type === 'assistant')?.id;
+  for (const message of snapshot.messages)
+    messages[message.id] = message.id === streaming || message.type === 'compaction' ? mergeStreamed(message, session.messages[message.id], session, partial) : message;
   let next: SessionState = {
     ...session, order: [...prefix, ...snapshot.messages.map(message => message.id)], messages, pending,
     outbox: session.outbox.filter(id => unacknowledged.some(item => item.id === id)),
@@ -538,7 +547,9 @@ function mergeStreamed(read: Message, shown: Message | undefined, session: Sessi
     if (part.type === 'reasoning' ? part.time?.completed : index !== read.content.length - 1) return part;
     const before = live?.content[index];
     if (before?.type === part.type) {
-      if (session.partial.includes(partialKey(read.id, part.type, ordinal))) partial.add(partialKey(read.id, part.type, ordinal));
+      // The first read of a connection: what was streamed while disconnected is missing
+      // from the middle of what is kept, until the part ends and brings its whole text.
+      if (!session.loaded || session.partial.includes(partialKey(read.id, part.type, ordinal))) partial.add(partialKey(read.id, part.type, ordinal));
       if (before.text.length > part.text.length) { changed = true; return { ...part, text: before.text }; }
       return part;
     }

@@ -4,7 +4,8 @@
 // no network at all. The scripts are described at the head of `mock-model.ts`.
 export type Json = Record<string, any>
 interface Tool { name: string; properties: string[] }
-export interface Turn { model: string; user: string; results: string[]; tools: Tool[] }
+/** `attachments`: the types of the prompt's parts that are not text (`input_image`, `input_file`). */
+export interface Turn { model: string; user: string; results: string[]; tools: Tool[]; attachments: string[] }
 export interface Step { text: string; call?: { name: string; arguments: string }; pauseMs?: number }
 
 // MOCK_TODO=fullstack: the scripts edit examples/todo-fullstack (React Router, src/home.tsx)
@@ -73,18 +74,21 @@ const textOf = (content: unknown): string => typeof content === 'string' ? conte
 
 export function parse(body: Json): Turn {
   const input: Json[] = typeof body.input === 'string' ? [{ role: 'user', content: body.input }] : body.input ?? []
-  let user = '', results: string[] = []
+  let user = '', results: string[] = [], attachments: string[] = []
   for (const item of input) {
     const type = item.type ?? 'message'
     if (type === 'message' && item.role === 'user') {
       const text = textOf(item.content)
       // Clients wrap context in pseudo-XML user messages; those are not the prompt.
-      if (!/^\s*<[a-zA-Z_-]+[ >]/.test(text)) { user = text; results = [] }
+      if (!/^\s*<[a-zA-Z_-]+[ >]/.test(text)) {
+        user = text; results = []
+        attachments = Array.isArray(item.content) ? item.content.filter((part: Json) => typeof part?.text !== 'string').map((part: Json) => String(part?.type)) : []
+      }
     } else if (type.endsWith('_call_output')) results.push(typeof item.output === 'string' ? item.output : textOf(item.output) || JSON.stringify(item.output ?? ''))
   }
   const tools = (body.tools ?? []).filter((tool: Json) => tool.type === 'function')
     .map((tool: Json): Tool => ({ name: tool.name, properties: Object.keys(tool.parameters?.properties ?? {}) }))
-  return { model: body.model ?? '', user, results, tools }
+  return { model: body.model ?? '', user, results, tools, attachments }
 }
 
 /** A call of the offered tool, with the argument names its schema uses. */

@@ -186,11 +186,6 @@ export function createChatController(options: ChatOptions): ChatController {
 
   // ---- sessions -------------------------------------------------------------
 
-  /** What a session keeps when it leaves the screen: who it is and what it asks, not its transcript. */
-  const evicted = (session: SessionState): SessionState => ({
-    ...emptySession(session.id), info: session.info, parentID: session.parentID, status: session.status,
-    permissions: session.permissions, forms: session.forms,
-  });
   // Selection is user intent, not asynchronous request work: the state changes before the
   // call returns, so the next input event cannot address the old draft. The returned
   // promise is the first read of the new selection's transcript.
@@ -199,14 +194,10 @@ export function createChatController(options: ChatOptions): ChatController {
     selection++;
     opened = true;
     if (!preserveMutation) setMutation(undefined);
-    store.update(state => {
-      const keep = new Set(id ? familyOf(state, id) : []);
-      const sessions: Record<string, SessionState> = {};
-      for (const [key, session] of Object.entries(state.sessions))
-        sessions[key] = keep.has(key) || key === 'global' || session.outbox.length || (!session.loaded && !session.order.length) ? session : evicted(session);
-      return { ...state, sessions, sessionID: id, draftKey: draftKey ?? (id ? draftKeys.get(id) ?? `session:${id}` : undefined) };
+    store.batch(() => {
+      patch({ sessionID: id, draftKey: draftKey ?? (id ? draftKeys.get(id) ?? `session:${id}` : undefined) });
+      sync.unwatch(id);
     });
-    sync.unwatch(id);
     return id ? sync.watch(id) : Promise.resolve();
   }
   /** With the catalog read and nothing selected: the latest conversation, or a new one. */
@@ -258,13 +249,16 @@ export function createChatController(options: ChatOptions): ChatController {
       }
     })();
   }
-  /** Connected, catalog read, a session chosen and its transcript here. */
+  /** Connected, catalog read, a session chosen, its transcript here and its status known. */
   async function established() {
     await until(state => state.connection.status === 'connected' && state.ready, handshake,
       () => store.get().connection.error ?? 'OpenCode event handshake timed out');
     await choose();
     const id = store.get().sessionID;
-    if (id && !store.get().sessions[id]?.loaded) await sync.watch(id);
+    if (!id) return;
+    if (!store.get().sessions[id]?.loaded) await sync.watch(id);
+    // Whether it is running is a read of its own.
+    await until(state => state.sessionID !== id || state.sessions[id]?.status !== 'unknown', handshake, () => 'The list of running sessions was not read');
   }
   function reconnect(): Promise<void> {
     check();
@@ -516,7 +510,11 @@ export function createChatController(options: ChatOptions): ChatController {
     selectModel: model => unheld(() => run(() => selectModel(model))),
     interrupt: id => run(() => interrupt(id)),
     replyPermission: (id, decision) => run(() => replyPermission(id, decision)),
-    replyForm: (id, value) => run(() => replyForm(id, value)),
+    replyForm: (id, value) => {
+      // An answer the form does not take is the caller's to show beside the form, not a chat error.
+      const form = disposed ? undefined : findForm(id), invalid = form && validateAnswer(form.fields, value);
+      return invalid ? Promise.reject(new Error(invalid)) : run(() => replyForm(id, value));
+    },
     cancelForm: id => run(() => cancelForm(id)),
     replyQuestion: (id, answers) => run(() => replyQuestion(id, answers)),
     rejectQuestion: id => run(() => cancelForm(id)),

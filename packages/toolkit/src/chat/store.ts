@@ -44,9 +44,11 @@ export interface SessionState {
   /** Cursor of the next older page; absent at the start of history. */
   readonly older?: string;
   readonly loadingOlder: boolean;
-  /** Text and reasoning parts whose beginning this client did not receive (it joined
-   * mid-stream; deltas are not stored by the server): `<messageID>:<text|reasoning>:<n>`,
-   * n counting parts of that kind in the message. Cleared when the part ends. */
+  /** Text and reasoning parts still streaming whose text here is incomplete: this client
+   * joined mid-stream, or was disconnected for a while (deltas are not stored by the
+   * server, so what was missed cannot be read): `<messageID>:<text|reasoning>:<n>`, n
+   * counting parts of that kind in the message. Cleared when the part ends, which brings
+   * the whole text. */
   readonly partial: readonly string[];
   /** An event could not be applied (unknown message or tool, a run
    * that ended with unfinished tools): the transcript is read again. */

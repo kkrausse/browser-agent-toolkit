@@ -85,7 +85,9 @@ export interface Sync {
   catalog(): Promise<void>;
   /** A session's transcript, kept current from then on and read again on every connection. */
   watch(id: string): Promise<void>;
-  /** Forget every watched session but `keep` and its family. */
+  /** Stop following every session but `keep` and its family, and drop their transcripts:
+   * what leaves the screen keeps who it is and what it asks (info, status, permissions,
+   * forms), not its messages. */
   unwatch(keep?: string): void;
   loadOlder(id: string): Promise<void>;
   /** The id and every known descendant (subagent sessions), parents first. */
@@ -357,6 +359,26 @@ export function createSync(options: SyncOptions): Sync {
     unwatch(keep) {
       const kept = keep ? new Set(familyOf(store.get(), keep)) : new Set<string>();
       for (const id of [...watched]) if (!kept.has(id)) watched.delete(id);
+      const dropped: string[] = [];
+      store.update(state => {
+        const sessions: Record<string, SessionState> = {};
+        for (const [id, session] of Object.entries(state.sessions)) {
+          // A prompt still on its way keeps its session whole until the server has answered.
+          const keeps = kept.has(id) || id === 'global' || session.outbox.length > 0 || (!session.loaded && !session.order.length);
+          sessions[id] = keeps ? session : {
+            ...emptySession(id), info: session.info, parentID: session.parentID, status: session.status,
+            permissions: session.permissions, forms: session.forms, failure: session.failure,
+          };
+          if (!keeps) dropped.push(id);
+        }
+        return dropped.length ? { ...state, sessions } : state;
+      });
+      // Their transcripts are gone from here: the next watch reads them again.
+      for (const id of dropped) {
+        keys.invalidate(`transcript:${id}`);
+        clearTimeout(settling.get(`stale:${id}`));
+        settling.delete(`stale:${id}`);
+      }
     },
     async loadOlder(id) {
       const session = store.get().sessions[id];

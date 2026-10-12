@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ChatView, EditorPreview, useEditor } from '@kkrausse/browser-agent-toolkit-react'
-import { editorSteps, type BootRuntime, type Editor, type EditorEvent } from '@kkrausse/browser-agent-toolkit/browser'
+import { activityOf, editorSteps, familyOf, spawnedBy, subagentCalls, type BootRuntime, type Editor, type EditorEvent } from '@kkrausse/browser-agent-toolkit/browser'
 // Through this module, so the toolkit stays in the chunks only authorized users are served.
 export { resetWorkspace, preloadEditor } from '@kkrausse/browser-agent-toolkit/browser'
 import '@kkrausse/browser-agent-toolkit-react/styles.css'
@@ -11,8 +11,10 @@ const isPreviewReady = (frame: HTMLIFrameElement) => !!frame.contentDocument?.qu
 
 // Startup time is the point of this demo: keep each open's step times where a
 // measuring script (and a person in the console) can read them.
-// `__editor` is the open editor itself, for a script that drives the chat controller.
-declare global { interface Window { __editorTimings?: { current: Record<string, number>; runs: Record<string, number>[] }; __editor?: Editor } }
+// `__editor` is the open editor itself, for a script that drives the chat controller, and
+// `__chatSelectors` the questions such a script asks of `__editor.chat.store`.
+declare global { interface Window { __editorTimings?: { current: Record<string, number>; runs: Record<string, number>[] }; __editor?: Editor; __chatSelectors?: typeof chatSelectors } }
+const chatSelectors = { activityOf, familyOf, spawnedBy, subagentCalls }
 const record = (event: EditorEvent) => {
   if (event.type !== 'step') return
   const store = (window.__editorTimings ??= { current: {}, runs: [] })
@@ -34,7 +36,7 @@ export default function EditorPanel({ fakeHost, onExit }: { fakeHost: boolean; o
 function Opened({ boot, onExit }: { boot?: BootRuntime; onExit(): void }) {
   const { editor, snapshot, retry } = useEditor({ boot, onEvent: record })
   const [exiting, setExiting] = useState(false)
-  useEffect(() => { window.__editor = editor; return () => { window.__editor = undefined } }, [editor])
+  useEffect(() => { window.__editor = editor; window.__chatSelectors = chatSelectors; return () => { window.__editor = undefined } }, [editor])
   const exit = () => {
     setExiting(true)
     void (editor ? editor.close().catch(() => {}) : Promise.resolve()).then(onExit)
