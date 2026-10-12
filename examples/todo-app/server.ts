@@ -21,8 +21,8 @@ const editor = createEditorHandler({
   // mock of examples/terminal-app (`PORT=4311 bun mock-model.ts` → http://127.0.0.1:4311/v1, any key).
   providers: { opencode: { baseURL: process.env.EDITOR_MODEL_BASE_URL || 'https://opencode.ai/zen/v1', headers: {
     authorization: `Bearer ${modelKey || 'public'}`,
-    // Chromium replaces the guest's User-Agent. Restore the real app identity (pinned 2.0.3).
-    'user-agent': 'opencode/stable/2.0.3/vivari-opencode-server',
+    // Chromium replaces the guest's User-Agent. Restore the server's own identity (ports/opencode/server, 2.0.26).
+    'user-agent': 'opencode/stable/2.0.26/bat-opencode-server',
   } } },
   onEvent: event => { if (event.type !== 'model.request') console.log(`[editor] ${event.type} ${event.provider} ${'status' in event ? event.status : event.error} ${event.ms} ms`) },
 })

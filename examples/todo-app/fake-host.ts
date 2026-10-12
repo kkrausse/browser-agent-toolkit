@@ -6,13 +6,13 @@ import { resolve } from 'node:path'
 /**
  * Development only: run the editor's two programs natively (see the toolkit's `./fake`).
  *   EDITOR_FAKE_DIR        scratch directory holding /workspace and /app (default /tmp/bat-toolkit-todo)
- *   BAT_OPENCODE_DIR       directory with the pinned OpenCode server.js and tree-sitter wasm (default <repo>/.runtime/opencode-2.0.3)
+ *   BAT_OPENCODE_DIR       directory with the pinned OpenCode server.js and tree-sitter wasm (default <repo>/.runtime/opencode-2.0.26)
  *   EDITOR_PREVIEW_PORT, EDITOR_AGENT_PORT   native loopback ports for guest ports 5173 and 4096
  */
 export async function createTodoFakeHost(hostOrigin: string) {
   const directory = resolve(process.env.EDITOR_FAKE_DIR ?? '/tmp/bat-toolkit-todo')
   // Where `bun run setup` puts it.
-  const openCode = process.env.BAT_OPENCODE_DIR ?? resolve(import.meta.dirname, '../../.runtime/opencode-2.0.3')
+  const openCode = process.env.BAT_OPENCODE_DIR ?? resolve(import.meta.dirname, '../../.runtime/opencode-2.0.26')
   const app = resolve(directory, 'app')
   if (!existsSync(resolve(app, 'server.js'))) {
     if (!existsSync(resolve(openCode, 'server.js'))) throw Error(`OpenCode server.js not found in ${openCode}; run \`bun run setup\` in the repository root or set BAT_OPENCODE_DIR`)

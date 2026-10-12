@@ -9,7 +9,7 @@
 // A transcript is read again only
 //   - on `server.connected` (every connection: what happened before it is unknown),
 //   - when the reducer marked the session `stale`: an event named a message or tool this
-//     client does not have, the durable sequence had a gap, or a run ended and left tools
+//     client does not have, or a run ended and left tools
 //     unfinished (the server settles those without events),
 // and a session's info is read when an event names a session this client has never seen.
 //
@@ -276,8 +276,8 @@ export function createSync(options: SyncOptions): Sync {
     store.update(state => {
       const sessions: Record<string, SessionState> = {};
       for (const [id, session] of Object.entries(state.sessions))
-        sessions[id] = !session.loaded && !session.loading && !session.loadingOlder && session.status === 'unknown' && session.seq === undefined
-          ? session : { ...session, loaded: false, loading: false, loadingOlder: false, status: 'unknown', seq: undefined };
+        sessions[id] = !session.loaded && !session.loading && !session.loadingOlder && session.status === 'unknown'
+          ? session : { ...session, loaded: false, loading: false, loadingOlder: false, status: 'unknown' };
       return { ...state, sessions, ready: false };
     });
   }

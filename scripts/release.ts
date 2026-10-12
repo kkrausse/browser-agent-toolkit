@@ -46,7 +46,7 @@ const stamp = commit.slice(0, 7) + (dirty ? '-dirty' : '')
 const out = resolve(value('--out') ?? join(root, '.release', `${toolkit.version}-${stamp}`))
 
 const built = flag('--skip-setup')
-  ? { env: { BAT_PREPARE: join(root, process.env.CARGO_TARGET_DIR ?? 'target', 'release/bat-prepare'), BAT_OPENCODE_DIR: process.env.BAT_OPENCODE_DIR ?? join(root, '.runtime/opencode-2.0.3') } }
+  ? { env: { BAT_PREPARE: join(root, process.env.CARGO_TARGET_DIR ?? 'target', 'release/bat-prepare'), BAT_OPENCODE_DIR: process.env.BAT_OPENCODE_DIR ?? join(root, '.runtime/opencode-2.0.26') } }
   : await setup()
 
 rmSync(out, { recursive: true, force: true })

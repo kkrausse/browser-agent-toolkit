@@ -48,11 +48,9 @@ export interface SessionState {
    * mid-stream; deltas are not stored by the server): `<messageID>:<text|reasoning>:<n>`,
    * n counting parts of that kind in the message. Cleared when the part ends. */
   readonly partial: readonly string[];
-  /** An event could not be applied (unknown message or tool, a gap in the sequence, a run
+  /** An event could not be applied (unknown message or tool, a run
    * that ended with unfinished tools): the transcript is read again. */
   readonly stale: boolean;
-  /** Sequence number of the last durable event applied on this connection. */
-  readonly seq?: number;
   /** The failure of the last run, until the next run starts. */
   readonly failure?: StructuredError;
   /** Counts of text and reasoning parts a message had when its step was started again

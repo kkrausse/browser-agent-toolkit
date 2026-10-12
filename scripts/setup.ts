@@ -8,30 +8,22 @@
 //
 // Needs: bun, cargo with the targets wasm32-wasip1-threads and wasm32-unknown-unknown
 // (`rustup target add …`), node 24 and network access the first time (dependencies and the
-// pinned OpenCode 2.0.3 server). `CARGO_TARGET_DIR` is respected (default `target/`).
+// OpenCode server packages). `CARGO_TARGET_DIR` is respected (default `target/`).
 //
 //   1. bun install
-//   2. OpenCode server artefact → .runtime/opencode-2.0.3/ ($BAT_OPENCODE_DIR overrides;
-//      downloaded from the checksummed release asset). The terminal example runs the
-//      server its terminal client was built for instead: 2.0.26, bundled here from the
-//      published packages (ports/opencode/server) into .runtime/opencode-2.0.26/
+//   2. OpenCode server artefact → .runtime/opencode-2.0.26/ ($BAT_OPENCODE_DIR overrides):
+//      bundled here from the published packages pinned in ports/opencode/server. Both
+//      examples run it; the chat client and the terminal client are built for that version.
 //   3. kernel.wasm, bat_modules.wasm, bat_node_native.wasm, bat_sh.wasm, the bat-prepare CLI
 //   4. runtime bundles → runtime/dist/
 //   5. the toolkit package → packages/toolkit/dist/, then its React package →
 //      packages/react/dist/
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 const root = resolve(import.meta.dir, '..')
 const target = resolve(root, process.env.CARGO_TARGET_DIR ?? 'target')
 const openCodeFiles = ['server.js', 'tree-sitter.wasm', 'tree-sitter-bash.wasm', 'tree-sitter-powershell.wasm']
-const openCodeRelease = {
-  url: 'https://github.com/kkrausse/browser-agent-toolkit/releases/download/opencode-input-2.0.3/opencode-2.0.3-live-catalog-qualified.tgz',
-  sha256: '9f0884636fd81befda7de73103e6e09f2efb438acb7250a95f7e4433d386f0c8',
-  payload: '.runtime/opencode-bun-server',
-}
-
 async function run(label: string, command: string[], options: { cwd?: string; env?: Record<string, string> } = {}): Promise<void> {
   const started = performance.now()
   const child = Bun.spawn(command, { cwd: options.cwd ?? root, env: { ...process.env, ...options.env }, stdout: 'inherit', stderr: 'inherit', stdin: 'ignore' })
@@ -48,33 +40,10 @@ async function openCodeDir(): Promise<string> {
     if (!hasOpenCode(process.env.BAT_OPENCODE_DIR)) throw Error(`BAT_OPENCODE_DIR has no ${openCodeFiles.join(', ')}: ${process.env.BAT_OPENCODE_DIR}`)
     return resolve(process.env.BAT_OPENCODE_DIR)
   }
-  const local = join(root, '.runtime/opencode-2.0.3')
-  if (hasOpenCode(local)) return local
-  const copy = (from: string) => {
-    mkdirSync(local, { recursive: true })
-    for (const name of openCodeFiles) cpSync(join(from, name), join(local, name))
-  }
-  const response = await fetch(openCodeRelease.url, { signal: AbortSignal.timeout(300_000) })
-  if (!response.ok) throw Error(`OpenCode download: HTTP ${response.status} ${openCodeRelease.url}`)
-  const bytes = new Uint8Array(await response.arrayBuffer())
-  if (new Bun.CryptoHasher('sha256').update(bytes).digest('hex') !== openCodeRelease.sha256) throw Error('OpenCode archive does not match its pinned sha256')
-  // Extracted into a fresh directory of its own; only the four named files are taken from it.
-  const scratch = mkdtempSync(join(tmpdir(), 'bat-opencode-'))
-  try {
-    await Bun.write(join(scratch, 'input.tgz'), bytes)
-    mkdirSync(join(scratch, 'payload'))
-    await run('extract OpenCode', ['tar', '-xzf', join(scratch, 'input.tgz'), '-C', join(scratch, 'payload')])
-    const payload = join(scratch, 'payload', openCodeRelease.payload)
-    if (!hasOpenCode(payload)) throw Error(`OpenCode archive has no ${openCodeRelease.payload}/server.js`)
-    copy(payload)
-  } finally {
-    rmSync(scratch, { recursive: true, force: true })
-  }
-  console.log(`[setup] OpenCode 2.0.3 downloaded to ${local}`)
-  return local
+  return builtOpenCodeDir()
 }
 
-/** The server version of the terminal example, built from the published packages pinned in ports/opencode/server/bun.lock. */
+/** OpenCode 2.0.26, built from the published packages pinned in ports/opencode/server/bun.lock. */
 async function builtOpenCodeDir(): Promise<string> {
   const recipe = join(root, 'ports/opencode/server')
   const lock = Bun.JSONC.parse(await Bun.file(join(recipe, 'bun.lock')).text()) as { packages: Record<string, unknown[]> }
@@ -108,7 +77,6 @@ if (import.meta.main) {
   const example = { editor: 'examples/todo-app', terminal: 'examples/terminal-app' }[process.argv[2] ?? '']
   if (example) {
     // The example's own script: prepare (image, manifest, runtime assets), build, serve.
-    if (process.argv[2] === 'terminal' && !process.env.BAT_OPENCODE_DIR) env.BAT_OPENCODE_DIR = await builtOpenCodeDir()
     const child = Bun.spawn(['bun', 'run', 'editor'], { cwd: join(root, example), env: { ...process.env, ...env }, stdout: 'inherit', stderr: 'inherit', stdin: 'inherit' })
     for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => child.kill(signal))
     process.exit(await child.exited)

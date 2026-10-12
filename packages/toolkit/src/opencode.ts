@@ -13,7 +13,7 @@ const server = `${workspace}/.server`;
 const configDirectory = `${server}/config/opencode`;
 const locationQuery = new URLSearchParams({ 'location[directory]': workspace }).toString();
 
-/** Everything fixed about the pinned OpenCode 2.0.3 server artifact. */
+/** Everything fixed about the pinned OpenCode 2.0.26 server artifact. */
 export const openCode = {
   port: 4096,
   directory: workspace,
@@ -53,6 +53,8 @@ export function agentLaunch(password: string, description: LaunchDescription = d
     OPENCODE_PASSWORD: password,
     // In the workspace, so sessions persist with it (the old runtime kept it outside).
     OPENCODE_DATABASE_PATH: `${server}/data/opencode.sqlite`,
+    // At INFO the server prints every bus event, and the editor keeps what it prints.
+    OPENCODE_LOG_LEVEL: 'WARN',
   });
   // Loaded before the server (see `modelSourcePreloadSource`); a separate argument, so a host
   // that maps guest paths (the development fake host) maps this one too.
@@ -87,8 +89,8 @@ export function agentConfig(modelBaseURL: string, models: Record<string, Catalog
 export function modelCatalogPluginSource(modelIDs: string[]): string {
   return `export default { id: 'editor.model-catalog', async setup(ctx) {
   const supplied = new Set(${JSON.stringify(modelIDs)});
-  await ctx.catalog.transform(catalog => {
-    for (const id of [...(catalog.provider.get('opencode')?.models.keys() ?? [])]) if (!supplied.has(id)) catalog.model.remove('opencode', id);
+  await ctx.model.transform(models => {
+    for (const model of [...models.list('opencode')]) if (!supplied.has(model.modelID)) models.remove('opencode', model.modelID);
   });
 } };`;
 }
@@ -106,7 +108,7 @@ const modelSourcePreload = `${server}/editor-model-source.cjs`;
  * document enters the program: `JSON.parse` of a text over a megabyte whose value has the
  * document's shape (an object of providers, each with `id` and `models`) returns only the
  * providers kept. Every other parse pays one length comparison. Measured in
- * docs/experiments/2026-10-09-startup.md. It depends on the pinned 2.0.3 server parsing the
+ * docs/experiments/2026-10-09-startup.md. It depends on the pinned server parsing the
  * document with `JSON.parse`; if that changes, nothing is reduced and nothing breaks.
  */
 export function modelSourcePreloadSource(providers: string[] = ['opencode']): string {
@@ -155,7 +157,7 @@ export async function installAgentConfig(fs: RuntimeFs, options: { modelBaseURL:
 
 const timed = (name: string) => { try { performance.mark(`bat:${name}`); } catch { /* no user timing */ } };
 
-type PluginRow = { id: string; state?: { status: string } };
+type PluginRow = { id: string; state?: { status: string; error?: string } };
 
 /** Health, plugin activation, then proof that the model the chat will use is offered with tools. */
 export async function verifyAgentReady(endpoint: Pick<RuntimeEndpoint, 'fetch'>, authorization: string, signal: AbortSignal) {
@@ -168,26 +170,34 @@ export async function verifyAgentReady(endpoint: Pick<RuntimeEndpoint, 'fetch'>,
   };
   const deadline = Date.now() + 30000;
   let lastFailure: unknown = Error('OpenCode health not ready');
+  // `/api/info` answers 503 while the server's services boot.
   for (;;) {
     signal.throwIfAborted();
     const remaining = deadline - Date.now();
     if (remaining <= 0) throw Error('OpenCode health readiness timed out after 30000ms', { cause: lastFailure });
     try {
-      const health = await request('/api/health', 'GET', Math.min(3000, remaining));
+      const health = await request('/api/info', 'GET', Math.min(3000, remaining));
       await health.arrayBuffer();
       if (health.ok) { timed('agent.health'); break; }
       lastFailure = Error(`OpenCode health HTTP ${health.status}`);
     } catch (error) { lastFailure = error; }
     await new Promise(resolve => setTimeout(resolve, 50));
   }
-  const activated = await request(`/api/plugin/await-activation?${locationQuery}`, 'POST');
-  await activated.arrayBuffer();
-  if (!activated.ok) throw Error(`OpenCode plugin activation HTTP ${activated.status}`);
-  timed('agent.activated');
-  const plugins = await json(`/api/plugin?${locationQuery}`, 'plugins');
-  const active = (id: string) => Array.isArray(plugins.data) && plugins.data.some((plugin: PluginRow) => plugin.id === id && plugin.state?.status === 'active');
-  if (!active('editor.model-headers')) throw Error('OpenCode model header transport plugin is not active');
-  if (!active('editor.javascript')) throw Error('OpenCode guest JavaScript tool plugin is not active');
+  // Plugins activate after the server answers; the list says when each one has.
+  const required = { 'editor.model-headers': 'model header transport', 'editor.javascript': 'guest JavaScript tool' };
+  for (const activation = Date.now() + 30000;;) {
+    signal.throwIfAborted();
+    const plugins = await json(`/api/plugin?${locationQuery}`, 'plugins');
+    const rows: PluginRow[] = Array.isArray(plugins.data) ? plugins.data : [];
+    const missing = Object.entries(required).filter(([id]) => rows.find(plugin => plugin.id === id)?.state?.status !== 'active');
+    if (!missing.length) break;
+    for (const [id, what] of missing) {
+      const state = rows.find(plugin => plugin.id === id)?.state;
+      if (state?.status === 'failed') throw Error(`OpenCode ${what} plugin failed: ${state.error ?? 'no reason given'}`);
+    }
+    if (Date.now() > activation) throw Error(`OpenCode ${missing[0]![1]} plugin is not active`);
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
   timed('agent.plugins');
   const entries = await json(`/api/config?${locationQuery}`, 'configuration');
   const selected = Array.isArray(entries) && entries.find(entry => entry.type === 'document' && entry.path === openCode.configPath);
@@ -198,7 +208,11 @@ export async function verifyAgentReady(endpoint: Pick<RuntimeEndpoint, 'fetch'>,
     ? (selection.startsWith('opencode/') ? selection.slice('opencode/'.length) : undefined)
     : selection?.providerID === 'opencode' ? selection.model : undefined;
   const configured = modelID && selected.info?.providers?.opencode?.models?.[modelID];
-  if (!configured || typeof configured.package !== 'string' || configured.websocket !== false) throw Error('OpenCode global model configuration not loaded');
+  // (2.0.26 has no per-model `websocket` switch: only the `openai` provider defaults to a socket.)
+  if (!configured || typeof configured.package !== 'string') {
+    const seen = Array.isArray(entries) ? entries.map(entry => `${entry.type} ${entry.path ?? '(inline)'}`).join(', ') : typeof entries;
+    throw Error(`OpenCode global model configuration not loaded (selection ${JSON.stringify(selection)}, model ${JSON.stringify(configured)}; entries: ${seen})`);
+  }
   timed('agent.config');
   const { data } = await json(`/api/model?${locationQuery}`, 'model catalog');
   // Startup tracing (see the runtime's trace.ts): the catalog as served, for comparing runs.

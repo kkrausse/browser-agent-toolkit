@@ -26,6 +26,12 @@
 //   starts "run `…`"     calls the shell tool with the command between the backquotes (the
 //                        page's configuration does not allow it, so the client asks first)
 //                        and repeats its output; ends SCRIPTED-SHELL-DONE
+//   starts "count to N"  the numbers 1 to N as text, one streamed piece each (a reply long
+//                        enough to stop, steer or queue behind); ends SCRIPTED-COUNT-DONE
+//   "call <tool> {json}" calls that tool with exactly those arguments and repeats its
+//                        answer; ends SCRIPTED-CALL-DONE. With the tool `subagent`
+//                        (`{"agent":"general","description":"…","prompt":"…"}`) the prompt
+//                        is itself answered by these scripts, in the child session
 //   anything else        a paragraph of streamed text; ends SCRIPTED-PLAIN-DONE
 //
 // wasm-term's mock-llm (branch `wasm-term`; `?model=http://<host>:4791/v1&modelId=mock-model`) has more scripts,

@@ -94,10 +94,22 @@ function call(turn: Turn, name: string, known: Record<string, string>): Step['ca
   return { name, arguments: JSON.stringify(Object.fromEntries(Object.entries(known).filter(([key]) => tool.properties.includes(key)))) }
 }
 
-export function next(turn: Turn): Step {
+export function next(input: Turn): Step {
   // The server asks for a session title in a request of its own, without tools.
-  if (!turn.tools.length) return { text: 'Scripted session' }
+  if (!input.tools.length) return { text: 'Scripted session' }
+  // A subagent's prompt is the delegated one under this line: the same scripts apply to it.
+  const turn = { ...input, user: input.user.replace(/^You are a subagent spawned by another session\.\n/, '') }
   const offered = `(offered: ${turn.tools.map(tool => tool.name).join(', ')})`
+  const counted = /^count to (\d+)/i.exec(turn.user)
+  if (counted) return { text: `${Array.from({ length: Math.min(Number(counted[1]), 5000) }, (_, index) => index + 1).join(' ')} SCRIPTED-COUNT-DONE` }
+  const direct = /^call (\w+) (\{[\s\S]*\})\s*$/i.exec(turn.user)
+  if (direct) {
+    const [, name, json] = direct
+    if (turn.results.length) return { text: `The ${name} tool answered: ${turn.results[0]!.trim().slice(0, 300)} SCRIPTED-CALL-DONE` }
+    if (!turn.tools.some(tool => tool.name === name)) return { text: `The call script needs the ${name} tool ${offered}.` }
+    try { JSON.parse(json!) } catch { return { text: `The call script needs JSON arguments; got ${json}` } }
+    return { text: `Calling ${name}.`, call: { name: name!, arguments: json! } }
+  }
   const command = /^run `([^`\n]+)`/i.exec(turn.user)?.[1]
   if (command) {
     if (turn.results.length) return { text: `The shell tool answered: ${turn.results[0]!.trim().slice(0, 300)} SCRIPTED-SHELL-DONE` }

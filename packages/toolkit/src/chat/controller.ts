@@ -189,7 +189,7 @@ export function createChatController(options: ChatOptions): ChatController {
   /** What a session keeps when it leaves the screen: who it is and what it asks, not its transcript. */
   const evicted = (session: SessionState): SessionState => ({
     ...emptySession(session.id), info: session.info, parentID: session.parentID, status: session.status,
-    permissions: session.permissions, forms: session.forms, seq: session.seq,
+    permissions: session.permissions, forms: session.forms,
   });
   // Selection is user intent, not asynchronous request work: the state changes before the
   // call returns, so the next input event cannot address the old draft. The returned

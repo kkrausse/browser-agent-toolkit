@@ -12,10 +12,11 @@
 //   (`applySnapshot`), where upstream drops or misapplies them until the next read.
 // - What cannot be applied marks the session `stale` instead of being dropped silently;
 //   the owner reads the transcript again (./sync.ts).
-// - A gap in a session's durable sequence numbers does the same.
 //
-// Durable events carry `durable: { aggregateID, seq }`; deltas are ephemeral and are not
-// stored by the server; every `*.ended` event carries the full text and replaces what the
+// Durable events carry `durable: { aggregateID, seq }`. The numbers are not used here: the
+// stream leaves some out (a session's sequence as received from a 2.0.26 server went
+// 6, 8: an event the server keeps to itself), so a jump does not mean a loss. Deltas are
+// ephemeral and are not stored by the server; every `*.ended` event carries the full text and replaces what the
 // deltas accumulated.
 import type {
   FormInfo, OpenCodeEvent, PermissionRequest, SessionInboxInfo, SessionInfo,
@@ -157,18 +158,7 @@ const removePending = (session: SessionState, inboxID?: string): SessionState =>
 // ---- one session -----------------------------------------------------------
 
 export function reduceSession(input: SessionState, event: OpenCodeEvent): SessionState {
-  let session = input;
-  // Durable events of a session are numbered without gaps. One that was already applied is
-  // skipped; a jump means events were lost.
-  const durable = 'durable' in event ? event.durable : undefined;
-  if (durable && durable.aggregateID === session.id) {
-    if (session.seq !== undefined) {
-      if (durable.seq <= session.seq) return session;
-      if (durable.seq > session.seq + 1 && session.loaded) session = stale(session);
-    }
-    session = { ...session, seq: durable.seq };
-  }
-  session = reduceAlways(session, event);
+  const session = reduceAlways(input, event);
   return session.loaded ? reduceTranscript(session, event) : session;
 }
 
@@ -519,7 +509,7 @@ export function applySnapshot(session: SessionState, snapshot: TranscriptSnapsho
     outbox: session.outbox.filter(id => unacknowledged.some(item => item.id === id)),
     permissions: [...snapshot.permissions], forms: [...snapshot.forms],
     older: joins && prefix.length ? session.older : snapshot.older,
-    loaded: true, loading: false, stale: false, seq: undefined, partial: [...partial],
+    loaded: true, loading: false, stale: false, partial: [...partial],
     bases: Object.fromEntries(Object.entries(session.bases).filter(([id]) => fetched.has(id))),
   };
   for (const item of pending) next = materialize(next, item);
