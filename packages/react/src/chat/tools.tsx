@@ -103,10 +103,11 @@ export function Output({ text: value, lines = 14, tail = false }: { text: string
 // then, and if it cannot load, the patch is shown as coloured lines.
 const PatchDiff = lazy(() => import("@pierre/diffs/react").then(
   module => ({ default: function Rendered({ patch, scheme }: { patch: string; scheme: "light" | "dark" }) {
-    return <module.PatchDiff patch={patch} disableWorkerPool options={{ themeType: scheme, diffStyle: "unified", disableFileHeader: true, overflow: "wrap" }} />;
+    return <module.PatchDiff patch={patch} disableWorkerPool style={diffStyle} options={{ themeType: scheme, diffStyle: "unified", disableFileHeader: true, overflow: "wrap" }} />;
   } }),
   () => ({ default: PlainPatch }),
 ));
+const diffStyle = { "--diffs-font-size": "12px", "--diffs-line-height": "18px" } as React.CSSProperties;
 function PlainPatch({ patch }: { patch: string }) {
   const lines = patch.replace(/\n$/, "").split("\n").filter(line => !/^(Index: |={5,}|--- |\+\+\+ |diff --git |index )/.test(line));
   return <pre className="oc-pre oc-patch">{lines.map((line, index) =>

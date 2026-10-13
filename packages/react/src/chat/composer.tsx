@@ -55,12 +55,12 @@ const waiting: Record<PendingPrompt["status"], string> = {
   stranded: "Not delivered: the run ended first",
 };
 /** The prompts the server holds and has not given to the run, each with a way to withdraw it. */
-function Queue({ controller, pending }: { controller: ChatController; pending: readonly PendingPrompt[] }) {
+function Queue({ controller, pending, busy }: { controller: ChatController; pending: readonly PendingPrompt[]; busy: boolean }) {
   if (!pending.length) return null;
   return <ul className="oc-queue" aria-label="Waiting messages">
     {pending.map(prompt => <li key={prompt.id}>
       <span className="oc-queue-text">{prompt.text || "Files"}</span>
-      <span className="oc-queue-status">{waiting[prompt.status]}</span>
+      <span className="oc-queue-status">{busy || prompt.status === "sending" ? waiting[prompt.status] : "Held: goes with the next run"}</span>
       <Button type="button" variant="ghost" size="icon-sm" aria-label="Cancel this message" title="Cancel this message" disabled={prompt.status === "sending"}
         onClick={() => run(controller.cancelQueued(prompt.id, prompt.sessionID))}><X aria-hidden="true" /></Button>
     </li>)}
@@ -160,7 +160,7 @@ function SessionComposer({ controller, showModels }: { controller: ChatControlle
     };
   }, []);
   return <form ref={form} className="oc-composer" data-dragging={dragging || undefined} onSubmit={event => { event.preventDefault(); send(); }}>
-    <Queue controller={controller} pending={state.pending.filter(prompt => prompt.status !== "sending" && prompt.status !== "starting")} />
+    <Queue controller={controller} busy={busy} pending={state.pending.filter(prompt => prompt.status !== "sending" && prompt.status !== "starting")} />
     <div className="oc-composer-box">
       {attachments.items.length > 0 && <div className="oc-chips">
         {attachments.items.map(item => <span className="oc-chip" key={item.id} title={item.file.name}>

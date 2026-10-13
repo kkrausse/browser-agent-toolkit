@@ -30,9 +30,14 @@ export function AttachmentChip({ file, onOpenFile }: { file: Attachment; onOpenF
   </span>;
 }
 
+/** A long prompt is shown by its first lines until asked for. */
+const longPrompt = (text: string) => text.length > 700 || text.split("\n").length > 9;
 const UserRow = memo(function UserRow({ message, sending, onOpenFile }: { message: User; sending: boolean; onOpenFile?: OpenFile }) {
+  const [all, setAll] = useState(false);
+  const long = longPrompt(message.text);
   return <article className="oc-row oc-message oc-message-user" aria-label="user message" data-sending={sending || undefined}>
-    {message.text && <div className="oc-user-text">{message.text}</div>}
+    {message.text && <div className="oc-user-text" data-clamped={(long && !all) || undefined}>{message.text}</div>}
+    {long && <button type="button" className="oc-link oc-user-more" aria-expanded={all} onClick={() => setAll(!all)}>{all ? "Show less" : "Show all"}</button>}
     {!!message.files?.length && <div className="oc-chips">{message.files.map((file, index) => <AttachmentChip key={index} file={file} onOpenFile={onOpenFile} />)}</div>}
   </article>;
 });

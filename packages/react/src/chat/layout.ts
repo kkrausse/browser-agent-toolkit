@@ -50,7 +50,8 @@ function turnItems(messages: readonly Assistant[], running: boolean, last: boole
       }
     }
     if (message.retry && !message.time.completed) { close(); items.push({ kind: "retry", key: `${message.id}:retry`, retry: message.retry }); }
-    else if (message.error) { close(); items.push({ kind: "error", key: `${message.id}:error`, error: message.error }); }
+    // A step the user stopped is said once, by the run's end ("Stopped").
+    else if (message.error && message.error.type !== "aborted") { close(); items.push({ kind: "error", key: `${message.id}:error`, error: message.error }); }
   }
   close();
   return items;
