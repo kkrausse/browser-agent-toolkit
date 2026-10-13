@@ -112,7 +112,7 @@ export function FormCard({ controller, entry }: { controller: ChatController; en
     if (problem) { setInvalid(form.fields.reduce((message, field) => message.replace(new RegExp(`: ${field.key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`), `: ${titleOf(field)}`), problem)); return; }
     run(controller.replyForm(form.id, answer));
   };
-  return <form className="oc-request" aria-label={form.title || "Question"} onSubmit={event => { event.preventDefault(); submit(); }}>
+  return <form className="oc-request" noValidate aria-label={form.title || "Question"} onSubmit={event => { event.preventDefault(); submit(); }}>
     <Asker controller={controller} sessionID={form.sessionID} />
     {form.title && <strong className="oc-request-title">{form.title}</strong>}
     {form.fields.filter(field => field.type === "external" || (!field.hidden && isFieldActive(field, answer))).map(field =>

@@ -31,7 +31,7 @@ export function AttachmentChip({ file, onOpenFile }: { file: Attachment; onOpenF
 }
 
 /** A long prompt is shown by its first lines until asked for. */
-const longPrompt = (text: string) => text.length > 700 || text.split("\n").length > 9;
+const longPrompt = (text: string) => text.length > 400 || text.split("\n").length > 9;
 const UserRow = memo(function UserRow({ message, sending, onOpenFile }: { message: User; sending: boolean; onOpenFile?: OpenFile }) {
   const [all, setAll] = useState(false);
   const long = longPrompt(message.text);
