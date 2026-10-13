@@ -32,6 +32,13 @@
 //                        answer; ends SCRIPTED-CALL-DONE. With the tool `subagent`
 //                        (`{"agent":"general","description":"…","prompt":"…"}`) the prompt
 //                        is itself answered by these scripts, in the child session
+//   "demo markdown"      headings, lists, a code block, a table, a quote; ends SCRIPTED-MARKDOWN-DONE
+//   "think <text>"       a streamed reasoning item, then the text; ends SCRIPTED-THINK-DONE
+//   "flaky N <text>"     the first N requests are answered 503 (the client retries), then
+//                        the text; ends SCRIPTED-FLAKY-DONE
+//   "sequence" + lines   each further line is `say <text>` or `call <tool> {json}`: the calls
+//                        are made one per step, in order, with the `say` lines before a call
+//                        as that step's text; ends SCRIPTED-SEQUENCE-DONE
 //   anything else        a paragraph of streamed text; ends SCRIPTED-PLAIN-DONE
 //
 // wasm-term's mock-llm (branch `wasm-term`; `?model=http://<host>:4791/v1&modelId=mock-model`) has more scripts,

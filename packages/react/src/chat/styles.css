@@ -1,307 +1,206 @@
+/* The chat's look. Every colour is one of the tokens below, each with a light and a dark
+   value. The scheme follows the system's preference; a host fixes it with `data-theme` or a
+   `light`/`dark` class on the chat or on an ancestor (or ChatView's `theme`), and may
+   set any token on `.oc-chat` to match its own palette. */
+.oc-chat,
+.oc-popup {
+  color-scheme: light dark;
+  --oc-bg: light-dark(#ffffff, #111318);
+  --oc-fg: light-dark(#182230, #e4e7ee);
+  --oc-muted: light-dark(#667085, #98a1b3);
+  --oc-border: light-dark(#dce1e7, #2a2e38);
+  --oc-surface: light-dark(#f4f6f9, #191c23);
+  --oc-surface-2: light-dark(#e9edf2, #242833);
+  --oc-primary: light-dark(#182230, #e4e7ee);
+  --oc-primary-fg: light-dark(#ffffff, #111318);
+  --oc-accent: light-dark(#3157c8, #8ea8ff);
+  --oc-danger: light-dark(#b42318, #ff8f85);
+  --oc-danger-bg: light-dark(#fff1ef, #2a1614);
+  --oc-warn: light-dark(#8a5a07, #edc063);
+  --oc-warn-bg: light-dark(#fffaeb, #272110);
+  --oc-warn-border: light-dark(#ecd9a0, #574819);
+  --oc-add: light-dark(#17803d, #5bd08a);
+  --oc-add-bg: light-dark(#e7f6ec, #12301f);
+  --oc-del-bg: light-dark(#fdecea, #3a1b18);
+  --oc-shadow: light-dark(rgb(16 24 40 / 0.14), rgb(0 0 0 / 0.5));
+}
+.oc-chat[data-theme="dark"], .oc-popup[data-theme="dark"], .dark .oc-chat, [data-theme="dark"] .oc-chat { color-scheme: dark; }
+.oc-chat[data-theme="light"], .oc-popup[data-theme="light"], .light .oc-chat, [data-theme="light"] .oc-chat { color-scheme: light; }
+
 .oc-chat {
-  --oc-border: #dce1e7;
-  --oc-muted: #667085;
-  --oc-accent: #3157c8;
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 320px;
   min-width: 0;
-  background: #fff;
-  color: #182230;
-  font:
-    14px/1.55 system-ui,
-    sans-serif;
+  background: var(--oc-bg);
+  color: var(--oc-fg);
+  font: 14px/1.5 system-ui, sans-serif;
   border: 1px solid var(--oc-border);
   border-radius: 12px;
   overflow: hidden;
 }
-.oc-chat * {
-  box-sizing: border-box;
-}
-.oc-toolbar,
-.oc-controls,
-.oc-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.oc-toolbar {
-  padding: 12px 16px;
-}
-.oc-header {
-  border-bottom: 1px solid var(--oc-border);
-}
-.oc-footer {
-  padding: 6px 16px;
-  border-top: 1px solid var(--oc-border);
-  font-size: 12px;
-  color: var(--oc-muted);
-  max-height: 30%;
-  overflow: auto;
-  flex-shrink: 0;
-}
+.oc-chat *, .oc-chat *::before, .oc-chat *::after { box-sizing: border-box; }
+.oc-chat svg { width: 14px; height: 14px; flex-shrink: 0; }
+.oc-chat p { margin: 0; }
+.oc-muted { color: var(--oc-muted); font-size: 12px; }
+.oc-link { border: 0; padding: 0; background: none; color: var(--oc-accent); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.oc-spin { animation: oc-spin 1s linear infinite; }
+@keyframes oc-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .oc-spin { animation-duration: 3s; } }
+.oc-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ---- header, status ---- */
+.oc-header { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--oc-border); flex-shrink: 0; min-width: 0; }
+.oc-header > strong { font-size: 13px; margin-right: 4px; }
+.oc-header .oc-session { flex: 0 1 260px; min-width: 80px; border-color: transparent; }
+.oc-header-space { flex: 1; }
+.oc-footer { padding: 4px 12px; border-top: 1px solid var(--oc-border); font-size: 12px; color: var(--oc-muted); max-height: 30%; overflow: auto; flex-shrink: 0; }
+.oc-footer[data-quiet] { padding: 0; border: 0; }
 .oc-connection { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.oc-toolbar-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; margin-right: auto; }
-.oc-settings > summary { cursor: pointer; padding: 5px 0; color: var(--oc-muted); font-size: 12px; }
-.oc-header, .oc-composer { flex-shrink: 0; }
-.oc-controls {
-  padding: 10px 16px;
-  background: #f8fafc;
-}
-.oc-controls label {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  min-width: 0;
-  font-size: 12px;
-}
-.oc-controls [data-slot="select-trigger"] {
-  min-width: 0;
-  max-width: 240px;
-}
-.oc-transcript-wrap {
-  position: relative;
-  flex: 1;
-  min-height: 100px;
-  overflow: hidden;
-}
-.oc-transcript {
-  height: 100%;
-  overflow: auto;
-  padding: 16px;
-  scrollbar-gutter: stable;
-  overflow-anchor: none;
-}
-.oc-message {
-  margin: 0 auto 12px;
-  max-width: 850px;
-  overflow-wrap: anywhere;
-}
-.oc-message:has(+ .oc-message-continuation) { margin-bottom: 4px; }
-.oc-role {
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--oc-muted);
-  margin-bottom: 6px;
-}
-.oc-message-user {
-  background: #f3f5fa;
-  border-radius: 10px;
-  padding: 12px 16px;
-}
-.oc-run-status {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--oc-muted);
-  font-size: 11px;
-  white-space: nowrap;
-}
-.oc-run-status::before,
-.oc-run-status::after {
-  content: "";
-  height: 1px;
-  flex: 1;
-  background: var(--oc-border);
-}
-.oc-run-status-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.oc-run-status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: #17a673;
-  box-shadow: 0 0 0 3px #e8f7f1;
-}
-.oc-run-status-failed .oc-run-status-dot {
-  background: #d92d20;
-  box-shadow: 0 0 0 3px #feeceb;
-}
-.oc-run-status-interrupted .oc-run-status-dot {
-  background: #dc8b18;
-  box-shadow: 0 0 0 3px #fff3df;
-}
-.oc-markdown p {
-  margin: 8px 0;
-}
+/* Nothing to report: the status stays readable by a script or a screen reader only. */
+.oc-connection[data-quiet] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.oc-error { display: flex; gap: 10px; align-items: start; padding: 8px 12px; background: var(--oc-danger-bg); color: var(--oc-danger); font-size: 13px; overflow-wrap: anywhere; flex-shrink: 0; }
+.oc-error span { flex: 1; }
+
+/* ---- transcript ---- */
+.oc-transcript-wrap { position: relative; flex: 1; min-height: 100px; overflow: hidden; }
+.oc-transcript { height: 100%; overflow: auto; padding: 12px 14px; scrollbar-gutter: stable; scrollbar-color: var(--oc-border) transparent; }
+.oc-transcript-content { display: flex; flex-direction: column; gap: 10px; max-width: 850px; margin: 0 auto; }
+.oc-jump.oc-jump { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); border-radius: 999px; box-shadow: 0 2px 10px var(--oc-shadow); }
+.oc-message { min-width: 0; overflow-wrap: anywhere; }
+.oc-message-assistant { display: flex; flex-direction: column; gap: 6px; }
+/* A long transcript stays cheap: what is off screen is not laid out or painted. */
+.oc-row { content-visibility: auto; contain-intrinsic-size: auto 60px; min-width: 0; }
+.oc-message-user { align-self: flex-end; max-width: 88%; background: var(--oc-surface); border-radius: 12px; padding: 8px 12px; }
+.oc-message-user[data-sending] { opacity: 0.6; }
+.oc-user-text { white-space: pre-wrap; }
+.oc-empty { text-align: center; color: var(--oc-muted); padding: 32px 12px; }
+.oc-empty h3 { margin: 0 0 4px; font-size: 15px; color: var(--oc-fg); }
+.oc-history-status { text-align: center; color: var(--oc-muted); font-size: 12px; }
+.oc-activity { display: flex; align-items: center; gap: 6px; color: var(--oc-muted); font-size: 13px; }
+
+/* ---- markdown ---- */
+.oc-markdown { min-width: 0; }
+.oc-markdown > :first-child { margin-top: 0; }
+.oc-markdown > :last-child { margin-bottom: 0; }
+.oc-markdown p { margin: 8px 0; }
+.oc-markdown .oc-h { margin: 14px 0 6px; font-weight: 650; line-height: 1.3; color: var(--oc-fg); letter-spacing: normal; text-transform: none; }
+.oc-markdown h1.oc-h { font-size: 1.3em; }
+.oc-markdown h2.oc-h { font-size: 1.18em; }
+.oc-markdown h3.oc-h { font-size: 1.08em; }
+.oc-markdown h4.oc-h, .oc-markdown h5.oc-h, .oc-markdown h6.oc-h { font-size: 1em; }
 /* The host page's own element styles (an app that lays out every `li` as a flex row)
    must not reach a rendered answer. */
-.oc-markdown ul,
-.oc-markdown ol {
-  display: block;
-  margin: 8px 0;
-  padding-left: 1.4em;
-}
-.oc-markdown ul {
-  list-style: disc;
-}
-.oc-markdown ol {
-  list-style: decimal;
-}
-.oc-markdown li {
-  display: list-item;
-  margin: 2px 0;
-}
-.oc-heading {
-  font-size: 1.1em;
-  font-weight: 650;
-}
-.oc-chat pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  overflow: auto;
-  font:
-    12px/1.6 ui-monospace,
-    monospace;
-  max-height: 360px;
-}
-.oc-chat code {
-  font-family: ui-monospace, monospace;
-  background: #f1f3f7;
-  border-radius: 3px;
-  padding: 1px 3px;
-}
-.oc-chat pre code {
-  background: none;
-  padding: 0;
-}
-.oc-code {
-  background: #f6f8fb;
-  border: 1px solid var(--oc-border);
-  border-radius: 8px;
-  margin: 12px 0;
-  overflow: hidden;
-}
-.oc-code header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 5px 10px;
-  border-bottom: 1px solid var(--oc-border);
-  font-size: 12px;
-}
-.oc-code header span:first-child {
-  flex: 1;
-}
-.oc-code pre {
-  padding: 10px;
-  margin: 0;
-  white-space: pre;
-}
-.oc-tool,
-.oc-reasoning {
-  padding: 2px 0;
-  margin: 0;
-  font-size: 12px;
-  color: var(--oc-muted);
-}
-.oc-message-parts { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 16px; row-gap: 4px; }
-.oc-message-parts > * { min-width: 0; flex-basis: 100%; }
-.oc-message-parts > .oc-tool { flex: 0 1 auto; max-width: 100%; }
-.oc-message-parts > .oc-tool[open] { flex-basis: 100%; }
-.oc-tool > summary { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.oc-tool > summary::before { content: "›"; display: inline-block; margin-right: 6px; }
-.oc-tool[open] > summary::before { transform: rotate(90deg); }
-.oc-tool > summary { list-style: none; }
-.oc-tool-subject { margin: 0 6px; font-size: 0.92em; opacity: 0.85; }
-.oc-tool > summary::-webkit-details-marker { display: none; }
-.oc-tool > summary:hover { color: var(--oc-accent); }
-.oc-tool[open] { color: inherit; }
-.oc-tool summary,
-.oc-reasoning summary {
-  cursor: pointer;
-}
-.oc-tool summary span {
-  margin-left: 12px;
-  font-size: 12px;
-  color: var(--oc-muted);
-}
-.oc-tool h4 {
-  margin: 8px 0;
-  font-size: 12px;
-}
-.oc-chat a {
-  color: var(--oc-accent);
-}
-.oc-chat blockquote {
-  border-left: 3px solid var(--oc-border);
-  margin-left: 0;
-  padding-left: 12px;
-}
-.oc-table {
-  overflow: auto;
-}
-.oc-chat th,
-.oc-chat td {
-  padding: 5px 9px;
-  border-bottom: 1px solid var(--oc-border);
-  text-align: left;
-}
-.oc-empty {
-  text-align: center;
-  color: var(--oc-muted);
-  padding: 36px 12px;
-}
-.oc-empty h3 {
-  color: #344054;
-}
-.oc-history-status { margin: 0 auto 12px; text-align: center; color: var(--oc-muted); font-size: 12px; }
-.oc-error {
-  display: flex;
-  gap: 10px;
-  align-items: start;
-  padding: 10px 16px;
-  background: #fff1ef;
-  color: #9d271b;
-  overflow-wrap: anywhere;
-}
-.oc-error span {
-  flex: 1;
-}
-.oc-requests {
-  max-height: 45%;
-  overflow: auto;
-}
-.oc-request {
-  margin: 8px 16px;
-  padding: 12px;
-  background: #fffcf2;
-  border: 1px solid #e9d799;
-  border-radius: 8px;
-}
-.oc-request fieldset {
-  border: 0;
-  padding: 0;
-  margin: 0 0 12px;
-}
-.oc-option {
-  display: flex;
-  gap: 8px;
-  padding: 5px 0;
-}
-.oc-option small {
-  display: block;
-  color: var(--oc-muted);
-}
-.oc-composer {
-  padding: 12px 16px;
-  border-top: 1px solid var(--oc-border);
-}
-.oc-composer textarea {
-  max-height: 220px;
-  resize: vertical;
-}
-.oc-composer .oc-actions {
-  margin-top: 8px;
-  justify-content: space-between;
-}
-.oc-composer small {
-  font-size: 11px;
-  color: var(--oc-muted);
-}
+.oc-markdown ul, .oc-markdown ol { display: block; margin: 8px 0; padding-left: 1.4em; }
+.oc-markdown ul { list-style: disc; }
+.oc-markdown ol { list-style: decimal; }
+.oc-markdown li { display: list-item; margin: 2px 0; padding: 0; background: none; border: 0; }
+.oc-markdown li > ul, .oc-markdown li > ol { margin: 2px 0; }
+.oc-markdown a { color: var(--oc-accent); }
+.oc-markdown hr { border: 0; border-top: 1px solid var(--oc-border); margin: 12px 0; }
+.oc-markdown blockquote { border-left: 3px solid var(--oc-border); margin: 8px 0; padding-left: 12px; color: var(--oc-muted); }
+.oc-markdown code, .oc-tool-subject { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; background: var(--oc-surface-2); border-radius: 4px; padding: 1px 4px; }
+.oc-table { overflow: auto; margin: 8px 0; }
+.oc-table table { border-collapse: collapse; font-size: 13px; }
+.oc-table th, .oc-table td { padding: 4px 10px; border-bottom: 1px solid var(--oc-border); text-align: left; }
+.oc-chat .oc-pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto; max-height: 420px; font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--oc-fg); background: none; }
+.oc-chat .oc-pre code { background: none; padding: 0; font-size: inherit; }
+.oc-code { background: var(--oc-surface); border: 1px solid var(--oc-border); border-radius: 8px; margin: 10px 0; overflow: hidden; }
+.oc-code header { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 2px 10px; border-bottom: 1px solid var(--oc-border); font-size: 11px; color: var(--oc-muted); }
+.oc-chat .oc-code .oc-pre { padding: 8px 10px; white-space: pre; }
+
+/* ---- tool calls ---- */
+.oc-tool, .oc-subagent { min-width: 0; font-size: 13px; }
+.oc-tool-head { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; height: 24px; padding: 0 4px; margin: 0 -4px; border: 0; border-radius: 6px; background: none; color: var(--oc-muted); font: inherit; text-align: left; cursor: pointer; }
+.oc-tool-head:hover, .oc-tool-head[aria-expanded="true"] { color: var(--oc-fg); }
+.oc-tool-head:hover { background: var(--oc-surface); }
+.oc-tool-head:focus-visible { outline: 2px solid var(--oc-accent); outline-offset: -2px; }
+.oc-tool-verb { flex-shrink: 0; }
+.oc-tool-subject { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
+.oc-tool-extra { flex-shrink: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.oc-chevron { margin-left: auto; opacity: 0; transition: transform 0.12s; }
+.oc-tool-head:hover .oc-chevron, .oc-tool-head[aria-expanded="true"] .oc-chevron, .oc-tool-head:focus-visible .oc-chevron { opacity: 1; }
+.oc-tool-head[aria-expanded="true"] .oc-chevron { transform: rotate(90deg); }
+.oc-tool[data-status="error"] > .oc-tool-head > svg:first-child { color: var(--oc-danger); }
+.oc-chat .oc-tool-error { margin: 0 0 2px 20px; color: var(--oc-danger); font-size: 12px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.oc-tool-body { margin: 2px 0 4px 6px; padding-left: 13px; border-left: 1px solid var(--oc-border); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.oc-tool-list { margin: 0 0 2px 6px; padding-left: 13px; border-left: 1px solid var(--oc-border); min-width: 0; }
+.oc-console { background: var(--oc-surface); border-radius: 6px; padding: 6px 8px; min-width: 0; }
+.oc-console-command { display: flex; align-items: start; justify-content: space-between; gap: 6px; }
+.oc-console-live .oc-pre { color: var(--oc-muted); }
+.oc-output { min-width: 0; }
+.oc-fields { margin: 0; display: grid; gap: 2px; font-size: 12px; }
+.oc-fields > div { display: grid; grid-template-columns: minmax(60px, max-content) 1fr; gap: 10px; }
+.oc-fields dt { color: var(--oc-muted); }
+.oc-fields dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; max-height: 120px; overflow: auto; font-family: ui-monospace, monospace; }
+.oc-diff { border: 1px solid var(--oc-border); border-radius: 6px; overflow: hidden; min-width: 0; }
+.oc-diff header { display: flex; align-items: center; gap: 8px; padding: 3px 8px; background: var(--oc-surface); font-size: 12px; }
+.oc-diff-file { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, monospace; }
+.oc-diff-stat { font-variant-numeric: tabular-nums; }
+.oc-diff-body { max-height: 420px; overflow: auto; }
+[data-line="add"] { color: var(--oc-add); }
+[data-line="del"] { color: var(--oc-danger); }
+.oc-patch [data-line="add"] { background: var(--oc-add-bg); color: var(--oc-fg); }
+.oc-patch [data-line="del"] { background: var(--oc-del-bg); color: var(--oc-fg); }
+.oc-patch [data-line="hunk"] { color: var(--oc-muted); }
+.oc-patch span { display: block; padding: 0 8px; }
+
+/* ---- subagents ---- */
+.oc-subagent-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--oc-fg); }
+.oc-chat .oc-subagent-activity { margin: 0 0 0 20px; color: var(--oc-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oc-subagent-activity[data-waiting] { color: var(--oc-warn); }
+.oc-subagent-activity[data-failed] { color: var(--oc-danger); }
+.oc-subagent-body { margin: 4px 0 4px 6px; padding: 2px 0 2px 13px; border-left: 2px solid var(--oc-border); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+/* ---- notices ---- */
+.oc-notice { display: flex; align-items: center; gap: 10px; color: var(--oc-muted); font-size: 12px; }
+.oc-notice::before, .oc-notice::after { content: ""; height: 1px; flex: 1; background: var(--oc-border); }
+.oc-notice[data-tone="danger"] { color: var(--oc-danger); }
+.oc-alert { display: flex; gap: 8px; padding: 8px 10px; border-radius: 8px; background: var(--oc-danger-bg); color: var(--oc-danger); font-size: 13px; overflow-wrap: anywhere; min-width: 0; }
+.oc-alert > svg { margin-top: 3px; }
+.oc-alert > div { min-width: 0; display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+.oc-alert p { color: var(--oc-fg); white-space: pre-wrap; }
+.oc-alert[data-tone="warn"] { background: var(--oc-warn-bg); color: var(--oc-warn); }
+.oc-compaction-summary { margin-top: 6px; padding: 8px 10px; border: 1px solid var(--oc-border); border-radius: 8px; font-size: 13px; }
+
+/* ---- requests ---- */
+.oc-requests { max-height: 50%; overflow: auto; flex-shrink: 0; padding: 0 12px; display: flex; flex-direction: column; gap: 8px; }
+.oc-request { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 10px 12px; background: var(--oc-warn-bg); border: 1px solid var(--oc-warn-border); border-radius: 10px; font-size: 13px; }
+.oc-request-title { display: flex; align-items: center; gap: 6px; }
+.oc-chat .oc-asker { display: flex; align-items: center; gap: 6px; color: var(--oc-warn); font-size: 12px; font-weight: 600; }
+.oc-chat .oc-request-resources { max-height: 120px; padding: 6px 8px; border-radius: 6px; background: var(--oc-bg); }
+.oc-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.oc-field-label { font-weight: 600; }
+.oc-field-label em, .oc-option em { color: var(--oc-danger); font-style: normal; }
+.oc-field-description { color: var(--oc-muted); font-size: 12px; }
+.oc-chat .oc-field-error { color: var(--oc-danger); white-space: pre-wrap; }
+.oc-option { display: flex; gap: 8px; padding: 3px 0; cursor: pointer; }
+.oc-option small { display: block; color: var(--oc-muted); }
+.oc-external { display: inline-flex; align-items: center; gap: 6px; color: var(--oc-accent); overflow-wrap: anywhere; }
+
+/* ---- composer ---- */
+.oc-composer { flex-shrink: 0; padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 6px; }
+.oc-composer-box { display: flex; flex-direction: column; gap: 6px; padding: 8px 8px 6px 10px; border: 1px solid var(--oc-border); border-radius: 12px; background: var(--oc-bg); }
+.oc-composer-box:focus-within { border-color: var(--oc-muted); }
+.oc-composer[data-dragging] .oc-composer-box { border-style: dashed; border-color: var(--oc-accent); background: var(--oc-surface); }
+.oc-composer textarea { resize: none; max-height: 200px; font-family: inherit; line-height: 1.45; }
+.oc-composer-bar { display: flex; align-items: center; gap: 4px; min-width: 0; margin-left: -4px; }
+.oc-composer-space { flex: 1; }
+.oc-composer small { font-size: 11px; color: var(--oc-muted); }
+.oc-composer .oc-model { flex: 0 1 auto; min-width: 60px; max-width: 200px; border-color: transparent; color: var(--oc-muted); }
+.oc-delivery { display: flex; padding: 1px; border: 1px solid var(--oc-border); border-radius: 7px; }
+.oc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.oc-message-user .oc-chips { margin-top: 6px; }
+.oc-message-user .oc-user-text + .oc-chips { margin-top: 8px; }
+.oc-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 30px; padding: 0 4px 0 6px; border: 1px solid var(--oc-border); border-radius: 8px; background: var(--oc-bg); font-size: 12px; }
+.oc-chip img { width: 22px; height: 22px; border-radius: 4px; object-fit: cover; }
+.oc-chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+.oc-chip-size { color: var(--oc-muted); flex-shrink: 0; padding-right: 2px; }
+.oc-refused { display: flex; align-items: start; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: 8px; background: var(--oc-danger-bg); color: var(--oc-danger); font-size: 12px; overflow-wrap: anywhere; }
+.oc-queue { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.oc-queue li { display: flex; align-items: center; gap: 8px; min-width: 0; height: 30px; padding: 0 4px 0 10px; border: 1px dashed var(--oc-border); border-radius: 8px; font-size: 13px; }
+.oc-queue-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oc-queue-status { flex-shrink: 0; color: var(--oc-muted); font-size: 12px; }
+
 .oc-editor-preview { width: 100%; height: 100%; border: 0; background: white; }

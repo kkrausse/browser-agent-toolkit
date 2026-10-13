@@ -1,7 +1,20 @@
-/* No preflight or global theme: only namespaced, precompiled component utilities. */
+/* No preflight or global theme: only namespaced, precompiled component utilities. Colours
+   are the chat's tokens (styles.css), so the primitives follow light and dark with it. */
 @import "tailwindcss/theme.css" layer(theme) theme(inline) prefix(ocui);
 @import "tailwindcss/utilities.css" layer(utilities) prefix(ocui) source(none);
-@source "./ui";
+@source "./";
+@theme inline {
+  --color-bg: var(--oc-bg);
+  --color-fg: var(--oc-fg);
+  --color-muted: var(--oc-muted);
+  --color-line: var(--oc-border);
+  --color-surface: var(--oc-surface);
+  --color-raised: var(--oc-surface-2);
+  --color-primary: var(--oc-primary);
+  --color-primary-fg: var(--oc-primary-fg);
+  --color-accent: var(--oc-accent);
+  --color-danger: var(--oc-danger);
+}
 
-.oc-ui { box-sizing: border-box; font-family: system-ui, sans-serif; line-height: 1.4; }
+.oc-ui { box-sizing: border-box; font-family: inherit; line-height: 1.4; }
 .oc-ui *, .oc-ui *::before, .oc-ui *::after { box-sizing: border-box; }

@@ -1,32 +1,25 @@
-import {
-  type ReactNode,
-  memo,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
-import {
-  canSend,
-  isPreparing,
-  type ChatController,
-  type PermissionRequest,
-  type QuestionRequest,
-  type RequestState,
-  type SessionMessageInfo,
-} from "@kkrausse/browser-agent-toolkit/browser";
-import { Markdown } from "./markdown";
+// The chat: header (sessions), transcript, pending requests, composer, status.
+// transcript.tsx scrolls, parts.tsx lays a session out as rows, tools.tsx, notices.tsx and
+// requests.tsx draw them, composer.tsx sends. Colours are tokens (styles.css): light and
+// dark, by the system's preference unless the host says otherwise.
+import { useRef, type ReactNode } from "react";
+import { Plus } from "lucide-react";
+import { isPreparing, type ChatController, type ChatSnapshot } from "@kkrausse/browser-agent-toolkit/browser";
+import { Composer } from "./composer";
+import { run, useChatSnapshot, type OpenFile } from "./hooks";
+import { FormCard, PermissionCard } from "./requests";
+import { ChatThemeProvider, useResolvedScheme } from "./theme";
+import { Transcript } from "./transcript";
 import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Textarea } from "./ui/textarea";
 import { ChoiceSelect } from "./ui/select";
-import { ChoiceGroup } from "./ui/choice-group";
+
 export { Markdown, CodeBlock } from "./markdown";
-export type OpenFile = (
-  path: string,
-  selection?: { startLine: number; endLine: number },
-) => void;
+export { Transcript } from "./transcript";
+export { Composer } from "./composer";
+export { PermissionCard, FormCard } from "./requests";
+export { ToolRow, ToolRun } from "./tools";
+export { useChatSnapshot, useChatState, type OpenFile } from "./hooks";
+
 export interface ChatViewProps {
   controller: ChatController;
   showSessions?: boolean;
@@ -34,665 +27,77 @@ export interface ChatViewProps {
   showHeader?: boolean;
   showTitle?: boolean;
   showFooter?: boolean;
+  /** `light` or `dark` fixes the scheme; by default it follows the system's preference,
+   * or a `data-theme` attribute or `light`/`dark` class on an ancestor. */
+  theme?: "light" | "dark";
   onOpenFile?: OpenFile;
   headerActions?: ReactNode;
   footer?: ReactNode;
 }
-export const useChatSnapshot = (controller: ChatController) =>
-  useSyncExternalStore(
-    controller.subscribe,
-    controller.getSnapshot,
-    controller.getSnapshot,
-  );
-const run = (promise: Promise<unknown>) => {
-  void promise.catch(() => {});
-};
-const pretty = (value: unknown) =>
-  typeof value === "string" ? value : JSON.stringify(value, null, 2);
-type Part = Extract<
-  SessionMessageInfo,
-  { type: "assistant" }
->["content"][number];
 
-export const ToolCard = memo(function ToolCard({
-  part,
-  onOpenFile,
-}: {
-  part: Extract<Part, { type: "tool" }>;
-  onOpenFile?: OpenFile;
-}) {
-  const input = part.state.input;
-  const file =
-    typeof input === "object" &&
-    input &&
-    ("path" in input
-      ? input.path
-      : "filePath" in input
-        ? input.filePath
-        : undefined);
-  // What the call is about, on the closed card: the command of a shell call, else the file.
-  const command =
-    typeof input === "object" && input && "command" in input && typeof input.command === "string"
-      ? input.command.trim().split("\n")[0]
-      : undefined;
-  const subject = command ?? (typeof file === "string" ? file : undefined);
-  return (
-    <details className="oc-tool">
-      <summary>
-        <strong>{part.name}</strong>
-        {subject && <code className="oc-tool-subject">{subject}</code>}
-        <span>{part.state.status}</span>
-      </summary>
-      {typeof file === "string" && onOpenFile && (
-        <Button type="button" onClick={() => onOpenFile(file)}>
-          Open {file}
-        </Button>
-      )}
-      <h4>Input</h4>
-      <pre>{pretty(input)}</pre>
-      {"content" in part.state && (
-        <>
-          <h4>Output</h4>
-          <pre>
-            {part.state.content
-              ?.map((content) =>
-                content.type === "text" ? content.text : pretty(content),
-              )
-              .join("\n")}
-          </pre>
-        </>
-      )}
-      {"error" in part.state && (
-        <pre role="alert">{pretty(part.state.error)}</pre>
-      )}
-      {"metadata" in part.state &&
-        part.state.metadata &&
-        Object.keys(part.state.metadata).length > 0 && (
-          <details>
-            <summary>Details / changes</summary>
-            <pre>{pretty(part.state.metadata)}</pre>
-          </details>
-        )}
-    </details>
-  );
-});
-export const MessagePart = memo(function MessagePart({
-  part,
-  onOpenFile,
-}: {
-  part: Part;
-  onOpenFile?: OpenFile;
-}) {
-  if (part.type === "text") return <Markdown text={part.text} />;
-  if (part.type === "reasoning")
-    return (
-      <details className="oc-reasoning">
-        <summary>Reasoning</summary>
-        <Markdown text={part.text} />
-      </details>
-    );
-  if (part.type === "tool")
-    return <ToolCard part={part} onOpenFile={onOpenFile} />;
-  return <pre>{pretty(part)}</pre>;
-});
-const MessageRow = memo(function MessageRow({
-  message,
-  onOpenFile,
-  continuation = false,
-  modelName,
-}: {
-  message: SessionMessageInfo;
-  onOpenFile?: OpenFile;
-  continuation?: boolean;
-  modelName?: string;
-}) {
-  if (message.type === "model-switched") {
-    return (
-      <div className="oc-message oc-run-status" aria-label="Model switched">
-        <span className="oc-run-status-label">
-          Switched to {modelName || message.model.id} · {message.model.providerID}
-          {message.model.variant && ` · ${message.model.variant}`}
-        </span>
-      </div>
-    );
+/** A failed hydrate leaves execution unknown with nothing in flight. Without a retry the
+ * composer would stay as it is until the next server event, if any. */
+const isStalled = (state: ChatSnapshot) => state.connection === "connected" && state.execution === "unknown" &&
+  !state.loading && !state.sending && !state.sessionOperationPending && !state.held;
+
+function statusOf(state: ChatSnapshot): string {
+  if (state.connection !== "connected") {
+    if (state.connection === "disconnected") return "Disconnected";
+    // The first connection, or one being made again: the data layer does that by itself.
+    return state.connectionState.attempt > 1 || state.messages.length ? "Reconnecting…" : "Connecting…";
   }
-  if (message.type === "idle") {
-    const label = {
-      succeeded: "Run completed",
-      failed: "Run failed",
-      interrupted: "Run interrupted",
-    }[message.outcome];
-    return (
-      <div
-        className={`oc-message oc-run-status oc-run-status-${message.outcome}`}
-        role="status"
-        aria-label={label}
-      >
-        <span className="oc-run-status-label">
-          <span className="oc-run-status-dot" aria-hidden="true" />
-          {label}
-        </span>
-      </div>
-    );
-  }
-  return (
-    <article
-      className={`oc-message oc-message-${message.type}${continuation ? " oc-message-continuation" : ""}`}
-      aria-label={`${message.type} message`}
-    >
-      {!continuation && <div className="oc-role">
-        {message.type === "user"
-          ? "You"
-          : message.type === "assistant"
-            ? "OpenCode"
-            : message.type}
-      </div>}
-      {"text" in message && <Markdown text={message.text} />}
-      {message.type === "assistant" &&
-        <div className="oc-message-parts">{message.content.map((part, i) => (
-          <MessagePart
-            key={part.type === "tool" ? part.id : `${part.type}-${i}`}
-            part={part}
-            onOpenFile={onOpenFile}
-          />
-        ))}</div>}
-      {"files" in message &&
-        message.files?.map((file, i) => (
-          <div key={i} className="oc-file">
-            {file.name || file.mime}
-            {onOpenFile &&
-              file.source?.type === "uri" &&
-              file.source.uri.startsWith("file://") && (
-                <Button
-                  onClick={() =>
-                    onOpenFile(
-                      decodeURIComponent(
-                        new URL(
-                          file.source!.type === "uri"
-                            ? file.source!.uri
-                            : "file:///",
-                        ).pathname,
-                      ),
-                    )
-                  }
-                >
-                  Open file
-                </Button>
-              )}
-          </div>
-        ))}
-      {"error" in message && message.error && (
-        <pre role="alert">{pretty(message.error)}</pre>
-      )}
-      {message.type === "assistant" && message.retry && (
-        <p role="status">
-          Retry {message.retry.attempt}: {pretty(message.retry.error)}
-        </p>
-      )}
-      {message.type !== "assistant" && !("text" in message) && (
-        <pre>{pretty(message)}</pre>
-      )}
-    </article>
-  );
-});
-export function Transcript({
-  controller,
-  onOpenFile,
-}: {
-  controller: ChatController;
-  onOpenFile?: OpenFile;
-}) {
-  const state = useChatSnapshot(controller),
-    viewport = useRef<HTMLDivElement>(null),
-    following = useRef(true);
-  const previous = useRef<{ firstID?: string; height: number }>({ height: 0 }),
-    session = useRef(state.sessionID);
-  useLayoutEffect(() => {
-    const el = viewport.current;
-    if (!el) return;
-    if (session.current !== state.sessionID) {
-      session.current = state.sessionID;
-      following.current = true;
-      el.scrollTop = el.scrollHeight;
-    } else {
-      const oldFirst = previous.current.firstID;
-      const oldFirstIndex = oldFirst
-        ? state.messages.findIndex((message) => message.id === oldFirst)
-        : -1;
-      if (oldFirstIndex > 0)
-        el.scrollTop += el.scrollHeight - previous.current.height;
-      else {
-        const selection = el.ownerDocument.getSelection();
-        if (
-          selection &&
-          !selection.isCollapsed &&
-          el.contains(selection.anchorNode)
-        )
-          following.current = false;
-        if (following.current) el.scrollTop = el.scrollHeight;
-      }
-    }
-    previous.current = {
-      firstID: state.messages[0]?.id,
-      height: el.scrollHeight,
-    };
-  }, [state.messages, state.sessionID]);
-  return (
-    <div className="oc-transcript-wrap">
-      <div
-        className="oc-transcript"
-        ref={viewport}
-        role="log"
-        aria-label="Conversation"
-        aria-live="off"
-        onScroll={() => {
-          const el = viewport.current!;
-          following.current =
-            el.scrollHeight - el.scrollTop - el.clientHeight < 64;
-        }}
-      >
-        {state.loading && (
-          <p className="oc-empty" role="status">
-            Loading conversation…
-          </p>
-        )}
-        {!state.loading && state.loadingOlder && (
-          <p className="oc-history-status" role="status">
-            Loading earlier messages…
-          </p>
-        )}
-        {!state.loading && !state.messages.length && (
-          <div className="oc-empty">
-            <h3>
-              {state.sessionID
-                ? "What would you like to build?"
-                : "Start a conversation"}
-            </h3>
-            <p>
-              {state.sessionID
-                ? "Ask a question, explore your code, or describe a change."
-                : "Choose a session or create a new chat above."}
-            </p>
-          </div>
-        )}
-        {state.messages.map((message, index) => (
-          <MessageRow
-            key={message.id}
-            message={message}
-            modelName={message.type === "model-switched"
-              ? state.models.find((model) => model.id === message.model.id && model.providerID === message.model.providerID)?.name
-              : undefined}
-            onOpenFile={onOpenFile}
-            continuation={message.type === "assistant" && state.messages[index - 1]?.type === "assistant"}
-          />
-        ))}
-      </div>
-    </div>
-  );
+  if (state.held) return `Paused: ${state.held}`;
+  if (isPreparing(state)) return "Preparing chat…";
+  if (state.execution === "idle") return state.sending ? "Sending…" : "Ready";
+  if (state.execution === "unknown") return isStalled(state) ? "Execution state unknown" : "Checking execution…";
+  return state.execution === "retrying" ? "Retrying…" : "Working…";
 }
-export function PermissionCard({
-  controller,
-  entry,
-}: {
-  controller: ChatController;
-  entry: RequestState<PermissionRequest>;
-}) {
-  return (
-    <section className="oc-request" aria-label="Permission request">
-      <strong>Permission needed: {entry.request.action}</strong>
-      <pre>{entry.request.resources.join("\n")}</pre>
-      <div className="oc-actions">
-        {(
-          [
-            ["once", "Allow once"],
-            ["always", "Always allow"],
-            ["reject", "Reject"],
-          ] as const
-        ).map(([decision, label]) => (
-          <Button
-            key={decision}
-            disabled={entry.submitting}
-            onClick={() =>
-              run(controller.replyPermission(entry.request.id, decision))
-            }
-          >
-            {label}
-          </Button>
-        ))}
-      </div>
-      {entry.error && (
-        <p role="alert">{entry.error} — choose a response to retry.</p>
-      )}
-    </section>
-  );
-}
-export function QuestionCard({
-  controller,
-  entry,
-}: {
-  controller: ChatController;
-  entry: RequestState<QuestionRequest>;
-}) {
-  const [answers, setAnswers] = useState<string[][]>(() =>
-      entry.request.questions.map(() => []),
-    ),
-    [custom, setCustom] = useState<Record<number, string>>({});
-  const complete = entry.request.questions.map((q, i) =>
-    custom[i]?.trim()
-      ? q.multiple
-        ? [...answers[i]!, custom[i]!.trim()]
-        : [custom[i]!.trim()]
-      : answers[i]!,
-  );
-  return (
-    <form
-      className="oc-request"
-      onSubmit={(e) => {
-        e.preventDefault();
-        run(controller.replyQuestion(entry.request.id, complete));
-      }}
-    >
-      {entry.request.questions.map((q, i) => (
-        <fieldset key={i} disabled={entry.submitting}>
-          <legend>
-            {q.header}: {q.question}
-          </legend>
-          <ChoiceGroup label={q.question} name={`${entry.request.id}-${i}`} options={q.options} value={answers[i] ?? []} multiple={q.multiple} disabled={entry.submitting}
-            onValueChange={value => {
-              setAnswers(previous => previous.map((answer, index) => index === i ? value : answer));
-              if (!q.multiple) setCustom(previous => ({ ...previous, [i]: "" }));
-            }}
-          />
-          {q.custom !== false && (
-            <label>
-              Custom answer
-              <Input
-                value={custom[i] ?? ""}
-                onChange={(e) => {
-                  setCustom((c) => ({ ...c, [i]: e.target.value }));
-                  if (!q.multiple)
-                    setAnswers((a) => a.map((v, j) => (i === j ? [] : v)));
-                }}
-              />
-            </label>
-          )}
-        </fieldset>
-      ))}
-      <div className="oc-actions">
-        <Button
-          type="submit"
-          disabled={entry.submitting || complete.some((a) => !a.length)}
-        >
-          Submit answers
-        </Button>
-        <Button
-          type="button"
-          disabled={entry.submitting}
-          onClick={() => run(controller.rejectQuestion(entry.request.id))}
-        >
-          Skip
-        </Button>
-      </div>
-      {entry.error && <p role="alert">{entry.error} — you can retry.</p>}
-    </form>
-  );
-}
-export function Composer({ controller }: { controller: ChatController }) {
-  return <SessionComposer key={controllerIdentity(controller)} controller={controller} />;
-}
-function SessionComposer({ controller }: { controller: ChatController }) {
-  const state = useChatSnapshot(controller),
-    [drafts, setDrafts] = useState<Record<string, string>>({});
-  const key = state.draftKey ?? state.sessionID ?? "none";
-  const text = drafts[key] ?? "";
-  const ready = canSend(state), preparing = isPreparing(state);
-  // A send asked for while the chat is still preparing. The controller never queues
-  // (it rejects until ready), so the intent is parked here, visibly, and delivered
-  // once. It names the draft it was made for: other text or another chat is not it.
-  const [queued, setQueued] = useState<{ key: string; text: string }>();
-  const delivered = useRef<object>(undefined);
-  const waiting = !!queued && queued.key === key && queued.text === text;
-  const deliver = (draft: string) => {
-    void controller.send({ text: draft }).then(
-      () => setDrafts(current => current[key] === draft ? { ...current, [key]: "" } : current),
-      () => {},
-    );
-  };
-  const send = () => {
-    // While a send is queued the effect below owns its delivery: a repeated Enter
-    // must neither queue again nor race it with a second send.
-    if (!text.trim() || waiting) return;
-    if (preparing) setQueued({ key, text });
-    else if (ready) deliver(text);
-  };
-  useEffect(() => {
-    if (!queued || (waiting && preparing)) return;
-    // Preparation is over, or the queued draft is no longer the one on screen. Send
-    // only into a ready chat; anything else (failed creation, a session that turned
-    // out to be running) leaves the text in the composer beside the state shown.
-    setQueued(undefined);
-    if (waiting && ready && delivered.current !== queued) { delivered.current = queued; deliver(queued.text); }
-  });
-  return (
-    <form
-      className="oc-composer"
-      onSubmit={(e) => {
-        e.preventDefault();
-        send();
-      }}
-    >
-      <Textarea
-        aria-label="Message OpenCode"
-        placeholder="Message OpenCode…"
-        value={text}
-        onChange={(e) => {
-          // Editing withdraws a queued send: text still being changed is never sent.
-          setQueued(undefined);
-          setDrafts(current => ({ ...current, [key]: e.target.value }));
-        }}
-        onKeyDown={(e) => {
-          if (
-            e.key === "Enter" &&
-            !e.shiftKey &&
-            !e.nativeEvent.isComposing &&
-            e.nativeEvent.keyCode !== 229
-          ) {
-            e.preventDefault();
-            send();
-          }
-        }}
-      />
-      <div className="oc-actions">
-        {waiting
-          ? <small role="status">Sends when the chat is ready · edit or cancel to keep it as a draft</small>
-          : <small>Enter to send · Shift+Enter for a new line</small>}
-        {(state.execution === "running" || state.execution === "retrying") && state.sessionID ? (
-          <Button
-            type="button"
-            disabled={state.connection !== "connected"}
-            onClick={() => run(controller.interrupt())}
-          >
-            {state.interruptRequested ? "Stop requested · Retry" : "Stop"}
-          </Button>
-        ) : waiting ? (
-          <Button type="button" onClick={() => setQueued(undefined)}>
-            Cancel send
-          </Button>
-        ) : (
-          <Button variant="default" type="submit" disabled={!ready || !text.trim()}>
-            {state.sending ? "Sending…" : "Send ↑"}
-          </Button>
-        )}
-      </div>
-    </form>
-  );
-}
+
 /** Unmount only unsubscribes. The host owns and disposes the supplied controller. */
 export function ChatView({
-  controller,
-  showSessions = true,
-  showModels = true,
-  showHeader = true,
-  showTitle = true,
-  showFooter = true,
-  onOpenFile,
-  headerActions,
-  footer,
+  controller, showSessions = true, showModels = true, showHeader = true, showTitle = true, showFooter = true,
+  theme, onOpenFile, headerActions, footer,
 }: ChatViewProps) {
   const state = useChatSnapshot(controller);
-  const showConnection = !footer || state.connection !== "connected" || state.execution !== "idle" || state.loading || state.sessionOperationPending || !!state.held;
-  // A failed hydrate leaves execution unknown with nothing in flight. Without a
-  // retry the composer would stay disabled until the next server event, if any.
-  const stalled = state.connection === "connected" && state.execution === "unknown" &&
-    !state.loading && !state.sending && !state.sessionOperationPending && !state.held;
-  return (
-    <section className="oc-chat" aria-label="OpenCode chat">
-      {showHeader && <header className="oc-header">
-        <div className="oc-toolbar">
-          <div className="oc-toolbar-copy">
-            {showTitle && <strong>OpenCode</strong>}
-            {(showSessions || showModels) && (
-              <details className="oc-settings">
-                <summary>Session & model</summary>
-                <ChatSettings controller={controller} showSessions={showSessions} showModels={showModels} />
-              </details>
-            )}
-          </div>
-          {headerActions}
-        </div>
+  const root = useRef<HTMLElement>(null);
+  const scheme = useResolvedScheme(root);
+  const status = statusOf(state), stalled = isStalled(state);
+  // Quiet: a chat that is ready, or working with its work on screen, says nothing here.
+  const quiet = status === "Ready" || status === "Working…" || status === "Retrying…" || status === "Sending…";
+  return <ChatThemeProvider value={scheme}>
+    <section className="oc-chat" aria-label="OpenCode chat" ref={root} data-theme={theme}>
+      {showHeader && (showTitle || showSessions || headerActions) && <header className="oc-header">
+        {showTitle && <strong>OpenCode</strong>}
+        {showSessions && <>
+          <ChoiceSelect label="Session" className="oc-session" disabled={!!state.held} value={state.sessionID ?? ""}
+            onValueChange={value => run(controller.selectSession(value))}
+            placeholder={state.sessionOperationPending ? "New chat" : "Select a session"}
+            items={state.sessions.map(session => ({ value: session.id, label: session.title || "Untitled chat" }))} />
+          <Button variant="ghost" size="icon" aria-label="New chat" title="New chat"
+            disabled={state.connection !== "connected" || state.loading || state.sessionOperationPending || !!state.held}
+            onClick={() => run(controller.createSession())}><Plus aria-hidden="true" /></Button>
+        </>}
+        <span className="oc-header-space" />
+        {headerActions}
       </header>}
-      {state.error && (
-        <div className="oc-error" role="alert">
-          <span>{state.error}</span>
-          <Button onClick={() => controller.clearError()}>Dismiss</Button>
-        </div>
-      )}
-      {state.failure && (
-        <div className="oc-error" role="alert">
-          <span>{state.failure.message}</span>
-        </div>
-      )}
+      {state.error && <div className="oc-error" role="alert">
+        <span>{state.error}</span>
+        <Button variant="ghost" size="sm" onClick={() => controller.clearError()}>Dismiss</Button>
+      </div>}
       <Transcript controller={controller} onOpenFile={onOpenFile} />
-      <div className="oc-requests">
-        {state.permissions.map((entry) => <PermissionCard key={entry.request.id} controller={controller} entry={entry} />)}
-        {state.unsupportedForms.map(form => (
-          <div role="alert" key={form.id}>
-            <strong>{form.title}</strong>: This form cannot be answered by this chat client.
-            Open it in a compatible OpenCode client to continue, or dismiss it to cancel the request.
-            Unsupported fields: {form.fields.map(f => `${f.key} (${f.type})`).join(", ")}.
-            <div className="oc-actions">
-              <Button type="button" onClick={() => run(controller.dismissForm(form.id))}>Dismiss</Button>
-            </div>
-          </div>
-        ))}
-        {state.questions.map((entry) => <QuestionCard key={entry.request.id} controller={controller} entry={entry} />)}
-      </div>
-      <Composer controller={controller} />
-      {showFooter && <footer className="oc-footer">
-        {showConnection && (
-          <div className="oc-connection"><span role="status">
-            {state.connection === "connected"
-              ? state.held
-                ? `Paused: ${state.held}`
-                : isPreparing(state)
-                ? "Preparing chat…"
-                : state.execution === "idle"
-                ? state.sending ? "Sending…" : "Ready"
-                : state.execution === "unknown"
-                  ? stalled ? "Execution state unknown" : "Checking execution…"
-                  : state.execution === "retrying"
-                    ? "Retrying…"
-                    : "Working…"
-              : state.connection}
-          </span>
-          {state.connection !== "connected" && state.connection !== "connecting" && <Button
-            disabled={!!state.held}
-            onClick={() => run(controller.reconnect())}
-          >
-            Reconnect
-          </Button>}
-          {stalled && <Button
-            onClick={() => run(state.sessionID ? controller.selectSession(state.sessionID) : controller.reconnect())}
-          >
-            Retry
-          </Button>}</div>
-        )}
+      {(state.permissions.length > 0 || state.forms.length > 0) && <div className="oc-requests">
+        {state.permissions.map(entry => <PermissionCard key={entry.request.id} controller={controller} entry={entry} />)}
+        {state.forms.map(entry => <FormCard key={entry.request.id} controller={controller} entry={entry} />)}
+      </div>}
+      <Composer controller={controller} showModels={showModels} />
+      {showFooter && <footer className="oc-footer" data-quiet={(quiet && !footer) || undefined}>
+        <div className="oc-connection" data-quiet={quiet || undefined}>
+          <span role="status">{status}</span>
+          {state.connection === "disconnected" && <Button size="sm" disabled={!!state.held} onClick={() => run(controller.reconnect())}>Reconnect</Button>}
+          {stalled && <Button size="sm" onClick={() => run(state.sessionID ? controller.selectSession(state.sessionID) : controller.reconnect())}>Retry</Button>}
+        </div>
         {footer}
       </footer>}
     </section>
-  );
-}
-
-function ChatSettings({ controller, showSessions, showModels }: ChatViewProps) {
-  const state = useChatSnapshot(controller);
-  const defaultModel = state.defaultModel;
-  const defaultName = defaultModel && state.models.find(model => model.id === defaultModel.id && model.providerID === defaultModel.providerID)?.name;
-  const defaultLabel = defaultModel
-    ? `${defaultName ?? defaultModel.id} · ${defaultModel.providerID} (server default)`
-    : state.connection === "connecting" ? "Resolving server default…" : "Server default unavailable";
-  return (
-        <nav className="oc-controls" aria-label="Chat settings">
-          {showSessions && (
-            <>
-              <label>
-                Session
-                <ChoiceSelect
-                  label="Session"
-                  disabled={!!state.held}
-                  value={state.sessionID ?? ""}
-                  onValueChange={(value) =>
-                    run(controller.selectSession(value))
-                  }
-                  placeholder="Select session"
-                  items={state.sessions.map(s => ({ value: s.id, label: s.title || s.id }))}
-                />
-              </label>
-              <Button
-                disabled={state.connection !== "connected" || state.loading || state.sessionOperationPending || !!state.held}
-                onClick={() => run(controller.createSession())}
-              >
-                New chat
-              </Button>
-            </>
-          )}
-          {showModels && (
-            <label>
-              Model
-              <ChoiceSelect
-                label="Model"
-                disabled={!canSend(state)}
-                value={
-                  state.model
-                    ? JSON.stringify({
-                        providerID: state.model.providerID,
-                        id: state.model.id,
-                      })
-                    : ""
-                }
-                onValueChange={(value) =>
-                  run(controller.selectModel(JSON.parse(value)))
-                }
-                placeholder={defaultLabel}
-                items={state.models
-                  .filter((m) => m.enabled)
-                  .map((m) => ({
-                      value: JSON.stringify({
-                        providerID: m.providerID,
-                        id: m.id,
-                      }),
-                      label: `${m.name} · ${m.providerID}`,
-                  }))}
-              />
-            </label>
-          )}
-        </nav>
-  );
-}
-// Controller changes (e.g. workspace switches) must never inherit draft text.
-const controllerIdentities = new WeakMap<ChatController, number>();
-let nextControllerIdentity = 0;
-function controllerIdentity(controller: ChatController) {
-  let identity = controllerIdentities.get(controller);
-  if (identity === undefined) controllerIdentities.set(controller, identity = ++nextControllerIdentity);
-  return identity;
+  </ChatThemeProvider>;
 }

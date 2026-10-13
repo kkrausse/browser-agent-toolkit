@@ -6,7 +6,7 @@ export type Json = Record<string, any>
 interface Tool { name: string; properties: string[] }
 /** `attachments`: the types of the prompt's parts that are not text (`input_image`, `input_file`). */
 export interface Turn { model: string; user: string; results: string[]; tools: Tool[]; attachments: string[] }
-export interface Step { text: string; call?: { name: string; arguments: string }; pauseMs?: number }
+export interface Step { text: string; call?: { name: string; arguments: string }; pauseMs?: number; reasoning?: string; status?: number }
 
 // MOCK_TODO=fullstack: the scripts edit examples/todo-fullstack (React Router, src/home.tsx)
 // instead of the plain TODO app (src/App.tsx).
@@ -106,6 +106,37 @@ export function next(input: Turn): Step {
   const offered = `(offered: ${turn.tools.map(tool => tool.name).join(', ')})`
   const counted = /^count to (\d+)/i.exec(turn.user)
   if (counted) return { text: `${Array.from({ length: Math.min(Number(counted[1]), 5000) }, (_, index) => index + 1).join(' ')} SCRIPTED-COUNT-DONE` }
+  if (/^demo markdown/i.test(turn.user)) return { text: markdown }
+  // `think <text>`: a reasoning item streamed before the answer.
+  const thought = /^think\b\s*([\s\S]*)$/i.exec(turn.user)
+  if (thought) return { reasoning: 'Weighing the request. '.repeat(30), text: `${thought[1] || 'Thought about it.'} SCRIPTED-THINK-DONE`, pauseMs: 400 }
+  // `flaky N <text>`: the first N requests of this prompt are answered 503, so the client retries.
+  const flaky = /^flaky (\d+)\b\s*([\s\S]*)$/i.exec(turn.user)
+  if (flaky) {
+    const seen = (failures.get(turn.user) ?? 0) + 1
+    failures.set(turn.user, seen)
+    if (seen <= Number(flaky[1])) return { text: `scripted failure ${seen}`, status: 503 }
+    failures.delete(turn.user)
+    return { text: `${flaky[2] || 'Answered'} after ${flaky[1]} failed attempts. SCRIPTED-FLAKY-DONE` }
+  }
+  // `sequence`, then one line each: `say <text>` or `call <tool> {json}`. Every call is a
+  // step of its own, with the `say` lines before it as its text (none: a call without text).
+  if (/^sequence\b/i.test(turn.user)) {
+    const lines = turn.user.split('\n').slice(1).map(line => line.trim()).filter(Boolean)
+    let calls = 0, text: string[] = []
+    for (const line of lines) {
+      const said = /^say (.*)$/i.exec(line), called = /^call (\w+) (\{.*\})$/i.exec(line)
+      if (said) text.push(said[1]!)
+      else if (called) {
+        if (calls++ === turn.results.length) {
+          if (!turn.tools.some(tool => tool.name === called[1])) return { text: `The sequence script needs the ${called[1]} tool ${offered}.` }
+          return { text: text.join('\n\n'), call: { name: called[1]!, arguments: called[2]! }, pauseMs: 150 }
+        }
+        text = []
+      }
+    }
+    return { text: `${text.join('\n\n') || 'The sequence is done.'} SCRIPTED-SEQUENCE-DONE` }
+  }
   const direct = /^call (\w+) (\{[\s\S]*\})\s*$/i.exec(turn.user)
   if (direct) {
     const [, name, json] = direct
@@ -137,6 +168,37 @@ export function next(input: Turn): Step {
   return { text: `Done. The edit tool answered: \`${turn.results[1]!.split('\n').find(line => line.trim())?.slice(0, 120) ?? ''}\`. The app beside this panel reloads by itself. SCRIPTED-EDIT-DONE` }
 }
 
+const failures = new Map<string, number>()
+const markdown = `# Streaming markdown
+
+A paragraph with **bold**, *emphasis*, \`inline code\` and a [link](https://example.com/docs) that arrives in pieces.
+
+## A list
+
+- first item, with \`code\`
+- second item
+  - nested item
+1. ordered one
+2. ordered two
+
+## Code
+
+\`\`\`ts
+export function greet(name: string): string {
+  // a comment long enough to need horizontal room in a narrow side panel of the page
+  return \`Hello, \${name}!\`
+}
+\`\`\`
+
+### A table
+
+| tool | calls |
+| --- | --- |
+| read | 4 |
+| shell | 6 |
+
+> A quote to close. SCRIPTED-MARKDOWN-DONE`
+
 let serial = 0
 const id = (prefix: string) => `${prefix}_scripted${(++serial).toString(36).padStart(6, '0')}`
 const delay = Number(env.SCRIPTED_MODEL_DELAY_MS ?? 25)
@@ -144,9 +206,12 @@ const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, m
 
 /** The step as a streamed Responses API answer; `headers` are the endpoint's own (CORS, where it is another origin). */
 export function reply(turn: Turn, step: Step, headers: Record<string, string> = {}): Response {
+  if (step.status) return new Response(JSON.stringify({ error: { message: step.text, type: 'server_error' } }), { status: step.status, headers: { ...headers, 'content-type': 'application/json' } })
   const usage = { input_tokens: Math.ceil(turn.user.length / 4) + 1, input_tokens_details: { cached_tokens: 0 }, output_tokens: Math.ceil(step.text.length / 4) + 1, output_tokens_details: { reasoning_tokens: 0 }, total_tokens: 0 }
   usage.total_tokens = usage.input_tokens + usage.output_tokens
-  const items: Json[] = [{ type: 'message', id: id('msg'), role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: step.text, annotations: [] }] }]
+  const items: Json[] = []
+  if (step.reasoning) items.push({ type: 'reasoning', id: id('rs'), summary: [{ type: 'summary_text', text: step.reasoning }] })
+  if (step.text) items.push({ type: 'message', id: id('msg'), role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: step.text, annotations: [] }] })
   if (step.call) items.push({ type: 'function_call', id: id('fc'), status: 'completed', call_id: id('call'), name: step.call.name, arguments: step.call.arguments })
   const base = { id: id('resp'), object: 'response', created_at: Math.floor(Date.now() / 1000), model: turn.model, output: [] as Json[], usage: null as Json | null }
   const encoder = new TextEncoder()
@@ -163,7 +228,13 @@ export function reply(turn: Turn, step: Step, headers: Record<string, string> = 
         await send('response.in_progress', { response: { ...base, status: 'in_progress' } })
         for (const [output_index, item] of items.entries()) {
           const item_id = item.id
-          if (item.type === 'message') {
+          if (item.type === 'reasoning') {
+            await send('response.output_item.added', { output_index, item: { ...item, summary: [] } })
+            await send('response.reasoning_summary_part.added', { item_id, output_index, summary_index: 0, part: { type: 'summary_text', text: '' } })
+            for (const delta of step.reasoning!.match(/\s*\S+\s*/g) ?? []) await send('response.reasoning_summary_text.delta', { item_id, output_index, summary_index: 0, delta })
+            await send('response.reasoning_summary_text.done', { item_id, output_index, summary_index: 0, text: step.reasoning })
+            await send('response.reasoning_summary_part.done', { item_id, output_index, summary_index: 0, part: item.summary[0] })
+          } else if (item.type === 'message') {
             await send('response.output_item.added', { output_index, item: { ...item, status: 'in_progress', content: [] } })
             await send('response.content_part.added', { item_id, output_index, content_index: 0, part: { type: 'output_text', text: '', annotations: [] } })
             for (const delta of step.text.match(/\s*\S+\s*/g) ?? []) await send('response.output_text.delta', { item_id, output_index, content_index: 0, delta })

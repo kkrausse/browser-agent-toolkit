@@ -7,7 +7,9 @@ export async function buildUIStyles(output = new URL("../dist/", import.meta.url
   const compiled = await $`bunx @tailwindcss/cli -i src/chat/tailwind.css --minify`.cwd(root.pathname).text();
   // Tailwind's internal property names and layers are not covered by its utility prefix.
   const css = postcss.parse(compiled.replaceAll("--tw-", "--ocui-tw-"));
-  css.walkAtRules("layer", rule => { rule.params = rule.params.split(",").map(name => `ocui-${name.trim()}`).join(","); });
+  // Out of their layers: a layered rule loses to any unlayered one, so a host page's plain
+  // `button { border: … }` would restyle every control. The layers' order is the file's order.
+  css.walkAtRules("layer", rule => { if (rule.nodes) rule.replaceWith(rule.nodes); else rule.remove(); });
   css.walkRules(rule => {
     if (rule.selector === "*,:before,:after,::backdrop") {
       rule.selector = ".oc-ui,.oc-ui *,.oc-ui::before,.oc-ui::after,.oc-ui *::before,.oc-ui *::after,.oc-ui::backdrop";

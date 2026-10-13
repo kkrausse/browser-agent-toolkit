@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { openEditor, type Editor, type EditorSnapshot, type OpenEditorOptions } from '@kkrausse/browser-agent-toolkit/browser';
 
-export { ChatView, Transcript, Composer, useChatSnapshot, type ChatViewProps } from './chat/view';
+export { ChatView, Transcript, Composer, Markdown, useChatSnapshot, useChatState, type ChatViewProps, type OpenFile } from './chat/view';
 export type { Editor, EditorSnapshot } from '@kkrausse/browser-agent-toolkit/browser';
 
 const opening: EditorSnapshot = { status: 'opening', message: 'Loading editor…', timings: {}, preview: 'stopped', agent: 'stopped', log: [] };
