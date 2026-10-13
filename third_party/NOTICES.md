@@ -52,6 +52,22 @@ license (the crate is dual-licensed MIT OR Apache-2.0). It is a build dependency
 Cargo, not vendored. The shell's parser, expansion, interpreter and utilities are written
 here; no shell or coreutils crate is used.
 
+## jaq (linked into `bat_sh.wasm`)
+
+The shell's `jq` (`crates/bat-sh/src/jq.rs`) is the jaq interpreter: `jaq-core` 3.1.1,
+`jaq-std` 3.0.3, `jaq-json` 2.0.3 and their JSON lexer `hifijson`, Copyright (c) Michael
+Färber, MIT. They are build dependencies fetched by Cargo, not vendored. The definitions of
+`join`, `IN`, `INDEX`, `tostream` and `truncate_stream` in that file follow jq's own
+`builtin.jq` (https://github.com/jqlang/jq, Copyright (C) 2012 Stephen Dolan, MIT).
+
+jaq brings these crates into `bat_sh.wasm` with it: `jiff`, `jiff-core`, `jiff-tzdb`,
+`jiff-tzdb-platform` (dates; the bundled time zone data is the IANA database, public domain),
+`aho-corasick`, `memchr` (Unlicense OR MIT); `regex-bites`, `regex-automata`, `bstr`,
+`base64`, `num-bigint`, `num-integer`, `num-traits`, `indexmap`, `hashbrown`, `equivalent`,
+`dyn-clone`, `once_cell`, `log` (MIT OR Apache-2.0); `bytes`, `libm`, `typed-arena`,
+`urlencoding` (MIT); `foldhash` (Zlib); `ryu` (Apache-2.0 OR BSL-1.0); `self_cell`
+(Apache-2.0 OR GPL-2.0-only, used under Apache-2.0).
+
 ## SQLite and wasi-libc (`runtime/src/sqlite/sqlite3.wasm`, a committed binary)
 
 Built by `runtime/src/sqlite/native/build.sh` (inputs, checksums and download URLs are in
@@ -112,7 +128,7 @@ of each `wasm/` workspace.
 | `bat_node_native.wasm` (`zlib`, `crypto`) | `flate2` with `miniz_oxide`, `crc32fast`, `adler2` | MIT OR Apache-2.0 (miniz_oxide also Zlib; adler2 also 0BSD) |
 | | `brotli`, `alloc-no-stdlib`, `brotli-decompressor` | BSD-3-Clause OR MIT |
 | | RustCrypto: `digest`, `md-5`, `sha1`, `sha2`, `hmac`, `pbkdf2`, `scrypt`, `salsa20`, `aes`, `ghash` and their support crates | MIT OR Apache-2.0 |
-| `bat_sh.wasm` | `regex-lite` (above) | MIT OR Apache-2.0 |
+| `bat_sh.wasm` | `regex-lite` (above); jaq and what it brings (above) | MIT OR Apache-2.0; as stated above |
 | `bat_tls.wasm` (`runtime/src/net/tls/`, committed; its own `Cargo.lock` in `native/`) | `rustls` 0.23.45 (TLS) | Apache-2.0 OR ISC OR MIT |
 | | `ring` 0.17.14 (cryptography; includes code from BoringSSL and OpenSSL, see its `LICENSE` files) | Apache-2.0 AND ISC |
 | | `rustls-webpki` 0.103.15 (certificate verification), `untrusted` | ISC |

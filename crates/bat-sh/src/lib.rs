@@ -11,6 +11,7 @@ pub mod files;
 pub mod find;
 pub mod glob;
 pub mod interp;
+pub mod jq;
 pub mod parser;
 pub mod pkg;
 pub mod rg;

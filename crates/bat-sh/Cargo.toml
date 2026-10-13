@@ -10,3 +10,8 @@ edition = "2021"
 
 [dependencies]
 regex-lite = "0.1"
+# jq is jaq (src/jq.rs). jaq-std hands out its native filters (`funs`) only with
+# every feature on, so the feature set is its default one.
+jaq-core = "=3.1.1"
+jaq-std = "=3.0.3"
+jaq-json = "=2.0.3"
