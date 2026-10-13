@@ -24,13 +24,12 @@ export function Transcript({ controller, onOpenFile }: { controller: ChatControl
   const loaded = !!session?.loaded, hasOlder = !!session?.older, loadingOlder = !!session?.loadingOlder;
   const count = session?.order.length ?? 0, first = session?.order[0];
   const viewport = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null);
-  const following = useRef(true), lastTop = useRef(0);
+  const following = useRef(true);
   const [away, setAway] = useState(false);
   const toEnd = useCallback(() => {
     const element = viewport.current;
     if (!element) return;
     element.scrollTop = element.scrollHeight;
-    lastTop.current = element.scrollTop;
   }, []);
   const follow = useCallback((value: boolean) => { following.current = value; setAway(!value); }, []);
 
@@ -56,7 +55,6 @@ export function Transcript({ controller, onOpenFile }: { controller: ChatControl
     if (previous.first && first !== previous.first && session?.order.includes(previous.first) && !following.current) {
       const expected = previous.top + (element.scrollHeight - previous.height);
       if (Math.abs(element.scrollTop - expected) > 1) element.scrollTop = expected;
-      lastTop.current = element.scrollTop;
     }
     before.current = { first, height: element.scrollHeight, top: element.scrollTop };
   });
@@ -70,18 +68,27 @@ export function Transcript({ controller, onOpenFile }: { controller: ChatControl
     if (element && loaded && hasOlder && !loadingOlder && element.scrollHeight <= element.clientHeight + nearStart) loadOlder();
   }, [loaded, hasOlder, loadingOlder, count, loadOlder]);
 
+  // The user's own prompt is always shown: sending one resumes following.
+  const lastPrompt = session?.order.findLast(id => session.messages[id]?.type === "user");
+  useLayoutEffect(() => { if (lastPrompt) { follow(true); toEnd(); } }, [lastPrompt, follow, toEnd]);
+
+  // Only a gesture of the user stops following. The offset also moves by itself (rows above
+  // take their real height when first laid out, the browser keeps an anchor in place), and
+  // that must not be taken for scrolling away.
+  const gesture = useRef(0);
+  const touched = () => { gesture.current = performance.now(); };
   const onScroll = () => {
     const element = viewport.current!;
     const top = element.scrollTop, distance = element.scrollHeight - top - element.clientHeight;
-    // Only the user moves the view up; content that grows leaves the offset alone.
     if (distance <= nearEnd) { if (!following.current) follow(true); }
-    else if (top < lastTop.current - 1 && following.current) follow(false);
-    lastTop.current = top;
+    else if (following.current && performance.now() - gesture.current < 400) follow(false);
+    else if (following.current) toEnd();
     before.current = { ...before.current, top };
     if (top < nearStart) loadOlder();
   };
   return <div className="oc-transcript-wrap">
-    <div className="oc-transcript" ref={viewport} role="log" aria-label="Conversation" aria-live="off" onScroll={onScroll}>
+    <div className="oc-transcript" ref={viewport} role="log" aria-label="Conversation" aria-live="off" tabIndex={0} onScroll={onScroll}
+      onWheel={touched} onTouchStart={touched} onTouchMove={touched} onPointerDown={touched} onKeyDown={touched}>
       <div className="oc-transcript-content" ref={content}>
         {sessionID && !loaded && <p className="oc-empty" role="status">Loading conversation…</p>}
         {loaded && hasOlder && <p className="oc-history-status" role="status">

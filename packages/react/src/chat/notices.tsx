@@ -34,7 +34,7 @@ export function RetryNotice({ retry }: { retry: Retry }) {
   return <div className="oc-alert" data-tone="warn" role="status">
     <RotateCw aria-hidden="true" />
     <div>
-      <strong>Attempt {retry.attempt} failed. Trying again at {clock(retry.at)}.</strong>
+      <strong>The request failed. Attempt {retry.attempt} starts at {clock(retry.at)}.</strong>
       <p>{retry.error.message}</p>
     </div>
   </div>;

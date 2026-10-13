@@ -103,7 +103,7 @@ export function describeActivity(activity: Activity): { text: string; waiting?: 
   switch (activity.kind) {
     case "permission": return { text: `Waiting for your permission: ${activity.request.action}`, waiting: true };
     case "form": return { text: `Waiting for your answer: ${activity.form.title || "a question"}`, waiting: true };
-    case "retry": return { text: `Attempt ${activity.attempt} failed, trying again: ${activity.message}` };
+    case "retry": return { text: `Request failed, attempt ${activity.attempt} is next: ${activity.message}` };
     case "tool": return { text: toolLine(activity.part) };
     case "reasoning": case "working": return { text: "Thinking" };
     case "text": return { text: firstLine(activity.text) ?? "Writing" };
