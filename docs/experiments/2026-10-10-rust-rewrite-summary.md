@@ -242,11 +242,25 @@ Deduplicated from all nine reports and this pass. "Source" names the report with
 10. **The preview frame has no `SharedWorker`** (since §5.1): an app that uses one will not
     work in the preview.
 
+10a. **A workspace is as large as the kernel memory lets it be** (256 MiB by default,
+    `kernelMemory.pages`), less what the kernel itself holds (25 to 30 MiB with the image
+    cache). Every file a program writes is in that memory, whole, with up to half as much
+    again of spare capacity while it grows, and a second time in the journal until that is
+    written out (a quarter second, or 4 MiB): 120 MiB of files took 163 to 171 MiB, and the
+    write that does not fit fails with `ENOSPC`. Until 2026-10-13 the limit was nearer a
+    third of the memory and reaching it froze the tab (the fold of the journal copied the
+    whole overlay into one block; `docs/experiments/2026-10-13-persist-oom.md`). What is
+    large and can be had again belongs in a `noPersist` directory or outside the guest.
+    `RuntimeHost.status()` gives the numbers.
+
 **B. Robustness risks that have not bitten in the scenario**
 
 11. **An unexplained kernel trap and a page hang**, each seen once by the net agent
     (`fd::pipe`, "operation does not support unaligned accesses"; page spinning on a lock),
-    not reproduced in five repeats or a 2,400-write stress, never explained. (net)
+    not reproduced in five repeats or a 2,400-write stress, never explained. (net) Since
+    2026-10-13 a trap with a kernel lock held no longer leaves the page spinning: every
+    thread gets an error and the host calls `onFatal` (decisions, that date). The trap
+    itself is still unexplained.
 12. **Reliability is seven scenario passes.** Never tried: permission or question cards,
     the Stop button, session export/import, two editors on one origin, a reload during a
     turn on the final build (passed once for the end-to-end agent).

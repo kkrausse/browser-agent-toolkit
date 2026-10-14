@@ -13,7 +13,10 @@
   `packages/guest-shims/esbuild/lib/bat_esbuild.wasm`,
   `packages/guest-shims/tailwindcss-oxide/tailwindcss-oxide.wasm`.
 - After a change, verify with the real thing: `runtime/harness/check.sh` (12 guest scripts
-  in Chrome; `BAT_HARNESS_PORT`, `BAT_HARNESS_SESSION`), `bench/startup/run.ts` for
+  in Chrome; `BAT_HARNESS_PORT`, `BAT_HARNESS_SESSION`), `bun runtime/harness/persist-check.ts`
+  after a change to persistence, the kernel's locks or its memory (a large overlay folded
+  and restored, a write refused, the tab killed mid-snapshot, a trap under the lock; its
+  own Chrome through Playwright, 2 minutes), `bench/startup/run.ts` for
   startup, and `examples/todo-app/demo/run.ts` for the README scenario (one paid model
   conversation per run; the key is in the gitignored `examples/todo-app/.env.local`).
 - Layout: `crates/`, `runtime/`, `packages/toolkit` are the toolkit; `packages/react`

@@ -15,6 +15,8 @@
 //               at several delays: everything flushed before is intact after each restore
 //   old-format  a snapshot as written before 2026-10-13 (each file one record) is restored, and
 //               a journal frame that begins before the snapshot is applied from the snapshot on
+//   no-persist  a directory named by the boot option `noPersist`: what is written there is in
+//               neither the journal nor a snapshot, and is gone at the next open
 //   dead        a kernel call traps with the filesystem lock held: the page's calls and the
 //               supervisor's fail with an error at once, `onFatal` is called, nothing spins
 //
@@ -299,6 +301,24 @@ const cases: Record<string, () => Promise<string>> = {
     const size = await inPage<number>('reading', `k.readFile('/old/f2.bin').length`)
     expect(size === 6 * MIB && again.snapshotSeq >= restored.snapshotSeq, `after the new snapshot: ${size} bytes`)
     return `a 6 MiB file in one record restored (${mib(restored.snapshotBytes)}, ${restored.ms.toFixed(0)} ms), a journal frame across the snapshot applied from the snapshot on, folded again and restored`
+  },
+
+  async 'no-persist'() {
+    const ns = `pc-${run}-nopersist`
+    const query = '&nopersist=/workspace/scratch'
+    await open(ns, query)
+    await node(`require('fs').writeFileSync('/workspace/kept.txt','kept')`)
+    const wrote = await node(WRITE, ['/workspace/scratch/f0.bin', '24', '7'])
+    expect(wrote.code === 0, `write under the directory: exit ${wrote.code} ${wrote.stderr}`)
+    await inPage('flush', 'k.flush()')
+    const journal = (await stats()).journalSize
+    expect(journal < MIB, `24 MiB under a directory that is not kept made a journal of ${journal} bytes`)
+    const snap = await inPage<{ bytes: number }>('snapshot', `h.boot.kerneld('snapshot')`)
+    expect(snap.bytes < MIB, `and a snapshot of ${snap.bytes} bytes`)
+    await open(ns, query)
+    const left = await inPage<{ kept: string; scratch: string[] }>('after the reload', `({ kept: new TextDecoder().decode(k.readFile('/workspace/kept.txt')), scratch: k.readdir('/workspace/scratch').map((e) => e.name) })`)
+    expect(left.kept === 'kept' && left.scratch.length === 0, `after the reload: ${JSON.stringify(left)}`)
+    return `24 MiB under noPersist: ${journal} journal bytes, ${snap.bytes} snapshot bytes, gone after the reload, the rest kept`
   },
 
   async dead() {

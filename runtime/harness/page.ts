@@ -88,7 +88,8 @@ async function start() {
     // `?persist=1`: the overlay is journaled to OPFS under the namespace (`ns=`) and restored
     // from it at the next load (runtime/harness/persist-check.ts).
     persist: params.get('persist') === '1',
-    noPersist: ['/.bat'],
+    // `?nopersist=/workspace/scratch`: a directory that is not kept, as the host's `noPersist`.
+    noPersist: ['/.bat', ...params.getAll('nopersist')],
     warmSpare: params.get('spare') !== '0',
     // `?trace`: kerneld posts its marks too; collected in `__batTrace` (runtime/src/trace.ts).
     trace: params.has('trace'),

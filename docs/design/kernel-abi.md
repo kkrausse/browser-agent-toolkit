@@ -37,8 +37,8 @@ wasm-bindgen. `bat_abi_version()` returns `1`.
   `kernel.ts` allocates one 256 KiB scratch block per instance and uses it for paths, stat
   results and small payloads.
 - The kernel never keeps a caller pointer after the call returns.
-- Two calls hand kernel-owned buffers to the caller (`bat_journal_take`,
-  `bat_persist_snapshot`); they are released with `bat_blob_free(ptr, len)`.
+- One call hands a kernel-owned buffer to the caller (`bat_journal_take`); it is released
+  with `bat_blob_free(ptr, len)`.
 - `bat_image_section` returns a pointer into the immutable image head; it stays valid for
   the session and must not be freed.
 - **Views go stale when memory grows.** Any instance may grow the memory. Old
@@ -114,6 +114,7 @@ Exported globals (each is the *address* of an `i32` word; read with `Atomics.loa
 | `BAT_KERNELD_WORD` | bumped when the supervisor has work |
 | `BAT_FAULT_WORD` | bumped when a proxied image fault completed |
 | `BAT_PERSIST_WORD` | bumped when the durable sequence advanced |
+| `BAT_KERNEL_DEAD` | not 0: a thread died holding a kernel lock, the kernel cannot be used again. Set by the binding of the thread that trapped (a trap while the thread's lock count, the first word of its Thread record, is above 0), or by a thread that spun 30 s for a lock. The binding refuses every call once it is set; a thread waiting for a lock traps |
 
 ## 3. Processes
 
@@ -331,14 +332,24 @@ journaling. Directories marked non-persistent are never written and come back em
 | `bat_persist_durable()` | `f64` | durable sequence number |
 | `bat_persist_exclude(path, len)` | 0 | mark a directory (created if missing) non-persistent; call at every boot, after restore |
 | supervisor only: | | |
-| `bat_persist_replay(ptr, len)` | bytes applied | apply a snapshot or journal payload |
+| `bat_persist_replay(ptr, len, more)` | bytes applied | apply the records of a journal payload or of a piece of a snapshot; a record cut short by the end is not applied (it starts the next piece). `more` != 0: further pieces of the same snapshot follow. `ENOMEM` when the memory has no room for what a record holds |
 | `bat_persist_enable(seq)` | | start journaling at `seq` |
 | `bat_journal_take(out)` | 0 | `out`: `{ u32 ptr, u32 len, f64 end_seq }`; free with `bat_blob_free` |
-| `bat_persist_snapshot(out)` | 0 | same shape; all persistent nodes as records; discards pending journal bytes (they are in the snapshot) |
+| `bat_persist_snapshot(out)` | 0 | writes all persistent nodes as records through `host_persist_write`, in pieces of at most 1 MiB, holding the filesystem for reading; nothing is copied or allocated beyond a 256 KiB buffer. `out`: `{ f64 bytes, f64 seq }`. The host's refusal of a piece is the result (`ENOSPC`, `EIO`); the journal is not touched |
+| `bat_persist_snapshot_done(seq)` | | the snapshot taken at `seq` is durable: pending journal bytes up to `seq` are dropped |
+| `bat_persist_stats(out)` | | any thread. `out`, 6 `f64`: journaling on, sequence number, durable sequence number, pending journal bytes, when the journal was last written out, when a snapshot was last completed (epoch ms, 0: never) |
 | `bat_persist_set_durable(seq)` | | publish and wake waiters |
 | `bat_persist_pending()` | bytes | journal bytes not yet taken |
 
 `kernel.flush()` (async, any thread) and `kernel.flushSync()` (workers) wrap this.
+
+A file in OPFS: the journal is frames of `{ u32 "BATJ", u32 len, u32 fnv1a32(payload), u32 0,
+f64 end_seq }` and `len` bytes of records; a snapshot slot is `{ "BATSNAP1", f64 seq, f64 len,
+u32 1, u32 0 }` and `len` bytes of records, the header written after the records are flushed.
+Sequence numbers are byte offsets in the stream of all records, so a frame's first record is
+at `end_seq - len`: the restore applies a frame from the snapshot's `seq` on. An operation
+that changes the overlay fails with `ENOSPC`, having changed nothing, when the journal has
+no room for its records (docs/design/decisions.md, 2026-10-13).
 
 ## 10. Supervisor (kerneld only)
 
@@ -362,6 +373,8 @@ Module `bat`:
 | `host_log` | `(level i32, ptr i32, len i32)` | UTF-8 text; level 1 stdout-like, 3 error |
 | `host_now_ms` | `() -> f64` | wall clock, ms since the epoch |
 | `host_image_read` | `(image i32, offset f64, ptr i32, len i32) -> i32` | read exactly `len` bytes of image `image` at `offset` into memory; return bytes read, `-11` if this thread has no handle for the image, another negative on failure. Must not call the kernel |
+
+| `host_persist_write` | `(ptr i32, len i32) -> i32` | the next bytes of the snapshot `bat_persist_snapshot` is writing, in order; return 0, or a negative errno (`-28` when the disk is full), which ends the snapshot. Called with the filesystem lock held for reading: must not call the kernel. Only kerneld has somewhere to put them; elsewhere `-5` |
 
 (The wait/notify instructions go through imports because the stable Rust toolchain does not
 expose them; they are reached only on contended or blocking paths.)
@@ -411,7 +424,9 @@ layers that serve many small reads should pool and use `readFileInto`.
 
 kerneld RPC ops (`booted.kerneld(op, args)`): `storeImage { name, url }`,
 `hasImage { name }`, `removeImage { name }`, `mount { name, path }`, `snapshot`, `flush`,
-`spareReady`, `stats`.
+`spareReady`, `stats`. kerneld also posts `{ type: 'fatal', error }` once, when the kernel is
+dead (`BAT_KERNEL_DEAD`): `booted.failed` is then set, `booted.onFatal` listeners are called
+and every pending and later request rejects with that error.
 
 ## 13. Reserved for the next exports (not implemented yet)
 

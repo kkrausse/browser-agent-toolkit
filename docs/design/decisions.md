@@ -1610,3 +1610,113 @@ servers.
   its window before the frame loads is posted the frame's errors, failed loads, rejections,
   `console.error` and guest socket states (`{ t: 'bat-preview', kind, text }`). Off
   otherwise: a diagnostics aid, not part of the toolkit's API.
+
+## 2026-10-13: a snapshot is written through, not copied; a dead kernel is an error
+
+What happened, what was run and the numbers: `docs/experiments/2026-10-13-persist-oom.md`.
+
+- **What was wrong.** A tab froze for good in a downstream app after the agent had
+  downloaded two files of 30 and 22 MB into the workspace. The fold of the journal into a
+  snapshot (`persist::snapshot`) took the filesystem lock for writing and then asked for
+  one block the size of every persistent file (`Vec::with_capacity`), which the entry of
+  2026-10-11 on the fixed memory did not count among "what can be large": with 107 MiB of
+  256 in use, blocks of 71 to 103 MiB were refused. Rust aborts on that, the lock was
+  never released, kerneld waited for it for ever (in `persist::pending_bytes`), every
+  process parked in `stat`, and the page's main thread, which may not block, spun on it
+  at 100% CPU. The last sentence of that entry's exhaustion rule ("still a trap, and with
+  a kernel lock possibly held it is fatal for the runtime, as it was") was this.
+- **A snapshot is not built in memory.** Options: (1) ask for the block fallibly and skip
+  the fold when it is refused: no trap, but a workspace over about a third of the memory
+  is then never folded, its journal grows without limit and every open replays all of it;
+  (2) write it in pieces through several kernel calls, releasing the lock between them:
+  the overlay changes between pieces, so the snapshot is a fuzzy one that is only right
+  with the journal of the same interval replayed over it, and the records are not all
+  idempotent (a node number is reused, a link counts); (3) hold the filesystem for the
+  whole snapshot and hand the bytes to the host as they lie. **3**: `snapshot` takes a
+  sink, holds the lock for *reading* (lookups and reads go on, on the page too; changes
+  wait), gathers small records in one 256 KiB buffer taken before the lock and gives the
+  sink a file's contents straight from the file. On wasm the sink is a new host import,
+  `host_persist_write`, which kerneld answers by writing to its OPFS handle. This is a
+  host call with a kernel lock held, against the rule at the top of `lock.rs`; it is
+  allowed here because the call blocks on nothing of the kernel's (a file write), the
+  holder is the supervisor, which is never killed, and the alternative was the copy. The
+  hold is as long as the write: 38 ms for 60 MiB here, the same as the copy and the
+  write together took before.
+- **On disk nothing new has to be understood.** The container is the same (`BATSNAP1`,
+  version 1: 32-byte header, then records) and so are the records. What changed is which
+  records a snapshot is made of: a file over 64 KiB is an empty node, a truncate to its
+  size when it is over 1 MiB, and write records of at most 1 MiB, where it used to be one
+  node record holding the file. So the restore reads a snapshot in 4 MiB pieces
+  (`bat_persist_replay(ptr, len, more)`: a record cut by the end of a piece is carried
+  into the next, and nodes nobody links to are collected after the last piece) instead of
+  one block of the snapshot's size beside the files it makes: restoring 60 MiB peaked at
+  67 MiB of kernel memory, 122 before. A snapshot written before this is read as it is,
+  the piece growing to its largest record (so it costs what it used to, once: the next
+  fold rewrites it). An earlier build reads the new ones. A snapshot that does not fit
+  the memory fails the boot with `ENOMEM` and a sentence naming `kernelMemory.pages`,
+  where it used to trap.
+- **Crash safety is the scheme there was, with one hole closed.** Two slots alternate; a
+  snapshot is written to the one that does not hold the newest, records first, flushed,
+  then the header, flushed; the restore takes the slot with the highest sequence number
+  whose header is whole and whose size is the header's; the journal is cut only after
+  that. A crash during the records leaves a slot without a header and the other slot and
+  the journal untouched. The hole: the kernel used to drop its pending journal records
+  when it built the snapshot, before anything was on disk, so a snapshot that then failed
+  to be written lost them, and the journal went on with a gap. Now the kernel keeps them
+  until kerneld calls `bat_persist_snapshot_done(seq)`, after the header is durable. That
+  leaves one new state, a durable snapshot beside journal records it already covers (the
+  page went between the header and the cut, or the cut failed); sequence numbers are byte
+  offsets in the record stream, so the restore applies a frame from the snapshot's
+  sequence number on and skips what is before it, to the byte. A snapshot that fails (the
+  disk is full: the sink's error, `ENOSPC`) is reported, truncates its slot and is tried
+  again no sooner than 30 s later.
+- **Nothing large is allocated under the lock without a way to fail.** The journal buffer
+  grew by `extend_from_slice` inside every operation. Now an operation that changes the
+  overlay starts by getting the journal 64 KiB of room and the node table 256 entries
+  (`vfs::changing`), a write gets room for its bytes' record before the file is touched,
+  a copy-up for the node's record, a rename into the persistent area for the subtree's.
+  No room is `ENOSPC` to the caller with nothing changed. The journal's and a file's
+  growth are geometric while the memory has room for that and exact when it has not
+  (`mem::grow`, `Journal::reserve`). A replay asks the same way (`ENOMEM`). What is left
+  infallible under the lock is small: a directory entry, a name, a node.
+- **The journal is drained when it is large, not only when the timer says.** Pending
+  records are a second copy of what was written. At 4 MiB pending the kernel asks the
+  supervisor to drain (`Work::Flush`), which it does on its next turn instead of up to a
+  quarter second later.
+- **A dead kernel says so.** A thread that traps with a kernel lock held still leaves the
+  kernel unusable; no code can make that impossible (a bug, a stack overflow). What can
+  be done is to make it an error instead of a wait. `BAT_KERNEL_DEAD` is a word in the
+  shared memory. The host binding wraps every export: a call that traps while its thread
+  holds a lock (the thread's lock count, first word of its record) sets the word, and
+  every call on every thread throws "The runtime has failed…" (`code: 'BAT_KERNEL_DEAD'`)
+  once it is set. A thread waiting for a lock looks at the word (a blocked one once a
+  second, a spinning one every 4,096 spins) and traps itself; a thread that cannot block
+  also gives up after 30 s of spinning and sets the word, so the page's main thread fails
+  with an error even if nothing else noticed. kerneld sees the word within its quarter
+  second (or at once, when the failing call was its own), stops every process worker
+  where it is, since one waiting for the lost lock would wait for good, and posts
+  `fatal` to the page; there every pending and later kerneld request rejects with the
+  error, and the host calls `onFatal` listeners, ends its streams and resolves every
+  process's `exited` with SIGKILL. A trap with no lock held is not this: it is that
+  call's error, as before. Cost of the wrapper: none that the harness's twelve guests
+  show (two runs each way, within their noise).
+- **An embedding page can see it coming.** `RuntimeHost.status()` (synchronous): the kernel
+  memory in use, its peak, its capacity and the count of refused allocations; the journal
+  bytes not yet on disk and for how long there have been some; when the journal was last
+  written out and last folded (`bat_persist_stats`). `RuntimeHost.onFatal(listener)`. Both
+  optional in the toolkit's contract (`packages/toolkit/src/runtime-host.ts`).
+- **`noPersist` is a boot option of the host** (`bootRuntime({ noPersist: ['/workspace/source'] })`,
+  and `openEditor`'s `runtime.noPersist`): directories that are not kept, beside `/tmp`
+  and `/.bat`. A file there is held once, not also in the journal, and is gone at the
+  next open.
+- **Checked by** `bun runtime/harness/persist-check.ts` (its own Chrome and server): the
+  reproduction, the refusal, 16 kills of the tab in the middle of snapshots and journal
+  writes, a snapshot and a journal in the earlier form, a `noPersist` directory, a real trap under
+  the lock.
+- **Not done.** A file is still held in kernel memory, whole, with up to half as much
+  again of spare capacity while it grows (120 MiB of files took 163 to 171 MiB): the
+  memory is the ceiling of a workspace, and the fifth 30 MiB file is refused. Files that
+  live in OPFS instead of the memory would lift that; this entry only makes the ceiling
+  an `ENOSPC` instead of a freeze. The journal at restore is still read whole into the
+  supervisor's JavaScript memory (it is cut at 16 MiB, or 1 MiB when idle). The 30 s
+  give-up of a spinning thread was not exercised by a test (the word and the trap were).
