@@ -11,9 +11,9 @@
 
 use crate::errno::*;
 use crate::image::ImageMount;
-use crate::lock::RwLock;
+use crate::lock::{RwLock, WriteGuard};
 use crate::path::{components, split_parent, PathBuf};
-use crate::persist::Journal;
+use crate::persist::{Journal, LINK_HEAD, NODE_HEAD, SMALL, WRITE_HEAD};
 use crate::proc::Process;
 use crate::sys;
 use bat_image::Kind as IKind;
@@ -130,6 +130,25 @@ pub static VFS: RwLock<Vfs> = RwLock::new(Vfs {
 fn new_dir(opaque: bool) -> Kind {
     Kind::Dir(Dir { children: BTreeMap::new(), opaque, mount: NONE })
 }
+
+/// The filesystem, for an operation that changes the overlay. The journal is given room
+/// for the operation's small records (nodes, links, names) first: appending them later
+/// cannot then be what finds the kernel memory full, which with this lock held would stop
+/// every thread for good (an allocation that fails aborts). Contents ask for their own
+/// room where they are written (`write_ino`, `copy_up`, `rename`).
+fn changing() -> R<WriteGuard<'static, Vfs>> {
+    let mut v = VFS.write();
+    v.journal.reserve(SMALL)?;
+    // The node table likewise: it is one block, megabytes of it in a large workspace, and
+    // must not be what moves (and fails to) in the middle of an operation.
+    if v.nodes.capacity() - v.nodes.len() < NODES_AHEAD {
+        let more = NODES_AHEAD.max(v.nodes.len() / 2);
+        v.nodes.try_reserve(more).or_else(|_| v.nodes.try_reserve_exact(NODES_AHEAD)).map_err(|_| ENOSPC)?;
+    }
+    Ok(v)
+}
+/// More nodes than one operation makes (a path's missing directories and the file).
+const NODES_AHEAD: usize = 256;
 
 pub fn init() {
     let mut v = VFS.write();
@@ -554,6 +573,10 @@ impl Vfs {
             IKind::Dir => return Err(EISDIR),
         };
         let p = self.ensure_ov(parent_canon)?;
+        if let (Kind::File(d), true) = (&kind, self.node(p).persist) {
+            // The node's record holds the contents.
+            self.journal.reserve(NODE_HEAD + d.len() + SMALL)?;
+        }
         let ino = self.new_node(p, kind, e.mode);
         self.link_raw(p, name, ino);
         Ok(ino)
@@ -628,6 +651,16 @@ impl Vfs {
         for k in kids {
             self.set_persist(k, persist);
         }
+    }
+    /// Bytes of the records `emit_subtree` writes for `ino`.
+    fn subtree_bytes(&self, ino: u32) -> usize {
+        let n = self.node(ino);
+        NODE_HEAD
+            + match &n.kind {
+                Kind::File(d) => d.len(),
+                Kind::Symlink(t) => t.len(),
+                Kind::Dir(d) => d.children.iter().map(|(name, &c)| LINK_HEAD + name.len() + if c == WHITEOUT { 0 } else { self.subtree_bytes(c) }).sum(),
+            }
     }
     /// Journal a whole subtree (it just became persistent).
     pub fn emit_subtree(&mut self, ino: u32) {
@@ -808,7 +841,7 @@ pub fn open(path: &[u8], flags: u32, mode: u32, canon: &mut PathBuf) -> R<Opened
         let l = v.walk(path, follow, canon)?;
         return open_loc(&v, l, flags);
     }
-    let mut v = VFS.write();
+    let mut v = changing()?;
     let mut pc = PathBuf::new();
     // Resolve the final symlink (if any) first so creation lands on its target.
     let mut real = PathBuf::new();
@@ -917,19 +950,18 @@ impl Vfs {
         Ok(())
     }
     fn write_ino(&mut self, ino: u32, pos: Option<u64>, src: &[u8]) -> R<u64> {
+        // The journal's copy of the bytes first: nothing has changed if it has no room.
+        if self.node(ino).persist {
+            self.journal.reserve(WRITE_HEAD + src.len() + SMALL)?;
+        }
         let n = self.node_mut(ino);
         let Kind::File(d) = &mut n.kind else { return Err(EINVAL) };
         let pos = pos.unwrap_or(d.len() as u64) as usize;
         let end = pos.checked_add(src.len()).ok_or(EINVAL)?;
         if end > d.len() {
-            if end > d.capacity() {
-                // Grow geometrically but not absurdly for big files.
-                // Near a full memory: what is needed, or the write fails with ENOSPC.
-                let want = end.max(d.capacity() + d.capacity() / 2);
-                if want == end || !crate::mem::can_take(want - d.capacity()) || crate::mem::reserve(d, want - d.len(), ENOSPC).is_err() {
-                    crate::mem::reserve(d, end - d.len(), ENOSPC)?;
-                }
-            }
+            // Grow geometrically but not absurdly for big files.
+            // Near a full memory: what is needed, or the write fails with ENOSPC.
+            crate::mem::grow(d, end, ENOSPC)?;
             d.resize(end, 0);
         }
         d[pos..end].copy_from_slice(src);
@@ -955,14 +987,14 @@ pub fn ov_read(ino: u32, pos: u64, dst: &mut [u8]) -> R<usize> {
 }
 /// Returns the file position after the write. `pos` None appends.
 pub fn ov_write(ino: u32, pos: Option<u64>, src: &[u8], path: &[u8]) -> R<u64> {
-    let mut v = VFS.write();
+    let mut v = changing()?;
     v.try_node(ino).ok_or(EBADF)?;
     let end = v.write_ino(ino, pos, src)?;
     v.notify_full(path, WATCH_CHANGE);
     Ok(end)
 }
 pub fn ov_truncate(ino: u32, len: u64, path: &[u8]) -> R<()> {
-    let mut v = VFS.write();
+    let mut v = changing()?;
     v.try_node(ino).ok_or(EBADF)?;
     v.truncate_ino(ino, len as usize)?;
     v.notify_full(path, WATCH_CHANGE);
@@ -975,7 +1007,7 @@ pub fn ov_stat(ino: u32, st: &mut Stat) -> R<()> {
     Ok(())
 }
 pub fn ov_set_meta(ino: u32, mode: Option<u32>, mtime: Option<f64>) -> R<()> {
-    let mut v = VFS.write();
+    let mut v = changing()?;
     v.try_node(ino).ok_or(EBADF)?;
     v.set_meta(ino, mode, mtime);
     Ok(())
@@ -986,7 +1018,7 @@ pub const WF_EXCL: u32 = 2;
 
 /// Create-or-replace a file in one call.
 pub fn write_file(path: &[u8], data: &[u8], mode: u32, flags: u32) -> R<()> {
-    let mut v = VFS.write();
+    let mut v = changing()?;
     let mut real = PathBuf::new();
     let path = match v.walk(path, true, &mut real) {
         Ok(_) => real.as_bytes(),
@@ -1037,7 +1069,7 @@ pub fn write_file(path: &[u8], data: &[u8], mode: u32, flags: u32) -> R<()> {
 }
 
 pub fn mkdir(path: &[u8], mode: u32, recursive: bool) -> R<()> {
-    let mut v = VFS.write();
+    let mut v = changing()?;
     v.mkdir(path, mode, recursive)
 }
 
@@ -1110,7 +1142,7 @@ impl Vfs {
 }
 
 pub fn unlink(path: &[u8]) -> R<()> {
-    let mut v = VFS.write();
+    let mut v = changing()?;
     let mut pc = PathBuf::new();
     let (parent, name) = v.walk_parent(path, &mut pc)?;
     let l = v.lookup_child(parent, name)?;
@@ -1123,7 +1155,7 @@ pub fn unlink(path: &[u8]) -> R<()> {
 }
 
 pub fn rmdir(path: &[u8]) -> R<()> {
-    let mut v = VFS.write();
+    let mut v = changing()?;
     let mut pc = PathBuf::new();
     let (parent, name) = v.walk_parent(path, &mut pc)?;
     if name.is_empty() {
@@ -1149,7 +1181,7 @@ pub fn rmdir(path: &[u8]) -> R<()> {
 }
 
 pub fn rename(old: &[u8], new: &[u8]) -> R<()> {
-    let mut v = VFS.write();
+    let mut v = changing()?;
     let mut spc = PathBuf::new();
     let mut dpc = PathBuf::new();
     let (sp, sname) = v.walk_parent(old, &mut spc)?;
@@ -1202,6 +1234,10 @@ pub fn rename(old: &[u8], new: &[u8]) -> R<()> {
     let dpersist = v.node(dparent).persist;
     let was = v.node(ino).persist;
     if dpersist && !was {
+        if v.journal.enabled {
+            let bytes = v.subtree_bytes(ino);
+            v.journal.reserve(bytes + SMALL)?;
+        }
         v.set_persist(ino, true);
         if v.journal.enabled {
             v.emit_subtree(ino);
@@ -1223,7 +1259,7 @@ pub fn rename(old: &[u8], new: &[u8]) -> R<()> {
 }
 
 pub fn symlink(target: &[u8], path: &[u8]) -> R<()> {
-    let mut v = VFS.write();
+    let mut v = changing()?;
     let mut pc = PathBuf::new();
     let (parent, name) = v.walk_parent(path, &mut pc)?;
     match v.lookup_child(parent, name) {
@@ -1239,7 +1275,7 @@ pub fn symlink(target: &[u8], path: &[u8]) -> R<()> {
 }
 
 pub fn link(old: &[u8], new: &[u8]) -> R<()> {
-    let mut v = VFS.write();
+    let mut v = changing()?;
     let (ino, _) = v.materialize(old, false)?;
     if matches!(v.node(ino).kind, Kind::Dir(_)) {
         return Err(EPERM);
@@ -1258,7 +1294,7 @@ pub fn link(old: &[u8], new: &[u8]) -> R<()> {
 }
 
 pub fn set_meta(path: &[u8], follow: bool, mode: Option<u32>, mtime: Option<f64>) -> R<()> {
-    let mut v = VFS.write();
+    let mut v = changing()?;
     let (ino, canon) = v.materialize(path, follow)?;
     v.set_meta(ino, mode, mtime);
     v.notify_full(canon.as_bytes(), WATCH_CHANGE);
@@ -1266,7 +1302,7 @@ pub fn set_meta(path: &[u8], follow: bool, mode: Option<u32>, mtime: Option<f64>
 }
 
 pub fn truncate(path: &[u8], len: u64) -> R<()> {
-    let mut v = VFS.write();
+    let mut v = changing()?;
     let (ino, canon) = v.materialize(path, true)?;
     v.truncate_ino(ino, len as usize)?;
     v.notify_full(canon.as_bytes(), WATCH_CHANGE);

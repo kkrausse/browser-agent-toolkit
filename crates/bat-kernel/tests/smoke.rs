@@ -39,7 +39,7 @@ fn st(p: &str) -> Result<Stat, i32> {
 }
 fn read(p: &str) -> Result<Vec<u8>, i32> {
     let mut s = Stat::default();
-    let mut buf = vec![0u8; 1 << 20];
+    let mut buf = vec![0u8; 4 << 20];
     let n = vfs::read_file(p.as_bytes(), 0, &mut buf, &mut s)?;
     buf.truncate(n);
     Ok(buf)
@@ -222,7 +222,36 @@ fn kernel_smoke() {
     // persistence: snapshot + journal replay reproduce the overlay
     vfs::persist_exclude(b"/workspace/.cache").unwrap();
     persist::enable(0);
-    let (snap, s0) = persist::snapshot();
+    // A file larger than a snapshot's pieces, and one that fits in none of its buffers.
+    let big: Vec<u8> = (0..(2 << 20) + 12345u32).map(|i| (i % 251) as u8).collect();
+    vfs::write_file(b"/workspace/big.bin", &big, 0o644, 0).unwrap();
+    vfs::write_file(b"/workspace/mid.bin", &big[..100_000], 0o600, 0).unwrap();
+    let mut snap = Vec::new();
+    let mut largest = 0;
+    let (bytes, s0) = persist::snapshot(&mut |piece| {
+        largest = largest.max(piece.len());
+        snap.extend_from_slice(piece);
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(bytes as usize, snap.len());
+    // No piece is the overlay: contents leave in megabytes, the rest through a small buffer.
+    assert!(largest <= 1 << 20, "{largest}");
+    // A sink that fails (the disk is full) fails the snapshot and leaves the journal alone.
+    vfs::write_file(b"/workspace/pending.txt", b"pending", 0o644, 0).unwrap();
+    assert_eq!(persist::snapshot(&mut |_| Err(ENOSPC)).err(), Some(ENOSPC));
+    assert!(persist::pending_bytes() > 0);
+    // Once a snapshot is durable the journal drops what it covers, and only that.
+    let (_, covered) = persist::snapshot(&mut |_| Ok(())).unwrap();
+    vfs::write_file(b"/workspace/newer.txt", b"newer", 0o644, 0).unwrap();
+    let pending = persist::pending_bytes();
+    persist::snapshot_done(covered);
+    assert!(persist::pending_bytes() > 0 && persist::pending_bytes() < pending);
+    assert_eq!(persist::current_seq() - covered, persist::pending_bytes() as u64);
+    let (tail, _) = persist::take();
+    vfs::unlink(b"/workspace/pending.txt").unwrap();
+    vfs::unlink(b"/workspace/newer.txt").unwrap();
+    let _ = (tail, persist::take());
     vfs::write_file(b"/workspace/after.txt", b"journaled", 0o644, 0).unwrap();
     vfs::write_file(b"/workspace/.cache/x", b"volatile", 0o644, 0).unwrap();
     vfs::unlink(b"/workspace/hard").unwrap();
@@ -242,8 +271,23 @@ fn kernel_smoke() {
         v.rebuild_free();
     }
     assert_eq!(st("/workspace").err(), Some(ENOENT));
-    assert_eq!(persist::replay(&snap), snap.len());
-    assert_eq!(persist::replay(&journal), journal.len());
+    // The snapshot is read back in pieces that end anywhere: a record cut short is left
+    // for the next piece (kerneld's restore).
+    let mut at = 0;
+    let mut piece = 300_000;
+    while at < snap.len() {
+        let end = (at + piece).min(snap.len());
+        let applied = persist::replay(&snap[at..end], end < snap.len()).unwrap();
+        // A record larger than the piece: the reader takes a larger piece.
+        if applied == 0 {
+            piece *= 2;
+        }
+        at += applied;
+    }
+    assert_eq!(read("/workspace/big.bin").unwrap(), big);
+    assert_eq!(read("/workspace/mid.bin").unwrap(), &big[..100_000]);
+    assert_eq!(st("/workspace/mid.bin").unwrap().mode & 0o777, 0o600);
+    assert_eq!(persist::replay(&journal, false), Ok(journal.len()));
     // mounts are not persisted; the host mounts again at boot
     assert!(unsafe { abi::bat_image_mount(id, name.as_ptr(), name.len(), mp.as_ptr(), mp.len()) } > 0);
     // ...and declares the non-persistent roots again; they come back empty
@@ -255,5 +299,24 @@ fn kernel_smoke() {
     assert_eq!(st("/workspace/hard").err(), Some(ENOENT));
     assert_eq!(read("/workspace/node_modules/pkg/index.js").unwrap(), b"patched");
     assert!(ls("/workspace/.cache").is_empty());
+
+    // A snapshot as written before 2026-10-13, every file whole in its node's record, in one
+    // piece: the same records, still read. (The journal has always been in this form.)
+    vfs::unlink(b"/workspace/big.bin").unwrap();
+    let mut old = persist::Journal::new();
+    {
+        let v = vfs::VFS.read();
+        let ino = v.nodes.len() as u32 + 7;
+        let mut data = vec![0u8; 1];
+        data.extend_from_slice(&big);
+        old.rec_node(
+            ino,
+            &vfs::Node { kind: vfs::Kind::File(data), mode: 0o640, persist: true, nlink: 0, opens: Default::default(), mtime: 5.0, ctime: 5.0, btime: 5.0 },
+        );
+        old.rec_link(0, b"old-format.bin", ino);
+    }
+    assert_eq!(persist::replay(&old.buf, false), Ok(old.buf.len()));
+    let got = read("/old-format.bin").unwrap();
+    assert_eq!((got.len(), &got[1..]), (big.len() + 1, &big[..]));
     let _ = fd::POLLIN;
 }

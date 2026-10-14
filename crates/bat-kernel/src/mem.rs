@@ -38,6 +38,19 @@ pub fn reserve(v: &mut Vec<u8>, additional: usize, err: i32) -> R<()> {
     v.try_reserve_exact(additional).map_err(|_| err)
 }
 
+/// Room in a file's contents for `end` bytes in all: half as much again as it had while the
+/// memory has room for that (a file written piece by piece is not moved for every piece),
+/// else exactly what is needed, or `err`.
+pub fn grow(v: &mut Vec<u8>, end: usize, err: i32) -> R<()> {
+    if end > v.capacity() {
+        let want = end.max(v.capacity() + v.capacity() / 2);
+        if want == end || !can_take(want - v.capacity()) || reserve(v, want - v.len(), err).is_err() {
+            reserve(v, end - v.len(), err)?;
+        }
+    }
+    Ok(())
+}
+
 /// A zeroed buffer of `len` bytes, or `err`.
 pub fn zeroed(len: usize, err: i32) -> R<Vec<u8>> {
     let mut v = Vec::new();

@@ -11,6 +11,7 @@ mod imp {
         fn host_log(level: u32, ptr: *const u8, len: usize);
         fn host_now_ms() -> f64;
         fn host_image_read(image: u32, offset: f64, ptr: *mut u8, len: usize) -> i32;
+        fn host_persist_write(ptr: *const u8, len: usize) -> i32;
     }
 
     /// `memory.atomic.wait32` through `Atomics.wait`. The stable toolchain does
@@ -31,6 +32,11 @@ mod imp {
     }
     pub fn image_read(image: u32, offset: u64, buf: &mut [u8]) -> i32 {
         unsafe { host_image_read(image, offset as f64, buf.as_mut_ptr(), buf.len()) }
+    }
+    /// The next bytes of the snapshot being written (persist.rs). Only the supervisor's
+    /// instance has somewhere to put them; 0 or `-errno`.
+    pub fn persist_write(buf: &[u8]) -> i32 {
+        unsafe { host_persist_write(buf.as_ptr(), buf.len()) }
     }
 }
 
@@ -85,6 +91,9 @@ mod imp {
             Some(r) => r(image, offset, buf),
             None => -5,
         }
+    }
+    pub fn persist_write(_buf: &[u8]) -> i32 {
+        -5
     }
 }
 

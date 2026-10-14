@@ -40,6 +40,12 @@ export interface BootOptions {
   /** Not part of the toolkit contract: overrides for harnesses. */
   namespace?: string
   persist?: boolean
+  /** Directories that are not kept: what programs write under them stays in memory for the
+   * session, is never journaled and is gone at the next open (the directory itself comes
+   * back empty). `/tmp` and `/.bat` always are. For what is large and can be had again (a
+   * download, a cache): a journaled file is held in the journal a second time until it is
+   * written out. */
+  noPersist?: string[]
   /** `false`: no preview. An object: the worker script and its scope, for a page that is not
    * served from `/` or whose server cannot send `Service-Worker-Allowed` (a static
    * directory): the script is then one at or above `scope` that runs the runtime's `sw.js`
@@ -114,9 +120,33 @@ export interface RuntimeHost {
   started(): void
   flush(): Promise<void>
   close(): Promise<void>
+  /** `listener` is called once if the runtime fails for good: its kernel stopped (a thread
+   * died holding a kernel lock), no call will work again and the page has to be reloaded.
+   * Every process is over then (`exited` resolves with SIGKILL), every stream ends and every
+   * call rejects with the same error. Returns the unsubscribe function. */
+  onFatal(listener: (error: Error) => void): () => void
+  /** Cheap and synchronous, for a page that shows the runtime's health (see `RuntimeStatus`). */
+  status(): RuntimeStatus
   /** Not part of the toolkit contract: boot timings (ms) and the kernel, for harnesses. */
   readonly timings: Record<string, number | boolean>
   readonly kernel: Kernel
+}
+
+export interface RuntimeStatus {
+  /** The error `onFatal` was called with, once the runtime has failed. */
+  failed?: Error
+  /** The kernel memory in bytes: its size (`capacity`: what the heap may hold of it), what
+   * is allocated now and the most that ever was, and how many allocations were refused for
+   * want of room (each an ENOSPC or ENOMEM to some program). Files the programs write live
+   * here; `inUse` near `capacity` is when writes start to fail. */
+  kernelMemory: { size: number; capacity: number; inUse: number; peakInUse: number; refused: number }
+  /** The workspace on disk. `unflushedBytes`: journal records still only in memory (0 when
+   * everything written is durable); `unflushedMs`: for how long there have been some, 0 when
+   * there are none (the supervisor writes them out within a quarter of a second, so
+   * seconds here mean it is not writing); `flushedAt` and `snapshotAt`: when the journal was
+   * last written out and when it was last folded into a snapshot (epoch ms, 0: not yet in
+   * this session). */
+  persist: { enabled: boolean; unflushedBytes: number; unflushedMs: number; flushedAt: number; snapshotAt: number }
 }
 
 interface ManifestImage {
@@ -338,7 +368,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
       processWorkerType: 'classic',
       namespace,
       persist: options.persist ?? true,
-      noPersist: ['/.bat', '/tmp'],
+      noPersist: ['/.bat', '/tmp', ...(options.noPersist ?? [])],
       warmSpare: true,
       // The prepared launches start together: one warm worker each, already loading that
       // launch's program scripts while the kernel finishes booting.
@@ -481,8 +511,16 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
   const previewUrl = location.origin + (scope.endsWith('/preview/') ? scope : `${scope}preview/`)
   const { endpoint } = createEndpoints({ kernel, io: reactor }, previewUrl, lifetime.signal)
   const live = (): void => {
+    if (booted.failed) throw booted.failed
     if (lifetime.signal.aborted) throw new Error('The runtime is closed')
   }
+  // A dead kernel ends what the runtime handed out, as a close does (streams end, watches
+  // stop); calls then fail with its error.
+  booted.onFatal((error) => lifetime.abort(error))
+  /** For a process: over, without a status, when the kernel died under it. */
+  const whenFailed = (resolve: (exit: { code: null; signal: string }) => void) =>
+    lifetime.signal.addEventListener('abort', () => booted.failed && resolve({ code: null, signal: 'SIGKILL' }), { once: true })
+  let dirtySince = 0
 
   // ---- service worker ----
   const hostPaths: Record<number, string[]> = {}
@@ -710,6 +748,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
     lifetime.signal.addEventListener('abort', close, { once: true })
     let gone = false
     const exited = new Promise<{ code: number | null; signal: string | null }>((resolve) => {
+      whenFailed(resolve)
       reactor.onChild(child.pid, (status) => {
         gone = true
         terminals.delete(child.pid)
@@ -780,6 +819,7 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
     void wantOut
     let gone = false
     const exited = new Promise<{ code: number | null; signal: string | null }>((resolve) => {
+      whenFailed(resolve)
       reactor.onChild(child.pid, (status) => {
         gone = true
         processes.delete(child.pid)
@@ -838,6 +878,30 @@ export async function bootRuntime(options: BootOptions): Promise<RuntimeHost> {
         return Promise.reject(e)
       }
       return kernel.flush()
+    },
+    onFatal: (listener) => booted.onFatal(listener),
+    status() {
+      const now = performance.timeOrigin + performance.now()
+      // The memory's numbers are plain words of it, readable whatever state the kernel is in;
+      // the journal's are behind the filesystem lock, and are left out once it is dead.
+      const memory = new Float64Array(8)
+      const journal = { enabled: false, seq: 0, durableSeq: 0, pendingBytes: 0, flushedAt: 0, snapshotAt: 0 }
+      if (!booted.failed && !lifetime.signal.aborted) {
+        try {
+          const m = kernel.memoryStats()
+          memory.set([m.size, m.maximum, m.heapStart, m.heapEnd, m.inUse, m.peakInUse, m.refused])
+          Object.assign(journal, kernel.persistStats())
+        } catch {
+          // it has just failed: `failed` says so
+        }
+      }
+      const dirty = journal.seq > journal.durableSeq
+      dirtySince = dirty ? dirtySince || now : 0
+      return {
+        failed: booted.failed,
+        kernelMemory: { size: memory[0], capacity: memory[1] - memory[2], inUse: memory[4], peakInUse: memory[5], refused: memory[6] },
+        persist: { enabled: journal.enabled, unflushedBytes: journal.pendingBytes, unflushedMs: dirty ? Math.max(now - Math.max(dirtySince, journal.flushedAt), 0) : 0, flushedAt: journal.flushedAt, snapshotAt: journal.snapshotAt },
+      }
     },
     close() {
       return (closing ??= (async () => {

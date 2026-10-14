@@ -4,7 +4,7 @@
 //  - mounts images (it holds a handle on each, and faults chunks in for
 //    threads that have none, i.e. the page),
 //  - restores the overlay from OPFS at boot and drains the journal to it.
-import { attachKernel, type KernelInstance } from './attach'
+import { attachKernel, deadKernel, type KernelInstance } from './attach'
 import { createKernel, type Kernel } from './kernel'
 import { trace, traceEnable } from '../trace'
 import { fnv1a32, imageExists, openImageHandle, opfsDir, preopenImage, removeImage, storeImage, type SyncHandle } from './opfs'
@@ -61,6 +61,13 @@ const SNAPSHOT_AT = 16 << 20
 // so an open normally restores from a snapshot and a short journal.
 const SNAPSHOT_IDLE_AT = 1 << 20
 const SNAPSHOT_IDLE_MS = 5000
+// A snapshot that could not be written (the disk is full) is not tried again at once.
+const SNAPSHOT_RETRY_MS = 30_000
+// A snapshot is read back in pieces of this size: what the restore needs of the kernel
+// memory beside the files themselves. The kernel writes no record larger than 1 MiB and
+// its head (crates/bat-kernel/src/persist.rs); a snapshot from before 2026-10-13 holds
+// each file in one record, and the piece then grows to the largest of them.
+const RESTORE_PIECE = 4 << 20
 
 let inst: KernelInstance
 let k: Kernel
@@ -74,7 +81,34 @@ let journalSize = 0
 let journalWrittenAt = 0
 let nextSlot: 'snap-a' | 'snap-b' = 'snap-a'
 let outP = 0
-const stats = { spawns: 0, kills: 0, faults: 0, snapshotReads: 0, journalFrames: 0, journalBytes: 0, snapshots: 0 }
+const stats = { spawns: 0, kills: 0, faults: 0, snapshotReads: 0, journalFrames: 0, journalBytes: 0, snapshots: 0, snapshotFailures: 0, lastSnapshotError: '' }
+
+// ---- a dead kernel ----
+
+/**
+ * The kernel can no longer be used: a thread trapped holding one of its locks (attach.ts
+ * sets `BAT_KERNEL_DEAD` and makes every call throw), or this supervisor cannot go on.
+ * Said once to the console and to the page, which fails what is pending and tells the
+ * application (boot.ts); the process workers are stopped where they are, since a thread
+ * waiting for the lost lock would wait for good; every later request is answered with the
+ * error.
+ */
+let failure: Error | undefined
+function fatal(cause: unknown): Error {
+  if (failure) return failure
+  failure = (cause as any)?.code === 'BAT_KERNEL_DEAD' ? (cause as Error) : deadKernel(cause)
+  report('kerneld: the kernel is dead:', (cause as Error)?.cause ?? cause)
+  try {
+    Atomics.store(inst.i32(), k.x.BAT_KERNEL_DEAD.value >>> 2, 1)
+  } catch {
+    // not attached yet
+  }
+  for (const proc of procs.values()) proc.worker.terminate()
+  for (const spare of spares.splice(0)) void spare.ready.then((s) => s.worker.terminate(), () => {})
+  postMessage({ type: 'fatal', error: failure.message })
+  return failure
+}
+const isDead = (): boolean => !!failure || Atomics.load(inst.i32(), k.x.BAT_KERNEL_DEAD.value >>> 2) !== 0
 
 // ---- process workers ----
 
@@ -356,8 +390,60 @@ function writeFrom(h: SyncHandle, ptr: number, len: number, at: number) {
   let done = 0
   while (done < len) done += h.write(inst.u8().subarray(ptr + done, ptr + len), { at: at + done })
 }
-function replay(ptr: number, len: number): number {
-  return k.x.bat_persist_replay(ptr, len)
+/** Kernel memory for a piece of what is being restored. */
+function restoreBuffer(len: number): number {
+  const p = k.x.bat_alloc(len || 1) >>> 0
+  if (!p) throw tooLarge()
+  return p
+}
+const tooLarge = () => Object.assign(new Error('The saved workspace does not fit in the kernel memory (the boot option kernelMemory.pages).'), { code: 'ENOMEM' })
+/** Apply the records at `ptr`: the bytes applied. `more`: further pieces of the same snapshot follow. */
+function replay(ptr: number, len: number, more = false): number {
+  const applied: number = k.x.bat_persist_replay(ptr, len, more ? 1 : 0)
+  if (applied < 0) throw tooLarge()
+  return applied
+}
+/**
+ * Apply the `len` bytes of records of a snapshot, a piece at a time: the kernel never holds
+ * more of the file than one piece, whatever the overlay's size. A record that the end of a
+ * piece cuts short is carried into the next.
+ */
+function replaySnapshot(h: SyncHandle, len: number) {
+  let cap = Math.min(len, RESTORE_PIECE) || 1
+  let p = restoreBuffer(cap)
+  let at = 0 // bytes applied
+  let have = 0 // bytes in the piece, which follow them
+  try {
+    while (at < len) {
+      const want = Math.min(cap, len - at) - have
+      if (want > 0) {
+        readInto(h, p + have, want, SNAP_HEADER + at + have)
+        have += want
+      }
+      const last = at + have === len
+      const applied = replay(p, have, !last)
+      if (applied === 0) {
+        // Not one whole record in the piece: a record larger than it, or a damaged one.
+        const need = have >= 5 ? 5 + inst.dv().getUint32(p + 1, true) : 0
+        if (need <= cap || at + need > len) {
+          report(`kerneld restore: the snapshot has a record that cannot be read at byte ${at} of ${len}; restored up to it`)
+          if (!last) replay(p, 0)
+          return
+        }
+        const larger = restoreBuffer(need)
+        inst.u8().copyWithin(larger, p, p + have)
+        k.x.bat_free(p, cap)
+        p = larger
+        cap = need
+        continue
+      }
+      inst.u8().copyWithin(p, p + applied, p + have)
+      have -= applied
+      at += applied
+    }
+  } finally {
+    k.x.bat_free(p, cap)
+  }
 }
 
 async function restore() {
@@ -389,12 +475,9 @@ async function restore() {
   }
   if (best) {
     const h = await open(best.name)
-    const p = k.x.bat_alloc(best.len || 1) >>> 0
     try {
-      readInto(h, p, best.len, SNAP_HEADER)
-      replay(p, best.len)
+      replaySnapshot(h, best.len)
     } finally {
-      k.x.bat_free(p, best.len || 1)
       h.close()
     }
     nextSlot = best.name === 'snap-a' ? 'snap-b' : 'snap-a'
@@ -418,10 +501,17 @@ async function restore() {
       const payload = file.subarray(off + FRAME_HEADER, off + FRAME_HEADER + len)
       if (fnv1a32(payload) !== sum) break
       if (end > snapSeq) {
-        const p = k.x.bat_alloc(len || 1) >>> 0
-        inst.u8().set(payload, p)
-        replay(p, len)
-        k.x.bat_free(p, len || 1)
+        // Sequence numbers are byte offsets in the records, so a frame that begins before
+        // the snapshot's holds that many bytes of records the snapshot already has (a
+        // snapshot was made durable and the page went before the journal was cut).
+        const fresh = payload.subarray(Math.max(0, snapSeq - (end - len)))
+        const p = restoreBuffer(fresh.length)
+        try {
+          inst.u8().set(fresh, p)
+          replay(p, fresh.length)
+        } finally {
+          k.x.bat_free(p, fresh.length || 1)
+        }
         seq = end
         frames++
       }
@@ -474,10 +564,49 @@ function drainJournal() {
     stats.journalBytes += len
   }
   x.bat_persist_set_durable(seq)
-  if (journalSize > SNAPSHOT_AT) void snapshot()
+  if (journalSize > SNAPSHOT_AT) fold()
 }
 
-let snapshotting: Promise<unknown> | undefined
+/** Fold the journal into a snapshot, unless one has just failed. */
+function fold() {
+  if (performance.now() - snapshotFailedAt < SNAPSHOT_RETRY_MS) return
+  void snapshot().catch((e) => report('kerneld snapshot:', e))
+}
+
+// Where the kernel's pieces of the snapshot being written go (`host_persist_write`).
+let snapshotTo: { h: SyncHandle; at: number; error?: unknown } | undefined
+function persistWrite(bytes: Uint8Array): number {
+  const to = snapshotTo
+  if (!to) return -5
+  try {
+    let done = 0
+    while (done < bytes.length) {
+      const n = to.h.write(bytes.subarray(done), { at: to.at + done })
+      if (n <= 0) throw new Error('OPFS wrote nothing')
+      done += n
+    }
+    to.at += done
+    return 0
+  } catch (e) {
+    to.error = e
+    return (e as DOMException)?.name === 'QuotaExceededError' ? -28 : -5
+  }
+}
+
+let snapshotFailedAt = -Infinity
+let snapshotting: Promise<{ seq: number; bytes: number; ms: number }> | undefined
+/**
+ * Write the overlay to the slot that does not hold the newest snapshot, then cut the journal.
+ * The kernel is not asked for the overlay in one piece (a copy of everything, which a full
+ * or fragmented kernel memory refused, with the filesystem lock held): it writes the records
+ * through `persistWrite` while it holds the filesystem for reading, the files' bytes
+ * straight from where they are.
+ *
+ * What a crash can leave: the slot without its header (written last, after the records are
+ * flushed), which the restore passes over for the other slot and the journal, both
+ * untouched until then; or the new snapshot complete beside a journal not yet cut, whose
+ * frames the restore skips by their sequence numbers.
+ */
 function snapshot() {
   return (snapshotting ??= (async () => {
     if (!journal) return { seq: 0, bytes: 0, ms: 0 }
@@ -490,13 +619,13 @@ function snapshot() {
     let len = 0
     let seq = 0
     try {
-      x.bat_persist_snapshot(outP)
-      const dv = inst.dv()
-      const ptr = dv.getUint32(outP, true)
-      len = dv.getUint32(outP + 4, true)
-      seq = dv.getFloat64(outP + 8, true)
       h.truncate(0)
-      writeFrom(h, ptr, len, SNAP_HEADER)
+      const to = (snapshotTo = { h, at: SNAP_HEADER } as NonNullable<typeof snapshotTo>)
+      const rc: number = x.bat_persist_snapshot(outP)
+      if (rc < 0) throw new Error(`the snapshot could not be written (${to.error ?? `errno ${-rc}`})`, { cause: to.error })
+      const dv = inst.dv()
+      len = dv.getFloat64(outP, true)
+      seq = dv.getFloat64(outP + 8, true)
       h.flush()
       const hdr = new Uint8Array(SNAP_HEADER)
       hdr.set(SNAP_MAGIC, 0)
@@ -506,11 +635,24 @@ function snapshot() {
       hd.setUint32(24, 1, true)
       h.write(hdr, { at: 0 })
       h.flush()
-      x.bat_blob_free(ptr, len)
+    } catch (e) {
+      // The journal still holds everything; the slot must not pass for a snapshot.
+      snapshotFailedAt = performance.now()
+      stats.snapshotFailures++
+      stats.lastSnapshotError = String((e as Error)?.message ?? e)
+      try {
+        h.truncate(0)
+      } catch {
+        // as it is: without a header
+      }
+      throw e
     } finally {
+      snapshotTo = undefined
       h.close()
     }
-    // Every journal frame on disk is now covered by the snapshot.
+    // Every journal frame on disk is now covered by the snapshot, and so is what the kernel
+    // still held of the journal up to `seq`.
+    x.bat_persist_snapshot_done(seq)
     journal.truncate(0)
     journal.flush()
     journalSize = 0
@@ -528,7 +670,7 @@ function snapshot() {
 async function supervise() {
   const x = k.x
   const word = x.BAT_KERNELD_WORD.value >>> 2
-  for (;;) {
+  while (!isDead()) {
     const i32 = inst.i32()
     const seen = Atomics.load(i32, word)
     for (;;) {
@@ -550,20 +692,24 @@ async function supervise() {
           else x.bat_image_fault(a, b)
         } else if (kind === 5) drainJournal()
       } catch (e) {
+        if (isDead()) throw e
         report('kerneld:', e)
       }
     }
     await waitWord(i32, word, seen, 250)
+    if (isDead()) break
     if (journal && x.bat_persist_pending() > 0) {
       try {
         drainJournal()
       } catch (e) {
+        if (isDead()) throw e
         report('kerneld journal:', e)
       }
     } else if (journal && journalSize > SNAPSHOT_IDLE_AT && performance.now() - journalWrittenAt > SNAPSHOT_IDLE_MS) {
-      void snapshot().catch((e) => report('kerneld snapshot:', e))
+      fold()
     }
   }
+  fatal(deadKernel())
 }
 
 async function init(args: InitArgs) {
@@ -610,6 +756,7 @@ async function init(args: InitArgs) {
         const arriving = arrivingImages[image]
         return arriving ? readStash(arriving, offset, dst) : -11
       },
+      persistWrite,
     },
   })
   k = createKernel(inst)
@@ -619,7 +766,8 @@ async function init(args: InitArgs) {
   const restored = args.persist ? await restore() : undefined
   trace('kerneld.restored', restored)
   if (!args.persist) for (const path of args.noPersist) excludePath(path)
-  void supervise()
+  // The loop ends only with the kernel: by its word, or by a call of the loop itself failing.
+  void supervise().catch(fatal)
   return { pid, restored }
 }
 
@@ -652,9 +800,12 @@ const ops: Record<string, (a: any) => unknown> = {
 self.onmessage = async (e: MessageEvent) => {
   const { id, op, args } = e.data
   try {
+    if (failure) throw failure
     const value = await ops[op](args)
     postMessage({ id, ok: true, value })
   } catch (err) {
+    // A request that found the kernel dead is how the supervisor may learn of it.
+    if ((err as any)?.code === 'BAT_KERNEL_DEAD') fatal(err)
     postMessage({ id, ok: false, error: String((err as Error)?.message ?? err), code: (err as any)?.code })
   }
 }

@@ -779,9 +779,11 @@ pub unsafe extern "C" fn bat_persist_exclude(p: *const u8, n: usize) -> i32 {
     let mut pb = PathBuf::new();
     ret(abs(p, n, &mut pb).and_then(|pp| vfs::persist_exclude(pp)).map(|_| 0))
 }
+/// Apply the records in `p[..n]`: the bytes applied (a record cut short at the end is left
+/// for the next call), or -ENOMEM. `more` != 0: further pieces of the same snapshot follow.
 #[no_mangle]
-pub unsafe extern "C" fn bat_persist_replay(p: *const u8, n: usize) -> i32 {
-    persist::replay(sl(p, n)) as i32
+pub unsafe extern "C" fn bat_persist_replay(p: *const u8, n: usize, more: u32) -> i32 {
+    ret(persist::replay(sl(p, n), more != 0).map(|applied| applied as i32))
 }
 #[no_mangle]
 pub extern "C" fn bat_persist_enable(seq: f64) {
@@ -806,11 +808,33 @@ pub unsafe extern "C" fn bat_journal_take(out: *mut Blob) -> i32 {
     give(v, seq, out);
     0
 }
+/// Write a snapshot of the overlay through the host (`host_persist_write`, in pieces, in
+/// order). out: bytes written f64, sequence number f64. -errno when the host refused a
+/// piece; nothing has changed then. Supervisor only.
 #[no_mangle]
-pub unsafe extern "C" fn bat_persist_snapshot(out: *mut Blob) -> i32 {
-    let (v, seq) = persist::snapshot();
-    give(v, seq, out);
-    0
+pub unsafe extern "C" fn bat_persist_snapshot(out: *mut f64) -> i32 {
+    let mut sink = |piece: &[u8]| match sys::persist_write(piece) {
+        rc if rc < 0 => Err(-rc),
+        _ => Ok(()),
+    };
+    ret(persist::snapshot(&mut sink).map(|(bytes, seq)| {
+        *out = bytes as f64;
+        *out.add(1) = seq as f64;
+        0
+    }))
+}
+/// The snapshot taken at `seq` is durable: the journal drops what it covers.
+#[no_mangle]
+pub extern "C" fn bat_persist_snapshot_done(seq: f64) {
+    persist::snapshot_done(seq as u64);
+    persist::note_snapshot();
+}
+/// out (6 f64): journaling on, sequence number, durable sequence number, pending journal
+/// bytes, when the journal was last written out, when a snapshot was last completed
+/// (epoch ms, 0: never).
+#[no_mangle]
+pub unsafe extern "C" fn bat_persist_stats(out: *mut f64) {
+    persist::stats(&mut *(out as *mut [f64; 6]));
 }
 #[no_mangle]
 pub unsafe extern "C" fn bat_blob_free(ptr: *mut u8, len: usize) {

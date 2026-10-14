@@ -85,7 +85,9 @@ async function start() {
     }),
     processWorkerType: 'classic',
     namespace: params.get('ns') ?? 'bat-node',
-    persist: false,
+    // `?persist=1`: the overlay is journaled to OPFS under the namespace (`ns=`) and restored
+    // from it at the next load (runtime/harness/persist-check.ts).
+    persist: params.get('persist') === '1',
     noPersist: ['/.bat'],
     warmSpare: params.get('spare') !== '0',
     // `?trace`: kerneld posts its marks too; collected in `__batTrace` (runtime/src/trace.ts).

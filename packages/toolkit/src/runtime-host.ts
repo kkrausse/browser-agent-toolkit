@@ -47,6 +47,11 @@ export interface BootOptions {
   /** Optional, and a runtime may ignore it. Most the runtime keeps in memory of the
    * dependency image's contents, in bytes (default 32 MiB). */
   imageCacheBytes?: number;
+  /** Optional, and a runtime may ignore it. Directories that are not kept between opens:
+   * what programs write under them is never saved and is gone at the next open (the
+   * directory comes back empty). For what is large and can be had again, such as a download
+   * or a cache. `/tmp` is always one. */
+  noPersist?: string[];
 }
 
 /** Resolves when the kernel is up, the image is mounted and the persisted overlay is
@@ -159,6 +164,21 @@ export interface RuntimeHost {
   started?(): void;
   /** Resolves when every write made so far is durable. */
   flush(): Promise<void>;
+  /** Optional. `listener` is called once if the runtime fails for good (its kernel stopped):
+   * every process is over, every later call rejects with the same error, and only a reload
+   * of the page gets a runtime again. What was written before is saved. Returns the
+   * unsubscribe function. */
+  onFatal?(listener: (error: Error) => void): () => void;
+  /** Optional. Cheap and synchronous: the runtime's memory and how far its saving is behind,
+   * for a page that shows them. Sizes in bytes, times in ms (`flushedAt`, `snapshotAt`:
+   * epoch ms, 0 when not yet in this session). `kernelMemory.inUse` near `capacity` is
+   * when writes start to fail with ENOSPC (`refused` counts them); `persist.unflushedMs` is
+   * for how long written data has been waiting to be saved, 0 when none is. */
+  status?(): {
+    failed?: Error;
+    kernelMemory: { size: number; capacity: number; inUse: number; peakInUse: number; refused: number };
+    persist: { enabled: boolean; unflushedBytes: number; unflushedMs: number; flushedAt: number; snapshotAt: number };
+  };
   /** Kills every process, flushes, releases the workspace lock. Idempotent. */
   close(): Promise<void>;
 }

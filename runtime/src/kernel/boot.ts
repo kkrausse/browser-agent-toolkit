@@ -55,6 +55,12 @@ export interface BootedKernel {
   imageArrived(id: number): Promise<void>
   restored?: { snapshotSeq: number; seq: number; snapshotBytes?: number; journalFrames: number; journalBytes: number; ms: number }
   timings: { compileMs: number; attachMs: number; kerneldMs: number }
+  /** Set once the kernel is dead (a thread trapped holding one of its locks): every kernel
+   * call and every `kerneld` request then fails with it, at once. Nothing recovers a dead
+   * kernel; the page reloads. */
+  failed?: Error
+  /** `listener` is called once if the kernel dies (at once if it has). Returns the unsubscribe function. */
+  onFatal(listener: (error: Error) => void): () => void
   close(): void
 }
 
@@ -64,15 +70,28 @@ export async function bootKernel(opts: BootOptions): Promise<BootedKernel> {
   const module = await (opts.module ?? WebAssembly.compileStreaming(fetch(opts.wasmUrl)))
   const t1 = performance.now()
   let memory = createKernelMemory(opts.kernelMemory)
-  const inst = await attachKernel({ module, memory, canBlock: false, first: true })
+  const fatalListeners = new Set<(error: Error) => void>()
+  let failed: Error | undefined
+  const pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>()
+  // Told by the page's own binding (a call found the kernel dead) or by kerneld, whichever is first.
+  const fail = (error: Error) => {
+    if (failed) return
+    failed = error
+    if (booted) booted.failed = error
+    for (const p of pending.values()) p.reject(error)
+    pending.clear()
+    for (const listener of [...fatalListeners]) listener(error)
+  }
+  let booted: BootedKernel | undefined
+  const inst = await attachKernel({ module, memory, canBlock: false, first: true, host: { dead: fail } })
   const kernel = createKernel(inst)
   if (opts.imageCacheBytes !== undefined) inst.x.bat_image_cache_limit(opts.imageCacheBytes)
   const t2 = performance.now()
 
   const worker = new Worker(opts.kerneldUrl, { type: 'module', name: 'kerneld' })
   let nextId = 1
-  const pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>()
   worker.onmessage = (e) => {
+    if (e.data.type === 'fatal') return fail(Object.assign(new Error(e.data.error), { code: 'BAT_KERNEL_DEAD' }))
     const { id, ok, value, error, code } = e.data
     const p = pending.get(id)
     if (!p) return
@@ -86,6 +105,7 @@ export async function bootKernel(opts: BootOptions): Promise<BootedKernel> {
   }
   const kerneld = <T,>(op: string, args?: unknown) =>
     new Promise<T>((resolve, reject) => {
+      if (failed) return reject(failed)
       const id = nextId++
       pending.set(id, { resolve, reject })
       worker.postMessage({ id, op, args })
@@ -110,7 +130,7 @@ export async function bootKernel(opts: BootOptions): Promise<BootedKernel> {
   // whenever the browser gets around to tearing the old document down.
   const onPageHide = () => worker.terminate()
   addEventListener('pagehide', onPageHide)
-  const booted: BootedKernel = {
+  booted = {
     kernel,
     module,
     memory,
@@ -120,6 +140,12 @@ export async function bootKernel(opts: BootOptions): Promise<BootedKernel> {
     imageArrived: (id) => kerneld('imageArrived', { id }),
     restored: init.restored,
     timings: { compileMs: t1 - t0, attachMs: t2 - t1, kerneldMs: t3 - t2 },
+    failed,
+    onFatal(listener) {
+      if (failed) listener(failed)
+      else fatalListeners.add(listener)
+      return () => void fatalListeners.delete(listener)
+    },
     close() {
       // kerneld takes the process workers with it. The page then lets go of the memory, so
       // that a page that stays open after its editor closed does not keep it (the objects
@@ -128,8 +154,9 @@ export async function bootKernel(opts: BootOptions): Promise<BootedKernel> {
       removeEventListener('pagehide', onPageHide)
       for (const p of pending.values()) p.reject(new Error('The runtime is closed'))
       pending.clear()
+      fatalListeners.clear()
       kernel.release()
-      memory = booted.memory = undefined as unknown as WebAssembly.Memory
+      memory = booted!.memory = undefined as unknown as WebAssembly.Memory
     },
   }
   return booted

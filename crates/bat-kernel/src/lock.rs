@@ -9,6 +9,12 @@
 //! sets `Thread::dying` and waits for the depth to read zero before it
 //! terminates the worker. A dying thread that tries to take its first lock
 //! parks instead.
+//!
+//! A dead kernel: a thread that traps with a lock held (an allocation that failed, a bug)
+//! never releases it. The host binding sees the trap and sets `BAT_KERNEL_DEAD`; a thread
+//! waiting for a lock then stops with an error of its own instead of waiting for good. A
+//! thread that may not block also gives up after `STUCK_MS` of spinning, and declares the
+//! kernel dead itself: nothing holds a kernel lock that long and lives.
 
 use crate::sys;
 use crate::thread;
@@ -17,6 +23,64 @@ use core::ops::{Deref, DerefMut};
 use core::sync::atomic::{AtomicU32, Ordering::*};
 
 const SPINS: u32 = 200;
+
+/// Not 0: a thread died holding a kernel lock, so the state under it is unreachable for
+/// good. Set by the host binding of the thread that trapped (runtime/src/kernel/attach.ts),
+/// which also refuses every later call, or here by a thread that spun for `STUCK_MS`.
+#[no_mangle]
+pub static BAT_KERNEL_DEAD: AtomicU32 = AtomicU32::new(0);
+/// How long a thread that cannot block spins for a lock before it declares the kernel
+/// dead. Far above any hold: the longest is a snapshot being written (the filesystem held
+/// for reading while the overlay goes to disk), seconds at worst.
+const STUCK_MS: f64 = 30_000.0;
+/// A blocked waiter looks at `BAT_KERNEL_DEAD` this often.
+const LOOK_MS: f64 = 1000.0;
+
+/// Stop this thread: the lock it waits for will never be free. A trap, which its host
+/// binding turns into an error for the caller. Nothing here allocates.
+#[cold]
+fn dead(stuck: bool) -> ! {
+    if stuck {
+        BAT_KERNEL_DEAD.store(1, SeqCst);
+        sys::log(3, "bat kernel: waited 30 s for a kernel lock; the thread holding it is gone. The kernel is dead.");
+    }
+    std::process::abort()
+}
+
+/// One round of waiting for a lock word: sleep on it where the thread may, else spin. Ends
+/// the thread once the kernel is dead.
+struct Waiting {
+    can_block: bool,
+    spins: u32,
+    since: f64,
+}
+impl Waiting {
+    fn new() -> Self {
+        Waiting { can_block: thread::can_block(), spins: 0, since: 0.0 }
+    }
+    fn wait(&mut self, word: &AtomicU32, seen: u32) {
+        if self.can_block {
+            sys::wait(word.as_ptr(), seen, LOOK_MS);
+            if BAT_KERNEL_DEAD.load(Relaxed) != 0 {
+                dead(false);
+            }
+            return;
+        }
+        core::hint::spin_loop();
+        self.spins += 1;
+        if self.spins % 4096 == 0 {
+            if BAT_KERNEL_DEAD.load(Relaxed) != 0 {
+                dead(false);
+            }
+            let now = sys::now_ms();
+            if self.since == 0.0 {
+                self.since = now;
+            } else if now - self.since > STUCK_MS {
+                dead(true);
+            }
+        }
+    }
+}
 
 #[inline]
 pub(crate) fn gate_enter() {
@@ -60,16 +124,12 @@ impl RawLock {
             }
             core::hint::spin_loop();
         }
-        let can_block = thread::can_block();
+        let mut waiting = Waiting::new();
         loop {
             if self.0.swap(2, Acquire) == 0 {
                 return;
             }
-            if can_block {
-                sys::wait(self.0.as_ptr(), 2, -1.0);
-            } else {
-                core::hint::spin_loop();
-            }
+            waiting.wait(&self.0, 2);
         }
     }
     #[inline]
@@ -177,18 +237,14 @@ impl<T> RwLock<T> {
             }
             core::hint::spin_loop();
         }
-        let can_block = thread::can_block();
+        let mut waiting = Waiting::new();
         loop {
             let seq = self.seq.load(SeqCst);
             self.s.fetch_or(WAIT, SeqCst);
             if self.try_once(write) {
                 return;
             }
-            if can_block {
-                sys::wait(self.seq.as_ptr(), seq, -1.0);
-            } else {
-                core::hint::spin_loop();
-            }
+            waiting.wait(&self.seq, seq);
         }
     }
     #[inline]

@@ -104,9 +104,10 @@ export interface OpenEditorOptions {
   signal?: AbortSignal;
   /** Replaces the runtime the manifest names. Development only (see `./fake`). */
   boot?: BootRuntime;
-  /** Memory limits of the runtime, passed to it as they are (see `BootOptions`): the size of
-   * its kernel memory and of its image cache. For a small device, or a large workspace. */
-  runtime?: Pick<BootOptions, 'kernelMemory' | 'imageCacheBytes'>;
+  /** Limits of the runtime, passed to it as they are (see `BootOptions`): the size of its
+   * kernel memory and of its image cache, for a small device or a large workspace, and the
+   * directories it does not keep between opens. */
+  runtime?: Pick<BootOptions, 'kernelMemory' | 'imageCacheBytes' | 'noPersist'>;
 }
 
 export const openedElsewhereMessage = 'This workspace is already open in another tab or window. Close the editor there, then retry.';

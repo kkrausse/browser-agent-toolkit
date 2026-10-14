@@ -628,7 +628,8 @@ export function createKernel(inst: KernelInstance) {
         }
       }
     }
-    void loop()
+    // The loop ends with the kernel (a call of it throws once the kernel is dead).
+    void loop().catch((e) => inst.host.log(3, `event loop: ${(e as Error)?.message ?? e}`))
     return () => {
       stopped = true
       Atomics.notify(i32, word)
@@ -822,6 +823,17 @@ export function createKernel(inst: KernelInstance) {
 
   // ---- persistence ----
 
+  /** The journal: whether the overlay is journaled at all, the sequence number of the last
+   * change and of the last durable one (equal when nothing waits), the journal bytes still
+   * in the kernel memory, and when the supervisor last wrote the journal out and last
+   * completed a snapshot (epoch ms, 0: not yet in this session). */
+  function persistStats(): { enabled: boolean; seq: number; durableSeq: number; pendingBytes: number; flushedAt: number; snapshotAt: number } {
+    sync()
+    x.bat_persist_stats(outP)
+    const d = outP >>> 3
+    return { enabled: f64[d] !== 0, seq: f64[d + 1], durableSeq: f64[d + 2], pendingBytes: f64[d + 3], flushedAt: f64[d + 4], snapshotAt: f64[d + 5] }
+  }
+
   /**
    * Resolve when everything written so far is durable in OPFS (immediately if
    * persistence is off). Works on the page: waits with Atomics.waitAsync.
@@ -887,7 +899,7 @@ export function createKernel(inst: KernelInstance) {
     ttyOpen, isatty, ttyGetattr, ttySetattr, ttyWinsize, ttyResize,
     subscribe, pollFd, poll, takeEvents, runEvents, watchAdd, watchRemove, watchRead,
     getpid, getppid, chdir, getcwd, spawn, procInfo, exit, waitpid, kill, sigTake, procList,
-    imageNames, imageStats, imageSection, imageCacheStats, memoryStats,
+    imageNames, imageStats, imageSection, imageCacheStats, memoryStats, persistStats,
     flush, flushSync, overlayGeneration, retrying,
   }
   return self
