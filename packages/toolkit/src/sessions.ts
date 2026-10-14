@@ -40,6 +40,11 @@ async function request(endpoint: ChatEndpoint, path: string, init?: RequestInit)
   return response.json();
 }
 
+// OpenCode 2.0.26 serves a session's export and the import under `/api/experimental/session`
+// (2.0.3 had them under `/api/session`, which now answers 404). The bundle is the same:
+// what 2.0.3 exported, 2.0.26 imports with equal messages.
+const transfer = '/api/experimental/session';
+
 type SessionPage = { data: { id: string }[]; cursor?: { next?: string | null } | null };
 const listPath = (directory: string, cursor?: string) =>
   `/api/session?${new URLSearchParams({ directory, limit: '100', ...(cursor ? { cursor } : {}) })}`;
@@ -53,7 +58,7 @@ export async function exportSessions(endpoint: ChatEndpoint, directory: string):
     for (const { id } of page.data) {
       if (ids.has(id)) throw Error('Repeated session in native export pagination');
       ids.add(id);
-      sessions.push(parseBundle((await request(endpoint, `/api/session/${encodeURIComponent(id)}/export`)).data));
+      sessions.push(parseBundle((await request(endpoint, `${transfer}/${encodeURIComponent(id)}/export`)).data));
     }
     // The server sends null for exhausted pagination cursors.
     cursor = page.cursor?.next ?? undefined;
@@ -78,22 +83,22 @@ export async function importSessions(endpoint: ChatEndpoint, directory: string, 
     }
   }
   // Keep the saved IDs: the store was just emptied, and OpenCode accepts an import
-  // under a deleted session's ID (checked against 2.0.3), so anything that names a
+  // under a deleted session's ID (checked against 2.0.3 and 2.0.26), so anything that names a
   // session stays valid. The session list is ordered by update time, which an import
   // sets to now: import in reverse of the saved list order, parents still first, and
   // the list reads as it was saved.
   const ids = new Map<string, string>();
   for (const session of orderSessions([...sessions].reverse())) {
     const parentID = session.info.parentID ? ids.get(session.info.parentID) : undefined;
-    const transfer = (id: string) => request(endpoint, '/api/session/import', {
+    const send = (id: string) => request(endpoint, `${transfer}/import`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ ...session, info: { ...session.info, id, ...(parentID ? { parentID } : {}) }, location: { directory } }),
     });
     let id = session.info.id;
     // An ID still taken outside this directory's list cannot be emptied here.
-    const result = await transfer(id).catch(error => {
+    const result = await send(id).catch(error => {
       if (!String(error).includes('HTTP 409')) throw error;
-      return transfer(id = 'ses_' + crypto.randomUUID().replaceAll('-', ''));
+      return send(id = 'ses_' + crypto.randomUUID().replaceAll('-', ''));
     });
     if (result?.data?.id !== id) throw Error('Native session import returned unexpected ID');
     await request(endpoint, `/api/session/${encodeURIComponent(id)}/message?order=desc&limit=50`);
