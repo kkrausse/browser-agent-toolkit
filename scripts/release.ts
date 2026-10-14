@@ -83,12 +83,19 @@ if (packagedPolicy.includes('dir:../')) throw Error('The guest policy names a di
 writeFileSync(join(prepareDir, 'guest-policy.json'), packagedPolicy)
 const openCode = join(prepareDir, 'opencode')
 mkdirSync(openCode)
-const pinned = JSON.parse(policyText).application.files as Record<string, { bytes: number; sha256: string }>
+// A server directory that describes itself (`application.json`, written by
+// ports/opencode/server/build.ts) replaces the policy's pins in bat-prepare; the package then
+// carries that description beside the files, so `prepare()` of the package does the same.
+// Without one the files must be the ones the policy pins.
+const describedPath = join(built.env.BAT_OPENCODE_DIR, 'application.json')
+const described = existsSync(describedPath) ? readFileSync(describedPath, 'utf8') : undefined
+const pinned = (described ? JSON.parse(described).files : JSON.parse(policyText).application.files) as Record<string, { bytes: number; sha256: string }>
 for (const [name, expected] of Object.entries(pinned)) {
   const source = join(built.env.BAT_OPENCODE_DIR, name)
-  if (sha256(source) !== expected.sha256) throw Error(`${source} is not the file the guest policy pins`)
+  if (sha256(source) !== expected.sha256) throw Error(`${source} is not the file ${described ? 'its application.json describes' : 'the guest policy pins'}`)
   cpSync(source, join(openCode, name))
 }
+if (described) writeFileSync(join(openCode, 'application.json'), described)
 cpSync(join(root, 'third_party/NOTICES.md'), join(prepareDir, 'NOTICES.md'))
 const runtimeFiles = Object.fromEntries(readdirSync(join(stage, 'dist/runtime')).sort().map(name => [`dist/runtime/${name}`, sha256(join(stage, 'dist/runtime', name))]))
 writeFileSync(join(stage, 'BUILD-PROVENANCE.json'), provenance({ ...runtimeFiles, 'prepare/guest-policy.json': sha256(join(prepareDir, 'guest-policy.json')) }))
