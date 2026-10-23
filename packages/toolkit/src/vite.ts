@@ -24,6 +24,74 @@ export interface BrowserEditorOptions {
 }
 
 type IncomingLike = { url?: string; originalUrl?: string };
+type ModuleLike = { id: string | null; url: string };
+type ClientEnvironmentLike = {
+  moduleGraph: { invalidateModule(mod: ModuleLike, ...rest: unknown[]): void };
+  transformRequest(url: string): Promise<{ code: string } | null>;
+  hot: { send(payload: { type: 'full-reload'; path?: string }): void };
+};
+type WatcherLike = { on(event: 'all', listener: () => void): void };
+
+/** React Router's dev manifest: the route table the running page was built from. */
+const routeManifestId = '\0virtual:react-router/browser-manifest';
+
+/** The route table in that module's code (`window.__reactRouterManifest={...}`), as a
+ * comparable string: ids, nesting, paths and modules. Undefined when it does not parse. */
+function routeTable(code: string): string | undefined {
+  try {
+    const scope: { __reactRouterManifest?: { routes?: Record<string, Record<string, unknown>> } } = {};
+    new Function('window', code)(scope);
+    const routes = Object.values(scope.__reactRouterManifest?.routes ?? {});
+    return JSON.stringify(routes.map(r => [r.id, r.parentId, r.path, r.index, r.caseSensitive, r.module]).sort());
+  } catch {
+    return undefined;
+  }
+}
+
+/** Reload the preview when React Router's route table changes. React Router reloads its
+ * route config (routes.ts, files added or removed in the app directory) on the server and
+ * invalidates its manifest module, but tells the open page nothing: its router keeps the
+ * old table, so a route the agent just added was a 404 until someone reloaded the frame.
+ * Natively a developer presses reload; nobody does in the preview. The manifest is
+ * invalidated only after the new config is in place, so it is rebuilt then, and the page
+ * reloads only when the table differs (not for a route module's new loader, which React
+ * Router's own HMR applies). A rebuild fails while routes.ts names a file not written yet;
+ * it is tried again after the next file event. */
+function reloadOnRouteTableChange(client: ClientEnvironmentLike, watcher: WatcherLike | undefined, seen: { table?: string }) {
+  const graph = client.moduleGraph;
+  const invalidate = graph.invalidateModule.bind(graph);
+  let url: string | undefined;
+  let shown: string | undefined; // the open page's table while a rebuild is due
+  let running = false;
+  let again = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const check = () => {
+    if (running) { again = true; return; }
+    running = true;
+    void client.transformRequest(url!)
+      .then(() => {
+        if (seen.table !== undefined && seen.table !== shown) client.hot.send({ type: 'full-reload', path: '*' });
+        shown = undefined;
+      }, () => {})
+      .finally(() => {
+        running = false;
+        if (again) { again = false; schedule(); }
+      });
+  };
+  const schedule = (ms = 0) => {
+    if (shown === undefined) return;
+    clearTimeout(timer);
+    timer = setTimeout(check, ms);
+  };
+  graph.invalidateModule = (mod, ...rest) => {
+    invalidate(mod, ...rest);
+    if (mod.id !== routeManifestId || seen.table === undefined) return;
+    url = mod.url;
+    shown ??= seen.table;
+    schedule();
+  };
+  watcher?.on('all', () => schedule(50));
+}
 
 const reactPackage = '@kkrausse/browser-agent-toolkit-react';
 
@@ -38,6 +106,9 @@ function installed(from: string, name: string): boolean {
 /** One Vite plugin for both sides. The application still owns its Vite config. */
 export function browserEditor(options: BrowserEditorOptions): any {
   let editingModule: string;
+  let root: string;
+  let routeCompiler = false;
+  const routes: { table?: string } = {};
   return {
     name: 'browser-editor', enforce: 'pre' as const,
     config(config: { root?: string }) {
@@ -57,8 +128,9 @@ export function browserEditor(options: BrowserEditorOptions): any {
         optimizeDeps: { esbuildOptions: { sourcemap: false } },
       };
     },
-    configureServer(server: { middlewares: { use(handler: (request: IncomingLike, response: unknown, next: () => void) => void): void }; httpServer?: { prependListener(name: string, listener: (request: IncomingLike) => void): void; removeListener(name: string, listener: (request: IncomingLike) => void): void; once(name: string, listener: () => void): void } | null }) {
+    configureServer(server: { environments?: { client?: ClientEnvironmentLike }; watcher?: WatcherLike; middlewares: { use(handler: (request: IncomingLike, response: unknown, next: () => void) => void): void }; httpServer?: { prependListener(name: string, listener: (request: IncomingLike) => void): void; removeListener(name: string, listener: (request: IncomingLike) => void): void; once(name: string, listener: () => void): void } | null }) {
       if (!isGuest()) return;
+      if (server.environments?.client) reloadOnRouteTableChange(server.environments.client, server.watcher, routes);
       // A transport may deliver the path below the prefix; the server expects its base.
       const base = previewBase();
       const restore = (request: IncomingLike) => {
@@ -69,8 +141,12 @@ export function browserEditor(options: BrowserEditorOptions): any {
       server.httpServer?.prependListener('upgrade', restore);
       server.httpServer?.once('close', () => server.httpServer?.removeListener('upgrade', restore));
     },
-    configResolved(config: { root: string; assetsInclude?: (file: string) => boolean }) {
+    configResolved(config: { root: string; assetsInclude?: (file: string) => boolean; server?: { hmr?: unknown; preTransformRequests?: boolean } }) {
+      root = config.root;
       editingModule = resolve(config.root, options.module);
+      // React Router compiles route modules in a second dev server of its own (its "child
+      // compiler": no HMR, no pre-transform requests), which gets this plugin too.
+      routeCompiler = isGuest() && config.server?.hmr === false && config.server?.preTransformRequests === false;
       if (!isGuest() || typeof config.assetsInclude !== 'function') return;
       // Vite hashes its config, functions by their source text, to decide whether the
       // dependency-optimizer cache shipped by prepare is still valid. Its own
@@ -87,6 +163,19 @@ export function browserEditor(options: BrowserEditorOptions): any {
       // went out as 6.1 MB and took the server 290 ms (native: 500-750 ms under load). A map
       // with empty mappings is Vite's way of saying "none, and do not invent one".
       if (isGuest() && id.includes('/.browser-editor-cache/vite/deps/')) return { code, map: { mappings: '' } };
+      if (isGuest() && id === routeManifestId) routes.table = routeTable(code) ?? routes.table;
+    },
+    resolveId(id: string, importer?: string) {
+      // routes.ts may name a route file before the agent writes it. If the manifest is built
+      // in that gap (the reload above, or anyone loading the page), React Router's compiler
+      // registers the URL under an unresolved id, keeps that entry when the file appears,
+      // and then fails every manifest build ("There is a new version of the pre-bundle")
+      // until the dev server restarts; that happens natively too. Resolving a missing file
+      // to the path it will have keeps the entry valid once it exists.
+      // React Router asks with no importer, which Vite's container turns into the root's index.html.
+      if (!routeCompiler || (importer && !importer.endsWith('/index.html')) || !id.startsWith('/') || id.startsWith('/@') || id.includes('?') || id.includes('\0')) return;
+      const file = join(root, id);
+      if (file.startsWith(root + '/') && !existsSync(file) && !existsSync(id)) return file;
     },
     load(id: string) {
       if (isGuest() && id.split('?')[0] === editingModule) return 'export default function Editing(){return null}';

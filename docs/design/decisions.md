@@ -1610,3 +1610,28 @@ servers.
   its window before the frame loads is posted the frame's errors, failed loads, rejections,
   `console.error` and guest socket states (`{ t: 'bat-preview', kind, text }`). Off
   otherwise: a diagnostics aid, not part of the toolkit's API.
+
+## 2026-10-23: the preview reloads when React Router's route table changes
+
+- **What was wrong.** An agent added a route (a file in a new `src/routes/<name>/` and an
+  entry in `src/routes.ts`; irs-tools) and the preview did not show it. The guest's watcher
+  was fine: React Router logged "Route config changed." and its dev manifest module
+  already listed the route. But its Vite plugin only invalidates that module; the open
+  page keeps the route table it loaded, so navigating there was a 404 until the frame was
+  reloaded. Natively a developer presses reload (same with `ssr: false` outside the guest).
+- **Decision.** The `browserEditor` plugin, in the guest: when React Router invalidates
+  `\0virtual:react-router/browser-manifest` (after the new config is in place), rebuild it,
+  compare the route table (ids, parents, paths, modules) with the one last built, and send
+  Vite's `full-reload` if it differs. A route module's own edits stay hot updates.
+- **Second hazard, upstream and native too.** If the manifest is built while `routes.ts`
+  names a file not yet written, React Router's child compiler registers the URL under an
+  unresolved id and keeps it when the file appears; every later build fails with "There is
+  a new version of the pre-bundle" until the dev server restarts. In that compiler only
+  (`hmr: false`, `preTransformRequests: false`) the plugin resolves a missing root-relative
+  file to the path it will have. A failed rebuild is retried after the next file event.
+- **Checked** in Chrome, the TODO example converted to React Router 7.13 framework mode
+  (`ssr: false`, as irs-tools): file then `routes.ts` reloads the frame about 0.2 s after the
+  write and `/about` renders; an edit of the route component is a hot update, no reload;
+  `routes.ts` first and the file 2 s later: no reload in between, a reload after the file,
+  `/contact` renders. Before: no reload, `/about` was "404 Not Found" until a manual reload,
+  and in the second order the dev server answered 500/504 for good.
